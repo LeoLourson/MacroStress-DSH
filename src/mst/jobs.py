@@ -2,8 +2,10 @@
 
 A job outlives the tool call that started it: the process runs on its own, its
 output goes to ``jobs/<id>/log.txt`` and ``jobs/<id>/job.json`` keeps the argv,
-the pid and the times. A lock file per resource keeps two jobs away from the
-same store; a lock whose process is gone is stale and is taken over.
+the pid and the times. The process is ``python -m mst.jobs``, which runs the argv
+and writes its exit code to ``jobs/<id>/exit.json``; a job killed before it ends
+has no exit code. A lock file per resource keeps two jobs away from the same
+store; a lock whose process is gone is stale and is taken over.
 """
 
 import ctypes
@@ -51,13 +53,15 @@ def start(ws: store.Workspace, resource: str, argv: Sequence[str]) -> str:
     try:
         with (directory / "log.txt").open("wb") as out:
             record["pid"] = subprocess.Popen(
-                [sys.executable, *argv],
+                [sys.executable, "-m", "mst.jobs", str(directory), *argv],
                 cwd=ws.root,
                 stdin=subprocess.DEVNULL,
                 stdout=out,
                 stderr=subprocess.STDOUT,
                 env={**os.environ, "PYTHONIOENCODING": "utf-8"},
                 creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+                # Its own process group, so cancel reaches the wrapper and the command alike.
+                start_new_session=sys.platform != "win32",
             ).pid
     except BaseException:
         _release(ws, resource, job_id)
@@ -68,9 +72,9 @@ def start(ws: store.Workspace, resource: str, argv: Sequence[str]) -> str:
 
 
 def status(ws: store.Workspace, job_id: str) -> dict:
-    """The job record and whether its process still runs."""
+    """The job record, whether its process still runs and its exit code once it ended."""
     record = _record(ws, job_id)
-    return record | {"running": _alive(record.get("pid"))}
+    return record | {"running": _alive(record.get("pid")), "exit_code": _exit_code(ws, job_id)}
 
 
 def log(ws: store.Workspace, job_id: str, tail: int = 50) -> str:
@@ -91,10 +95,11 @@ def cancel(ws: store.Workspace, job_id: str) -> dict:
         if sys.platform == "win32":
             subprocess.run(["taskkill", "/PID", str(pid), "/T", "/F"], capture_output=True)
         else:
-            os.kill(pid, signal.SIGTERM)
+            os.killpg(pid, signal.SIGTERM)
         _wait_gone(pid)
     record["finished"] = record.get("finished") or _now()
     record["cancelled"] = True
+    record["exit_code"] = _exit_code(ws, job_id)
     store.write_json(ws.jobs / job_id / "job.json", record)
     _release(ws, record.get("resource"), job_id)
     return record | {"running": False}
@@ -149,8 +154,15 @@ def _sweep(ws: store.Workspace) -> None:
         if record.get("finished") or _alive(record.get("pid")):
             continue
         record["finished"] = _now()
+        record["exit_code"] = _exit_code(ws, str(record.get("id")))
         store.write_json(path, record)
         _release(ws, record.get("resource"), str(record.get("id")))
+
+
+def _exit_code(ws: store.Workspace, job_id: str) -> int | None:
+    """The exit code the job wrote, or None while it runs or when it was killed."""
+    written = store.read_json(ws.jobs / job_id / "exit.json")
+    return None if written is None else written["code"]
 
 
 def _record(ws: store.Workspace, job_id: str) -> dict:
@@ -202,3 +214,14 @@ def _new_id() -> str:
 
 def _now() -> str:
     return datetime.now(UTC).isoformat(timespec="seconds")
+
+
+def _run(directory: Path, argv: list[str]) -> int:
+    """Run ``python <argv>`` and write its exit code next to the job's log."""
+    code = subprocess.run([sys.executable, *argv], stdin=subprocess.DEVNULL).returncode
+    store.write_json(directory / "exit.json", {"code": code})
+    return code
+
+
+if __name__ == "__main__":
+    sys.exit(_run(Path(sys.argv[1]), sys.argv[2:]))

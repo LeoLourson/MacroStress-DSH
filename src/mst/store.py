@@ -115,10 +115,20 @@ def write_state(ws: Workspace) -> dict[str, Any]:
 
 
 def _latest(directory: Path) -> str | None:
-    """The newest entry of ``directory`` by modification time, or None when it is empty."""
+    """The newest version of ``directory`` by modification time, or None when there is none.
+
+    A version is a folder with ``meta.json``; a ``.draft-`` folder is one still being written.
+    """
     if not directory.is_dir():
         return None
-    entries = sorted(directory.iterdir(), key=lambda entry: entry.stat().st_mtime)
+    entries = sorted(
+        (
+            entry
+            for entry in directory.iterdir()
+            if not entry.name.startswith(".") and (entry / "meta.json").is_file()
+        ),
+        key=lambda entry: entry.stat().st_mtime,
+    )
     return entries[-1].name if entries else None
 
 

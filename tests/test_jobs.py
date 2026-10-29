@@ -27,6 +27,16 @@ def test_a_job_prints_into_its_log(tmp_path):
     record = jobs.status(ws, job_id)
     assert record["argv"] == ["-c", "print(1)"]
     assert record["resource"] == "series"
+    assert record["exit_code"] == 0
+
+
+def test_a_failed_job_reports_its_exit_code(tmp_path):
+    ws = store.Workspace(tmp_path)
+    job_id = jobs.start(ws, "series", ["-c", "raise SystemExit(3)"])
+    wait(ws, job_id)
+    assert jobs.status(ws, job_id)["exit_code"] == 3
+    jobs.state(ws)
+    assert store.read_json(ws.jobs / job_id / "job.json")["exit_code"] == 3
 
 
 def test_a_busy_resource_is_refused_with_the_name_of_the_first_job(tmp_path):
@@ -56,6 +66,7 @@ def test_cancel_stops_the_process_and_releases_the_lock(tmp_path):
     job_id = jobs.start(ws, "code", SLEEP)
     cancelled = jobs.cancel(ws, job_id)
     assert cancelled["cancelled"] is True
+    assert cancelled["exit_code"] is None
     assert jobs.status(ws, job_id)["running"] is False
     assert not (ws.jobs / "code.lock").exists()
     assert jobs.state(ws)["jobs"] == 0
