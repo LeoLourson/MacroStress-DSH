@@ -245,6 +245,18 @@ $N$, $C$, $D$, $O$), `run-report` (как читать $P_5$/$P_{50}$/$P_{95}$ �
 
 **Коммит.** «Teach DSH the workflow: the skills, the prompt section and the bundle card».
 
+**Сделано.** `dsh/skills/{scenario-from-corpus,run-report,drivers}.md` — три скилла с
+командами и правилами: сборка $N$, $C$, $D$, $O$ из фрагментов корпуса и разница
+`save`/`validate`; чтение $P_5$/$P_{50}$/$P_{95}$, ES95, $\delta$, покрытия и пометок;
+каталог драйверов, оценка сателлитов и причины отказа проверки. `dsh/index.js` показывает в
+промпте пять строк из `workspace.json`, последняя — число задач в работе; скиллы
+регистрируются на время жизни плагина. Карточка в Settings → Plugins подписана в обеих
+локалях. `dsh/test/smoke.mjs` без запуска DSH подставляет фейковый контекст, регистрирует
+скиллы, строит пять строк раздела из `workspace.json` и сверяет карточку; проверка
+`node dsh/test/smoke.mjs` — `ok: 3 skills, 5 prompt lines, both locales`. Обновлены
+`dsh/README.md`, `docs/install.md` и раздел про промпт в `docs/architecture.md`.
+`jobs(state)` пишет тот же словарь, который читает раздел: `workspace/workspace.json`.
+
 ## Что уже решено по сателлитам (не переоткрывать)
 
 - Доля прошлого значения в цепи драйвера ограничена `RHO_MAX = 0.99`: взрывной корень
