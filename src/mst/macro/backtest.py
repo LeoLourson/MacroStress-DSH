@@ -224,16 +224,20 @@ def models_for(
 ) -> dict[str, tuple[str, Posterior]]:
     """The model version of each sign table on the calculation date, estimated once.
 
-    ``<root>/backtest/<key>`` names the version a table gave on the same panel and spec, so a
-    rerun loads it instead of estimating again.
+    Episode versions live under ``<root>/backtest/``, apart from the versions of
+    ``<root>/macro/`` that runs and the prompt section see. ``<root>/backtest/<key>`` names
+    the version a table gave on the same panel and spec, so a rerun loads it instead of
+    estimating again; a key whose version is gone is estimated anew.
     """
+    folder = root / "backtest"
     keys = {name: _key(panel, spec, as_of, shocks) for name, shocks in tables.items()}
     found = {}
     for name, key in keys.items():
-        pointer = root / "backtest" / key
+        pointer = folder / key
         if pointer.exists():
             version = pointer.read_text(encoding="utf-8").strip()
-            found[name] = (version, load(root, version)[0])
+            if (folder / "macro" / version).is_dir():
+                found[name] = (version, load(folder, version)[0])
     missing = [name for name in tables if name not in found]
     if missing:
         posterior = estimate(panel, spec)
@@ -245,10 +249,8 @@ def models_for(
                 tries=spec.rotation_tries,
                 seed=spec.sampler.seed,
             )
-            version = save(model, spec, panel, as_of, root)
-            pointer = root / "backtest" / keys[name]
-            pointer.parent.mkdir(parents=True, exist_ok=True)
-            pointer.write_text(version + "\n", encoding="utf-8")
+            version = save(model, spec, panel, as_of, folder)
+            (folder / keys[name]).write_text(version + "\n", encoding="utf-8")
             found[name] = (version, model)
     return found
 
