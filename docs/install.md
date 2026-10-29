@@ -6,20 +6,20 @@
 
 ## 1. Python-часть
 
-Нужны Python 3.12 и [uv](https://docs.astral.sh/uv/); версию Python фиксирует
-`requires-python` в `pyproject.toml`.
+Нужны Python 3.12 или новее и [uv](https://docs.astral.sh/uv/); минимальную версию Python
+фиксирует `requires-python` в `pyproject.toml`.
 
 ```powershell
 cd <путь к репозиторию>
 uv sync
-.venv\Scripts\python.exe -m pytest -q
+.venv\Scripts\python.exe -m pytest -q -m "not slow"
 ```
 
 `uv sync` создаёт `.venv` и ставит туда пакет `mst` вместе с зависимостями из `uv.lock`.
 Проверить, что сервер запускается:
 
 ```powershell
-.venv\Scripts\python.exe -m mst.mcp --workspace workspace
+uv run macrostress --workspace workspace
 ```
 
 Сервер говорит по stdio и ждёт клиента, поэтому после запуска ничего не печатает; выход —
