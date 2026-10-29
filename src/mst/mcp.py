@@ -11,6 +11,7 @@ from . import jobs as tasks
 from . import store
 from .data import sources
 from .data.store import SeriesStore
+from .macro import version as macro_version
 
 
 def build(ws: store.Workspace) -> FastMCP:
@@ -51,7 +52,55 @@ def build(ws: store.Workspace) -> FastMCP:
             return _update(ws, ids or [])
         raise ValueError(f"series: unknown action {action!r}, try search, get, add, update")
 
+    @server.tool
+    def model(
+        kind: str,
+        action: str,
+        version: str | None = None,
+        as_of: str | None = None,
+        only: list[str] | None = None,
+    ) -> dict:
+        """Model versions. kind: macro. Actions: list, describe, estimate, backtest."""
+        if kind != "macro":
+            raise ValueError(f"model: unknown kind {kind!r}, try macro")
+        if action == "list":
+            return {"versions": macro_version.catalogue(ws.models)}
+        if action == "describe":
+            return macro_version.describe(ws.models, _need(version, "version"))
+        if action == "estimate":
+            return _start(ws, "models", _macro_argv(ws, "estimate", _need(as_of, "as_of")))
+        if action == "backtest":
+            return _start(
+                ws, "models", _macro_argv(ws, "backtest", _need(as_of, "as_of"), only or [])
+            )
+        raise ValueError(
+            f"model: unknown action {action!r}, try list, describe, estimate, backtest"
+        )
+
     return server
+
+
+def _macro_argv(
+    ws: store.Workspace, command: str, as_of: str, only: list[str] | None = None
+) -> list[str]:
+    """The command line of ``python -m mst.macro`` for this workspace."""
+    day = date.fromisoformat(as_of).isoformat()
+    argv = [
+        "-m",
+        "mst.macro",
+        command,
+        "--as-of",
+        day,
+        "--store",
+        str(ws.series),
+        "--models",
+        str(ws.models),
+    ]
+    if command == "backtest":
+        argv += ["--corpus", str(ws.corpus / "manifest.json")]
+        if only:
+            argv += ["--only", *only]
+    return argv
 
 
 def _need(value: Any, name: str) -> Any:
@@ -82,8 +131,12 @@ def _rows(ws: store.Workspace, series_id: str, as_of: str | None) -> dict:
 
 def _update(ws: store.Workspace, ids: list[str]) -> dict:
     """Fetch the named series, or every one of them, as a task on the series resource."""
-    argv = ["-m", "mst.data", "update", *ids, "--workspace", str(ws.root)]
-    return {"job": tasks.start(ws, "series", argv), "argv": argv}
+    return _start(ws, "series", ["-m", "mst.data", "update", *ids, "--workspace", str(ws.root)])
+
+
+def _start(ws: store.Workspace, resource: str, argv: list[str]) -> dict:
+    """Start ``argv`` as a task on ``resource`` and name it."""
+    return {"job": tasks.start(ws, resource, argv), "argv": argv}
 
 
 def main(argv: list[str] | None = None) -> None:

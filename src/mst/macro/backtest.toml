@@ -1,0 +1,157 @@
+# Episodes of the check of the macro model (docs/scenario-formalization.md, section 9; plan,
+# stage 3). The calculation date is the day before the start month of the corpus card; the
+# constrained variables follow their realized monthly path up to the end of the card's window;
+# the driving shocks are those the card's sources of the time name (registry.toml, [[shocks]]).
+# Each episode needs at least as many driving shocks as constrained variables, and a global
+# variable needs a global shock. R1-R12 are left out: their history from 2012-01 is shorter
+# than two years or empty.
+
+draws = 1000
+seed = 20261029
+# Months after the start month the window runs to, as in msa.corpus.episodes.
+after_months = 12
+
+[[exclusions]]
+variables = ["ru.spread_aa", "ru.spread_a", "ru.spread_bbb"]
+start = 2021-01-01
+reason = "сшивка индексов MOEX: международная шкала до 2020-12, национальная с 2021-01"
+
+[[episodes]]
+id = "R13"
+constrained = ["ru.usdrub", "ru.key_rate"]
+driving = ["ru.fx_risk", "ru.monetary"]
+reason = "отток капитала и конвертация сбережений ослабили рубль, ЦБ ответил повышением ставки"
+sources = ["T1/2014-2", "S2/2014-1"]
+
+[[episodes]]
+id = "R14"
+constrained = ["gl.brent", "ru.usdrub"]
+driving = ["gl.oil", "ru.fx_risk"]
+reason = "санкции закрыли внешнее фондирование и подняли рисковую премию, во втором полугодии упала нефть"
+sources = ["S2/2014-2", "T1/2014-4"]
+
+[[episodes]]
+id = "R15"
+constrained = ["gl.brent", "ru.usdrub", "ru.key_rate"]
+driving = ["gl.oil", "ru.fx_risk", "ru.monetary"]
+reason = "плавающий курс при падении нефти и санкциях, затем повышение ставки"
+sources = ["T1/2014-4", "T1/2015-1"]
+
+[[episodes]]
+id = "R16"
+constrained = ["ru.key_rate", "ru.usdrub"]
+driving = ["ru.monetary", "ru.fx_risk"]
+reason = "ставка 17 % как ответ на валютный и инфляционный шок"
+sources = ["S2/2015-1", "T1/2015-1"]
+
+[[episodes]]
+id = "R17"
+constrained = ["gl.brent", "ru.usdrub"]
+driving = ["gl.oil", "ru.fx_risk"]
+reason = "падение нефти сократило валютную выручку, неприятие риска усилило давление на рубль"
+sources = ["S2/2016-1", "T1/2016-1"]
+
+[[episodes]]
+id = "R18"
+constrained = ["ru.spread_bbb"]
+driving = ["ru.fx_risk"]
+reason = "отток депозитов и потеря доверия к крупным частным банкам"
+sources = ["S2/2017-2", "S2/2018-1"]
+
+[[episodes]]
+id = "R19"
+constrained = ["ru.usdrub"]
+driving = ["ru.fx_risk"]
+reason = "санкции подняли рисковую премию, нерезиденты вышли из ОФЗ и акций"
+sources = ["T1/2018-2", "S2/2018-1"]
+
+[[episodes]]
+id = "R20"
+constrained = ["ru.ofz_10y"]
+driving = ["ru.fx_risk"]
+reason = "угроза санкций против госдолга, продажи ОФЗ нерезидентами"
+sources = ["S2/2018-2", "T1/2018-3"]
+
+[[episodes]]
+id = "R21"
+constrained = ["ru.key_rate", "ru.usdrub"]
+driving = ["ru.monetary", "ru.fx_risk"]
+reason = "повышение ставки в ответ на ослабление рубля из-за оттока нерезидентов"
+sources = ["T1/2018-3", "T1/2018-2"]
+
+[[episodes]]
+id = "R22"
+constrained = ["ru.key_rate", "ru.cpi"]
+driving = ["ru.monetary", "ru.inflation"]
+reason = "снижение ставки при замедлении инфляции к цели"
+sources = ["T1/2019-3", "S1/2019"]
+
+[[episodes]]
+id = "R23"
+constrained = ["gl.brent", "gl.vix", "ru.usdrub"]
+driving = ["gl.oil", "gl.financial", "ru.fx_risk"]
+reason = "пандемия и распад ОПЕК+: падение нефти, глобальное бегство от риска, выход нерезидентов"
+sources = ["S2/2020-1", "T3/2020-03"]
+
+[[episodes]]
+id = "R24"
+constrained = ["ru.key_rate"]
+driving = ["ru.monetary"]
+reason = "льготная ипотека на фоне снижения ключевой ставки с 6 до 4,25 %"
+sources = ["S2/2020-2"]
+
+[[episodes]]
+id = "R25"
+constrained = ["ru.key_rate", "ru.cpi"]
+driving = ["ru.monetary", "ru.inflation"]
+reason = "перегрев спроса и инфляция выше прогноза, ставка росла на каждом заседании"
+sources = ["S1/2021", "T1/2021-2"]
+
+[[episodes]]
+id = "R26"
+constrained = ["ru.imoex", "ru.usdrub"]
+driving = ["ru.fx_risk", "ru.monetary"]
+reason = "угроза санкций: выход нерезидентов из акций и ослабление рубля"
+sources = ["S2/2022-1", "T1/2022-1"]
+
+[[episodes]]
+id = "R27"
+constrained = ["ru.key_rate", "ru.usdrub"]
+driving = ["ru.monetary", "ru.fx_risk"]
+reason = "санкции на резервы и выход нерезидентов ударили по курсу, ЦБ поднял ставку до 20 %"
+sources = ["S2/2022-1", "T1/2022-1"]
+
+[[episodes]]
+id = "R28"
+constrained = ["ru.key_rate", "ru.usdrub"]
+driving = ["ru.monetary", "ru.fx_risk"]
+reason = "укрепление рубля при валютных ограничениях и быстрое снижение ставки"
+sources = ["S1/2022", "T1/2022-2"]
+
+[[episodes]]
+id = "R29"
+constrained = ["ru.imoex"]
+driving = ["ru.fx_risk"]
+reason = "мобилизация: падение акций и отток наличных"
+sources = ["S2/2022-2", "T1/2022-4"]
+
+[[episodes]]
+id = "R30"
+constrained = ["ru.usdrub"]
+driving = ["ru.fx_risk"]
+reason = "однодневный шок рынка акций; месячные ряды его почти не видят"
+sources = ["S2/2023-2"]
+
+[[episodes]]
+id = "R31"
+constrained = ["ru.key_rate", "ru.usdrub"]
+driving = ["ru.monetary", "ru.fx_risk"]
+reason = "внутренний спрос давил на курс через импорт, ЦБ внеочередно поднял ставку"
+sources = ["S1/2023", "T1/2023-4"]
+
+[[episodes]]
+id = "R32"
+constrained = ["ru.key_rate", "ru.usdrub"]
+driving = ["ru.monetary", "ru.fx_risk"]
+reason = "охлаждение спроса жёсткой политикой, укрепление рубля, начало снижения ставки"
+sources = ["S1/2025", "S2/2025-2"]

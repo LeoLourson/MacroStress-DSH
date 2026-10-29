@@ -1,0 +1,194 @@
+# Macro variables (docs/scenario-formalization.md, section 2) and named shocks with their sign
+# restrictions (section 4.2). The id prefix is the block: gl. global, ru. Russian.
+# transform: identity for rates and spreads, log100 (100 ln X) for prices, indices and volumes.
+
+[[variables]]
+id = "gl.brent"
+label = "нефть Brent"
+unit = "долл. за баррель"
+transform = "log100"
+source = "FRED"
+
+[[variables]]
+id = "gl.fed_rate"
+label = "ставка ФРС"
+unit = "%"
+transform = "identity"
+source = "FRED"
+
+[[variables]]
+id = "gl.ust_10y"
+label = "доходность UST на 10 лет"
+unit = "%"
+transform = "identity"
+source = "FRED"
+
+[[variables]]
+id = "gl.vix"
+label = "индекс волатильности VIX"
+unit = "пункты"
+transform = "log100"
+source = "FRED"
+
+[[variables]]
+id = "ru.key_rate"
+label = "ключевая ставка"
+unit = "%"
+transform = "identity"
+source = "Банк России"
+
+[[variables]]
+id = "ru.ruonia"
+label = "ставка RUONIA"
+unit = "%"
+transform = "identity"
+source = "Банк России"
+
+[[variables]]
+id = "ru.ofz_1y"
+label = "доходность ОФЗ на 1 год по G-кривой"
+unit = "%"
+transform = "identity"
+source = "КБД Московской биржи, публикация Банка России"
+
+[[variables]]
+id = "ru.ofz_5y"
+label = "доходность ОФЗ на 5 лет по G-кривой"
+unit = "%"
+transform = "identity"
+source = "КБД Московской биржи, публикация Банка России"
+
+[[variables]]
+id = "ru.ofz_10y"
+label = "доходность ОФЗ на 10 лет по G-кривой"
+unit = "%"
+transform = "identity"
+source = "КБД Московской биржи, публикация Банка России"
+
+[[variables]]
+id = "ru.spread_aa"
+label = "спред корпоративных облигаций группы AA к G-кривой"
+unit = "п. п."
+transform = "identity"
+source = "индексы MOEX: RUCBICPBBB до 2020-12, RUCBCPAANS с 2021-01 (сшивка, скачок уровня)"
+
+[[variables]]
+id = "ru.spread_a"
+label = "спред корпоративных облигаций группы A к G-кривой"
+unit = "п. п."
+transform = "identity"
+source = "индексы MOEX: RUCBICPBB до 2020-12, RUCBCPANS с 2021-01 (сшивка, скачок уровня)"
+
+[[variables]]
+id = "ru.spread_bbb"
+label = "спред корпоративных облигаций группы BBB к G-кривой"
+unit = "п. п."
+transform = "identity"
+source = "индексы MOEX: RUCBICPB до 2020-12, RUCBCPBBBNS с 2021-01 (сшивка, скачок уровня)"
+
+[[variables]]
+id = "ru.usdrub"
+label = "официальный курс доллара"
+unit = "руб. за долл."
+transform = "log100"
+source = "Банк России"
+
+[[variables]]
+id = "ru.cnyrub"
+label = "официальный курс юаня"
+unit = "руб. за юань"
+transform = "log100"
+source = "Банк России"
+
+[[variables]]
+id = "ru.cpi"
+label = "индекс потребительских цен"
+unit = "индекс"
+transform = "log100"
+source = "Росстат"
+
+[[variables]]
+id = "ru.output"
+label = "индекс выпуска базовых видов деятельности"
+unit = "индекс"
+transform = "log100"
+source = "Росстат"
+
+[[variables]]
+id = "ru.unemployment"
+label = "безработица"
+unit = "%"
+transform = "identity"
+source = "Росстат"
+
+[[variables]]
+id = "ru.real_wage"
+label = "индекс реальной зарплаты"
+unit = "индекс"
+transform = "log100"
+source = "Росстат"
+
+[[variables]]
+id = "ru.retail"
+label = "индекс оборота розничной торговли"
+unit = "индекс"
+transform = "log100"
+source = "Росстат"
+
+[[variables]]
+id = "ru.credit"
+label = "кредит организациям и населению"
+unit = "млн руб."
+transform = "log100"
+source = "Банк России"
+
+[[variables]]
+id = "ru.mortgage_rate"
+label = "средняя ставка ипотеки"
+unit = "%"
+transform = "identity"
+source = "Банк России"
+
+[[variables]]
+id = "ru.housing_price"
+label = "цена жилья"
+unit = "руб. за м²"
+transform = "log100"
+source = "Росстат"
+
+[[variables]]
+id = "ru.imoex"
+label = "индекс MOEX"
+unit = "пункты"
+transform = "log100"
+source = "MOEX"
+
+[[shocks]]
+id = "ru.monetary"
+label = "денежно-кредитный"
+rises = ["ru.key_rate", "ru.ruonia", "ru.ofz_1y"]
+falls = ["ru.usdrub", "ru.imoex"]
+
+[[shocks]]
+id = "ru.inflation"
+label = "инфляционный"
+rises = ["ru.cpi", "ru.key_rate"]
+falls = ["ru.real_wage"]
+
+[[shocks]]
+id = "ru.fx_risk"
+label = "курсовой и риск-премии"
+rises = ["ru.usdrub", "ru.ofz_10y", "ru.spread_bbb"]
+falls = ["ru.imoex"]
+
+[[shocks]]
+id = "gl.oil"
+label = "нефтяной"
+rises = ["gl.brent"]
+falls = ["ru.usdrub"]
+
+[[shocks]]
+id = "gl.financial"
+label = "глобальный финансовый"
+rises = ["gl.vix"]
+falls = ["gl.ust_10y", "ru.imoex"]

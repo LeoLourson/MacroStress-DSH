@@ -1,0 +1,55 @@
+# The estimation specification of the macro model (docs/scenario-formalization.md, section 4;
+# docs/scenario-implementation-plan.md, stage 2). A model version stores this file as it was.
+
+# T0: the first month of history (plan, section 4, decision 1).
+start = 2012-01-01
+# p: months of the past each variable depends on.
+lags = 3
+# lambda: the Minnesota tightness; smaller pulls the coefficients harder to the prior.
+tightness = 0.2
+# "constant" is the conjugate BVAR (s_j = 0, nu_j = infinity); "stochastic" adds stochastic
+# volatility and Student tails.
+volatility = "stochastic"
+# Prior of each s_j^2: inverse gamma with this mean and degrees of freedom (stochastic only).
+# Tight on purpose: policy rates move in steps and the Fed rate sat at zero, so with 5 degrees
+# of freedom the posterior median s_j reached 4.0 a month for gl.fed_rate and 1.2 for
+# ru.key_rate (store as of 2026-10-29) and simulated paths exploded within three months; with
+# 60 every median stays at or below 0.2.
+volvol_mean = 0.03
+volvol_df = 60.0
+# Variables whose prior returns them to their mean; every other one stays at its last value.
+stationary = ["gl.vix", "ru.spread_aa", "ru.spread_a", "ru.spread_bbb"]
+# Rosstat series are stored raw; their seasonality is removed when the panel is built.
+seasonal = ["ru.cpi", "ru.output", "ru.unemployment", "ru.real_wage", "ru.retail"]
+# Months after the impact month that a sign restriction also covers.
+sign_lag = 2
+# Rotations tried per parameter draw before the draw is dropped as unidentified.
+rotation_tries = 20000
+
+[sampler]
+draws = 1000
+burn = 1000
+thin = 2
+seed = 20261029
+
+# Regime dummies of the Russian block. An impulse is 1 in its month only; a step is 1 from its
+# month on, also over the scenario horizon.
+[[dummies]]
+month = 2014-11-01
+kind = "impulse"
+note = "переход к плавающему курсу"
+
+[[dummies]]
+month = 2022-02-01
+kind = "impulse"
+note = "февраль 2022 года"
+
+[[dummies]]
+month = 2022-03-01
+kind = "impulse"
+note = "март 2022 года"
+
+[[dummies]]
+month = 2021-01-01
+kind = "step"
+note = "сшивка спредов рейтинговых групп: международная шкала до 2020-12, национальная с 2021-01"
