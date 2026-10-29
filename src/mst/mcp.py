@@ -9,6 +9,7 @@ from fastmcp import FastMCP
 
 from . import jobs as tasks
 from . import store
+from .corpus import tool as corpus_tool
 from .data import sources
 from .data.store import SeriesStore
 from .drivers import version as satellite_version
@@ -63,6 +64,51 @@ def build(ws: store.Workspace) -> FastMCP:
         raise ValueError(f"series: unknown action {action!r}, try search, get, add, update")
 
     @server.tool
+    def corpus(
+        action: str,
+        query: str | None = None,
+        as_of: str | None = None,
+        id: str | None = None,
+        kind: str | None = None,
+        region: str | None = None,
+        factors: list[str] | None = None,
+        k: int = 8,
+        key: str | None = None,
+        file: str | None = None,
+        url: str | None = None,
+        ids: list[str] | None = None,
+    ) -> dict:
+        """The scenario corpus. Actions: search, get, list, add, index, fetch.
+
+        ``search`` and ``get`` read the index as it was on ``as_of``; ``list`` shows what the
+        manifest holds; ``add`` registers a file downloaded by hand under its ``key``. ``index``
+        and ``fetch`` are tasks on the corpus resource.
+        """
+        if action == "search":
+            return corpus_tool.search(
+                ws.corpus,
+                _need(query, "query"),
+                _day(_need(as_of, "as_of")),
+                kind=kind,
+                region=region,
+                factors=factors,
+                k=k,
+            )
+        if action == "get":
+            return corpus_tool.get(ws.corpus, _need(id, "id"), _day(_need(as_of, "as_of")))
+        if action == "list":
+            return corpus_tool.catalogue(ws.corpus)
+        if action == "add":
+            return corpus_tool.add(ws.corpus, _need(key, "key"), Path(_need(file, "file")), url)
+        if action == "index":
+            return _start(ws, "corpus", _corpus_argv(ws, "index"))
+        if action == "fetch":
+            return _start(ws, "corpus", _corpus_argv(ws, "fetch", *(ids or [])))
+        raise ValueError(
+            f"corpus: unknown action {action!r}, try search, get, list, add, index, fetch"
+        )
+
+    @server.tool
     def model(
         kind: str,
         action: str,
@@ -102,6 +148,16 @@ def build(ws: store.Workspace) -> FastMCP:
         )
 
     return server
+
+
+def _corpus_argv(ws: store.Workspace, command: str, *ids: str) -> list[str]:
+    """The command line of ``python -m mst.corpus`` for this workspace."""
+    return ["-m", "mst.corpus", command, *ids, "--corpus", str(ws.corpus)]
+
+
+def _day(as_of: str) -> date:
+    """The day an action works as of."""
+    return date.fromisoformat(as_of)
 
 
 def _macro_argv(

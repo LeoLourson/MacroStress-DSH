@@ -1,0 +1,1171 @@
+# Series for the movements tables of the episode cards (msa-corpus series, msa-corpus episodes).
+#
+# [series."<id>"]: title (with the quote and unit), unit (pp: moves in percentage points;
+# pct: moves in percent), since (where the download starts), source (an msa.data loader read at
+# its own frequency, or the BIS API; none for a series kept only monthly), monthly (the same series in data/series, the fallback when
+# the daily one is not downloaded), transform = "yoy" (an index turned into its 12-month change),
+# minus (a series subtracted on common dates).
+#
+# [factors.<country>]: the series that measure a factor, best first; the first one with data
+# around the episode is taken. "*" applies to every country. [episodes.<id>] overrides both.
+# A factor without a series (bank.solvency, capital_flows, sanctions, sovereign.default...) is
+# listed in the card as not measured: it is described in the chronology instead.
+#
+# BIS keys follow the dataflows WS_CBPOL (FREQ.REF_AREA), WS_XRU (FREQ.REF_AREA.CURRENCY.
+# COLLECTION), WS_LONG_CPI (FREQ.REF_AREA.UNIT_MEASURE, 771 = year-on-year change) and WS_SPP
+# (FREQ.REF_AREA.VALUE.UNIT_MEASURE, N.628 = nominal index), checked against the API on
+# 2026-10-29: Egypt, Nigeria, Ghana, Lebanon and Belarus have only monthly exchange rates,
+# Egypt has no policy rate and Belarus, Egypt, Sri Lanka and Ukraine no long CPI series.
+
+# D1. Bank of Russia.
+
+[series."cbr.usdrub"]
+title = "Официальный курс доллара США, руб. за доллар"
+unit = "pct"
+since = 1992-07-01
+monthly = "ru.usdrub"
+redenominated = 1998-01-01
+source = { loader = "cbr_currency", code = "R01235" }
+
+[series."cbr.key_rate"]
+title = "Ключевая ставка Банка России, % годовых (с 13.09.2013)"
+unit = "pp"
+since = 2013-09-13
+monthly = "ru.key_rate"
+source = { loader = "cbr_key_rate", before = [] }
+
+[series."cbr.ruonia"]
+title = "RUONIA, % годовых"
+unit = "pp"
+since = 2010-01-01
+monthly = "ru.ruonia"
+source = { loader = "cbr_ruonia" }
+
+[series."cbr.ofz_10y"]
+title = "Бескупонная доходность ОФЗ 10 лет, % годовых"
+unit = "pp"
+since = 2003-01-01
+monthly = "ru.ofz_10y"
+source = { loader = "cbr_zcyc", years = "10" }
+
+# Monthly series of the store with no daily version.
+
+[series."store.ru_cpi"]
+title = "ИПЦ России, % г/г"
+unit = "pp"
+since = 2012-01-01
+monthly = "ru.cpi"
+transform = "yoy"
+
+[series."store.ru_mortgage"]
+title = "Средневзвешенная ставка по ипотеке в рублях, % годовых"
+unit = "pp"
+since = 2012-01-01
+monthly = "ru.mortgage_rate"
+
+[series."store.ru_housing"]
+title = "Средняя цена 1 кв. м жилья, руб."
+unit = "pct"
+since = 2012-01-01
+monthly = "ru.housing_price"
+
+# D2. Moscow Exchange.
+
+[series."moex.imoex"]
+title = "Индекс МосБиржи (ММВБ), пункты"
+unit = "pct"
+since = 1997-09-01
+monthly = "ru.imoex"
+source = { loader = "moex_index", secid = "IMOEX" }
+
+[series."moex.rtsi"]
+title = "Индекс РТС, пункты"
+unit = "pct"
+since = 1995-09-01
+source = { loader = "moex_index", secid = "RTSI" }
+
+[series."moex.spread_bbb"]
+title = "Спред индекса корпоративных облигаций (B до 2021, BBB с 2021) к ОФЗ, п. п."
+unit = "pp"
+since = 2003-01-01
+monthly = "ru.spread_bbb"
+source = { loader = "moex_spread", old = "RUCBICPB", new = "RUCBCPBBBNS", splice = "2021-01-01" }
+
+# D3. FRED.
+
+[series."fred.DFF"]
+title = "Ставка по федеральным фондам, % годовых"
+unit = "pp"
+since = 1954-07-01
+monthly = "gl.fed_rate"
+source = { loader = "fred", series_id = "DFF" }
+
+[series."fred.DGS10"]
+title = "Доходность UST 10 лет, %"
+unit = "pp"
+since = 1962-01-01
+monthly = "gl.ust_10y"
+source = { loader = "fred", series_id = "DGS10" }
+
+[series."fred.BAMLC0A0CM"]
+title = "Спред ICE BofA US Corporate (IG) OAS, п. п."
+unit = "pp"
+since = 1996-12-01
+source = { loader = "fred", series_id = "BAMLC0A0CM" }
+
+[series."fred.BAMLH0A0HYM2"]
+title = "Спред ICE BofA US High Yield OAS, п. п."
+unit = "pp"
+since = 1996-12-01
+source = { loader = "fred", series_id = "BAMLH0A0HYM2" }
+
+[series."fred.BAA10Y"]
+title = "Спред Moody's Baa к UST 10 лет, п. п."
+unit = "pp"
+since = 1986-01-01
+source = { loader = "fred", series_id = "BAA10Y" }
+
+[series."fred.VIXCLS"]
+title = "VIX, пункты"
+unit = "pct"
+since = 1990-01-01
+monthly = "gl.vix"
+source = { loader = "fred", series_id = "VIXCLS" }
+
+[series."fred.VXOCLS"]
+title = "VXO, пункты"
+unit = "pct"
+since = 1986-01-01
+source = { loader = "fred", series_id = "VXOCLS" }
+
+[series."fred.DCOILBRENTEU"]
+title = "Brent, долл. за баррель"
+unit = "pct"
+since = 1987-05-01
+monthly = "gl.brent"
+source = { loader = "fred", series_id = "DCOILBRENTEU" }
+
+[series."fred.DCOILWTICO"]
+title = "WTI, долл. за баррель"
+unit = "pct"
+since = 1986-01-01
+source = { loader = "fred", series_id = "DCOILWTICO" }
+
+[series."fred.WTISPLC"]
+title = "WTI спот, месячная, долл. за баррель"
+unit = "pct"
+since = 1946-01-01
+source = { loader = "fred", series_id = "WTISPLC" }
+
+[series."fred.NASDAQCOM"]
+title = "NASDAQ Composite, пункты"
+unit = "pct"
+since = 1971-02-01
+source = { loader = "fred", series_id = "NASDAQCOM" }
+
+[series."fred.NIKKEI225"]
+title = "Nikkei 225, пункты"
+unit = "pct"
+since = 1949-05-01
+source = { loader = "fred", series_id = "NIKKEI225" }
+
+[series."fred.DTWEXBGS"]
+title = "Широкий индекс доллара США (январь 2006 = 100)"
+unit = "pct"
+since = 2006-01-01
+source = { loader = "fred", series_id = "DTWEXBGS" }
+
+[series."fred.DTWEXM"]
+title = "Индекс доллара к основным валютам (март 1973 = 100)"
+unit = "pct"
+since = 1973-01-01
+source = { loader = "fred", series_id = "DTWEXM" }
+
+[series."fred.DTWEXEMEGS"]
+title = "Индекс доллара к валютам развивающихся стран (январь 2006 = 100)"
+unit = "pct"
+since = 2006-01-01
+source = { loader = "fred", series_id = "DTWEXEMEGS" }
+
+[series."fred.DTWEXO"]
+title = "Индекс доллара к прочим важным торговым партнёрам (январь 1997 = 100)"
+unit = "pct"
+since = 1995-01-01
+source = { loader = "fred", series_id = "DTWEXO" }
+
+[series."fred.TEDRATE"]
+title = "TED-спред (LIBOR 3 мес. минус T-bill 3 мес.), п. п."
+unit = "pp"
+since = 1986-01-01
+source = { loader = "fred", series_id = "TEDRATE" }
+
+[series."fred.SOFR"]
+title = "SOFR, %"
+unit = "pp"
+since = 2018-04-01
+source = { loader = "fred", series_id = "SOFR" }
+
+[series."fred.MORTGAGE30US"]
+title = "Ставка 30-летней ипотеки, %"
+unit = "pp"
+since = 1971-04-01
+source = { loader = "fred", series_id = "MORTGAGE30US" }
+
+[series."fred.CSUSHPISA"]
+title = "Case-Shiller US National, индекс"
+unit = "pct"
+since = 1987-01-01
+source = { loader = "fred", series_id = "CSUSHPISA" }
+
+[series."fred.UNRATE"]
+title = "Безработица в США, %"
+unit = "pp"
+since = 1948-01-01
+source = { loader = "fred", series_id = "UNRATE" }
+
+[series."fred.PNGASEUUSDM"]
+title = "Газ, Европа (МВФ), долл. за MMBtu"
+unit = "pct"
+since = 1990-01-01
+source = { loader = "fred", series_id = "PNGASEUUSDM" }
+
+[series."fred.PNICKUSDM"]
+title = "Никель (МВФ), долл. за т"
+unit = "pct"
+since = 1990-01-01
+source = { loader = "fred", series_id = "PNICKUSDM" }
+
+[series."fred.PALUMUSDM"]
+title = "Алюминий (МВФ), долл. за т"
+unit = "pct"
+since = 1990-01-01
+source = { loader = "fred", series_id = "PALUMUSDM" }
+
+[series."fred.PWHEAMTUSDM"]
+title = "Пшеница (МВФ), долл. за т"
+unit = "pct"
+since = 1990-01-01
+source = { loader = "fred", series_id = "PWHEAMTUSDM" }
+
+[series."fred.DEXJPUS"]
+title = "Иен за доллар США"
+unit = "pct"
+since = 1971-01-01
+source = { loader = "fred", series_id = "DEXJPUS" }
+
+[series."fred.DEXUSUK"]
+title = "Долларов США за фунт"
+unit = "pct"
+since = 1971-01-01
+source = { loader = "fred", series_id = "DEXUSUK" }
+
+[series."fred.DEXSZUS"]
+title = "Франков за доллар США"
+unit = "pct"
+since = 1971-01-01
+source = { loader = "fred", series_id = "DEXSZUS" }
+
+[series."fred.DEXUSEU"]
+title = "Долларов США за евро"
+unit = "pct"
+since = 1999-01-01
+source = { loader = "fred", series_id = "DEXUSEU" }
+
+[series."fred.DEXMXUS"]
+title = "Песо за доллар США"
+unit = "pct"
+since = 1993-11-01
+source = { loader = "fred", series_id = "DEXMXUS" }
+
+[series."fred.DEXTHUS"]
+title = "Батов за доллар США"
+unit = "pct"
+since = 1981-01-01
+source = { loader = "fred", series_id = "DEXTHUS" }
+
+[series."fred.DEXKOUS"]
+title = "Вон за доллар США"
+unit = "pct"
+since = 1981-04-01
+source = { loader = "fred", series_id = "DEXKOUS" }
+
+[series."fred.DEXBZUS"]
+title = "Реалов за доллар США"
+unit = "pct"
+since = 1995-01-01
+source = { loader = "fred", series_id = "DEXBZUS" }
+
+[series."fred.DEXCHUS"]
+title = "Юаней за доллар США"
+unit = "pct"
+since = 1981-01-01
+source = { loader = "fred", series_id = "DEXCHUS" }
+
+[series."fred.CPIAUCSL"]
+title = "ИПЦ США, % г/г"
+unit = "pp"
+since = 1947-01-01
+transform = "yoy"
+source = { loader = "fred", series_id = "CPIAUCSL" }
+
+[series."fred.lt_de"]
+title = "Доходность гособлигаций Германии 10 лет (ОЭСР), %"
+unit = "pp"
+since = 1960-01-01
+source = { loader = "fred", series_id = "IRLTLT01DEM156N" }
+
+[series."fred.spread_gr"]
+title = "Спред гособлигаций Греции 10 лет к Германии (ОЭСР, месячный), п. п."
+unit = "pp"
+since = 1990-01-01
+minus = "fred.lt_de"
+source = { loader = "fred", series_id = "IRLTLT01GRM156N" }
+
+[series."fred.spread_it"]
+title = "Спред гособлигаций Италии 10 лет к Германии (ОЭСР, месячный), п. п."
+unit = "pp"
+since = 1990-01-01
+minus = "fred.lt_de"
+source = { loader = "fred", series_id = "IRLTLT01ITM156N" }
+
+[series."fred.spread_ie"]
+title = "Спред гособлигаций Ирландии 10 лет к Германии (ОЭСР, месячный), п. п."
+unit = "pp"
+since = 1990-01-01
+minus = "fred.lt_de"
+source = { loader = "fred", series_id = "IRLTLT01IEM156N" }
+
+[series."fred.lt_gb"]
+title = "Доходность гособлигаций Великобритании 10 лет (ОЭСР, месячная), %"
+unit = "pp"
+since = 1960-01-01
+source = { loader = "fred", series_id = "IRLTLT01GBM156N" }
+
+[series."fred.lt_jp"]
+title = "Доходность гособлигаций Японии 10 лет (ОЭСР, месячная), %"
+unit = "pp"
+since = 1960-01-01
+source = { loader = "fred", series_id = "IRLTLT01JPM156N" }
+
+# D5. BIS (D4, IMF IFS, is replaced by BIS series of the same content).
+
+[series."bis.xru.MX"]
+title = "Курс валюты Мексики: песо за доллар США (BIS)"
+unit = "pct"
+since = 1970-01-01
+source = { loader = "bis", flow = "WS_XRU", key = "D.MX.MXN.A" }
+
+[series."bis.cbpol.MX"]
+title = "Ставка центрального банка Мексики, % (BIS)"
+unit = "pp"
+since = 1970-01-01
+source = { loader = "bis", flow = "WS_CBPOL", key = "D.MX" }
+
+[series."bis.cpi.MX"]
+title = "Инфляция Мексики, % г/г (BIS)"
+unit = "pp"
+since = 1970-01-01
+source = { loader = "bis", flow = "WS_LONG_CPI", key = "M.MX.771" }
+
+[series."bis.spp.MX"]
+title = "Цены жилой недвижимости Мексики, номинальный индекс (BIS)"
+unit = "pct"
+since = 1970-01-01
+source = { loader = "bis", flow = "WS_SPP", key = "Q.MX.N.628" }
+
+[series."bis.xru.TH"]
+title = "Курс валюты Таиланда: батов за доллар США (BIS)"
+unit = "pct"
+since = 1970-01-01
+source = { loader = "bis", flow = "WS_XRU", key = "D.TH.THB.A" }
+
+[series."bis.cbpol.TH"]
+title = "Ставка центрального банка Таиланда, % (BIS)"
+unit = "pp"
+since = 1970-01-01
+source = { loader = "bis", flow = "WS_CBPOL", key = "D.TH" }
+
+[series."bis.cpi.TH"]
+title = "Инфляция Таиланда, % г/г (BIS)"
+unit = "pp"
+since = 1970-01-01
+source = { loader = "bis", flow = "WS_LONG_CPI", key = "M.TH.771" }
+
+[series."bis.spp.TH"]
+title = "Цены жилой недвижимости Таиланда, номинальный индекс (BIS)"
+unit = "pct"
+since = 1970-01-01
+source = { loader = "bis", flow = "WS_SPP", key = "Q.TH.N.628" }
+
+[series."bis.xru.ID"]
+title = "Курс валюты Индонезии: рупий за доллар США (BIS)"
+unit = "pct"
+since = 1970-01-01
+source = { loader = "bis", flow = "WS_XRU", key = "D.ID.IDR.A" }
+
+[series."bis.cbpol.ID"]
+title = "Ставка центрального банка Индонезии, % (BIS)"
+unit = "pp"
+since = 1970-01-01
+source = { loader = "bis", flow = "WS_CBPOL", key = "D.ID" }
+
+[series."bis.cpi.ID"]
+title = "Инфляция Индонезии, % г/г (BIS)"
+unit = "pp"
+since = 1970-01-01
+source = { loader = "bis", flow = "WS_LONG_CPI", key = "M.ID.771" }
+
+[series."bis.spp.ID"]
+title = "Цены жилой недвижимости Индонезии, номинальный индекс (BIS)"
+unit = "pct"
+since = 1970-01-01
+source = { loader = "bis", flow = "WS_SPP", key = "Q.ID.N.628" }
+
+[series."bis.xru.KR"]
+title = "Курс валюты Кореи: вон за доллар США (BIS)"
+unit = "pct"
+since = 1970-01-01
+source = { loader = "bis", flow = "WS_XRU", key = "D.KR.KRW.A" }
+
+[series."bis.cbpol.KR"]
+title = "Ставка центрального банка Кореи, % (BIS)"
+unit = "pp"
+since = 1970-01-01
+source = { loader = "bis", flow = "WS_CBPOL", key = "D.KR" }
+
+[series."bis.cpi.KR"]
+title = "Инфляция Кореи, % г/г (BIS)"
+unit = "pp"
+since = 1970-01-01
+source = { loader = "bis", flow = "WS_LONG_CPI", key = "M.KR.771" }
+
+[series."bis.spp.KR"]
+title = "Цены жилой недвижимости Кореи, номинальный индекс (BIS)"
+unit = "pct"
+since = 1970-01-01
+source = { loader = "bis", flow = "WS_SPP", key = "Q.KR.N.628" }
+
+[series."bis.xru.BR"]
+title = "Курс валюты Бразилии: реалов за доллар США (BIS)"
+unit = "pct"
+since = 1970-01-01
+source = { loader = "bis", flow = "WS_XRU", key = "D.BR.BRL.A" }
+
+[series."bis.cbpol.BR"]
+title = "Ставка центрального банка Бразилии, % (BIS)"
+unit = "pp"
+since = 1970-01-01
+source = { loader = "bis", flow = "WS_CBPOL", key = "D.BR" }
+
+[series."bis.cpi.BR"]
+title = "Инфляция Бразилии, % г/г (BIS)"
+unit = "pp"
+since = 1970-01-01
+source = { loader = "bis", flow = "WS_LONG_CPI", key = "M.BR.771" }
+
+[series."bis.spp.BR"]
+title = "Цены жилой недвижимости Бразилии, номинальный индекс (BIS)"
+unit = "pct"
+since = 1970-01-01
+source = { loader = "bis", flow = "WS_SPP", key = "Q.BR.N.628" }
+
+[series."bis.xru.TR"]
+title = "Курс валюты Турции: лир за доллар США (BIS)"
+unit = "pct"
+since = 1970-01-01
+source = { loader = "bis", flow = "WS_XRU", key = "D.TR.TRY.A" }
+
+[series."bis.cbpol.TR"]
+title = "Ставка центрального банка Турции, % (BIS)"
+unit = "pp"
+since = 1970-01-01
+source = { loader = "bis", flow = "WS_CBPOL", key = "D.TR" }
+
+[series."bis.cpi.TR"]
+title = "Инфляция Турции, % г/г (BIS)"
+unit = "pp"
+since = 1970-01-01
+source = { loader = "bis", flow = "WS_LONG_CPI", key = "M.TR.771" }
+
+[series."bis.spp.TR"]
+title = "Цены жилой недвижимости Турции, номинальный индекс (BIS)"
+unit = "pct"
+since = 1970-01-01
+source = { loader = "bis", flow = "WS_SPP", key = "Q.TR.N.628" }
+
+[series."bis.xru.AR"]
+title = "Курс валюты Аргентины: песо за доллар США (BIS)"
+unit = "pct"
+since = 1970-01-01
+source = { loader = "bis", flow = "WS_XRU", key = "D.AR.ARS.A" }
+
+[series."bis.cbpol.AR"]
+title = "Ставка центрального банка Аргентины, % (BIS)"
+unit = "pp"
+since = 1970-01-01
+source = { loader = "bis", flow = "WS_CBPOL", key = "D.AR" }
+
+[series."bis.cpi.AR"]
+title = "Инфляция Аргентины, % г/г (BIS)"
+unit = "pp"
+since = 1970-01-01
+source = { loader = "bis", flow = "WS_LONG_CPI", key = "M.AR.771" }
+
+[series."bis.spp.AR"]
+title = "Цены жилой недвижимости Аргентины, номинальный индекс (BIS)"
+unit = "pct"
+since = 1970-01-01
+source = { loader = "bis", flow = "WS_SPP", key = "Q.AR.N.628" }
+
+[series."bis.xru.UY"]
+title = "Курс валюты Уругвая: песо за доллар США (BIS)"
+unit = "pct"
+since = 1970-01-01
+source = { loader = "bis", flow = "WS_XRU", key = "D.UY.UYU.A" }
+
+[series."bis.cbpol.UY"]
+title = "Ставка центрального банка Уругвая, % (BIS)"
+unit = "pp"
+since = 1970-01-01
+source = { loader = "bis", flow = "WS_CBPOL", key = "D.UY" }
+
+[series."bis.cpi.UY"]
+title = "Инфляция Уругвая, % г/г (BIS)"
+unit = "pp"
+since = 1970-01-01
+source = { loader = "bis", flow = "WS_LONG_CPI", key = "M.UY.771" }
+
+[series."bis.spp.UY"]
+title = "Цены жилой недвижимости Уругвая, номинальный индекс (BIS)"
+unit = "pct"
+since = 1970-01-01
+source = { loader = "bis", flow = "WS_SPP", key = "Q.UY.N.628" }
+
+[series."bis.xru.IS"]
+title = "Курс валюты Исландии: крон за доллар США (BIS)"
+unit = "pct"
+since = 1970-01-01
+source = { loader = "bis", flow = "WS_XRU", key = "D.IS.ISK.A" }
+
+[series."bis.cbpol.IS"]
+title = "Ставка центрального банка Исландии, % (BIS)"
+unit = "pp"
+since = 1970-01-01
+source = { loader = "bis", flow = "WS_CBPOL", key = "D.IS" }
+
+[series."bis.cpi.IS"]
+title = "Инфляция Исландии, % г/г (BIS)"
+unit = "pp"
+since = 1970-01-01
+source = { loader = "bis", flow = "WS_LONG_CPI", key = "M.IS.771" }
+
+[series."bis.spp.IS"]
+title = "Цены жилой недвижимости Исландии, номинальный индекс (BIS)"
+unit = "pct"
+since = 1970-01-01
+source = { loader = "bis", flow = "WS_SPP", key = "Q.IS.N.628" }
+
+[series."bis.xru.HU"]
+title = "Курс валюты Венгрии: форинтов за доллар США (BIS)"
+unit = "pct"
+since = 1970-01-01
+source = { loader = "bis", flow = "WS_XRU", key = "D.HU.HUF.A" }
+
+[series."bis.cbpol.HU"]
+title = "Ставка центрального банка Венгрии, % (BIS)"
+unit = "pp"
+since = 1970-01-01
+source = { loader = "bis", flow = "WS_CBPOL", key = "D.HU" }
+
+[series."bis.cpi.HU"]
+title = "Инфляция Венгрии, % г/г (BIS)"
+unit = "pp"
+since = 1970-01-01
+source = { loader = "bis", flow = "WS_LONG_CPI", key = "M.HU.771" }
+
+[series."bis.spp.HU"]
+title = "Цены жилой недвижимости Венгрии, номинальный индекс (BIS)"
+unit = "pct"
+since = 1970-01-01
+source = { loader = "bis", flow = "WS_SPP", key = "Q.HU.N.628" }
+
+[series."bis.xru.UA"]
+title = "Курс валюты Украины: гривен за доллар США (BIS)"
+unit = "pct"
+since = 1970-01-01
+source = { loader = "bis", flow = "WS_XRU", key = "D.UA.UAH.A" }
+
+[series."bis.cbpol.UA"]
+title = "Ставка центрального банка Украины, % (BIS)"
+unit = "pp"
+since = 1970-01-01
+source = { loader = "bis", flow = "WS_CBPOL", key = "D.UA" }
+
+[series."bis.spp.UA"]
+title = "Цены жилой недвижимости Украины, номинальный индекс (BIS)"
+unit = "pct"
+since = 1970-01-01
+source = { loader = "bis", flow = "WS_SPP", key = "Q.UA.N.628" }
+
+[series."bis.xru.KZ"]
+title = "Курс валюты Казахстана: тенге за доллар США (BIS)"
+unit = "pct"
+since = 1970-01-01
+source = { loader = "bis", flow = "WS_XRU", key = "D.KZ.KZT.A" }
+
+[series."bis.cbpol.KZ"]
+title = "Ставка центрального банка Казахстана, % (BIS)"
+unit = "pp"
+since = 1970-01-01
+source = { loader = "bis", flow = "WS_CBPOL", key = "D.KZ" }
+
+[series."bis.cpi.KZ"]
+title = "Инфляция Казахстана, % г/г (BIS)"
+unit = "pp"
+since = 1970-01-01
+source = { loader = "bis", flow = "WS_LONG_CPI", key = "M.KZ.771" }
+
+[series."bis.spp.KZ"]
+title = "Цены жилой недвижимости Казахстана, номинальный индекс (BIS)"
+unit = "pct"
+since = 1970-01-01
+source = { loader = "bis", flow = "WS_SPP", key = "Q.KZ.N.628" }
+
+[series."bis.xru.BY"]
+title = "Курс валюты Беларуси: рублей за доллар США (BIS)"
+unit = "pct"
+since = 1970-01-01
+source = { loader = "bis", flow = "WS_XRU", key = "M.BY.BYN.A" }
+
+[series."bis.cbpol.BY"]
+title = "Ставка центрального банка Беларуси, % (BIS)"
+unit = "pp"
+since = 1970-01-01
+source = { loader = "bis", flow = "WS_CBPOL", key = "D.BY" }
+
+[series."bis.spp.BY"]
+title = "Цены жилой недвижимости Беларуси, номинальный индекс (BIS)"
+unit = "pct"
+since = 1970-01-01
+source = { loader = "bis", flow = "WS_SPP", key = "Q.BY.N.628" }
+
+[series."bis.xru.CN"]
+title = "Курс валюты Китая: юаней за доллар США (BIS)"
+unit = "pct"
+since = 1970-01-01
+source = { loader = "bis", flow = "WS_XRU", key = "D.CN.CNY.A" }
+
+[series."bis.cbpol.CN"]
+title = "Ставка центрального банка Китая, % (BIS)"
+unit = "pp"
+since = 1970-01-01
+source = { loader = "bis", flow = "WS_CBPOL", key = "D.CN" }
+
+[series."bis.cpi.CN"]
+title = "Инфляция Китая, % г/г (BIS)"
+unit = "pp"
+since = 1970-01-01
+source = { loader = "bis", flow = "WS_LONG_CPI", key = "M.CN.771" }
+
+[series."bis.spp.CN"]
+title = "Цены жилой недвижимости Китая, номинальный индекс (BIS)"
+unit = "pct"
+since = 1970-01-01
+source = { loader = "bis", flow = "WS_SPP", key = "Q.CN.N.628" }
+
+[series."bis.xru.NG"]
+title = "Курс валюты Нигерии: найр за доллар США (BIS)"
+unit = "pct"
+since = 1970-01-01
+source = { loader = "bis", flow = "WS_XRU", key = "M.NG.NGN.A" }
+
+[series."bis.cbpol.NG"]
+title = "Ставка центрального банка Нигерии, % (BIS)"
+unit = "pp"
+since = 1970-01-01
+source = { loader = "bis", flow = "WS_CBPOL", key = "D.NG" }
+
+[series."bis.cpi.NG"]
+title = "Инфляция Нигерии, % г/г (BIS)"
+unit = "pp"
+since = 1970-01-01
+source = { loader = "bis", flow = "WS_LONG_CPI", key = "M.NG.771" }
+
+[series."bis.spp.NG"]
+title = "Цены жилой недвижимости Нигерии, номинальный индекс (BIS)"
+unit = "pct"
+since = 1970-01-01
+source = { loader = "bis", flow = "WS_SPP", key = "Q.NG.N.628" }
+
+[series."bis.xru.LK"]
+title = "Курс валюты Шри-Ланки: рупий за доллар США (BIS)"
+unit = "pct"
+since = 1970-01-01
+source = { loader = "bis", flow = "WS_XRU", key = "D.LK.LKR.A" }
+
+[series."bis.cbpol.LK"]
+title = "Ставка центрального банка Шри-Ланки, % (BIS)"
+unit = "pp"
+since = 1970-01-01
+source = { loader = "bis", flow = "WS_CBPOL", key = "D.LK" }
+
+[series."bis.spp.LK"]
+title = "Цены жилой недвижимости Шри-Ланки, номинальный индекс (BIS)"
+unit = "pct"
+since = 1970-01-01
+source = { loader = "bis", flow = "WS_SPP", key = "Q.LK.N.628" }
+
+[series."bis.xru.EG"]
+title = "Курс валюты Египта: фунтов за доллар США (BIS)"
+unit = "pct"
+since = 1970-01-01
+source = { loader = "bis", flow = "WS_XRU", key = "M.EG.EGP.A" }
+
+[series."bis.spp.EG"]
+title = "Цены жилой недвижимости Египта, номинальный индекс (BIS)"
+unit = "pct"
+since = 1970-01-01
+source = { loader = "bis", flow = "WS_SPP", key = "Q.EG.N.628" }
+
+[series."bis.xru.LB"]
+title = "Курс валюты Ливана: фунтов за доллар США (BIS)"
+unit = "pct"
+since = 1970-01-01
+source = { loader = "bis", flow = "WS_XRU", key = "M.LB.LBP.A" }
+
+[series."bis.cbpol.LB"]
+title = "Ставка центрального банка Ливана, % (BIS)"
+unit = "pp"
+since = 1970-01-01
+source = { loader = "bis", flow = "WS_CBPOL", key = "D.LB" }
+
+[series."bis.cpi.LB"]
+title = "Инфляция Ливана, % г/г (BIS)"
+unit = "pp"
+since = 1970-01-01
+source = { loader = "bis", flow = "WS_LONG_CPI", key = "M.LB.771" }
+
+[series."bis.spp.LB"]
+title = "Цены жилой недвижимости Ливана, номинальный индекс (BIS)"
+unit = "pct"
+since = 1970-01-01
+source = { loader = "bis", flow = "WS_SPP", key = "Q.LB.N.628" }
+
+[series."bis.xru.GH"]
+title = "Курс валюты Ганы: седи за доллар США (BIS)"
+unit = "pct"
+since = 1970-01-01
+source = { loader = "bis", flow = "WS_XRU", key = "M.GH.GHS.A" }
+
+[series."bis.cbpol.GH"]
+title = "Ставка центрального банка Ганы, % (BIS)"
+unit = "pp"
+since = 1970-01-01
+source = { loader = "bis", flow = "WS_CBPOL", key = "D.GH" }
+
+[series."bis.cpi.GH"]
+title = "Инфляция Ганы, % г/г (BIS)"
+unit = "pp"
+since = 1970-01-01
+source = { loader = "bis", flow = "WS_LONG_CPI", key = "M.GH.771" }
+
+[series."bis.spp.GH"]
+title = "Цены жилой недвижимости Ганы, номинальный индекс (BIS)"
+unit = "pct"
+since = 1970-01-01
+source = { loader = "bis", flow = "WS_SPP", key = "Q.GH.N.628" }
+
+[series."bis.xru.SE"]
+title = "Курс валюты Швеции: крон за доллар США (BIS)"
+unit = "pct"
+since = 1970-01-01
+source = { loader = "bis", flow = "WS_XRU", key = "D.SE.SEK.A" }
+
+[series."bis.cbpol.SE"]
+title = "Ставка центрального банка Швеции, % (BIS)"
+unit = "pp"
+since = 1970-01-01
+source = { loader = "bis", flow = "WS_CBPOL", key = "D.SE" }
+
+[series."bis.cpi.SE"]
+title = "Инфляция Швеции, % г/г (BIS)"
+unit = "pp"
+since = 1970-01-01
+source = { loader = "bis", flow = "WS_LONG_CPI", key = "M.SE.771" }
+
+[series."bis.spp.SE"]
+title = "Цены жилой недвижимости Швеции, номинальный индекс (BIS)"
+unit = "pct"
+since = 1970-01-01
+source = { loader = "bis", flow = "WS_SPP", key = "Q.SE.N.628" }
+
+[series."bis.xru.GB"]
+title = "Курс валюты Великобритании: фунтов за доллар США (BIS)"
+unit = "pct"
+since = 1970-01-01
+source = { loader = "bis", flow = "WS_XRU", key = "D.GB.GBP.A" }
+
+[series."bis.cbpol.GB"]
+title = "Ставка центрального банка Великобритании, % (BIS)"
+unit = "pp"
+since = 1970-01-01
+source = { loader = "bis", flow = "WS_CBPOL", key = "D.GB" }
+
+[series."bis.cpi.GB"]
+title = "Инфляция Великобритании, % г/г (BIS)"
+unit = "pp"
+since = 1970-01-01
+source = { loader = "bis", flow = "WS_LONG_CPI", key = "M.GB.771" }
+
+[series."bis.spp.GB"]
+title = "Цены жилой недвижимости Великобритании, номинальный индекс (BIS)"
+unit = "pct"
+since = 1970-01-01
+source = { loader = "bis", flow = "WS_SPP", key = "Q.GB.N.628" }
+
+[series."bis.xru.JP"]
+title = "Курс валюты Японии: иен за доллар США (BIS)"
+unit = "pct"
+since = 1970-01-01
+source = { loader = "bis", flow = "WS_XRU", key = "D.JP.JPY.A" }
+
+[series."bis.cbpol.JP"]
+title = "Ставка центрального банка Японии, % (BIS)"
+unit = "pp"
+since = 1970-01-01
+source = { loader = "bis", flow = "WS_CBPOL", key = "D.JP" }
+
+[series."bis.cpi.JP"]
+title = "Инфляция Японии, % г/г (BIS)"
+unit = "pp"
+since = 1970-01-01
+source = { loader = "bis", flow = "WS_LONG_CPI", key = "M.JP.771" }
+
+[series."bis.spp.JP"]
+title = "Цены жилой недвижимости Японии, номинальный индекс (BIS)"
+unit = "pct"
+since = 1970-01-01
+source = { loader = "bis", flow = "WS_SPP", key = "Q.JP.N.628" }
+
+[series."bis.cbpol.US"]
+title = "Ставка центрального банка США, % (BIS)"
+unit = "pp"
+since = 1970-01-01
+source = { loader = "bis", flow = "WS_CBPOL", key = "D.US" }
+
+[series."bis.cpi.US"]
+title = "Инфляция США, % г/г (BIS)"
+unit = "pp"
+since = 1970-01-01
+source = { loader = "bis", flow = "WS_LONG_CPI", key = "M.US.771" }
+
+[series."bis.spp.US"]
+title = "Цены жилой недвижимости США, номинальный индекс (BIS)"
+unit = "pct"
+since = 1970-01-01
+source = { loader = "bis", flow = "WS_SPP", key = "Q.US.N.628" }
+
+[series."bis.xru.CH"]
+title = "Курс валюты Швейцарии: франков за доллар США (BIS)"
+unit = "pct"
+since = 1970-01-01
+source = { loader = "bis", flow = "WS_XRU", key = "D.CH.CHF.A" }
+
+[series."bis.cbpol.CH"]
+title = "Ставка центрального банка Швейцарии, % (BIS)"
+unit = "pp"
+since = 1970-01-01
+source = { loader = "bis", flow = "WS_CBPOL", key = "D.CH" }
+
+[series."bis.cpi.CH"]
+title = "Инфляция Швейцарии, % г/г (BIS)"
+unit = "pp"
+since = 1970-01-01
+source = { loader = "bis", flow = "WS_LONG_CPI", key = "M.CH.771" }
+
+[series."bis.spp.CH"]
+title = "Цены жилой недвижимости Швейцарии, номинальный индекс (BIS)"
+unit = "pct"
+since = 1970-01-01
+source = { loader = "bis", flow = "WS_SPP", key = "Q.CH.N.628" }
+
+[series."bis.cbpol.IE"]
+title = "Ставка центрального банка Ирландии, % (BIS)"
+unit = "pp"
+since = 1970-01-01
+source = { loader = "bis", flow = "WS_CBPOL", key = "D.IE" }
+
+[series."bis.cpi.IE"]
+title = "Инфляция Ирландии, % г/г (BIS)"
+unit = "pp"
+since = 1970-01-01
+source = { loader = "bis", flow = "WS_LONG_CPI", key = "M.IE.771" }
+
+[series."bis.spp.IE"]
+title = "Цены жилой недвижимости Ирландии, номинальный индекс (BIS)"
+unit = "pct"
+since = 1970-01-01
+source = { loader = "bis", flow = "WS_SPP", key = "Q.IE.N.628" }
+
+[series."bis.cbpol.GR"]
+title = "Ставка центрального банка Греции, % (BIS)"
+unit = "pp"
+since = 1970-01-01
+source = { loader = "bis", flow = "WS_CBPOL", key = "D.GR" }
+
+[series."bis.cpi.GR"]
+title = "Инфляция Греции, % г/г (BIS)"
+unit = "pp"
+since = 1970-01-01
+source = { loader = "bis", flow = "WS_LONG_CPI", key = "M.GR.771" }
+
+[series."bis.spp.GR"]
+title = "Цены жилой недвижимости Греции, номинальный индекс (BIS)"
+unit = "pct"
+since = 1970-01-01
+source = { loader = "bis", flow = "WS_SPP", key = "Q.GR.N.628" }
+
+[series."bis.cbpol.IT"]
+title = "Ставка центрального банка Италии, % (BIS)"
+unit = "pp"
+since = 1970-01-01
+source = { loader = "bis", flow = "WS_CBPOL", key = "D.IT" }
+
+[series."bis.cpi.IT"]
+title = "Инфляция Италии, % г/г (BIS)"
+unit = "pp"
+since = 1970-01-01
+source = { loader = "bis", flow = "WS_LONG_CPI", key = "M.IT.771" }
+
+[series."bis.spp.IT"]
+title = "Цены жилой недвижимости Италии, номинальный индекс (BIS)"
+unit = "pct"
+since = 1970-01-01
+source = { loader = "bis", flow = "WS_SPP", key = "Q.IT.N.628" }
+
+[series."bis.cbpol.CY"]
+title = "Ставка центрального банка Кипра, % (BIS)"
+unit = "pp"
+since = 1970-01-01
+source = { loader = "bis", flow = "WS_CBPOL", key = "D.CY" }
+
+[series."bis.cpi.CY"]
+title = "Инфляция Кипра, % г/г (BIS)"
+unit = "pp"
+since = 1970-01-01
+source = { loader = "bis", flow = "WS_LONG_CPI", key = "M.CY.771" }
+
+[series."bis.spp.CY"]
+title = "Цены жилой недвижимости Кипра, номинальный индекс (BIS)"
+unit = "pct"
+since = 1970-01-01
+source = { loader = "bis", flow = "WS_SPP", key = "Q.CY.N.628" }
+
+[factors."*"]
+volatility = ["fred.VIXCLS", "fred.VXOCLS"]
+"commodity.oil" = ["fred.DCOILBRENTEU", "fred.DCOILWTICO", "fred.WTISPLC"]
+"commodity.gas" = ["fred.PNGASEUUSDM"]
+"commodity.metals" = ["fred.PNICKUSDM"]
+"commodity.agri" = ["fred.PWHEAMTUSDM"]
+
+[factors.RU]
+fx = ["cbr.usdrub"]
+"rate.policy" = ["cbr.key_rate"]
+"rate.money_market" = ["cbr.ruonia"]
+"rate.sovereign" = ["cbr.ofz_10y"]
+"spread.credit" = ["moex.spread_bbb"]
+"equity.index" = ["moex.imoex", "moex.rtsi"]
+inflation = ["store.ru_cpi"]
+"housing.mortgage" = ["store.ru_mortgage"]
+"housing.prices" = ["store.ru_housing"]
+
+[factors.US]
+fx = ["fred.DTWEXBGS", "fred.DTWEXM"]
+"rate.policy" = ["fred.DFF"]
+"rate.money_market" = ["fred.TEDRATE"]
+"bank.liquidity" = ["fred.TEDRATE"]
+"rate.sovereign" = ["fred.DGS10"]
+"spread.credit" = ["fred.BAMLC0A0CM", "fred.BAA10Y"]
+"equity.index" = ["fred.NASDAQCOM"]
+"housing.prices" = ["fred.CSUSHPISA"]
+"housing.mortgage" = ["fred.MORTGAGE30US"]
+unemployment = ["fred.UNRATE"]
+inflation = ["fred.CPIAUCSL"]
+
+[factors.EU]
+fx = ["fred.DEXUSEU"]
+"rate.money_market" = ["fred.TEDRATE"]
+"bank.liquidity" = ["fred.TEDRATE"]
+
+[factors.EM]
+fx = ["fred.DTWEXEMEGS", "fred.DTWEXO"]
+
+[factors.MX]
+fx = ["fred.DEXMXUS", "bis.xru.MX"]
+"rate.policy" = ["bis.cbpol.MX"]
+inflation = ["bis.cpi.MX"]
+"housing.prices" = ["bis.spp.MX"]
+
+[factors.TH]
+fx = ["fred.DEXTHUS", "bis.xru.TH"]
+"rate.policy" = ["bis.cbpol.TH"]
+inflation = ["bis.cpi.TH"]
+"housing.prices" = ["bis.spp.TH"]
+
+[factors.ID]
+fx = ["bis.xru.ID"]
+"rate.policy" = ["bis.cbpol.ID"]
+inflation = ["bis.cpi.ID"]
+"housing.prices" = ["bis.spp.ID"]
+
+[factors.KR]
+fx = ["fred.DEXKOUS", "bis.xru.KR"]
+"rate.policy" = ["bis.cbpol.KR"]
+inflation = ["bis.cpi.KR"]
+"housing.prices" = ["bis.spp.KR"]
+
+[factors.BR]
+fx = ["fred.DEXBZUS", "bis.xru.BR"]
+"rate.policy" = ["bis.cbpol.BR"]
+inflation = ["bis.cpi.BR"]
+"housing.prices" = ["bis.spp.BR"]
+
+[factors.TR]
+fx = ["bis.xru.TR"]
+"rate.policy" = ["bis.cbpol.TR"]
+inflation = ["bis.cpi.TR"]
+"housing.prices" = ["bis.spp.TR"]
+
+[factors.AR]
+fx = ["bis.xru.AR"]
+"rate.policy" = ["bis.cbpol.AR"]
+inflation = ["bis.cpi.AR"]
+"housing.prices" = ["bis.spp.AR"]
+
+[factors.UY]
+fx = ["bis.xru.UY"]
+"rate.policy" = ["bis.cbpol.UY"]
+inflation = ["bis.cpi.UY"]
+"housing.prices" = ["bis.spp.UY"]
+
+[factors.IS]
+fx = ["bis.xru.IS"]
+"rate.policy" = ["bis.cbpol.IS"]
+inflation = ["bis.cpi.IS"]
+"housing.prices" = ["bis.spp.IS"]
+
+[factors.HU]
+fx = ["bis.xru.HU"]
+"rate.policy" = ["bis.cbpol.HU"]
+inflation = ["bis.cpi.HU"]
+"housing.prices" = ["bis.spp.HU"]
+
+[factors.UA]
+fx = ["bis.xru.UA"]
+"rate.policy" = ["bis.cbpol.UA"]
+"housing.prices" = ["bis.spp.UA"]
+
+[factors.KZ]
+fx = ["bis.xru.KZ"]
+"rate.policy" = ["bis.cbpol.KZ"]
+inflation = ["bis.cpi.KZ"]
+"housing.prices" = ["bis.spp.KZ"]
+
+[factors.BY]
+fx = ["bis.xru.BY"]
+"rate.policy" = ["bis.cbpol.BY"]
+"housing.prices" = ["bis.spp.BY"]
+
+[factors.CN]
+fx = ["fred.DEXCHUS", "bis.xru.CN"]
+"rate.policy" = ["bis.cbpol.CN"]
+inflation = ["bis.cpi.CN"]
+"housing.prices" = ["bis.spp.CN"]
+
+[factors.NG]
+fx = ["bis.xru.NG"]
+"rate.policy" = ["bis.cbpol.NG"]
+inflation = ["bis.cpi.NG"]
+"housing.prices" = ["bis.spp.NG"]
+
+[factors.LK]
+fx = ["bis.xru.LK"]
+"rate.policy" = ["bis.cbpol.LK"]
+"housing.prices" = ["bis.spp.LK"]
+
+[factors.EG]
+fx = ["bis.xru.EG"]
+"housing.prices" = ["bis.spp.EG"]
+
+[factors.LB]
+fx = ["bis.xru.LB"]
+"rate.policy" = ["bis.cbpol.LB"]
+inflation = ["bis.cpi.LB"]
+"housing.prices" = ["bis.spp.LB"]
+
+[factors.GH]
+fx = ["bis.xru.GH"]
+"rate.policy" = ["bis.cbpol.GH"]
+inflation = ["bis.cpi.GH"]
+"housing.prices" = ["bis.spp.GH"]
+
+[factors.SE]
+fx = ["bis.xru.SE"]
+"rate.policy" = ["bis.cbpol.SE"]
+inflation = ["bis.cpi.SE"]
+"housing.prices" = ["bis.spp.SE"]
+
+[factors.GB]
+fx = ["fred.DEXUSUK", "bis.xru.GB"]
+"rate.policy" = ["bis.cbpol.GB"]
+inflation = ["bis.cpi.GB"]
+"housing.prices" = ["bis.spp.GB"]
+"rate.sovereign" = ["fred.lt_gb"]
+
+[factors.JP]
+fx = ["fred.DEXJPUS", "bis.xru.JP"]
+"rate.policy" = ["bis.cbpol.JP"]
+inflation = ["bis.cpi.JP"]
+"housing.prices" = ["bis.spp.JP"]
+"rate.sovereign" = ["fred.lt_jp"]
+"equity.index" = ["fred.NIKKEI225"]
+
+[factors.CH]
+fx = ["fred.DEXSZUS", "bis.xru.CH"]
+"rate.policy" = ["bis.cbpol.CH"]
+inflation = ["bis.cpi.CH"]
+"housing.prices" = ["bis.spp.CH"]
+
+[factors.IE]
+"rate.policy" = ["bis.cbpol.IE"]
+inflation = ["bis.cpi.IE"]
+"housing.prices" = ["bis.spp.IE"]
+"spread.sovereign" = ["fred.spread_ie"]
+
+[factors.GR]
+"rate.policy" = ["bis.cbpol.GR"]
+inflation = ["bis.cpi.GR"]
+"housing.prices" = ["bis.spp.GR"]
+"spread.sovereign" = ["fred.spread_gr"]
+
+[factors.IT]
+"rate.policy" = ["bis.cbpol.IT"]
+inflation = ["bis.cpi.IT"]
+"housing.prices" = ["bis.spp.IT"]
+"spread.sovereign" = ["fred.spread_it"]
+
+[factors.CY]
+"rate.policy" = ["bis.cbpol.CY"]
+inflation = ["bis.cpi.CY"]
+"housing.prices" = ["bis.spp.CY"]
+
+[episodes.G34]
+"rate.money_market" = ["fred.SOFR"]
+"bank.liquidity" = ["fred.SOFR"]
+
+[episodes.R19]
+"commodity.metals" = ["fred.PALUMUSDM"]
+
+[episodes.G1]
+"commodity.oil" = ["fred.WTISPLC"]
+

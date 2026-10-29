@@ -21,7 +21,7 @@ flowchart LR
 | `mst.data` | Загружает месячные ряды и хранит каждую версию значения с датой публикации | [src/mst/data](../src/mst/data/README.md) |
 | `mst.macro` | Оценивает BVAR, идентифицирует шоки, строит условный прогноз и тяжесть сценария, проверяет модель на эпизодах | [src/mst/macro](../src/mst/macro/README.md) |
 | `mst.drivers` | Находит объекты величин, загружает их ряды, оценивает и проверяет сателлиты, строит пути драйверов | [src/mst/drivers](../src/mst/drivers/README.md) |
-| `mst.corpus` | Манифест корпуса источников; остальное — шаг 6 | [src/mst/corpus](../src/mst/corpus/README.md) |
+| `mst.corpus` | Хранит манифест корпуса, скачивает оригиналы, переводит их в Markdown, пишет карточки эпизодов, режет корпус на фрагменты и ищет по ним | [src/mst/corpus](../src/mst/corpus/README.md) |
 | `mst.scenario` | Контракт сценария $(N, C, D, O)$ | [src/mst/scenario](../src/mst/scenario/README.md) |
 | `mst.mcp`, `mst.jobs`, `mst.store` | MCP-сервер, задачи и каталог workspace | [src/mst](../src/mst/README.md) |
 | `dsh/` | Плагин DSH: запуск сервера, скиллы, раздел промпта | [dsh](../dsh/README.md) |
@@ -44,7 +44,10 @@ workspace/
   models/satellites/<sha256>/  версии сателлитов
   models/backtest/<key>   указатели: какую версию дал бэктест эпизода
   corpus/manifest.json    манифест корпуса; нужен бэктесту макромодели
-  corpus/index/state.json состояние индекса корпуса (шаг 6)
+  corpus/sources/, corpus/episodes/  тексты в Markdown и карточки эпизодов
+  corpus/raw/, corpus/text/, corpus/series/  оригиналы, конспекты, дневные ряды D1–D5
+  corpus/downloads.json   что скачано: адрес, хеш, размер, дата
+  corpus/index/           chunks.jsonl, vectors.npy, vectors.json, state.json
   portfolios/, scenarios/, runs/  пока пусты (шаги 7–9)
   jobs/<id>/job.json, log.txt     задачи
   jobs/<resource>.lock    блокировка ресурса
