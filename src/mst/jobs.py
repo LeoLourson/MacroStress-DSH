@@ -22,7 +22,7 @@ from pathlib import Path
 
 from . import store
 
-RESOURCES = ("series", "models", "corpus", "code")
+RESOURCES = ("series", "models", "corpus", "code", "runs")
 JOB_ID = re.compile(r"^[0-9A-Za-z-]+$")
 STILL_ACTIVE = 259
 QUERY_LIMITED_INFORMATION = 0x1000

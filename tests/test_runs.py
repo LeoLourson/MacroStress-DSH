@@ -1,0 +1,197 @@
+"""mst.runs: a run of a scenario writes its paths, its results and its meta in the workspace."""
+
+import asyncio
+import shutil
+import time
+
+import numpy as np
+import pytest
+from fastmcp import Client
+
+from mst import jobs, runs, store
+from mst.mcp import build
+from mst.scenario import tool as scenario_tool
+
+POSITIONS = [
+    {
+        "id": "sber",
+        "name": "Сбербанк",
+        "type": "common_stock",
+        "notional": 10.0,
+        "codes": {"secid": "SBER"},
+    },
+    {
+        "id": "corp",
+        "type": "bond",
+        "notional": 5.0,
+        "codes": {"isin": "RU000A0JX0J2"},
+        "terms": {"duration": 2.0},
+    },
+    {
+        "id": "mining",
+        "type": "loan",
+        "notional": 3.0,
+        "codes": {"okved": "05"},
+        "terms": {"lgd": 0.45},
+    },
+    {
+        "id": "flat",
+        "type": "real_estate",
+        "notional": 1.0,
+        "codes": {"okato": "14000000000"},
+        "terms": {"market": "primary"},
+    },
+]
+REQUEST = {"scenario": "oil", "draws": 5, "seed": 11, "positions": POSITIONS}
+
+
+@pytest.fixture
+def workspace(tmp_path, versions):
+    """A workspace with the two versions of the session and one scenario."""
+    ws = store.Workspace(tmp_path)
+    for kind, name in (("macro", versions.macro), ("satellites", versions.satellites)):
+        shutil.copytree(versions.models / kind / name, ws.models / kind / name)
+    scenario_tool.save(
+        ws.scenarios,
+        "oil",
+        {
+            "narrative": "нефть",
+            "horizon": 3,
+            "macro": versions.macro,
+            "satellites": versions.satellites,
+        },
+    )
+    return ws
+
+
+def start(ws, request=None, run_id=None):
+    run_id = run_id or runs.new_id()
+    runs.begin(ws, run_id, request or REQUEST)
+    return run_id, runs.execute(ws, run_id)
+
+
+def arrays(ws, run_id):
+    meta = runs.meta(ws, run_id)
+    with np.load(runs.folder(ws, run_id) / "paths.npz") as stored:
+        macro, drivers = stored["macro"], stored["drivers"]
+    with np.load(runs.folder(ws, run_id) / "changes.npz") as stored:
+        changes = stored["changes"]
+    return meta, macro, drivers, changes
+
+
+def driver(meta, drivers, name):
+    return drivers[:, :, meta["drivers"].index(name)]
+
+
+def test_a_run_writes_meta_paths_results_and_changes(workspace):
+    run_id, summary = start(workspace)
+    assert summary["status"] == "ok" and summary["positions"] == len(POSITIONS)
+    meta, macro, drivers, changes = arrays(workspace, run_id)
+    assert meta["status"] == "ok"
+    assert meta["scenario"] == "oil" and meta["seed"] == 11 and meta["draws"] == 5
+    assert meta["horizon"] == 3 and len(meta["months"]) == 4
+    assert meta["severity"] is None
+    assert macro.shape == (5, 4, 3) and drivers.shape == (5, 4, 5)
+    assert changes.shape == (5, len(POSITIONS))
+    stored = runs.result(workspace, run_id)
+    assert [item["position_id"] for item in stored["positions"]] == [
+        position["id"] for position in POSITIONS
+    ]
+    assert all(item["status"] == "ok" for item in stored["positions"])
+    assert all("value_change" not in item for item in stored["positions"])
+
+
+def test_every_position_is_the_formula_of_its_model(workspace):
+    run_id, _ = start(workspace)
+    meta, _, drivers, changes = arrays(workspace, run_id)
+    price = driver(meta, drivers, "share_price:sber")
+    spread = driver(meta, drivers, "bond_spread:corp")
+    overdue = driver(meta, drivers, "overdue_share:mining")
+    housing = driver(meta, drivers, "housing_price_primary:belgorod")
+    expected = {
+        "sber": 10.0 * (price[:, -1] / price[:, 0] - 1),
+        "corp": 5.0 * (1 - 2.0 * (spread[:, -1] - spread[:, 0]) / 100 - 1),
+        "mining": 3.0 * (1 - 0.45 * (overdue[:, -1] - overdue[:, 0]) - 1),
+        "flat": 1.0 * (housing[:, -1] / housing[:, 0] - 1),
+    }
+    for index, item in enumerate(meta["position_ids"]):
+        assert np.allclose(changes[:, index], expected[item], rtol=0, atol=1e-12), item
+
+
+def test_the_same_request_gives_the_same_changes(workspace):
+    first_id, _ = start(workspace)
+    second_id, _ = start(workspace)
+    _, _, _, first = arrays(workspace, first_id)
+    _, _, _, second = arrays(workspace, second_id)
+    assert np.array_equal(first, second)
+    other_id, _ = start(workspace, REQUEST | {"seed": 12})
+    _, _, _, other = arrays(workspace, other_id)
+    assert not np.array_equal(first, other)
+
+
+def test_a_run_that_cannot_start_leaves_its_reason_in_the_meta(workspace):
+    run_id = runs.new_id()
+    runs.begin(workspace, run_id, REQUEST | {"scenario": "nowhere"})
+    with pytest.raises(FileNotFoundError, match="nowhere"):
+        runs.execute(workspace, run_id)
+    meta = runs.meta(workspace, run_id)
+    assert meta["status"] == "failed" and "nowhere" in meta["error"]
+
+
+def test_the_catalogue_names_every_run(workspace):
+    run_id, _ = start(workspace)
+    found = runs.catalogue(workspace)["runs"]
+    assert [item["id"] for item in found] == [run_id]
+    assert found[0]["status"] == "ok" and found[0]["positions"] == len(POSITIONS)
+
+
+def test_a_request_needs_a_scenario_its_draws_and_its_seed(workspace):
+    for missing in ("scenario", "draws", "seed", "positions"):
+        with pytest.raises(ValueError):
+            runs.begin(workspace, runs.new_id(), {k: v for k, v in REQUEST.items() if k != missing})
+
+
+def call(ws, name, arguments):
+    """One tool call against a server built for ``ws``."""
+
+    async def run():
+        async with Client(build(ws)) as client:
+            return await client.call_tool(name, arguments)
+
+    return asyncio.run(run())
+
+
+def wait(ws, job_id, timeout=120.0):
+    """Wait until the job's process is gone."""
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        if not jobs.status(ws, job_id)["running"]:
+            return
+        time.sleep(0.1)
+    raise AssertionError(f"job {job_id} did not finish in {timeout} s")
+
+
+def test_the_run_tool_starts_a_job_and_reports_its_result(workspace):
+    started = call(
+        workspace,
+        "run",
+        {"action": "start", "scenario": "oil", "draws": 3, "seed": 5, "positions": POSITIONS},
+    ).data
+    wait(workspace, started["job"])
+    assert jobs.status(workspace, started["job"])["exit_code"] == 0
+    status = call(workspace, "run", {"action": "status", "id": started["run"]}).data
+    assert status["meta"]["status"] == "ok"
+    assert status["job"]["exit_code"] == 0
+    stored = call(workspace, "run", {"action": "result", "id": started["run"]}).data
+    assert len(stored["positions"]) == len(POSITIONS)
+    listed = call(workspace, "run", {"action": "list"}).data["runs"]
+    assert [item["id"] for item in listed] == [started["run"]]
+
+
+def test_the_run_tool_names_the_argument_it_lacks(workspace):
+    with pytest.raises(Exception, match="seed is required"):
+        call(
+            workspace,
+            "run",
+            {"action": "start", "scenario": "oil", "draws": 3, "positions": POSITIONS},
+        )

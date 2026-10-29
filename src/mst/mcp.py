@@ -8,7 +8,7 @@ from typing import Any
 from fastmcp import FastMCP
 
 from . import jobs as tasks
-from . import store
+from . import runs, store
 from .corpus import tool as corpus_tool
 from .data import sources
 from .data.store import SeriesStore
@@ -135,6 +135,54 @@ def build(ws: store.Workspace) -> FastMCP:
         raise ValueError(f"scenario: unknown action {action!r}, try list, get, save, validate")
 
     @server.tool
+    def run(
+        action: str,
+        id: str | None = None,
+        scenario: str | None = None,
+        positions: list[dict[str, Any]] | None = None,
+        draws: int | None = None,
+        seed: int | None = None,
+        base_currency: str = "RUB",
+    ) -> dict:
+        """Runs on the paths of a scenario. Actions: start, status, result, list.
+
+        ``start`` draws the scenario's paths and calculates ``positions`` on them as a job on
+        the ``runs`` resource; ``status`` reports that job and what the run has written,
+        ``result`` the per-position results and ``list`` every run of the workspace.
+        """
+        if action == "start":
+            run_id = runs.new_id()
+            runs.begin(
+                ws,
+                run_id,
+                {
+                    "scenario": _need(scenario, "scenario"),
+                    "draws": _need(draws, "draws"),
+                    "seed": _need(seed, "seed"),
+                    "base_currency": base_currency,
+                    "positions": _need(positions, "positions"),
+                },
+            )
+            job = tasks.start(
+                ws, "runs", ["-m", "mst.runs", run_id, "--workspace", str(ws.root)]
+            )
+            store.write_json(runs.folder(ws, run_id) / "job.json", {"job": job})
+            return {"run": run_id, "job": job}
+        if action == "status":
+            run_id = _need(id, "id")
+            link = store.read_json(runs.folder(ws, run_id) / "job.json") or {}
+            return {
+                "run": run_id,
+                "meta": _meta(ws, run_id),
+                "job": tasks.status(ws, link["job"]) if link.get("job") else None,
+            }
+        if action == "result":
+            return runs.result(ws, _need(id, "id"))
+        if action == "list":
+            return runs.catalogue(ws)
+        raise ValueError(f"run: unknown action {action!r}, try start, status, result, list")
+
+    @server.tool
     def model(
         kind: str,
         action: str,
@@ -212,6 +260,14 @@ def _macro_argv(
         if only:
             argv += ["--only", *only]
     return argv
+
+
+def _meta(ws: store.Workspace, run_id: str) -> dict | None:
+    """The meta a run has written so far; a run that has not started has none."""
+    try:
+        return runs.meta(ws, run_id)
+    except FileNotFoundError:
+        return None
 
 
 def _need(value: Any, name: str) -> Any:
