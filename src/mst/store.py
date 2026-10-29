@@ -94,6 +94,7 @@ def state(ws: Workspace) -> dict[str, Any]:
         "portfolios": _count(ws.portfolios),
         "scenarios": _count(ws.scenarios, suffix=".json"),
         "runs": _count(ws.runs),
+        "jobs": _unfinished(ws.jobs),
     }
 
 
@@ -117,3 +118,9 @@ def _count(directory: Path, suffix: str = "") -> int:
     if not directory.is_dir():
         return 0
     return sum(1 for entry in directory.iterdir() if entry.name.endswith(suffix))
+
+
+def _unfinished(directory: Path) -> int:
+    """How many job records carry no finish time yet."""
+    records = directory.glob("*/job.json")
+    return sum(1 for path in records if not (read_json(path) or {}).get("finished"))

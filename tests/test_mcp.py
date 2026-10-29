@@ -4,7 +4,7 @@ import asyncio
 
 from fastmcp import Client
 
-from mst import store
+from mst import jobs, store
 from mst.mcp import build
 
 
@@ -29,6 +29,7 @@ def test_jobs_state_returns_the_workspace_summary(tmp_path):
         "portfolios": 0,
         "scenarios": 0,
         "runs": 0,
+        "jobs": 0,
     }
 
 
@@ -48,3 +49,25 @@ def test_jobs_rejects_an_unknown_action(tmp_path):
         assert "unknown action" in str(error)
     else:
         raise AssertionError("an unknown action must not be accepted")
+
+
+def test_jobs_status_log_and_cancel_go_through_the_tool(tmp_path):
+    ws = store.Workspace(tmp_path)
+    job_id = jobs.start(ws, "code", ["-c", "import time; time.sleep(30)"])
+    try:
+        assert call(ws, "jobs", {"action": "status", "id": job_id}).data["running"] is True
+        assert call(ws, "jobs", {"action": "log", "id": job_id}).data == {"id": job_id, "log": ""}
+    finally:
+        cancelled = call(ws, "jobs", {"action": "cancel", "id": job_id}).data
+    assert cancelled["cancelled"] is True
+    assert cancelled["running"] is False
+
+
+def test_jobs_without_an_id_is_refused(tmp_path):
+    ws = store.Workspace(tmp_path)
+    try:
+        call(ws, "jobs", {"action": "status"})
+    except Exception as error:
+        assert "needs id" in str(error)
+    else:
+        raise AssertionError("status without an id must not be accepted")

@@ -5,6 +5,7 @@ from pathlib import Path
 
 from fastmcp import FastMCP
 
+from . import jobs as tasks
 from . import store
 
 
@@ -13,13 +14,27 @@ def build(ws: store.Workspace) -> FastMCP:
     server = FastMCP("macrostress")
 
     @server.tool
-    def jobs(action: str) -> dict:
-        """Workspace and task state. Actions: state (refresh workspace.json and return it)."""
-        if action != "state":
-            raise ValueError(f"jobs: unknown action {action!r}, try state")
-        return store.write_state(ws)
+    def jobs(action: str, id: str | None = None, tail: int = 50) -> dict:
+        """Workspace and task state. Actions: state, status, log, cancel."""
+        if action == "state":
+            return tasks.state(ws)
+        if action == "status":
+            return tasks.status(ws, _required(id, action))
+        if action == "log":
+            job_id = _required(id, action)
+            return {"id": job_id, "log": tasks.log(ws, job_id, tail)}
+        if action == "cancel":
+            return tasks.cancel(ws, _required(id, action))
+        raise ValueError(f"jobs: unknown action {action!r}, try state, status, log, cancel")
 
     return server
+
+
+def _required(value: str | None, action: str) -> str:
+    """The argument an action cannot work without."""
+    if not value:
+        raise ValueError(f"jobs: action {action!r} needs id")
+    return value
 
 
 def main(argv: list[str] | None = None) -> None:
