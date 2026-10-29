@@ -7,6 +7,8 @@ import tempfile
 from pathlib import Path
 from typing import Any
 
+from . import versions
+
 
 def sha256_of(obj: Any) -> str:
     """The hash of an object: sha256 of its canonical JSON.
@@ -120,21 +122,9 @@ def write_state(ws: Workspace) -> dict[str, Any]:
 
 
 def _latest(directory: Path) -> str | None:
-    """The newest version of ``directory`` by modification time, or None when there is none.
-
-    A version is a folder with ``meta.json``; a ``.draft-`` folder is one still being written.
-    """
-    if not directory.is_dir():
-        return None
-    entries = sorted(
-        (
-            entry
-            for entry in directory.iterdir()
-            if not entry.name.startswith(".") and (entry / "meta.json").is_file()
-        ),
-        key=lambda entry: entry.stat().st_mtime,
-    )
-    return entries[-1].name if entries else None
+    """The newest finished version of ``directory``, or None when there is none."""
+    found = versions.folders(directory)
+    return found[0].name if found else None
 
 
 def _count(directory: Path, suffix: str = "") -> int:

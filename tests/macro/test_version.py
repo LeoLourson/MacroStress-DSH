@@ -1,4 +1,4 @@
-"""mst.macro.version and ``msa-macro estimate``: a model version is named by its content."""
+"""mst.macro.version and ``python -m mst.macro estimate``: a version is named by its content."""
 
 import json
 from datetime import date

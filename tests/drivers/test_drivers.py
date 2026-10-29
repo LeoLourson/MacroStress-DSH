@@ -284,3 +284,11 @@ def test_driver_paths_repeat_bit_for_bit(satellites, data):
     first = simulate(satellites, macro, ["price:alpha", "price:beta"], seed=11)
     again = simulate(satellites, macro, ["price:alpha", "price:beta"], seed=11)
     assert np.array_equal(first.paths, again.paths)
+
+
+def test_an_unknown_quantity_or_object_is_a_key_error():
+    registry = load_registry()
+    with pytest.raises(KeyError):
+        registry.quantity("no_such_quantity")
+    with pytest.raises(KeyError):
+        registry.object("no_such_object")

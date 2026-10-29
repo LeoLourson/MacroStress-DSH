@@ -35,23 +35,21 @@ Ctrl+C. При запуске он создаёт `workspace/` и пишет т�
 
 ```yaml
 command: 'C:\Users\LeoLeon\Documents\MacroStress\macrostress-dsh\.venv\Scripts\python.exe'
-args: [..., '--workspace', 'C:\Users\LeoLeon\Documents\MacroStress\macrostress-dsh\workspace']
+args:
+  - ...
+  - '--workspace'
+  - &workspace 'C:\Users\LeoLeon\Documents\MacroStress\macrostress-dsh\workspace'
+...
+- id: dsh-macrostress
+  config:
+    workspace: *workspace
 ```
 
 На другой машине оба пути надо заменить на свои: интерпретатор из `.venv` этого репозитория
-и каталог данных. Workspace можно держать где угодно, но код плагина (`dsh/index.js`) читает
-снимок из `<репозиторий>/workspace`, если ему не передан параметр `workspace`. Если каталог
-данных лежит в другом месте, передайте плагину тот же путь в конфиге записи
-`dsh-macrostress`:
-
-```yaml
-- id: dsh-macrostress
-  name: 'dsh-macrostress'
-  config:
-    workspace: 'D:\data\macrostress'
-```
-
-Иначе сервер будет работать с одним каталогом, а промпт описывать другой.
+и каталог данных. Каталог данных можно держать где угодно, и написан он один раз, в якоре
+`&workspace`: оттуда путь получают и сервер, и плагин (`dsh/index.js`), поэтому промпт и
+инструменты всегда описывают один каталог. Якоря YAML понимают обе библиотеки, которые
+поставляет DSH (js-yaml 4 и yaml 2); в запущенном DSH это не проверялось.
 
 ## 3. Ключ FRED
 
