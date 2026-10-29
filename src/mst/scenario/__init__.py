@@ -1,1 +1,1 @@
-"""The scenario layer: contracts now, paths and the conditional forecast next."""
+"""The scenario layer: the scenario file, its contracts and the paths a run draws from them."""

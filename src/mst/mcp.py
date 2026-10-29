@@ -14,6 +14,7 @@ from .data import sources
 from .data.store import SeriesStore
 from .drivers import version as satellite_version
 from .macro import version as macro_version
+from .scenario import tool as scenario_tool
 
 
 def build(ws: store.Workspace) -> FastMCP:
@@ -109,6 +110,31 @@ def build(ws: store.Workspace) -> FastMCP:
         )
 
     @server.tool
+    def scenario(
+        action: str,
+        id: str | None = None,
+        spec: dict[str, Any] | None = None,
+    ) -> dict:
+        """Stored scenarios. Actions: list, get, save, validate.
+
+        ``save`` checks the contract and writes ``scenarios/<id>.json``; ``validate`` loads the
+        macro and satellite versions the file names and names every problem that keeps the
+        scenario from being computed, including corpus fragments not visible on the
+        calculation day when the index exists.
+        """
+        if action == "list":
+            return scenario_tool.catalogue(ws.scenarios)
+        if action == "get":
+            return scenario_tool.get(ws.scenarios, _need(id, "id"))
+        if action == "save":
+            return scenario_tool.save(ws.scenarios, _need(id, "id"), _need(spec, "spec"))
+        if action == "validate":
+            return scenario_tool.validate(
+                ws.scenarios, _need(id, "id"), ws.models, _indexed(ws)
+            )
+        raise ValueError(f"scenario: unknown action {action!r}, try list, get, save, validate")
+
+    @server.tool
     def model(
         kind: str,
         action: str,
@@ -158,6 +184,11 @@ def _corpus_argv(ws: store.Workspace, command: str, *ids: str) -> list[str]:
 def _day(as_of: str) -> date:
     """The day an action works as of."""
     return date.fromisoformat(as_of)
+
+
+def _indexed(ws: store.Workspace) -> Path | None:
+    """The corpus root when its index exists, so a scenario's sources can be checked."""
+    return ws.corpus if (ws.corpus / "index" / "chunks.jsonl").is_file() else None
 
 
 def _macro_argv(

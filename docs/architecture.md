@@ -8,10 +8,11 @@ flowchart LR
     data --> macro["mst.macro: макромодель"]
     data --> drivers["mst.drivers: каталоги и сателлиты"]
     macro --> drivers
-    corpus["mst.corpus: корпус"] -.-> scenario["mst.scenario: сценарий"]
+    corpus["mst.corpus: корпус"] --> scenario["mst.scenario: сценарий и его пути"]
     scenario --> macro
     drivers -.-> run["прогон и отчёт (шаги 8–9)"]
     macro -.-> run
+    scenario -.-> run
 ```
 
 Пунктир — то, что ещё не перенесено.
@@ -22,13 +23,14 @@ flowchart LR
 | `mst.macro` | Оценивает BVAR, идентифицирует шоки, строит условный прогноз и тяжесть сценария, проверяет модель на эпизодах | [src/mst/macro](../src/mst/macro/README.md) |
 | `mst.drivers` | Находит объекты величин, загружает их ряды, оценивает и проверяет сателлиты, строит пути драйверов | [src/mst/drivers](../src/mst/drivers/README.md) |
 | `mst.corpus` | Хранит манифест корпуса, скачивает оригиналы, переводит их в Markdown, пишет карточки эпизодов, режет корпус на фрагменты и ищет по ним | [src/mst/corpus](../src/mst/corpus/README.md) |
-| `mst.scenario` | Контракт сценария $(N, C, D, O)$ | [src/mst/scenario](../src/mst/scenario/README.md) |
+| `mst.scenario` | Хранит сценарий $(N, C, D, O)$, проверяет его и строит пути: условный прогноз с ограничениями и пути драйверов на тех же розыгрышах | [src/mst/scenario](../src/mst/scenario/README.md) |
 | `mst.mcp`, `mst.jobs`, `mst.store` | MCP-сервер, задачи и каталог workspace | [src/mst](../src/mst/README.md) |
 | `dsh/` | Плагин DSH: запуск сервера, скиллы, раздел промпта | [dsh](../dsh/README.md) |
 
-Пакеты зависят друг от друга в одну сторону: `data` ни от кого, `macro` от `data` и
-`scenario`, `drivers` от `data` и `macro`. MCP-сервер только разбирает аргументы и вызывает
-одну функцию пакета или запускает задачу.
+Пакеты зависят друг от друга в одну сторону: `data` ни от кого, `macro` от `data` (и от
+контракта сценария), `drivers` от `data` и `macro`, `scenario` от `macro`, `drivers` и
+`corpus`. MCP-сервер только разбирает аргументы и вызывает одну функцию пакета или запускает
+задачу.
 
 ## Workspace
 
@@ -48,7 +50,8 @@ workspace/
   corpus/raw/, corpus/text/, corpus/series/  оригиналы, конспекты, дневные ряды D1–D5
   corpus/downloads.json   что скачано: адрес, хеш, размер, дата
   corpus/index/           chunks.jsonl, vectors.npy, vectors.json, state.json
-  portfolios/, scenarios/, runs/  пока пусты (шаги 7–9)
+  scenarios/<id>.json     сценарий: нарратив, ограничения, движущие шоки, надбавки, версии
+  portfolios/, runs/      пока пусты (шаги 8–9)
   jobs/<id>/job.json, log.txt     задачи
   jobs/<resource>.lock    блокировка ресурса
 ```
