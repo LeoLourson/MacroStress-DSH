@@ -1,0 +1,19 @@
+{
+  "name": "dsh-macrostress",
+  "version": "0.1.0",
+  "private": true,
+  "description": "MacroStress as one DSH plugin: portfolio stress test through MCP tools.",
+  "type": "module",
+  "main": "index.js",
+  "exports": {
+    ".": "./index.js",
+    "./cordis.patch.yml": "./cordis.patch.yml",
+    "./locale/*.json": "./locale/*.json",
+    "./package.json": "./package.json"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  }
+}
