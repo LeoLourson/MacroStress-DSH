@@ -25,18 +25,21 @@ flowchart LR
 | `mst.drivers` | Находит объекты величин, загружает их ряды, оценивает и проверяет сателлиты, строит пути драйверов | [src/mst/drivers](../src/mst/drivers/README.md) |
 | `mst.corpus` | Хранит манифест корпуса, скачивает оригиналы, переводит их в Markdown, пишет карточки эпизодов, режет корпус на фрагменты и ищет по ним | [src/mst/corpus](../src/mst/corpus/README.md) |
 | `mst.scenario` | Хранит сценарий $(N, C, D, O)$, проверяет его и строит пути: условный прогноз с ограничениями и пути драйверов на тех же розыгрышах | [src/mst/scenario](../src/mst/scenario/README.md) |
-| `mst.plugin_sdk` | Поверхность модели позиции: что она объявляет, читает из путей и возвращает | [src/mst/plugin_sdk](../src/mst/plugin_sdk/__init__.py) |
+| `mst.plugin_sdk` | Поверхность модели позиции: что она объявляет, читает из путей и возвращает; `plugin_sdk.testing` — конформанс-проверка и демо-расчёт | [src/mst/plugin_sdk](../src/mst/plugin_sdk/__init__.py) |
 | `mst.engine` | Каталог моделей, подготовка входов, расчёт позиции и проверка того, что модель вернула; ветвления по типу актива нет | [src/mst/engine](../src/mst/engine/__init__.py) |
-| `mst.plugins` | Модели позиций: акция, облигация, кредит или депозит, недвижимость | [src/mst/plugins](../src/mst/plugins/__init__.py) |
+| `mst.plugins` | Пакеты типов активов: обнаружение `mst.plugins.<id>`, реестр объявлений и модели позиций | [src/mst/plugins](../src/mst/plugins/README.md) |
 | `mst.portfolio` | Портфель, его проверка против версий, стоимость позиций и отчёт прогона | [src/mst/portfolio](../src/mst/portfolio/__init__.py) |
 | `mst.mcp`, `mst.jobs`, `mst.runs`, `mst.store` | MCP-сервер, задачи, прогон и каталог workspace | [src/mst](../src/mst/README.md) |
 | `dsh/` | Плагин DSH: запуск сервера, скиллы, раздел промпта | [dsh](../dsh/README.md) |
+
+`python -m mst.plugin new|check|demo-run` создаёт пакет типа актива, проверяет его
+объявление и считает демо-позицию; как устроен плагин — в [plugins.md](plugins.md),
+контракты расчёта — в [platform.md](platform.md).
 
 Пакеты зависят друг от друга в одну сторону: `data` ни от кого, `macro` от `data` (и от
 контракта сценария), `drivers` от `data` и `macro`, `scenario` от `macro`, `drivers` и
 `corpus`, `engine` от `plugin_sdk` и `plugins`, `runs` от `scenario`, `engine` и `portfolio`.
 MCP-сервер только разбирает аргументы и вызывает одну функцию пакета или запускает задачу.
-
 ## Workspace
 
 Всё состояние — файлы одного каталога. Путь к нему передаётся серверу ключом

@@ -211,6 +211,20 @@ $\delta > 0$; настоящие `a3233197` / `3121fdc2` — портфель и
 
 **Коммит.** «Make an asset type an extension: discovery, the plugin command and its checks».
 
+**Сделано.** `src/mst/plugin_sdk/{version,plugin,testing}.py` — версия SDK `1.0.0` и
+диапазоны совместимости, объявление `Plugin` с моделями и демо-кейсом (`DemoCase`:
+позиция, `FixedPaths`, карта «величина → драйвер»), `check_plugin` (контракт, прогон демо
+через `engine.run`, детерминизм) и `calculate_demo`; `src/mst/plugins/__init__.py` —
+обнаружение пакетов `mst.plugins.<id>`, проверка объявлений вместе и реестр, из которого
+`mst.engine.model_catalog` строит каталог; у четырёх встроенных моделей появились `plugin.py`
+с демо-кейсами; `src/mst/plugin.py` и `src/mst/templates/plugin/` — `python -m mst.plugin
+new|check|demo-run`. `check` называет каждую проблему по имени, `demo-run` печатает
+P5/P50/P95 и ES95; свежий пакет проходит `new → check → demo-run`, сломанный отклоняется.
+Расхождение с планом: модуль `src/mst/plugins.py` не может существовать рядом с пакетом
+`mst.plugins`, поэтому обнаружение и реестр лежат в `mst/plugins/__init__.py`; `ui-manifest`
+не переносился — веба нет. Проверено: 292 лёгких теста (24 новых в `tests/plugins/`), ruff
+чист; `tests/plugins/test_boundary.py` не даёт `mst.engine` импортировать конкретный тип.
+
 ## Шаг 11. skills: скиллы и промпт DSH
 
 **Зачем.** Работа идёт из окна DSH: агент должен знать, как собрать сценарий из корпуса,
