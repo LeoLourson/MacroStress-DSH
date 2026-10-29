@@ -1,0 +1,33 @@
+# {{label}}
+
+Плагин `{{plugin_id}}` для MacroStress: тип актива `{{type_id}}` и его модель
+`{{plugin_id}}.paths.v1`. Стоимость позиции следует пути драйвера
+`{{plugin_id}}_price` и курсу её валюты к базовой валюте портфеля.
+
+## Как устроен
+
+| Файл | Что делает |
+|---|---|
+| `plugin.py` | Объявление `plugin = Plugin(...)` и демо-кейс |
+| `model.py` | Модель `CalculationModel`: требования, проверка входов, расчёт на путях |
+| `tests/` | Тесты пакета; `pytest` подхватывает их после установки пакета |
+
+## Что изменить
+
+1. Замените расчёт в `model.py` своим. Модель читает только `PreparedInputs` и
+   `CalculationContext` и не обращается к workspace, сети или LLM.
+2. Если позиции нужны собственные поля, заведите схему в `model.py` и укажите её в
+   `terms_schema`; позиция передаёт значения в `terms`.
+3. Замените демо-кейс в `plugin.py` на реалистичные пути, позицию и драйверы: `check`
+   считает его через тот же диспетчер, что и прогон.
+
+## Проверка
+
+```powershell
+python -m mst.plugin check {{plugin_id}}
+python -m mst.plugin demo-run {{plugin_id}}
+pytest src/mst/plugins/{{plugin_id}}/tests
+```
+
+Пакет в `src/mst/plugins/` платформа находит при следующем запуске; проверка без установки —
+`python -m mst.plugin check --path DIR/{{plugin_id}}`.

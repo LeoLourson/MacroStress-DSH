@@ -1,0 +1,41 @@
+"""The declaration of the ``{{plugin_id}}`` plugin and its demonstration case."""
+
+from datetime import date
+
+import numpy as np
+
+from mst.plugin_sdk import DemoCase, FixedPaths, Plugin, Position
+
+from .model import MODEL
+
+#: The demo paths: two repetitions of three months, so a quantile and its tail exist.
+DEMO = FixedPaths(
+    drivers={
+        "{{plugin_id}}_price:demo": np.array(
+            [[100.0, 102.0, 104.0], [100.0, 98.0, 96.0]]
+        )
+    },
+    start=date(2026, 9, 1),
+)
+
+plugin = Plugin(
+    plugin_id="{{plugin_id}}",
+    version="0.1.0",
+    sdk=">=1.0,<2.0",
+    label="{{label}}",
+    description="{{description}}",
+    models=(MODEL,),
+    demo=(
+        DemoCase(
+            name="demo",
+            position=Position(
+                id="demo",
+                type="{{type_id}}",
+                notional=100.0,
+                codes={"secid": "DEMO"},
+            ),
+            paths=DEMO,
+            drivers={"{{plugin_id}}_price": "{{plugin_id}}_price:demo"},
+        ),
+    ),
+)

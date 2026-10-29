@@ -1,0 +1,9 @@
+"""The contract of the ``{{plugin_id}}`` plugin."""
+
+from mst.plugin_sdk.testing import check_plugin
+
+from ..plugin import plugin
+
+
+def test_the_plugin_conforms():
+    assert [str(finding) for finding in check_plugin(plugin)] == []

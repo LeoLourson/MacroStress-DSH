@@ -1,0 +1,83 @@
+"""``{{plugin_id}}.paths.v1``: the position of ``{{type_id}}`` on its driver's paths.
+
+``V_H = V_0 · (D_H / D_0 · FX_H / FX_0 − 1)``: the position follows the driver
+``{{plugin_id}}_price`` of its object and the macro rate of its currency pair. The model is
+pure: it reads only the prepared inputs and the run's paths; no database, network or LLM.
+"""
+
+import numpy as np
+
+from mst.contracts import Contract
+from mst.plugin_sdk import (
+    CalculationContext,
+    CalculationModel,
+    DataRequirements,
+    Diagnostic,
+    DriverRequirement,
+    Position,
+    PreparedInputs,
+    RunOptions,
+    distribution,
+    envelope,
+    fx,
+    money,
+    scalar,
+)
+
+MODEL_ID = "{{plugin_id}}.paths.v1"
+QUANTITY = "{{plugin_id}}_price"
+
+
+class {{class}}Terms(Contract):
+    """The model takes no terms: the driver and the currency pair are all it reads."""
+
+
+class {{class}}(CalculationModel):
+    model_id = MODEL_ID
+    version = "0.1.0"
+    label = "{{label}}"
+    instrument_types = ("{{type_id}}",)
+    terms_schema = {{class}}Terms
+    metrics = ("{{plugin_id}}.value_current", "{{plugin_id}}.pnl", "{{plugin_id}}.loss")
+    required_metrics = metrics
+    description = "Стоимость следует пути драйвера и курсу валюты."
+
+    def requirements(self, position: Position, options: RunOptions) -> DataRequirements:
+        return DataRequirements(
+            drivers=[
+                DriverRequirement(
+                    key="price",
+                    quantity=QUANTITY,
+                    purpose="путь драйвера позиции",
+                )
+            ],
+            macro=fx.variables(position.currency, options.base_currency),
+        )
+
+    def validate(self, prepared: PreparedInputs) -> list[Diagnostic]:
+        return []
+
+    def calculate(self, prepared: PreparedInputs, context: CalculationContext):
+        driver = prepared.driver("price")
+        path = np.asarray(context.paths.driver(driver), dtype=float)
+        if np.any(path <= 0):
+            raise ValueError(f"{driver} carries a value at or below zero")
+        ratio = path[:, -1] / path[:, 0]
+        rate = fx.ratio(context.paths, prepared.position.currency, context.base_currency)
+        value0 = prepared.value_current
+        change = value0 * (ratio * rate - 1)
+        unit = money(context.base_currency)
+        return envelope(
+            prepared,
+            context,
+            self,
+            value_change=change,
+            metrics={
+                "{{plugin_id}}.value_current": scalar(unit, value0),
+                "{{plugin_id}}.pnl": distribution(unit, change),
+                "{{plugin_id}}.loss": distribution(unit, -change, tail=True),
+            },
+        )
+
+
+MODEL = {{class}}()

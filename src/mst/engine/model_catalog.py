@@ -1,20 +1,21 @@
 """The catalog of registered calculation models: the model of an instrument type.
 
-The packages of ``mst.plugins`` register their models here; nothing in ``mst.engine`` branches on
-an instrument type, it asks the catalog. Step 10 of the plan replaces this module's explicit
-import with discovery of ``mst.plugins.<id>`` packages, keeping the catalog's answer the same.
+The packages of ``mst.plugins`` declare their models in ``mst.plugins``; the catalog indexes the
+registry's models and answers by model id or by the position's instrument type. Nothing in
+``mst.engine`` branches on an instrument type, it asks the catalog.
 """
 
 from ..plugin_sdk.model import CalculationModel, Position
-from ..plugins import MODELS
+from ..plugins import registry
 
 
 class Catalog:
     """The models by id, and the model that serves an instrument type."""
 
-    def __init__(self, models: tuple[CalculationModel, ...] = MODELS) -> None:
-        self.models = {model.model_id: model for model in models}
-        if len(self.models) != len(models):
+    def __init__(self, models: tuple[CalculationModel, ...] | None = None) -> None:
+        found = tuple(models) if models is not None else tuple(registry().models.values())
+        self.models = {model.model_id: model for model in found}
+        if len(self.models) != len(found):
             raise ValueError("a model is registered twice under one id")
 
     def model(self, model_id: str) -> CalculationModel:
