@@ -26,9 +26,11 @@ def test_rosstat_alone_gets_the_mintsifry_roots():
         rosstat = transport(http, "https://rosstat.gov.ru/storage/a.xlsx")
         cbr = transport(http, "https://www.cbr.ru/scripts/XML_dynamic.asp")
         assert rosstat is not cbr
-        assert len(rosstat._pool._ssl_context.get_ca_certs()) > len(
-            cbr._pool._ssl_context.get_ca_certs()
-        )
+        plain = {cert.get("subject") for cert in cbr._pool._ssl_context.get_ca_certs()}
+        extra = {
+            cert.get("subject") for cert in rosstat._pool._ssl_context.get_ca_certs()
+        } - plain
+        assert any("Russian Trusted" in str(subject) for subject in extra)
 
 
 def test_lookalike_hosts_do_not_get_the_extra_roots():

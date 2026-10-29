@@ -30,8 +30,8 @@ ROOTS_PATH = SOURCES_PATH.with_name("mintsifry-roots.pem")
 
 
 def rosstat_context() -> ssl.SSLContext:
-    """The default verification plus the Mintsifry roots, for rosstat.gov.ru only."""
-    context = ssl.create_default_context()
+    """The roots httpx verifies every host against, plus the Mintsifry roots."""
+    context = httpx.create_ssl_context()
     context.load_verify_locations(cafile=str(ROOTS_PATH))
     return context
 
