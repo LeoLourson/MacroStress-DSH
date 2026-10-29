@@ -6,9 +6,11 @@ whenToUse: когда позиция не считается из-за драй�
 
 # Драйверы и сателлиты
 
-Драйвер — величина объекта (`share_price:sber`, `bond_spread:corp`,
-`overdue_share:mining`, `housing_price_primary:belgorod`). Сателлит — модель драйвера от
-макропеременных; версия сателлитов оценивается на панели конкретной макроверсии.
+Драйвер — величина объекта, `<величина>:<объект>`. Конкретные id берите из
+`model(kind="satellites", action="describe")` или `workspace/drivers/catalog.json`: в
+текущем workspace это, например, `share_price:sber`, `bond_spread:ru000a0jxpg2`,
+`overdue_share:stroitelstvo`, `housing_price_primary:okato_77000000000`. Сателлит — модель
+драйвера от макропеременных; версия сателлитов оценивается на панели конкретной макроверсии.
 
 ## 1. Обновить каталог
 
@@ -46,8 +48,9 @@ whenToUse: когда позиция не считается из-за драй�
 
 ## 4. Команды
 
-Оценка запускается только через `python -m`: точка входа ставит `OPENBLAS_NUM_THREADS=1`,
-иначе мелкие системы решаются в 20 потоков и оценка идёт часы вместо минут.
+Оценка запускается только через `python -m` из корня репозитория и тем же интерпретатором,
+что в `dsh/cordis.patch.yml`: точка входа ставит `OPENBLAS_NUM_THREADS=1`, иначе мелкие
+системы решаются в 20 потоков и оценка идёт часы вместо минут.
 
 ```powershell
 python -m mst.drivers update share_price --store workspace/series --drivers workspace/drivers/catalog.json
