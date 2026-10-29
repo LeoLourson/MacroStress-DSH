@@ -7,7 +7,7 @@ import pytest
 
 from mst.data.store import Observation, SeriesStore
 from mst.drivers.check import check
-from mst.drivers.estimate import correlation, fit, history
+from mst.drivers.estimate import correlation, fit, history, path_of
 from mst.drivers.registry import Registry, from_model, load_registry, to_model
 from mst.drivers.simulate import OVERLAY, PARAMETERS_FROM_ABOVE, NotServed, simulate
 from mst.drivers.spec import load_spec
@@ -242,6 +242,40 @@ def test_a_quarterly_average_driver_is_estimated_with_its_months_drawn(tmp_path)
     assert low - 0.05 <= simulated.COMPANIES["alpha"][1] <= high + 0.05
     beta = result.gamma[:, hist.nodes.index("sector"), 2].mean()
     assert beta == pytest.approx(simulated.SECTOR[2], abs=0.3)
+
+
+def test_a_driver_whose_data_imply_an_explosive_root_gets_a_stationary_path(tmp_path):
+    panel = simulated.panel(240, seed=5)
+    registry = simulated.registry(without_history=())
+    store = simulated.store(tmp_path, panel, seed=2)
+    store.write(
+        "drv.price.alpha",
+        [
+            Observation(month, 2.0 * 1.02**t, month, False)
+            for t, month in enumerate(panel.months)
+        ],
+    )
+    hist = history(registry, "price", panel, store, AS_OF)
+    spec = load_spec()
+    rho = fit(hist, spec).gamma[:, hist.driver.index("price:alpha"), 1]
+    assert np.all(np.abs(rho) <= spec.rho_max + 1e-9)
+    assert np.median(rho) > spec.rho_max - 0.05
+
+
+def test_a_path_ends_at_the_last_month_the_panel_knows(tmp_path):
+    panel = simulated.panel(120, seed=7)
+    y = panel.y.copy()
+    y[-2:] = np.nan
+    panel = replace(panel, y=y)
+    store = simulated.store(tmp_path, panel, seed=3)
+    registry = simulated.registry()
+    hist = history(registry, "price", panel, store, AS_OF)
+    node = hist.driver.index("price:alpha")
+    item = path_of(hist, node)
+    assert item.first == 1
+    assert item.observed[-1] == len(panel.months) - 3
+    assert len(item.path) == len(panel.months) - 3
+    assert fit(hist, load_spec()).rows[node] == len(item.path)
 
 
 def test_driver_paths_repeat_bit_for_bit(satellites, data):

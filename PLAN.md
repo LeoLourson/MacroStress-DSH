@@ -1,0 +1,193 @@
+# План переноса на DSH стек: шаги 6–11
+
+Состояние на 29.10.2026: шаги 0–5 в `main` (`mst` собирается, series, macro, drivers,
+сателлиты и инструменты работают). Остались шаги 6–11. Один шаг — одна ветка, зелёные
+проверки, коммит с телом «Зачем / Что / Как проверено / Что не сделано», слияние
+`git merge --no-ff` в `main`.
+
+## Как начинать и проверять любой шаг
+
+```powershell
+cd C:\Users\LeoLeon\Documents\MacroStress\macrostress-dsh
+git switch -c <шаг> main
+
+# лёгкий набор тестов: тяжёлая оценка BVAR гоняется только после правки модели
+.\.venv\Scripts\python.exe -m pytest -q --ignore=tests/macro/test_estimate.py `
+    --ignore=tests/macro/test_forecast.py --ignore=tests/macro/test_identify.py
+.\.venv\Scripts\python.exe -m ruff check --no-cache .
+```
+
+- `ruff` только с `--no-cache`: на этой машине он не может создать свой кэш.
+- Перенос — механический: `msa.` → `mst.`, затем правка имён каталогов и путей. Сверка со
+  старым репозиторием (`..\macrostress-core`) — диффом на одинаковых данных.
+- Данные живут в `workspace/` (вне git): `series/`, `drivers/`, `models/`, `corpus/`,
+  `portfolios/`, `scenarios/`, `runs/`. Каталоги уже объявлены в `mst.store.Workspace`.
+- Макро-версия для прогонов лежит в `workspace/models/macro/a3233197…` (скопирована из
+  старого `.data/models`), сателлиты — в `workspace/models/satellites/`.
+- Инструменты MCP добавляются в `src/mst/mcp.py` рядом с `jobs`, `series`, `model`; каждая
+  долгая операция запускается задачей (`_start`) на своём ресурсе, а не выполняется в сервере.
+- Оценка моделей запускается только через `python -m mst.*`: точка входа `__main__` ставит
+  `OPENBLAS_NUM_THREADS=1`. Без этого мелкие плотные solve идут в 20 потоков и оценка
+  сателлитов занимает часы вместо минут.
+
+## Шаг 6. corpus: документы, фрагменты, индекс, поиск
+
+**Зачем.** Сценарий собирается из источников: агент ищет фрагменты корпуса по нарративу и
+ссылкам, а эпизоды проверяют макромодель. Без корпуса шаги 7 и 8 нечем наполнить.
+
+**Что переносится.** `src/msa/corpus/{fetch,convert,index,series,episodes,embed}.py` →
+`src/mst/corpus/`; `manifest.py` уже перенесён. `src/msa/cli/corpus.py` →
+`src/mst/corpus/cli.py`; `corpus/README.md`, `corpus/manifest.json`, `corpus/series.toml`,
+`corpus/eval/` — в корень нового репозитория (данные — в `workspace/corpus/`).
+
+**Что меняется.**
+- Импорты `msa.*` → `mst.*`; `--corpus DIR` вместо `--data`.
+- CLI: `python -m mst.corpus check|fetch|add|convert|series|episodes|index|search|eval|all`,
+  обязательные `--corpus` и (для `search`) `--as-of`.
+- Инструмент `corpus(action=...)`: `search` (query, as_of), `get` (chunk id, as_of),
+  `list` (что в манифесте), `add` (ключ и файл по URL). `index` и `fetch` — задачи на
+  `corpus` (`mst.corpus index --corpus …`).
+- `store.state()` уже читает `corpus/index/state.json` — формат состояния не менять.
+
+**Проверка.** Перенесённые `tests/corpus/` зелёные; `index` дважды подряд даёт тот же
+`chunks.jsonl` (идемпотентность); `search --as-of` не возвращает фрагменты, опубликованные
+позже; инструмент `corpus` отвечает на search/get без сети.
+
+**Коммит.** «Port the corpus: documents, chunks, the index and its search».
+
+## Шаг 7. scenario: нарратив, ограничения, шоки, надбавки
+
+**Зачем.** Прогон — чистая функция от сценария $(N, C, D, O)$, версий моделей, даты $t=0$ и
+сида. Шаг вводит сценарий и сборку путей.
+
+**Что переносится.** `src/msa/engine/scenarios.py` (распределения факторов и шоков),
+`src/msa/engine/scenario_set.py` (розыгрыши, Соболь, сид) → `src/mst/scenario/set.py` и
+`src/mst/scenario/shocks.py`; `src/msa/contracts/scenario.py` уже в
+`src/mst/scenario/contracts.py` — расширить до `Scenario`, `Constraint`, `Overlay`.
+
+**Что меняется.**
+- Сценарий — файл `workspace/scenarios/<id>.json`: `narrative`, `sources`,
+  `constraints` (веса по переменным и месяцам, границы в шкале $y$), `driving_shocks`,
+  `overlays`, `horizon`, `macro`, `satellites`.
+- `mst.scenario.build(spec, macro_version, satellites_version, corpus)` → `Paths`:
+  условный прогноз `mst.macro` с ограничениями, затем `mst.drivers.simulate` на тех же
+  розыгрышах; тяжесть $\delta$ — из безусловного прогноза той же версии.
+- Проверки: неизвестная переменная, месяц вне горизонта, `low > high`, ранг $Z$, надбавка
+  на необслуживаемый драйвер — отказ с именем причины.
+- Инструмент `scenario(action=list|get|save|validate)`; `run` (шаг 8) берёт сценарий по id.
+
+**Проверка.** Перенесённые тесты розыгрышей (соболевские точки, повтор с тем же сидом —
+те же числа); сборка путей на синтетической макро-версии даёт заданные ограничениям пути
+до машинной точности; `validate` называет каждую невыполнимую связку.
+
+**Коммит.** «Port the scenario: constraints, shocks, overlays and the paths they draw».
+
+## Шаг 8. assets-run: модели позиций и расчёт на путях
+
+**Зачем.** Ядро расчёта: тип актива объявляет, какие входы ему нужны, платформа их находит
+и считает позицию на путях $R \times (H+1)$.
+
+**Что переносится.** `src/msa/engine/{dispatch,model_catalog,quantities,status}.py` →
+`src/mst/engine/`; `src/msa/plugin_sdk/{model,paths,calc,results,specs}.py` →
+`src/mst/plugin_sdk/`; модели позиций из `src/msa/plugins/` — по одной на шаг: акция
+(`equity`), облигация (`bond`), депозит/кредит, недвижимость.
+
+**Что меняется.**
+- `Paths` — протокол из `plugin_sdk/paths.py` (макропеременные и драйверы в исходных
+  единицах, пометки); платформа передаёт один и тот же объект всем моделям.
+- `engine/dispatch.py` готовит входы по `DataRequirements`, при отсутствии драйвера позиция
+  не считается, а результат называет недостающий драйвер.
+- Инструмент `run(action=start|status|result|list)` — задача на `runs`; результат в
+  `workspace/runs/<id>/` (мета, пути, вклад позиций).
+
+**Проверка.** Модель акции на синтетических путях даёт ту же цену, что формула в тесте;
+позиция без драйвера не считается и называет драйвер; повтор прогона с тем же сидом даёт
+те же числа побитно.
+
+**Коммит.** «Port the calculation of positions: the engine, the plugin SDK and the first
+asset types».
+
+## Шаг 9. portfolio: портфель, сопоставление, отчёт
+
+**Зачем.** Прогон запускается для портфеля: позиции, их объёмы, сопоставление с объектами
+реестра драйверов и отчёт с $P_5$, $P_{50}$, $P_{95}$ и тяжестью $\delta$.
+
+**Что переносится.** `src/msa/db/repositories/portfolios.py` (формат и проверки),
+`src/msa/engine/{portfolio,exposure,aggregation}.py`, `src/msa/api/portfolio_draft.py`
+(разбор черновика) → `src/mst/portfolio/`.
+
+**Что меняется.**
+- Портфель — `workspace/portfolios/<id>.json`: позиции с типом актива, номиналом и кодами
+  объекта (`secid`, `isin`, `inn`, `okved`, `okato`); драйвер находится `Registry.match`.
+- `mst.portfolio.run(portfolio, scenario, …)` — полный прогон: пути → позиции → агрегат →
+  перцентили и $\delta$; всё пишется в `workspace/runs/<id>/`, повтор даёт те же числа.
+- Инструменты `portfolio(action=list|get|save|delete|check|exposure)` и `run` из шага 8;
+  `jobs(state)` показывает число портфелей, сценариев и прогонов.
+
+**Проверка.** Портфель из трёх позиций на синтетическом сценарии даёт те же числа, что
+старый `run_batch`; повтор побитно совпадает; позиция с несуществующим объектом отклоняется
+с именем кода; отчёт содержит $P_5$, $P_{50}$, $P_{95}$ и $\delta$.
+
+**Коммит.** «Port the portfolio: positions, matching, aggregation and the run report».
+
+## Шаг 10. extension: тип актива как расширение
+
+**Зачем.** Новый тип актива добавляется пакетом, не правкой ядра: `msa-plugin new|check|demo-run`,
+документация и контрактные тесты.
+
+**Что переносится.** `src/msa/cli/plugin.py` → `src/mst/plugin.py`;
+`src/msa/platform/registry.py` → `src/mst/plugins.py` (обнаружение пакетов
+`mst.plugins.<id>` с `plugin = Plugin(...)`); `src/msa/plugin_sdk/testing.py`,
+`src/msa/plugin_sdk/version.py`; `docs/plugins.md` и `docs/platform.md`.
+
+**Что меняется.** Шаблон `msa-plugin new <id>` создаёт пакет с `plugin.py`, `model.py`,
+`tests/`; `check` проверяет контракт и `ui-manifest` не нужен (веба нет); `demo-run` считает
+позицию на демо-путях. Ядро не ветвится по типу актива.
+
+**Проверка.** `new` → `check` → `demo-run` проходит на свежем пакете; сломанный пакет
+отклоняется с именем ошибки; `pytest tests/plugins` зелёный; ни один модуль `mst.engine`
+не импортирует конкретный тип актива.
+
+**Коммит.** «Make an asset type an extension: discovery, the plugin command and its checks».
+
+## Шаг 11. skills: скиллы и промпт DSH
+
+**Зачем.** Работа идёт из окна DSH: агент должен знать, как собрать сценарий из корпуса,
+как запустить прогон и как прочитать отчёт.
+
+**Что переносится.** `src/msa/prompts/`, `src/msa/agents/*` (описания шагов и правила, не
+LangGraph) → `dsh/skills/`; `dsh/index.js` (раздел промпта), `dsh/locale/{ru,en}.json`,
+карточка плагина в Settings → Plugins.
+
+**Что меняется.** Три скилла: `scenario-from-corpus` (как искать фрагменты и собирать
+$N$, $C$, $D$, $O$), `run-report` (как читать $P_5$/$P_{50}$/$P_{95}$ и пометки), `drivers`
+(что значит «сателлит отвергнут» и как обновить каталог). Промпт-раздел показывает
+`workspace.json`: макро- и сателлитную версию, индекс корпуса, число портфелей, сценариев и
+прогонов, незавершённые задачи.
+
+**Проверка.** После перезапуска DSH в карточке видны инструменты, раздел промпта и список
+скиллов; `jobs(state)` и `workspace.json` совпадают; скилл открывается и называет команды.
+
+**Коммит.** «Teach DSH the workflow: the skills, the prompt section and the bundle card».
+
+## Что уже решено по сателлитам (не переоткрывать)
+
+- Доля прошлого значения в цепи драйвера ограничена `RHO_MAX = 0.99`: взрывной корень
+  ($\rho > 1$) не имеет конечного пути, и матрица точности перестаёт быть положительно
+  определённой. Усечение — по условному нормальному распределению, не обрезкой.
+- Первый месяц цепи берётся из стационарного распределения, а не из диффузного априори:
+  диффузное априори теряется в округлении на длинных путях (141 месяц и больше).
+- Путь заканчивается последним месяцем, чей `x` известен панели: квартальная цена,
+  опубликованная раньше своих регрессоров, оценивается по последний полный месяц, а не
+  отбрасывается целиком.
+- `python -m mst.drivers` ставит `OPENBLAS_NUM_THREADS=1` до импорта numpy.
+
+## Открытые вопросы
+
+1. На сколько месяцев вперёд хватает данных для `housing_price_*`: история начинается
+   около 2020-12, проверка вне выборки съедает 24 месяца — стоит ли просить Росстат
+   глубже или принять короткую историю.
+2. Нужен ли флаг `--spec` у `python -m mst.drivers`, чтобы гонять проверку на малом
+   сэмплере без правки `spec.toml`.
+3. `mst.macro` тоже считает много мелких матриц: проверить, нужен ли ему тот же
+   `OPENBLAS_NUM_THREADS=1` (сейчас не ставится).

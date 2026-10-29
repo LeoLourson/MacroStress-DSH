@@ -17,9 +17,13 @@ Months a driver is not observed in are drawn inside the sampler (``Path``, ``dra
 stored value fixes the mean of the driver over the ``span`` months it covers (one for a monthly
 value, three for a quarter's average), so a quarterly price or a bond that did not trade for a
 month keeps every month of its history. ``x`` is not drawn: a node's months start after the last
-month whose ``x`` is unknown. ``Psi_c`` is diagonal, a special case of the full covariance of
-section 6.2. The residual correlation ``Sigma_e`` across drivers is estimated after the
-sampler, from the residuals at the posterior mean over the months two drivers both observe.
+month whose ``x`` is unknown and end at the last month whose ``x`` is known, so a price published
+before its regressors is still estimated up to the last complete month. The chain is stationary:
+``rho`` is drawn below one in absolute value, and the first month starts from the stationary
+distribution, which keeps the tridiagonal precision well conditioned however long the path is.
+``Psi_c`` is diagonal, a special case of the full covariance of section 6.2. The residual
+correlation ``Sigma_e`` across drivers is estimated after the sampler, from the residuals at the
+posterior mean over the months two drivers both observe.
 """
 
 from dataclasses import dataclass
@@ -27,6 +31,7 @@ from datetime import date
 
 import numpy as np
 from scipy.linalg import cho_solve_banded, cholesky_banded, solve_banded
+from scipy.special import ndtr, ndtri
 
 from mst.data.store import SeriesStore
 from mst.macro.panel import Panel
@@ -38,8 +43,6 @@ SHAPE = 3.0
 """The shape of the inverse gamma prior of each diagonal element of ``Psi_c``."""
 COMMON = 12
 """Months two drivers must share for their residual correlation to be estimated."""
-DIFFUSE = 1e-8
-"""Prior precision of the first month of a drawn path."""
 
 
 @dataclass(frozen=True)
@@ -164,20 +167,32 @@ class Path:
 
 
 def path_of(hist: History, node: int, until: int | None = None) -> Path | None:
-    """The estimation months of a node up to ``until``; None without two usable observations."""
+    """The estimation months of a node up to ``until``; None without two usable observations.
+
+    The window is the months whose ``x`` the panel knows: it starts after the last month with an
+    unknown ``x`` and ends at the last one, so an observation that falls outside it is dropped.
+    """
     span, lags, d = hist.quantity.span, hist.quantity.lags, hist.d[:, node]
     last = len(d) - 1 if until is None else until
     observed = np.flatnonzero(np.isfinite(d[: last + 1]))
     if len(observed) < 2:
         return None
-    end = int(observed[-1])
     known = np.array(
-        [t >= lags and bool(np.all(np.isfinite(hist.x[t - lags : t + 1]))) for t in range(end + 1)]
+        [t >= lags and bool(np.all(np.isfinite(hist.x[t - lags : t + 1]))) for t in range(last + 1)]
     )
+    usable = np.flatnonzero(known)
+    if not len(usable):
+        return None
+    end = int(usable[-1])
+    observed = observed[observed <= end]
+    if len(observed) < 2:
+        return None
     first = max(int(observed[0]) - span + 1, lags)
-    unknown = np.flatnonzero(~known[first:]) + first
+    unknown = np.flatnonzero(~known[first : end + 1]) + first
     if len(unknown):
         first = int(unknown[-1]) + 1
+    if first > end:
+        return None
     observed = observed[observed - span + 1 >= first]
     if len(observed) < 2:
         return None
@@ -196,25 +211,27 @@ def draw_path(item: Path, gamma, centre, spread, sigma2: float, rng) -> np.ndarr
     """The path given scaled coefficients and the residual variance, observations held exactly.
 
     Given the parameters ``d_t = a_t + rho d_{t-1} + e_t`` is a Gaussian chain with a
-    tridiagonal precision; the first month has a diffuse prior. A draw of the chain is moved to
-    the observations by ``z + Q^-1 W' (W Q^-1 W')^-1 (v - W z)``.
+    tridiagonal precision, the first month taken from its stationary distribution. A draw of the
+    chain is moved to the observations by ``z + Q^-1 W' (W Q^-1 W')^-1 (v - W z)``.
     """
     n = len(item.path)
     rho = gamma[1] / spread[1]
-    a = (
+    intercept = (
         gamma[0]
         - gamma[1] * centre[1] / spread[1]
-        + ((item.xpart[1:] - centre[2:]) / spread[2:]) @ gamma[2:]
+        + ((item.xpart - centre[2:]) / spread[2:]) @ gamma[2:]
     )
+    a = intercept[1:]
     # Upper banded form of the tridiagonal precision: row 1 the diagonal, row 0 above it.
     banded = np.zeros((2, n))
     banded[1, 1:] += 1 / sigma2
     banded[1, :-1] += rho**2 / sigma2
-    banded[1, 0] += DIFFUSE
+    banded[1, 0] += (1 - rho**2) / sigma2
     banded[0, 1:] = -rho / sigma2
     shift = np.zeros(n)
     shift[1:] += a / sigma2
     shift[:-1] -= rho * a / sigma2
+    shift[0] += (intercept[0] / (1 - rho)) * (1 - rho**2) / sigma2
     upper = cholesky_banded(banded)
     draw = cho_solve_banded((upper, False), shift) + solve_banded(
         (0, 1), upper, rng.standard_normal(n)
@@ -305,7 +322,9 @@ def fit(hist: History, spec: Spec, *, until: int | None = None, seed: int | None
                 z, y = data[i]
                 precision += z.T @ z / sigma2[i]
                 shift += z.T @ y / sigma2[i]
-            gamma[i] = _normal(precision, shift, rng)
+            gamma[i] = _stationary(
+                _normal(precision, shift, rng), precision, shift, spread, spec.rho_max, rng
+            )
         for c in range(len(classes)):
             members = roots[cls[roots] == c]
             if len(members):
@@ -339,6 +358,25 @@ def _normal(precision: np.ndarray, shift: np.ndarray, rng) -> np.ndarray:
     chol = np.linalg.cholesky(precision)
     mean = np.linalg.solve(chol.T, np.linalg.solve(chol, shift))
     return mean + np.linalg.solve(chol.T, rng.standard_normal(len(shift)))
+
+
+def _stationary(draw: np.ndarray, precision, shift, spread, rho_max: float, rng) -> np.ndarray:
+    """The draw with its share of the previous month below ``rho_max`` in absolute value.
+
+    The conditional of that coefficient given the others is normal, and truncating it does not
+    depend on their values, so drawing it again from the truncated conditional gives a draw of
+    the truncated joint. An explosive driver has no path to simulate, so the tail is cut.
+    """
+    bound = rho_max * spread[1]
+    if abs(draw[1]) <= bound:
+        return draw
+    variance = 1 / precision[1, 1]
+    mean = (shift[1] - precision[1] @ draw + precision[1, 1] * draw[1]) * variance
+    scale = np.sqrt(variance)
+    low, high = ndtr((-bound - mean) / scale), ndtr((bound - mean) / scale)
+    share = low + rng.random() * (high - low)
+    draw[1] = np.clip(mean + scale * ndtri(min(max(share, 1e-300), 1 - 1e-16)), -bound, bound)
+    return draw
 
 
 def residuals(fit_: Fit, node: int) -> np.ndarray:
