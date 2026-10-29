@@ -1,0 +1,21 @@
+# Bundle layer: the whole MacroStress integration for this profile — the MCP server
+# that owns the workspace and the section of the system prompt that shows its state.
+# The module resolves from the profile, so the profile links to this package.
+- insert:
+    - id: mcp-macrostress
+      name: '@deepseek-ai/dsh-mcp-client'
+      config:
+        serverName: macrostress
+        transport: stdio
+        command: 'C:\Users\LeoLeon\Documents\MacroStress\macrostress-dsh\.venv\Scripts\python.exe'
+        args:
+          - '-u'
+          - '-m'
+          - 'mst.mcp'
+          - '--workspace'
+          - 'C:\Users\LeoLeon\Documents\MacroStress\macrostress-dsh\workspace'
+        env:
+          PYTHONUTF8: '1'
+        failOnStartupError: false
+    - id: dsh-macrostress
+      name: 'dsh-macrostress'
