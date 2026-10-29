@@ -76,20 +76,20 @@ def test_add_without_an_entry_is_refused(tmp_path):
         raise AssertionError("add without an entry must not be accepted")
 
 
-def test_importer_copies_the_old_series_and_refuses_an_unreadable_file(tmp_path):
-    old = tmp_path / "old"
-    source = old / "data" / "series"
+def test_importer_copies_series_and_refuses_an_unreadable_file(tmp_path):
+    source_root = tmp_path / "source"
+    source = source_root / "data" / "series"
     source.mkdir(parents=True)
     (source / "gl.vix.csv").write_text(
         "month,value,published,approximate\n2012-01,20.5,2012-02-01,0\n", encoding="utf-8"
     )
     ws = store.Workspace(tmp_path / "ws")
-    assert importer.import_series(old, ws)["copied"] == 1
+    assert importer.import_series(source_root, ws)["copied"] == 1
     assert SeriesStore(ws.series).read("gl.vix")[0].value == 20.5
 
     (source / "bad.csv").write_text("month,value\n2012-01,1\n", encoding="utf-8")
     with pytest.raises(KeyError):
-        importer.import_series(old, ws)
+        importer.import_series(source_root, ws)
 
 
 def test_update_runs_as_a_job_and_names_an_unknown_series(tmp_path):
