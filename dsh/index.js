@@ -64,7 +64,7 @@ function describe(state) {
     'MacroStress: стресс-тест портфеля, данные лежат в workspace ниже.',
     `workspace ${state.workspace}`,
     `макромодель ${shortVersion(state.macro)} · сателлиты ${shortVersion(state.satellites)} · корпус ${corpus}`,
-    `${state.portfolios} портфелей · ${state.scenarios} сценариев · ${state.runs} прогонов`,
+    `${state.portfolios} портфелей · ${state.scenarios} сценариев · ${state.runs} прогонов · ${state.jobs ?? 0} задач`,
     'Начать с jobs(action="state"): он обновляет этот снимок из файла.',
   ].join('\n');
 }
