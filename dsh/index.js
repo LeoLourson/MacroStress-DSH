@@ -59,6 +59,16 @@ function shortVersion(value) {
   return typeof value === 'string' && value !== '' ? value.slice(0, 12) : '—';
 }
 
+/** The Russian form of a count: 1 портфель, 2 портфеля, 5 портфелей. */
+function plural(count, one, few, many) {
+  const n = Math.abs(Number(count) || 0);
+  const mod10 = n % 10;
+  const mod100 = n % 100;
+  if (mod10 === 1 && mod100 !== 11) return one;
+  if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) return few;
+  return many;
+}
+
 /** The section text: five lines, whatever the workspace holds. */
 function describe(state) {
   const corpus = state.corpus_index?.as_of ?? 'не индексирован';
@@ -66,7 +76,10 @@ function describe(state) {
     'MacroStress: стресс-тест портфеля, данные лежат в workspace ниже.',
     `workspace ${state.workspace}`,
     `макромодель ${shortVersion(state.macro)} · сателлиты ${shortVersion(state.satellites)} · корпус ${corpus}`,
-    `${state.portfolios} портфелей · ${state.scenarios} сценариев · ${state.runs} прогонов · ${state.jobs ?? 0} задач`,
+    `${state.portfolios} ${plural(state.portfolios, 'портфель', 'портфеля', 'портфелей')} · ` +
+      `${state.scenarios} ${plural(state.scenarios, 'сценарий', 'сценария', 'сценариев')} · ` +
+      `${state.runs} ${plural(state.runs, 'прогон', 'прогона', 'прогонов')} · ` +
+      `задач в работе: ${state.jobs ?? 0}`,
     'Начать с jobs(action="state"): он обновляет этот снимок из файла.',
   ].join('\n');
 }

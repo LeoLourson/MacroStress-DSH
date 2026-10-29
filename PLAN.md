@@ -222,7 +222,7 @@ new|check|demo-run`. `check` называет каждую проблему по
 P5/P50/P95 и ES95; свежий пакет проходит `new → check → demo-run`, сломанный отклоняется.
 Расхождение с планом: модуль `src/mst/plugins.py` не может существовать рядом с пакетом
 `mst.plugins`, поэтому обнаружение и реестр лежат в `mst/plugins/__init__.py`; `ui-manifest`
-не переносился — веба нет. Проверено: 292 лёгких теста (24 новых в `tests/plugins/`), ruff
+не переносился — веба нет. Проверено: 313 лёгких тестов (45 новых в `tests/plugins/`), ruff
 чист; `tests/plugins/test_boundary.py` не даёт `mst.engine` импортировать конкретный тип.
 
 ## Шаг 11. skills: скиллы и промпт DSH
@@ -244,6 +244,19 @@ $N$, $C$, $D$, $O$), `run-report` (как читать $P_5$/$P_{50}$/$P_{95}$ �
 скиллов; `jobs(state)` и `workspace.json` совпадают; скилл открывается и называет команды.
 
 **Коммит.** «Teach DSH the workflow: the skills, the prompt section and the bundle card».
+
+**Сделано.** `dsh/skills/{scenario-from-corpus,run-report,drivers}.md` — три скилла с
+командами и правилами: сборка $N$, $C$, $D$, $O$ из фрагментов корпуса и разница
+`save`/`validate`; чтение $P_5$/$P_{50}$/$P_{95}$, ES95, $\delta$, покрытия и пометок;
+каталог драйверов, оценка сателлитов и причины отказа проверки. `dsh/index.js` показывает в
+промпте пять строк из `workspace.json`: четвёртая — число портфелей, сценариев, прогонов и
+задач в работе, пятая — с чего начать; скиллы регистрируются на время жизни плагина.
+Карточка в Settings → Plugins подписана в обеих локалях. `dsh/test/smoke.mjs` без запуска
+DSH подставляет фейковый контекст, регистрирует скиллы, строит пять строк раздела из
+временного `workspace.json` и сверяет карточку; проверка `node dsh/test/smoke.mjs` —
+`ok: 3 skills, 5 prompt lines, fallback, re-read, disposal, both locales`. Обновлены
+`dsh/README.md`, `docs/install.md` и раздел про промпт в `docs/architecture.md`. `jobs(state)` пишет тот же
+словарь, который читает раздел: `workspace/workspace.json`.
 
 ## Что уже решено по сателлитам (не переоткрывать)
 

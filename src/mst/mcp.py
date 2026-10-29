@@ -235,8 +235,9 @@ def build(ws: store.Workspace) -> FastMCP:
     ) -> dict:
         """Model versions. kind: macro, satellites. Actions: list, describe, estimate, backtest.
 
-        ``version`` names the version: the macro one to describe or backtest, or, for
-        ``satellites``, the macro version whose panel the satellites are estimated on.
+        ``version`` is the macro version for ``macro`` describe and backtest and for
+        ``satellites`` estimate; for ``satellites`` describe it is the satellite version.
+        ``list`` takes no version.
         """
         if kind == "satellites":
             if action == "list":

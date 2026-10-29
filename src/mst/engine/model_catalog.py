@@ -10,13 +10,31 @@ from ..plugins import registry
 
 
 class Catalog:
-    """The models by id, and the model that serves an instrument type."""
+    """The models by id, and the model that serves an instrument type.
+
+    Without explicit models the catalog reads the registry lazily, on the first lookup: the
+    command line that diagnoses a broken plugin must be importable before the registry is
+    built, and the platform still starts all-or-nothing when a run asks for a model.
+    """
 
     def __init__(self, models: tuple[CalculationModel, ...] | None = None) -> None:
-        found = tuple(models) if models is not None else tuple(registry().models.values())
-        self.models = {model.model_id: model for model in found}
-        if len(self.models) != len(found):
+        self._models: dict[str, CalculationModel] | None = None
+        if models is not None:
+            self._models = self._index(models)
+
+    @property
+    def models(self) -> dict[str, CalculationModel]:
+        if self._models is None:
+            self._models = self._index(tuple(registry().models.values()))
+        return self._models
+
+    @staticmethod
+    def _index(models) -> dict[str, CalculationModel]:
+        found = tuple(models)
+        indexed = {model.model_id: model for model in found}
+        if len(indexed) != len(found):
             raise ValueError("a model is registered twice under one id")
+        return indexed
 
     def model(self, model_id: str) -> CalculationModel:
         """The model ``model_id``."""

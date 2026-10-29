@@ -5,6 +5,9 @@
   "description": "MacroStress as one DSH plugin: portfolio stress test through MCP tools.",
   "type": "module",
   "main": "index.js",
+  "scripts": {
+    "test": "node test/smoke.mjs"
+  },
   "exports": {
     ".": "./index.js",
     "./cordis.patch.yml": "./cordis.patch.yml",
