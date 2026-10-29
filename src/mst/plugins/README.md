@@ -19,7 +19,7 @@ python -m mst.plugin demo-run <plugin_id> [--path DIR]
 ```
 
 Новый тип актива — пакет здесь, без правки ядра. Устройство плагина, контракт модели,
-демо-кейс и проверки — в [../../docs/plugins.md](../../docs/plugins.md); контракты расчёта —
-в [../../docs/platform.md](../../docs/platform.md).
+демо-кейс и проверки — в [../../../docs/plugins.md](../../../docs/plugins.md); контракты
+расчёта — в [../../../docs/platform.md](../../../docs/platform.md).
 
-Тесты реестра и конформанса — [../../tests/plugins](../../tests/plugins/).
+Тесты реестра и конформанса — [../../../tests/plugins](../../../tests/plugins/).

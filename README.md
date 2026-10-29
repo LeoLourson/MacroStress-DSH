@@ -79,7 +79,7 @@ Once a client is connected, it sees seven tools. Long operations start jobs: a t
 
 ## Documentation
 
-The docs are in Russian for now; [docs/mcp.md](docs/mcp.md) is in English.
+The documentation is in Russian, except [docs/mcp.md](docs/mcp.md), which is in English.
 
 - [docs/mcp.md](docs/mcp.md) — any MCP client, the first session, troubleshooting;
 - [docs/install.md](docs/install.md) — the Python package and the DeepSeek Harness plugin;

@@ -70,7 +70,7 @@ project.
 
 ### Any client, without a checkout
 
-After the first PyPI release, `uvx` runs the package straight from the index:
+`uvx` runs the package from PyPI:
 
 ```json
 {
@@ -83,7 +83,7 @@ After the first PyPI release, `uvx` runs the package straight from the index:
 }
 ```
 
-Until then, the same works from the repository without cloning:
+The same works straight from the repository, without cloning or publishing:
 
 ```json
 {
