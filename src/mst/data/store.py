@@ -32,6 +32,12 @@ def month_end(month: date) -> date:
     return month.replace(day=calendar.monthrange(month.year, month.month)[1])
 
 
+def shift(month: date, k: int) -> date:
+    """The first day of the month ``k`` months after the month of ``month``; ``k`` may be < 0."""
+    index = month.year * 12 + month.month - 1 + k
+    return date(index // 12, index % 12 + 1, 1)
+
+
 def new_versions(
     known: list[Observation],
     fetched: dict[date, float],

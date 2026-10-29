@@ -18,6 +18,7 @@ import openpyxl
 from mst.contracts import Contract
 
 from .release import Release
+from .store import shift
 
 SERVICE_URL = "https://www.cbr.ru/dataservice/data"
 EXCEL_URL = "https://www.cbr.ru/Queries/StatTable/Excel/"
@@ -28,11 +29,7 @@ DEBT_BY_ACTIVITY = (
 
 
 def _previous_month(day: date) -> date:
-    return date(day.year - 1, 12, 1) if day.month == 1 else date(day.year, day.month - 1, 1)
-
-
-def _next_month(month: date) -> date:
-    return date(month.year + 1, 1, 1) if month.month == 12 else date(month.year, month.month + 1, 1)
+    return shift(day, -1)
 
 
 def _service(
@@ -93,8 +90,8 @@ class CbrCredit(Release):
             )
             month, first = start, min(values, default=start)
             while month < first:
-                values[month] = self._archive(http, group.archive, _next_month(month))
-                month = _next_month(month)
+                values[month] = self._archive(http, group.archive, shift(month, 1))
+                month = shift(month, 1)
             parts.append(values)
         common = set.intersection(*(set(part) for part in parts))
         return {month: sum(part[month] for part in parts) for month in sorted(common)}

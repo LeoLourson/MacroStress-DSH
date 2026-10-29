@@ -2,7 +2,7 @@ from datetime import date
 
 import pytest
 
-from mst.data.store import Observation, SeriesStore, new_versions
+from mst.data.store import Observation, SeriesStore, new_versions, shift
 
 JAN, FEB, MAR = date(2024, 1, 1), date(2024, 2, 1), date(2024, 3, 1)
 
@@ -74,3 +74,9 @@ def test_repeated_fetch_adds_nothing():
 def test_series_id_cannot_escape_the_store(tmp_path):
     with pytest.raises(ValueError):
         SeriesStore(tmp_path).read("../secrets")
+
+
+def test_shift_moves_by_months_across_years_both_ways():
+    assert shift(date(2020, 12, 15), 1) == date(2021, 1, 1)
+    assert shift(date(2021, 1, 31), -1) == date(2020, 12, 1)
+    assert shift(date(2020, 3, 1), -27) == date(2017, 12, 1)

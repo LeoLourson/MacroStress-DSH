@@ -5,6 +5,8 @@ from datetime import date
 import numpy as np
 
 from mst.data.store import Observation, SeriesStore
+from mst.macro import cli
+from mst.macro import version as macro_version
 from mst.macro.backtest import (
     Case,
     Exclusion,
@@ -19,8 +21,6 @@ from mst.macro.backtest import (
 from mst.macro.estimate import Posterior
 from mst.macro.forecast import Simulation
 from mst.macro.panel import months_between
-from mst.macro import cli
-from mst.macro import version as macro_version
 from mst.macro.registry import Registry, Shock, block_of, load_registry
 from mst.macro.spec import load_spec
 

@@ -1,36 +1,21 @@
-"""A model version: the immutable files of one estimation, named by their hash.
+"""A macro model version: ``<root>/macro/<sha256>/``, written and read by ``mst.versions``.
 
-``<root>/macro/<sha256>/`` holds ``meta.json`` (spec, calculation date, variables, months,
-shock labels, diagnostics) and ``arrays.npz`` (the identified posterior and the panel it was
-estimated on). The hash covers the canonical JSON and every array's name, type, shape and
-bytes, so the same estimation gives the same name and a changed file no longer loads. Versions
-stay out of git (plan, section 4, decision 5).
+``meta.json`` holds the spec, calculation date, variables, months, shock labels and
+diagnostics; ``arrays.npz`` the identified posterior and the panel it was estimated on.
+Versions live in the workspace, out of git.
 """
 
-import hashlib
 import json
-import os
-import shutil
-import tempfile
 from datetime import date
 from pathlib import Path
 
-import numpy as np
+from mst import versions
 
 from .estimate import Posterior
 from .panel import Panel
 from .spec import Dummy, Spec
 
 ARRAYS = ("const", "lags", "dummy", "chol", "logvar", "volvol", "dof", "history", "rotation")
-
-
-def _digest(meta: dict, arrays: dict[str, np.ndarray]) -> str:
-    digest = hashlib.sha256(json.dumps(meta, sort_keys=True, ensure_ascii=False).encode())
-    for name in sorted(arrays):
-        array = np.ascontiguousarray(arrays[name])
-        digest.update(f"{name}|{array.dtype.str}|{array.shape}".encode())
-        digest.update(array.tobytes())
-    return digest.hexdigest()
 
 
 def save(model: Posterior, spec: Spec, panel: Panel, as_of: date, root: Path) -> str:
@@ -48,32 +33,12 @@ def save(model: Posterior, spec: Spec, panel: Panel, as_of: date, root: Path) ->
     }
     arrays = {name: getattr(model, name) for name in ARRAYS}
     arrays |= {"panel_y": panel.y, "panel_approximate": panel.approximate}
-    name = _digest(meta, arrays)
-    target = root / "macro" / name
-    if target.exists():
-        return name
-    target.parent.mkdir(parents=True, exist_ok=True)
-    draft = Path(tempfile.mkdtemp(dir=target.parent, prefix=".draft-"))
-    try:
-        (draft / "meta.json").write_text(
-            json.dumps(meta, sort_keys=True, ensure_ascii=False, indent=1), encoding="utf-8"
-        )
-        np.savez(draft / "arrays.npz", **arrays)
-        os.replace(draft, target)
-    except BaseException:
-        shutil.rmtree(draft, ignore_errors=True)
-        raise
-    return name
+    return versions.save(root / "macro", meta, arrays)
 
 
 def catalogue(root: Path) -> list[dict]:
     """Every saved version, newest first, as its meta records it."""
-    directory = Path(root) / "macro"
-    if not directory.is_dir():
-        return []
-    folders = [path for path in directory.iterdir() if (path / "meta.json").is_file()]
-    folders.sort(key=lambda path: path.stat().st_mtime, reverse=True)
-    return [_summary(path) for path in folders]
+    return [_summary(path) for path in versions.folders(Path(root) / "macro")]
 
 
 def describe(root: Path, name: str) -> dict:
@@ -107,12 +72,7 @@ def _summary(folder: Path) -> dict:
 
 def load(root: Path, name: str) -> tuple[Posterior, dict]:
     """The identified posterior and the meta of a version; refuses a changed version."""
-    folder = root / "macro" / name
-    meta = json.loads((folder / "meta.json").read_text(encoding="utf-8"))
-    with np.load(folder / "arrays.npz") as stored:
-        arrays = {key: stored[key] for key in stored.files}
-    if _digest(meta, arrays) != name:
-        raise ValueError(f"model version {name} does not match its hash")
+    meta, arrays = versions.read(root / "macro", name, "model version")
     spec = Spec.model_validate(meta["spec"])
     model = Posterior(
         ids=meta["ids"],

@@ -3,21 +3,18 @@
 ``build`` estimates every quantity on the panel of a macro model version, checks each driver out
 of sample and estimates the residual correlation of the drivers with history. ``<root>/satellites/
 <sha256>/`` holds ``meta.json`` (registry, spec, calculation date, macro version, nodes, checks)
-and ``arrays.npz`` (posterior draws, the driver histories and ``x``); the hash works as in
-``mst.macro.version``. A run takes the satellites of the macro version it simulates.
+and ``arrays.npz`` (posterior draws, the driver histories and ``x``), written and read by
+``mst.versions``. A run takes the satellites of the macro version it simulates.
 """
 
-import hashlib
 import json
-import os
-import shutil
-import tempfile
 from dataclasses import asdict, dataclass
 from datetime import date
 from pathlib import Path
 
 import numpy as np
 
+from mst import versions
 from mst.data.store import SeriesStore
 from mst.macro.panel import Panel
 from mst.macro.version import load as load_macro
@@ -130,44 +127,15 @@ def _parts(sat: Satellites) -> tuple[dict, dict[str, np.ndarray]]:
     return meta, arrays
 
 
-def _digest(meta: dict, arrays: dict[str, np.ndarray]) -> str:
-    digest = hashlib.sha256(json.dumps(meta, sort_keys=True, ensure_ascii=False).encode())
-    for name in sorted(arrays):
-        array = np.ascontiguousarray(arrays[name])
-        digest.update(f"{name}|{array.dtype.str}|{array.shape}".encode())
-        digest.update(array.tobytes())
-    return digest.hexdigest()
-
-
 def save(sat: Satellites, root: Path) -> str:
     """Writes the version unless it exists; returns its hash."""
     meta, arrays = _parts(sat)
-    name = _digest(meta, arrays)
-    target = root / "satellites" / name
-    if target.exists():
-        return name
-    target.parent.mkdir(parents=True, exist_ok=True)
-    draft = Path(tempfile.mkdtemp(dir=target.parent, prefix=".draft-"))
-    try:
-        (draft / "meta.json").write_text(
-            json.dumps(meta, sort_keys=True, ensure_ascii=False, indent=1), encoding="utf-8"
-        )
-        np.savez(draft / "arrays.npz", **arrays)
-        os.replace(draft, target)
-    except BaseException:
-        shutil.rmtree(draft, ignore_errors=True)
-        raise
-    return name
+    return versions.save(root / "satellites", meta, arrays)
 
 
 def load(root: Path, name: str) -> Satellites:
     """The satellites of a version; refuses a changed version."""
-    folder = root / "satellites" / name
-    meta = json.loads((folder / "meta.json").read_text(encoding="utf-8"))
-    with np.load(folder / "arrays.npz") as stored:
-        arrays = {key: stored[key] for key in stored.files}
-    if _digest(meta, arrays) != name:
-        raise ValueError(f"satellite version {name} does not match its hash")
+    meta, arrays = versions.read(root / "satellites", name, "satellite version")
     registry = Registry.model_validate(meta["registry"])
     fits, checks = {}, {}
     for q, part in meta["quantities"].items():
@@ -203,12 +171,7 @@ def load(root: Path, name: str) -> Satellites:
 
 def catalogue(root: Path) -> list[dict]:
     """Every saved satellite version, newest first, as its meta records it."""
-    directory = Path(root) / "satellites"
-    if not directory.is_dir():
-        return []
-    folders = [path for path in directory.iterdir() if (path / "meta.json").is_file()]
-    folders.sort(key=lambda path: path.stat().st_mtime, reverse=True)
-    return [_summary(path) for path in folders]
+    return [_summary(path) for path in versions.folders(Path(root) / "satellites")]
 
 
 def describe(root: Path, name: str) -> dict:

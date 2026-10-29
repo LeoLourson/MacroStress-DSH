@@ -59,9 +59,7 @@ def load_sources(path: Path = SOURCES_PATH, extra: Path | None = None) -> dict[s
     return found
 
 
-def search(
-    text: str, path: Path = SOURCES_PATH, extra: Path | None = None
-) -> list[dict[str, str]]:
+def search(text: str, path: Path = SOURCES_PATH, extra: Path | None = None) -> list[dict[str, str]]:
     """Sources whose id or loader contains ``text``, case-insensitive."""
     needle = text.casefold()
     return [
