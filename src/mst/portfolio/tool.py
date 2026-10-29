@@ -23,6 +23,7 @@ from ..macro import registry as macro_registry
 from ..macro import version as macro_version
 from ..plugin_sdk import RunOptions, fx
 from ..plugin_sdk.model import Position
+from ..scenario import build as scenario_build
 from ..scenario import tool as scenario_tool
 from .spec import Portfolio
 
@@ -92,18 +93,26 @@ def check(
     """Every problem that keeps the portfolio from running under ``scenario``, each one named."""
     portfolio = load(ws.portfolios, id)
     spec = scenario_tool.load(ws.scenarios, scenario)
-    model, meta = macro_version.load(ws.models, spec.macro)
+    posterior, meta = macro_version.load(ws.models, spec.macro)
     satellites = satellite_version.load(ws.models, spec.satellites)
-    options = RunOptions(
-        as_of=date.fromisoformat(meta["as_of"]),
-        horizon=spec.horizon,
-        base_currency=portfolio.base_currency,
-    )
+    as_of = date.fromisoformat(meta["as_of"])
     problems = []
+    if satellites.macro != spec.macro:
+        problems.append(
+            f"the satellites {spec.satellites} were estimated on the macro version "
+            f"{satellites.macro}, the scenario names {spec.macro}"
+        )
+    corpus = ws.corpus if (ws.corpus / "index" / "chunks.jsonl").is_file() else None
+    problems += scenario_build.validate(
+        spec, posterior, satellites, as_of=as_of, corpus=corpus
+    )["problems"]
+    options = RunOptions(
+        as_of=as_of, horizon=spec.horizon, base_currency=portfolio.base_currency
+    )
     for position in portfolio.positions:
         problems += [
             f"{position.id}: {problem}"
-            for problem in _position_problems(position, options, model, satellites, catalog)
+            for problem in _position_problems(position, options, posterior, satellites, catalog)
         ]
     return {"id": id, "scenario": scenario, "ok": not problems, "problems": problems}
 
@@ -150,7 +159,7 @@ def exposure(ws: store.Workspace, id: str, scenario: str) -> dict:
 
 
 def _position_problems(
-    position: Position, options: RunOptions, model, satellites, catalog: Catalog
+    position: Position, options: RunOptions, posterior, satellites, catalog: Catalog
 ) -> list[str]:
     """Why the portfolio's scenario cannot serve this position; empty when it can."""
     try:
@@ -166,13 +175,17 @@ def _position_problems(
                 for item in error.errors()
             ]
     try:
+        fx.variable(position.currency, options.base_currency)
+    except ValueError as error:
+        return [str(error)]
+    try:
         needs = chosen.requirements(position, options)
     except (ValidationError, ValueError) as error:
         return [f"requirements: {error}"]
     problems = [
         f"the macro version has no {variable}"
         for variable in needs.macro
-        if variable not in model.ids
+        if variable not in posterior.ids
     ]
     served = set(satellites.served())
     for requirement in needs.drivers:

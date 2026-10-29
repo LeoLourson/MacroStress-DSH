@@ -78,7 +78,7 @@ DRIFTS = {
     "overdue_share": ((-3.0, 0.2, 0.05, -0.03), 0.002),
     "housing_price_primary": ((5.0, 0.2, 0.5, -0.3), 0.05),
 }
-DRIVERS = [
+_DRIVERS = [
     {"quantity": "share_price", "object": "sber"},
     {"quantity": "share_price", "object": "gazp"},
     {"quantity": "bond_spread", "object": "corp"},
@@ -89,7 +89,7 @@ DRIVERS = [
 ]
 DRIVERS = [
     {**driver, "series": driver.get("series", series_id(driver["quantity"], driver["object"]))}
-    for driver in DRIVERS
+    for driver in _DRIVERS
 ]
 
 

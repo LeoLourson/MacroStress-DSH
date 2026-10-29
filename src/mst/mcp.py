@@ -151,7 +151,8 @@ def build(ws: store.Workspace) -> FastMCP:
         ``start`` draws the scenario's paths and calculates a portfolio's positions — or the
         ``positions`` given in the call — on them, as a job on the ``runs`` resource; ``status``
         reports that job and what the run has written, ``result`` the per-position results and
-        the report of a portfolio run, ``list`` every run of the workspace.
+        the report of a portfolio run, ``list`` every run of the workspace. ``base_currency`` is
+        the base of ``positions``; a portfolio brings its own.
         """
         if action == "start":
             if portfolio and positions:
@@ -168,9 +169,16 @@ def build(ws: store.Workspace) -> FastMCP:
                 request["base_currency"] = base_currency
             run_id = runs.new_id()
             runs.begin(ws, run_id, request)
-            job = tasks.start(
-                ws, "runs", ["-m", "mst.runs", run_id, "--workspace", str(ws.root)]
-            )
+            try:
+                job = tasks.start(
+                    ws, "runs", ["-m", "mst.runs", run_id, "--workspace", str(ws.root)]
+                )
+            except Exception as error:
+                store.write_json(
+                    runs.folder(ws, run_id) / "meta.json",
+                    {"id": run_id, "status": "failed", "error": f"{type(error).__name__}: {error}"},
+                )
+                raise
             store.write_json(runs.folder(ws, run_id) / "job.json", {"job": job})
             return {"run": run_id, "job": job}
         if action == "status":

@@ -45,7 +45,11 @@ def build(
         {
             "position": result.position_id,
             "status": result.status,
-            "reason": "; ".join(result.flags) or "the position was not calculated",
+            "reason": "; ".join(
+                item.message for item in result.diagnostics if item.severity == "error"
+            )
+            or "; ".join(result.flags)
+            or "the position was not calculated",
         }
         for result in results
         if result.status == "invalid"
@@ -55,7 +59,8 @@ def build(
     unknown = [result.position_id for result in results if result.value_current == 0]
     total = sum(result.value_current for result in results)
     covered = sum(result.value_current for result in included)
-    share = covered / total if total > 0 else None
+    # The share is of the measurable value; with an unmeasurable position it is unknown, not 1.
+    share = None if unknown or total <= 0 else covered / total
     flags = [f"exposure_unknown:{position}" for position in unknown]
     if excluded:
         flags.append("portfolio_exclusions")
@@ -65,7 +70,7 @@ def build(
         bool(excluded) and (share is None or 1.0 - share > coverage_limit)
     )
     position_status = worst(*(result.status for result in included))
-    status = (
+    status: PortfolioStatus = (
         "incomplete"
         if incomplete
         else "needs_review"

@@ -112,7 +112,17 @@ def envelope(
     flags=(),
     diagnostics=(),
 ) -> CalculationResult:
-    """A completed result of ``model`` for the prepared position under ``context``."""
+    """A completed result of ``model`` for the prepared position under ``context``.
+
+    The flags of the resolved drivers travel with the result, so the platform, not the model,
+    guarantees that a disclosure (parameters from the level above, approximate data, an overlay)
+    reaches the result.
+    """
+    disclosures = [
+        f"{flag}:{driver}"
+        for driver in sorted(set(prepared.drivers.values()))
+        for flag in sorted(context.paths.flags(driver))
+    ]
     return CalculationResult(
         position_id=prepared.position.id,
         name=prepared.position.name,
@@ -124,6 +134,6 @@ def envelope(
         value_current=prepared.value_current,
         value_change=np.asarray(value_change, dtype=float).tolist(),
         metrics=metrics,
-        flags=list(flags),
+        flags=[*flags, *disclosures],
         diagnostics=list(diagnostics),
     )

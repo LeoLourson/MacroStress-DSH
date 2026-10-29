@@ -98,7 +98,8 @@ def test_a_portfolio_with_an_unknown_code_is_incomplete_with_its_reason(workspac
     report = stored["summary"]
     assert report["status"] == "incomplete"
     assert report["loss"] is None
-    assert "driver_missing:share_price" in report["coverage"]["excluded"][0]["reason"]
+    reason = report["coverage"]["excluded"][0]["reason"]
+    assert "share_price" in reason and "secid NOWHERE" in reason
     assert stored["run"]["status"] == "incomplete"
 
 
@@ -106,6 +107,10 @@ def test_a_request_names_one_source_of_positions():
     with pytest.raises(ValueError, match="not both and not neither"):
         runs.RunRequest.model_validate(
             {"scenario": "oil", "draws": 5, "seed": 11, "portfolio": "demo", "positions": []}
+        )
+    with pytest.raises(ValueError, match="at least one position"):
+        runs.RunRequest.model_validate(
+            {"scenario": "oil", "draws": 5, "seed": 11, "positions": []}
         )
 
 

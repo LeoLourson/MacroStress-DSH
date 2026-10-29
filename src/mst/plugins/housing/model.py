@@ -75,13 +75,11 @@ class HousingOnPaths(CalculationModel):
         value0 = prepared.value_current
         change = value0 * (ratio * rate - 1)
         unit = money(context.base_currency)
-        flags = [f"{flag}:{driver}" for flag in sorted(context.paths.flags(driver))]
         return envelope(
             prepared,
             context,
             self,
             value_change=change,
-            flags=flags,
             metrics={
                 "housing.value_current": scalar(unit, value0),
                 "housing.pnl": distribution(unit, change),

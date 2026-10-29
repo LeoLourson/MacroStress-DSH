@@ -34,9 +34,5 @@ class Catalog:
             raise ValueError(f"the instrument type {position.type!r} is served by {names}")
         return found[0]
 
-    def catalogue(self) -> list[dict]:
-        """Every registered model, by id."""
-        return [self.models[model_id].describe() for model_id in sorted(self.models)]
-
 
 catalog = Catalog()

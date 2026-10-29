@@ -1,9 +1,12 @@
 """mst.portfolio.tool: the files of the portfolios, their check and their exposure."""
 
+import numpy as np
 import pytest
 from pydantic import ValidationError
 
+from mst.drivers import version as satellite_version
 from mst.portfolio import tool
+from mst.scenario import tool as scenario_tool
 
 
 def test_the_tool_writes_lists_reads_and_deletes_a_portfolio(workspace, positions):
@@ -85,13 +88,15 @@ def test_exposure_values_the_positions_at_the_calculation_month(workspace, portf
         assert row["value"] == pytest.approx(row["notional"])
 
 
-def test_exposure_converts_a_foreign_position_at_the_panel_rate(workspace, positions):
+def test_exposure_converts_a_foreign_position_at_the_panel_rate(workspace, positions, versions):
     positions[0]["currency"] = "USD"
     tool.save(workspace.portfolios, "demo", {"positions": positions})
     report = tool.exposure(workspace, "demo", "oil")
     row = report["exposures"][0]
-    assert row["fx"] != 1.0
-    assert row["value"] == pytest.approx(row["notional"] * row["fx"])
+    panel, _ = satellite_version.macro_panel(workspace.models, versions.macro)
+    rate = float(np.exp(panel.y[-1, panel.ids.index("ru.usdrub")] / 100))
+    assert row["fx"] == pytest.approx(rate)
+    assert row["value"] == pytest.approx(row["notional"] * rate)
 
 
 def test_exposure_names_a_currency_with_no_macro_path(workspace, positions):
@@ -100,3 +105,33 @@ def test_exposure_names_a_currency_with_no_macro_path(workspace, positions):
     report = tool.exposure(workspace, "demo", "oil")
     assert "no macro path from GBP to RUB" in report["problems"][0]
     assert len(report["exposures"]) == len(positions) - 1
+
+
+def test_check_names_a_currency_the_models_cannot_price(workspace, positions):
+    positions[0]["currency"] = "GBP"
+    tool.save(workspace.portfolios, "demo", {"positions": positions})
+    report = tool.check(workspace, "demo", "oil")
+    assert report["ok"] is False
+    assert "no macro path from GBP to RUB" in report["problems"][0]
+
+
+def test_check_names_an_infeasible_scenario(workspace, portfolio, versions):
+    target = float(versions.data.y[-1, 0])
+    fixed = {"terms": [{"variable": "gl.brent", "month": 1, "weight": 1.0}]}
+    scenario_tool.save(
+        workspace.scenarios,
+        "bad",
+        {
+            "narrative": "дважды",
+            "horizon": 3,
+            "macro": versions.macro,
+            "satellites": versions.satellites,
+            "constraints": [
+                {**fixed, "low": target, "high": target},
+                {**fixed, "low": target + 1.0, "high": target + 1.0},
+            ],
+        },
+    )
+    report = tool.check(workspace, portfolio, "bad")
+    assert report["ok"] is False
+    assert any("cannot meet constraints 2" in problem for problem in report["problems"])

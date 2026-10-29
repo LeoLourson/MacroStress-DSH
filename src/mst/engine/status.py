@@ -5,7 +5,7 @@ discloses them. ``invalid`` never does: the position was not calculated, or its 
 own declaration, and the run keeps the position with its reason.
 """
 
-from mst.contracts import ResultStatus
+from ..contracts import ResultStatus
 
 SEVERITY: dict[str, int] = {"ok": 0, "needs_review": 1, "invalid": 2}
 

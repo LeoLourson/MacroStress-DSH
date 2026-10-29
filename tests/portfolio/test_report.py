@@ -1,6 +1,6 @@
 """mst.portfolio.report: the loss of the portfolio at P5/P50/P95 and the severity of a scenario."""
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 import numpy as np
 import pytest
@@ -10,7 +10,7 @@ from mst.plugin_sdk import Position
 from mst.portfolio.report import build
 from mst.portfolio.spec import Portfolio
 from tests.engine import simulated
-from tests.engine.fixed import paths
+from tests.engine.fixed import fan, paths
 
 SERVED = {
     "share_price:sber",
@@ -76,11 +76,11 @@ def test_an_invalid_position_is_excluded_with_its_reason():
     broken = equity(id="gbp", currency="GBP", notional=40.0)
     report = build(portfolio(good, broken), batch(good, broken).results)
     assert report["status"] == "incomplete"
-    # The unpriceable position has no value in the base currency, so the share is of the
-    # measurable value; the report names the position it could not measure.
-    assert report["coverage"]["share"] == 1.0
+    # The unpriceable position has no value in the base currency, so the coverage of the
+    # portfolio's value is unknown; the report names the position it could not measure.
+    assert report["coverage"]["share"] is None
     assert report["coverage"]["excluded"][0]["position"] == "gbp"
-    assert "fx_missing:GBP" in report["coverage"]["excluded"][0]["reason"]
+    assert "no macro path from GBP to RUB" in report["coverage"]["excluded"][0]["reason"]
     assert "portfolio_exclusions" in report["flags"]
     assert "exposure_unknown:gbp" in report["flags"]
     assert report["loss"] is not None
@@ -100,3 +100,12 @@ def test_a_position_that_needs_review_makes_the_portfolio_need_review():
     report = build(portfolio(equity()), [review])
     assert report["status"] == "needs_review"
     assert report["loss"] is not None
+
+
+def test_es95_is_the_mean_of_the_worst_five_percent():
+    paths_ = paths(draws=100)
+    falling = dict(paths_.drivers)
+    falling["share_price:sber"] = fan(100.0, 70.0, draws=100)
+    result = batch(equity(), paths_=replace(paths_, drivers=falling)).results[0]
+    losses = np.sort(-np.asarray(result.value_change))
+    assert result.metrics["equity.loss"].quantiles.es95 == pytest.approx(losses[-5:].mean())

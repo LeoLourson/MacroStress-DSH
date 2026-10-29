@@ -20,7 +20,9 @@ class Portfolio(Contract):
     positions: list[Position] = Field(min_length=1)
 
     @model_validator(mode="after")
-    def unique(self):
+    def consistent(self):
+        if self.base_currency != "RUB":
+            raise ValueError("the base currency is RUB: the models price against the rouble")
         ids = [position.id for position in self.positions]
         if len(set(ids)) != len(ids):
             raise ValueError("two positions share one id")

@@ -27,6 +27,11 @@ def test_two_positions_cannot_share_an_id():
         Portfolio.model_validate({"positions": [position(), position()]})
 
 
+def test_the_base_currency_is_the_rouble():
+    with pytest.raises(ValidationError, match="base currency is RUB"):
+        Portfolio.model_validate({"base_currency": "USD", "positions": [position()]})
+
+
 def test_the_base_currency_is_an_upper_case_code():
     with pytest.raises(ValidationError):
         Portfolio.model_validate({"base_currency": "rub", "positions": [position()]})

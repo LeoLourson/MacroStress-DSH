@@ -9,7 +9,8 @@ P95 and the severity ``delta`` of the scenario.
 
 A run is a job: the tool writes the request and starts ``python -m mst.runs <id>``; the job builds
 the paths from the scenario and writes the rest. Repeating a request with the same seed gives the
-same numbers.
+same numbers. The status of a run is the report's for a portfolio run — ``ok``, ``needs_review``
+or ``incomplete`` — and the batch's otherwise: ``ok``, ``needs_review`` or ``invalid``.
 """
 
 import argparse
@@ -17,7 +18,7 @@ import json
 import os
 import re
 import sys
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from pathlib import Path
 
 import numpy as np
@@ -54,6 +55,10 @@ class RunRequest(Contract):
     def one_source(self):
         if (self.positions is None) == (self.portfolio is None):
             raise ValueError("a run names positions or a portfolio, not both and not neither")
+        if self.positions is not None and not self.positions:
+            raise ValueError("a run needs at least one position")
+        if self.base_currency != "RUB":
+            raise ValueError("the base currency is RUB: the models price against the rouble")
         ids = [position.id for position in self.positions or []]
         if len(set(ids)) != len(ids):
             raise ValueError("two positions share one id")
@@ -74,16 +79,21 @@ def folder(ws: store.Workspace, run_id: str) -> Path:
 
 
 def begin(ws: store.Workspace, run_id: str, request: dict) -> dict:
-    """Check ``request`` and write it as the run's ``request.json``; the job computes the rest."""
+    """Check ``request``, create the run's folder and write ``request.json``.
+
+    The folder is created exclusively: a run id that already exists is not overwritten.
+    """
     checked = RunRequest.model_validate(request).model_dump(mode="json")
-    store.write_json(folder(ws, run_id) / "request.json", checked)
+    directory = folder(ws, run_id)
+    directory.mkdir(parents=True, exist_ok=False)
+    store.write_json(directory / "request.json", checked)
     return checked
 
 
 def execute(ws: store.Workspace, run_id: str) -> dict:
-    """Compute the run of its request and write the paths and the results; the job's entry.
+    """Compute the run of its request and write the paths, the results and the report.
 
-    The run's ``meta.json`` says ``running`` from the first moment, so a failed job leaves the
+    The run's ``meta.json`` says ``running`` from the first moment, so a job that dies leaves the
     reason next to the request instead of an empty folder.
     """
     directory = folder(ws, run_id)
@@ -93,7 +103,6 @@ def execute(ws: store.Workspace, run_id: str) -> dict:
         "scenario": request.scenario,
         "draws": request.draws,
         "seed": request.seed,
-        "base_currency": request.base_currency,
         "status": "running",
         "started": _now(),
     }
@@ -102,6 +111,11 @@ def execute(ws: store.Workspace, run_id: str) -> dict:
         spec = scenario_tool.load(ws.scenarios, request.scenario)
         model, stored = macro_version.load(ws.models, spec.macro)
         satellites = satellite_version.load(ws.models, spec.satellites)
+        if satellites.macro != spec.macro:
+            raise ValueError(
+                f"the satellites {spec.satellites} were estimated on the macro version "
+                f"{satellites.macro}, the scenario names {spec.macro}"
+            )
         paths = scenario_build.build(
             spec, model, satellites, draws=request.draws, seed=request.seed
         )
@@ -118,6 +132,19 @@ def execute(ws: store.Workspace, run_id: str) -> dict:
             drivers=satellites.registry,
             served=satellites.served(),
             base_currency=base_currency,
+            as_of=date.fromisoformat(stored["as_of"]),
+        )
+        written = _write(
+            directory,
+            run_id,
+            request,
+            spec,
+            stored,
+            paths,
+            batch,
+            portfolio,
+            base_currency,
+            meta["started"],
         )
     except BaseException as error:
         store.write_json(
@@ -130,10 +157,7 @@ def execute(ws: store.Workspace, run_id: str) -> dict:
             },
         )
         raise
-    written = _write(
-        directory, run_id, request, spec, stored, paths, batch, portfolio, base_currency
-    )
-    return {"id": run_id, "status": written["status"], "positions": len(batch.results)}
+    return {"id": run_id, "status": written["status"], "positions": written["positions"]}
 
 
 def meta(ws: store.Workspace, run_id: str) -> dict:
@@ -203,11 +227,13 @@ def _write(
     batch,
     portfolio,
     base_currency: str,
+    started: str,
 ) -> dict:
     """The paths, the results of every position, the report and the meta that names them."""
     months = [month.isoformat() for month in paths.months]
-    # An invalid position keeps its column of zeros: the report reads the status, never the column.
-    changes = np.zeros((paths.draws, len(batch.results)))
+    # A position that was not calculated has no column: NaN stands in, so nobody reads a zero
+    # profit where there is no number at all.
+    changes = np.full((paths.draws, len(batch.results)), np.nan)
     for index, result in enumerate(batch.results):
         if result.value_change:
             changes[:, index] = result.value_change
@@ -236,6 +262,8 @@ def _write(
         "macro": spec.macro,
         "satellites": spec.satellites,
         "as_of": stored["as_of"],
+        "started": started,
+        "finished": _now(),
         "horizon": len(paths.months) - 1,
         "draws": paths.draws,
         "seed": paths.seed,
@@ -258,7 +286,6 @@ def _write(
         "position_ids": [result.position_id for result in batch.results],
         "positions": len(batch.results),
         "status": summary["status"] if summary is not None else batch.status,
-        "finished": _now(),
     }
     store.write_json(directory / "meta.json", written)
     return written

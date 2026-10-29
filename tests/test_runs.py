@@ -97,15 +97,47 @@ def test_every_position_is_the_formula_of_its_model(workspace):
         assert np.allclose(changes[:, index], expected[item], rtol=0, atol=1e-12), item
 
 
-def test_the_same_request_gives_the_same_changes(workspace):
+def test_the_same_request_gives_the_same_numbers(workspace):
     first_id, _ = start(workspace)
     second_id, _ = start(workspace)
-    _, _, _, first = arrays(workspace, first_id)
-    _, _, _, second = arrays(workspace, second_id)
+    _, _, first_drivers, first = arrays(workspace, first_id)
+    _, _, second_drivers, second = arrays(workspace, second_id)
+    # The meta differs by id and times; the paths, the changes and the metrics do not.
+    assert np.array_equal(first_drivers, second_drivers)
     assert np.array_equal(first, second)
+    assert runs.result(workspace, first_id)["positions"] == runs.result(
+        workspace, second_id
+    )["positions"]
     other_id, _ = start(workspace, REQUEST | {"seed": 12})
     _, _, _, other = arrays(workspace, other_id)
     assert not np.array_equal(first, other)
+
+
+def test_a_position_without_a_served_driver_is_invalid_in_the_files(workspace):
+    positions = [dict(POSITIONS[0], codes={"secid": "NOWHERE"})]
+    run_id, summary = start(workspace, REQUEST | {"positions": positions})
+    assert summary["status"] == "invalid"
+    stored = runs.result(workspace, run_id)
+    item = stored["positions"][0]
+    assert item["status"] == "invalid"
+    assert [error["code"] for error in item["diagnostics"] if error["severity"] == "error"] == [
+        "driver_missing:share_price"
+    ]
+    assert "secid NOWHERE" in item["diagnostics"][0]["message"]
+    _, _, _, changes = arrays(workspace, run_id)
+    assert np.all(np.isnan(changes[:, 0]))
+
+
+def test_a_run_folder_is_not_overwritten(workspace):
+    run_id = runs.new_id()
+    runs.begin(workspace, run_id, REQUEST)
+    with pytest.raises(FileExistsError):
+        runs.begin(workspace, run_id, REQUEST)
+
+
+def test_a_run_refuses_another_base_currency(workspace):
+    with pytest.raises(ValueError, match="base currency is RUB"):
+        runs.begin(workspace, runs.new_id(), REQUEST | {"base_currency": "USD"})
 
 
 def test_a_run_that_cannot_start_leaves_its_reason_in_the_meta(workspace):
@@ -115,6 +147,9 @@ def test_a_run_that_cannot_start_leaves_its_reason_in_the_meta(workspace):
         runs.execute(workspace, run_id)
     meta = runs.meta(workspace, run_id)
     assert meta["status"] == "failed" and "nowhere" in meta["error"]
+    stored = runs.result(workspace, run_id)
+    assert stored["run"]["status"] == "failed"
+    assert stored["positions"] == [] and stored["summary"] is None
 
 
 def test_the_catalogue_names_every_run(workspace):
@@ -174,3 +209,25 @@ def test_the_run_tool_names_the_argument_it_lacks(workspace):
             "run",
             {"action": "start", "scenario": "oil", "draws": 3, "positions": POSITIONS},
         )
+
+
+def test_a_run_that_cannot_get_the_resource_is_marked_failed(workspace):
+    blocker = jobs.start(workspace, "runs", ["-c", "import time; time.sleep(30)"])
+    try:
+        with pytest.raises(Exception, match="busy"):
+            call(
+                workspace,
+                "run",
+                {
+                    "action": "start",
+                    "scenario": "oil",
+                    "draws": 3,
+                    "seed": 5,
+                    "positions": POSITIONS,
+                },
+            )
+    finally:
+        jobs.cancel(workspace, blocker)
+    failed = [item for item in runs.catalogue(workspace)["runs"] if item["status"] == "failed"]
+    assert len(failed) == 1
+    assert "busy" in runs.meta(workspace, failed[0]["id"])["error"]

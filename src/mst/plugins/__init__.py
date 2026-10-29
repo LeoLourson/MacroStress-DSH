@@ -2,8 +2,7 @@
 
 Each is a package with a ``MODEL`` instance; a model declares the instrument types it serves
 and reads only ``mst.plugin_sdk``. ``mst.engine.model_catalog`` lists them, and step 10 of the
-plan turns this module into discovery of ``mst.plugins.<id>`` packages. The names are ordered so
-the catalog is stable: asset types of the same name must not depend on import order.
+plan turns this module into discovery of ``mst.plugins.<id>`` packages.
 """
 
 from .bond import MODEL as BOND

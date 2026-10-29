@@ -95,7 +95,8 @@ class PreparedInputs(Contract):
     value_current: NonNegative
     #: Requirement key -> the driver ``<quantity>:<object>`` the platform resolved it to.
     drivers: dict[Identifier, Identifier] = {}
-    #: Unresolved requirement keys and why: no served driver, no such macro variable.
+    #: Unresolved driver requirement keys and why no served driver matched them. A declared
+    #: macro variable the paths lack is a diagnostic of its own, not a driver miss.
     missing: dict[Identifier, Identifier] = {}
     requirements: DataRequirements = DataRequirements()
 
