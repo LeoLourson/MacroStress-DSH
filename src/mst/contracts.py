@@ -12,14 +12,12 @@ NonNegative = Annotated[Number, Field(ge=0)]
 Positive = Annotated[Number, Field(gt=0)]
 Horizon = Annotated[int, Field(strict=True, ge=1, le=360)]
 Seed = Annotated[int, Field(strict=True, ge=0, le=2**32 - 1)]
-McPoints = Literal[8192, 16384, 32768]
 Status = Literal["ok", "needs_review"]
 
 __all__ = [
     "Contract",
     "Horizon",
     "Identifier",
-    "McPoints",
     "NonNegative",
     "Number",
     "Positive",
@@ -27,7 +25,6 @@ __all__ = [
     "Seed",
     "Sha256",
     "Status",
-    "VersionStamp",
 ]
 
 
@@ -40,9 +37,3 @@ class Contract(BaseModel):
         revalidate_instances="always",
     )
 
-
-class VersionStamp(Contract):
-    model_version: Identifier
-    prompt_version: Identifier
-    code_sha256: Sha256
-    macro_draws_sha256: Sha256 | None = None

@@ -1,5 +1,5 @@
-# The estimation of the satellite models (docs/scenario-formalization.md, section 6.2; plan,
-# stage 4). A satellite version stores this file as it was.
+# The estimation of the satellite models (docs/scenario-formalization.md, section 6.2).
+# A satellite version stores this file as it was.
 
 # The columns of z_t except the constant are centred and divided by their standard deviation
 # within objects before estimation. In that scale the deviation of a coefficient of an object

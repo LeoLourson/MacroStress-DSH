@@ -23,7 +23,7 @@ from .store import SeriesStore
 from .update import update
 
 START = date(2012, 1, 1)
-"""T0 of docs/scenario-implementation-plan.md, section 4, decision 1."""
+"""T0, the first month of history of the macro model (docs/scenario-formalization.md, 4.1)."""
 
 ROOTS_PATH = SOURCES_PATH.with_name("mintsifry-roots.pem")
 """Roots and sub CAs of the Russian Trusted Root CA (Mintsifry), which signs rosstat.gov.ru."""

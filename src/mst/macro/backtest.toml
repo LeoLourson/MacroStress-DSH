@@ -1,5 +1,5 @@
-# Episodes of the check of the macro model (docs/scenario-formalization.md, section 9; plan,
-# stage 3). The calculation date is the day before the start month of the corpus card; the
+# Episodes of the check of the macro model (docs/scenario-formalization.md, section 9).
+# The calculation date is the day before the start month of the corpus card; the
 # constrained variables follow their realized monthly path up to the end of the card's window;
 # the driving shocks are those the card's sources of the time name (registry.toml, [[shocks]]).
 # Each episode needs at least as many driving shocks as constrained variables, and a global
@@ -8,7 +8,7 @@
 
 draws = 1000
 seed = 20261029
-# Months after the start month the window runs to, as in msa.corpus.episodes.
+# Months after the start month the window runs to, as in mst.corpus.episodes.
 after_months = 12
 
 [[exclusions]]

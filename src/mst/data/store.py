@@ -3,8 +3,7 @@
 A row ``month, value, published, approximate`` says that the value of ``month`` became known
 on ``published``. A revision adds a row and keeps the old one, so ``as_of(day)`` recovers what
 was known on that day. ``approximate`` marks a row whose publication date is estimated from
-the release lag rather than observed (docs/scenario-implementation-plan.md, section 4,
-decision 2).
+the release lag rather than observed.
 """
 
 import calendar
