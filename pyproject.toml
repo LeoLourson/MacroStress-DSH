@@ -27,11 +27,11 @@ classifiers = [
   "Topic :: Scientific/Engineering :: Mathematics",
 ]
 dependencies = [
-  "numpy==2.4.4",
-  "scipy==1.17.1",
-  "pydantic==2.12.5",
+  "numpy==2.5.4",
+  "scipy==1.18.1",
+  "pydantic==2.14.1",
   "httpx==0.28.1",
-  "fastmcp==2.14.7",
+  "fastmcp==4.1.4",
   # Excel tables of the Bank of Russia and Rosstat archives.
   "openpyxl==3.1.5",
   # Corpus: PDF text extraction, the YAML header of a document, BM25 stems.
@@ -40,8 +40,8 @@ dependencies = [
   "snowballstemmer==3.1.1",
   # Corpus search vectors: multilingual-e5-small on the CPU through ONNX Runtime.
   "onnxruntime==1.31.1",
-  "tokenizers==0.23.2",
-  "huggingface-hub==1.33.0",
+  "tokenizers==0.23.3",
+  "huggingface-hub==2.3.0",
 ]
 
 [project.urls]
@@ -56,13 +56,13 @@ macrostress = "mst.mcp:main"
 
 [dependency-groups]
 dev = [
-  "pytest==8.4.2",
+  "pytest==9.1.1",
   "pytest-timeout==2.4.0",
-  "ruff==0.12.12",
+  "ruff==0.17.2",
 ]
 
 [build-system]
-requires = ["uv_build>=0.12.13,<0.13.0"]
+requires = ["uv_build>=0.12.13,<0.14.0"]
 build-backend = "uv_build"
 
 # The import package is mst; the distribution is macrostress.
