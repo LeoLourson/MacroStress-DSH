@@ -1,0 +1,3701 @@
+{
+  "corpus_id": "scenario-corpus",
+  "version": "0.1.0",
+  "updated": "2026-10-29",
+  "description": "Корпус для построения сценариев стресс-теста: методики, наборы сценариев регуляторов, механизмы передачи и исторические эпизоды. Все тексты хранятся в Markdown; правила в corpus/README.md.",
+  "vocabularies": {
+    "kind": {
+      "methodology": "как строить сценарий: тяжесть, горизонт, согласованность",
+      "scenario_set": "сценарии регуляторов с числами, с известным автором и датой",
+      "transmission": "механизмы передачи шоков",
+      "episode": "исторический эпизод: что реально произошло"
+    },
+    "region": {
+      "ru": "Россия",
+      "em": "развивающиеся рынки и СНГ",
+      "dm": "развитые рынки и сырьё"
+    },
+    "text_policy": {
+      "full": "текст документа целиком в Markdown",
+      "summary": "собственный конспект со ссылками на страницы; текст не хранится"
+    },
+    "flags": {
+      "data_sparse": "ряды неполные, карточка выйдет не по всем факторам",
+      "verify": "дата или факт восстановлены по памяти, проверить"
+    },
+    "factors": {
+      "rate.policy": "Ставка центрального банка",
+      "rate.money_market": "Ставки денежного рынка",
+      "rate.sovereign": "Доходности госдолга",
+      "spread.credit": "Кредитные спреды",
+      "spread.sovereign": "Суверенные спреды",
+      "fx": "Валютный курс",
+      "equity.index": "Индекс акций",
+      "volatility": "Волатильность",
+      "commodity.oil": "Нефть",
+      "commodity.gas": "Газ",
+      "commodity.metals": "Металлы",
+      "commodity.agri": "Сельхозсырьё",
+      "inflation": "Инфляция",
+      "gdp": "Выпуск",
+      "unemployment": "Безработица",
+      "housing.prices": "Цены жилья",
+      "housing.mortgage": "Ипотека",
+      "bank.liquidity": "Ликвидность банков",
+      "bank.solvency": "Капитал и устойчивость банков",
+      "capital_flows": "Потоки капитала",
+      "sovereign.default": "Суверенный дефолт",
+      "sanctions": "Санкции"
+    }
+  },
+  "sources": [
+    {
+      "id": "M1",
+      "kind": "methodology",
+      "title": "Stress testing principles (d450)",
+      "publisher": "BCBS",
+      "year": 2018,
+      "path": "sources/methodology/M1.md",
+      "language": "en",
+      "jurisdiction": "intl",
+      "url": "https://www.bis.org/bcbs/publ/d450.htm",
+      "url_verified": true,
+      "text_policy": "full",
+      "factors": [
+        "rate.policy",
+        "fx",
+        "equity.index",
+        "spread.credit",
+        "gdp",
+        "inflation"
+      ],
+      "purpose": "Принципы: цели, тяжесть, согласованность сценария, управление",
+      "status": "raw",
+      "verify": false,
+      "file": {
+        "url": "https://www.bis.org/publications/201810-guidelines-stress-testing-principles.pdf"
+      }
+    },
+    {
+      "id": "M2",
+      "kind": "methodology",
+      "title": "Principles for sound stress testing practices and supervision (bcbs155)",
+      "publisher": "BCBS",
+      "year": 2009,
+      "path": "sources/methodology/M2.md",
+      "language": "en",
+      "jurisdiction": "intl",
+      "url": "https://www.bis.org/publ/bcbs155.htm",
+      "url_verified": true,
+      "text_policy": "full",
+      "factors": [
+        "rate.policy",
+        "fx",
+        "equity.index",
+        "spread.credit",
+        "gdp",
+        "inflation"
+      ],
+      "purpose": "Исходные принципы после 2008 года, обратные стресс-тесты",
+      "status": "raw",
+      "verify": false,
+      "file": {
+        "url": "https://www.bis.org/publications/200905-guidelines-principles-sound-stress-testing-practices-and-supervision.pdf"
+      }
+    },
+    {
+      "id": "M3",
+      "kind": "methodology",
+      "title": "Policy Statement on the Scenario Design Framework for Stress Testing (12 CFR 252, Appendix A)",
+      "publisher": "Federal Reserve",
+      "year": 2013,
+      "editions": [
+        "2013",
+        "2019"
+      ],
+      "path": "sources/methodology/M3/<edition>.md",
+      "language": "en",
+      "jurisdiction": "intl",
+      "url": null,
+      "url_verified": false,
+      "text_policy": "full",
+      "factors": [
+        "rate.policy",
+        "fx",
+        "equity.index",
+        "spread.credit",
+        "gdp",
+        "inflation",
+        "unemployment",
+        "housing.prices"
+      ],
+      "purpose": "Как ФРС задаёт тяжесть: правило безработицы, согласованность путей",
+      "status": "raw",
+      "verify": true,
+      "files": {
+        "2013": {
+          "url": "https://www.govinfo.gov/content/pkg/FR-2013-11-29/pdf/2013-27009.pdf",
+          "published": "2013-11-29"
+        },
+        "2019": {
+          "url": "https://www.govinfo.gov/content/pkg/FR-2019-02-28/pdf/2019-03503.pdf",
+          "published": "2019-02-28",
+          "note": "Federal Register 28.02.2019; что это поправки к Appendix A, не проверено"
+        }
+      }
+    },
+    {
+      "id": "M4",
+      "kind": "methodology",
+      "title": "Supervisory Stress Test Methodology",
+      "publisher": "Federal Reserve",
+      "editions": [
+        "2023",
+        "2024",
+        "2025"
+      ],
+      "path": "sources/methodology/M4/<edition>.md",
+      "language": "en",
+      "jurisdiction": "intl",
+      "url": null,
+      "url_verified": false,
+      "text_policy": "full",
+      "factors": [
+        "rate.policy",
+        "fx",
+        "equity.index",
+        "spread.credit",
+        "gdp",
+        "inflation"
+      ],
+      "purpose": "Как сценарий переводится в потери моделями",
+      "status": "raw",
+      "verify": true,
+      "files": {
+        "2023": {
+          "url": "https://www.federalreserve.gov/publications/files/2023-june-supervisory-stress-test-methodology.pdf"
+        },
+        "2024": {
+          "url": "https://www.federalreserve.gov/publications/files/2024-march-supervisory-stress-test-methodology.pdf"
+        },
+        "2025": {
+          "url": "https://www.federalreserve.gov/publications/files/2025-june-supervisory-stress-test-methodology.pdf"
+        }
+      }
+    },
+    {
+      "id": "M5",
+      "kind": "methodology",
+      "title": "EU-wide stress test methodological note",
+      "publisher": "EBA",
+      "editions": [
+        "2016",
+        "2018",
+        "2021",
+        "2023",
+        "2025"
+      ],
+      "path": "sources/methodology/M5/<edition>.md",
+      "language": "en",
+      "jurisdiction": "intl",
+      "url": null,
+      "url_verified": false,
+      "text_policy": "full",
+      "factors": [
+        "rate.policy",
+        "fx",
+        "equity.index",
+        "spread.credit",
+        "gdp",
+        "inflation"
+      ],
+      "purpose": "Статичный баланс, рыночный риск, передача шоков в потери",
+      "status": "raw",
+      "verify": false,
+      "files": {
+        "2016": {
+          "page": "https://www.eba.europa.eu/eba-launches-2016-eu-wide-stress-test-exercise",
+          "match": "(?i)methodolog"
+        },
+        "2018": {
+          "url": "https://www.eba.europa.eu/sites/default/files/documents/10180/2106649/2ff7a78b-ffdc-4fb6-9244-8ec994928c96/2018%20EU-wide%20stress%20test%20-%20Methodological%20Note.pdf"
+        },
+        "2021": {
+          "url": "https://www.eba.europa.eu/sites/default/files/document_library/Risk%20Analysis%20and%20Data/EU-wide%20Stress%20Testing/2021/Launch%20of%20the%20ST/962559/2021%20EU-wide%20stress%20test%20-%20Methodological%20Note.pdf",
+          "note": "Редакция к запуску стресс-теста; раньше выходила редакция 936417"
+        },
+        "2023": {
+          "url": "https://www.eba.europa.eu/sites/default/files/document_library/Risk%20Analysis%20and%20Data/EU-wide%20Stress%20Testing/2023/Methodology/1043009/2023%20EU-wide%20stress%20test%20-%20Methodological%20Note.pdf"
+        },
+        "2025": {
+          "url": "https://www.eba.europa.eu/sites/default/files/2024-11/ee01efca-947b-43ae-b17d-20f9d4314e8e/2025%20EU-wide%20stress%20test%20-%20Methodological%20Note.pdf"
+        }
+      }
+    },
+    {
+      "id": "M6",
+      "kind": "methodology",
+      "title": "STAMP€: Stress-Test Analytics for Macroprudential Purposes in the euro area",
+      "publisher": "ECB",
+      "year": 2017,
+      "path": "sources/methodology/M6.md",
+      "language": "en",
+      "jurisdiction": "intl",
+      "url": null,
+      "url_verified": false,
+      "text_policy": "full",
+      "factors": [
+        "rate.policy",
+        "fx",
+        "equity.index",
+        "spread.credit",
+        "gdp",
+        "inflation"
+      ],
+      "purpose": "Каркас макропруденциальных стресс-тестов ЕЦБ",
+      "status": "raw",
+      "verify": false,
+      "file": {
+        "url": "https://www.ecb.int/pub/conferences/shared/pdf/20170511_2nd_mp_policy/DeesHenryMartin-Stampe-Stress-Test_Analytics_for_Macroprudential_Purposes_in_the_euro_area.en.pdf",
+        "note": "Копия на странице конференции ЕЦБ 11.05.2017; основной адрес издания не проверен"
+      }
+    },
+    {
+      "id": "M7",
+      "kind": "methodology",
+      "title": "A macro stress testing framework for assessing systemic risks in the banking sector (Occasional Paper 152)",
+      "publisher": "ECB",
+      "authors": [
+        "J. Henry",
+        "C. Kok"
+      ],
+      "year": 2013,
+      "path": "sources/methodology/M7.md",
+      "language": "en",
+      "jurisdiction": "intl",
+      "url": null,
+      "url_verified": false,
+      "text_policy": "full",
+      "factors": [
+        "rate.policy",
+        "fx",
+        "equity.index",
+        "spread.credit",
+        "gdp",
+        "inflation"
+      ],
+      "purpose": "Модель передачи макросценария в банковский сектор",
+      "status": "raw",
+      "verify": false,
+      "file": {
+        "url": "https://www.ecb.europa.eu/pub/pdf/scpops/ecbocp152.pdf"
+      }
+    },
+    {
+      "id": "M8",
+      "kind": "methodology",
+      "title": "A Guide to IMF Stress Testing: Methods and Models",
+      "publisher": "IMF",
+      "authors": [
+        "L. L. Ong (ed.)"
+      ],
+      "year": 2014,
+      "path": "sources/methodology/M8.md",
+      "language": "en",
+      "jurisdiction": "intl",
+      "url": null,
+      "url_verified": false,
+      "text_policy": "summary",
+      "factors": [
+        "rate.policy",
+        "fx",
+        "equity.index",
+        "spread.credit",
+        "gdp",
+        "inflation"
+      ],
+      "purpose": "Справочник методов МВФ: решения, ликвидность, сценарии",
+      "status": "planned",
+      "verify": false,
+      "notes": "Книга: хранить конспект, если права на текст нет",
+      "file": {
+        "page": "https://www.imf.org/en/publications/books/issues/2016/12/31/a-guide-to-imf-stress-testing-methods-and-models-41117",
+        "match": "(?i)\\.pdf|\\.ashx",
+        "note": "Книга продаётся; бесплатный PDF на странице не подтверждён"
+      }
+    },
+    {
+      "id": "M9",
+      "kind": "methodology",
+      "title": "Stress Testing at the IMF (Departmental Paper)",
+      "publisher": "IMF",
+      "authors": [
+        "T. Adrian",
+        "J. Morsink",
+        "L. Schumacher"
+      ],
+      "year": 2020,
+      "path": "sources/methodology/M9.md",
+      "language": "en",
+      "jurisdiction": "intl",
+      "url": null,
+      "url_verified": false,
+      "text_policy": "full",
+      "factors": [
+        "rate.policy",
+        "fx",
+        "equity.index",
+        "spread.credit",
+        "gdp",
+        "inflation"
+      ],
+      "purpose": "Обзор практики и уроков МВФ",
+      "status": "raw",
+      "verify": false,
+      "file": {
+        "url": "https://www.imf.org/-/media/files/publications/dp/2020/english/stimfea.pdf"
+      }
+    },
+    {
+      "id": "M10",
+      "kind": "methodology",
+      "title": "Macrofinancial Stress Testing — Principles and Practices",
+      "publisher": "IMF",
+      "year": 2012,
+      "path": "sources/methodology/M10.md",
+      "language": "en",
+      "jurisdiction": "intl",
+      "url": null,
+      "url_verified": false,
+      "text_policy": "full",
+      "factors": [
+        "rate.policy",
+        "fx",
+        "equity.index",
+        "spread.credit",
+        "gdp",
+        "inflation"
+      ],
+      "purpose": "Семь принципов макрофинансовых стресс-тестов",
+      "status": "raw",
+      "verify": false,
+      "file": {
+        "url": "https://www.imf.org/external/np/pp/eng/2012/082212.pdf",
+        "published": "2012-08-22"
+      }
+    },
+    {
+      "id": "M11",
+      "kind": "methodology",
+      "title": "A Framework for Macroprudential Bank Solvency Stress Testing (WP/13/68)",
+      "publisher": "IMF",
+      "authors": [
+        "A. Jobst",
+        "L. L. Ong",
+        "C. Schmieder"
+      ],
+      "year": 2013,
+      "path": "sources/methodology/M11.md",
+      "language": "en",
+      "jurisdiction": "intl",
+      "url": null,
+      "url_verified": false,
+      "text_policy": "full",
+      "factors": [
+        "rate.policy",
+        "fx",
+        "equity.index",
+        "spread.credit",
+        "gdp",
+        "inflation"
+      ],
+      "purpose": "Применение в FSAP, калибровка тяжести",
+      "status": "raw",
+      "verify": false,
+      "file": {
+        "url": "https://www.imf.org/external/pubs/ft/wp/2013/wp1368.pdf"
+      }
+    },
+    {
+      "id": "M12",
+      "kind": "methodology",
+      "title": "A framework for stress testing the UK banking system (discussion paper)",
+      "publisher": "Bank of England",
+      "year": 2013,
+      "path": "sources/methodology/M12.md",
+      "language": "en",
+      "jurisdiction": "intl",
+      "url": null,
+      "url_verified": false,
+      "text_policy": "full",
+      "factors": [
+        "rate.policy",
+        "fx",
+        "equity.index",
+        "spread.credit",
+        "gdp",
+        "inflation"
+      ],
+      "purpose": "Циклический и исследовательский сценарии",
+      "status": "raw",
+      "verify": false,
+      "file": {
+        "url": "https://www.bankofengland.co.uk/-/media/boe/files/paper/2013/a-framework-for-stress-testing-the-uk-banking-system.pdf"
+      }
+    },
+    {
+      "id": "M13",
+      "kind": "methodology",
+      "title": "Key elements of the stress test",
+      "publisher": "Bank of England",
+      "editions": [
+        "2014",
+        "2019",
+        "2022"
+      ],
+      "path": "sources/methodology/M13/<edition>.md",
+      "language": "en",
+      "jurisdiction": "intl",
+      "url": null,
+      "url_verified": false,
+      "text_policy": "full",
+      "factors": [
+        "rate.policy",
+        "fx",
+        "equity.index",
+        "spread.credit",
+        "gdp",
+        "inflation"
+      ],
+      "purpose": "Как BoE обосновывает тяжесть сценария в данном году",
+      "status": "raw",
+      "verify": true,
+      "files": {
+        "2014": {
+          "url": "https://www.bankofengland.co.uk/-/media/boe/files/stress-testing/2014/key-elements-of-the-2014-stress-test"
+        },
+        "2019": {
+          "url": "https://www.bankofengland.co.uk/-/media/boe/files/stress-testing/2019/stress-testing-the-uk-banking-system-key-elements-of-the-2019-stress-test"
+        },
+        "2022": {
+          "url": "https://www.bankofengland.co.uk/stress-testing/2022/key-elements-of-the-2022-stress-test",
+          "format": "html"
+        }
+      }
+    },
+    {
+      "id": "M14",
+      "kind": "methodology",
+      "title": "Stress-testing macro stress testing: does it live up to expectations? (WP 369)",
+      "publisher": "BIS",
+      "authors": [
+        "C. Borio",
+        "M. Drehmann",
+        "K. Tsatsaronis"
+      ],
+      "year": 2011,
+      "path": "sources/methodology/M14.md",
+      "language": "en",
+      "jurisdiction": "intl",
+      "url": "https://www.bis.org/publ/work369.htm",
+      "url_verified": true,
+      "text_policy": "full",
+      "factors": [
+        "rate.policy",
+        "fx",
+        "equity.index",
+        "spread.credit",
+        "gdp",
+        "inflation"
+      ],
+      "purpose": "Ограничения макро-стресс-тестов: почему сценарии не видят кризисы",
+      "status": "raw",
+      "verify": false,
+      "file": {
+        "url": "https://www.bis.org/publications/working-paper-369-stress-testing-macro-stress-testing-does-it-live-expectations.pdf"
+      }
+    },
+    {
+      "id": "M15",
+      "kind": "methodology",
+      "title": "How to find plausible, severe and useful stress scenarios",
+      "publisher": "International Journal of Central Banking",
+      "authors": [
+        "T. Breuer",
+        "M. Jandačka",
+        "K. Rheinberger",
+        "M. Summer"
+      ],
+      "year": 2009,
+      "path": "sources/methodology/M15.md",
+      "language": "en",
+      "jurisdiction": "intl",
+      "url": null,
+      "url_verified": false,
+      "text_policy": "full",
+      "factors": [
+        "rate.policy",
+        "fx",
+        "equity.index",
+        "spread.credit",
+        "gdp",
+        "inflation"
+      ],
+      "purpose": "Поиск сценария: правдоподобие против тяжести",
+      "status": "raw",
+      "verify": false,
+      "file": {
+        "url": "https://www.ijcb.org/sites/default/files/journal/v5n3/ijcb-v5n3-how-find-plausible-severe-and-useful-stress-scenarios.pdf"
+      }
+    },
+    {
+      "id": "M16",
+      "kind": "methodology",
+      "title": "Stress scenario selection by empirical likelihood",
+      "publisher": "Quantitative Finance",
+      "authors": [
+        "P. Glasserman",
+        "C. Kang",
+        "W. Kang"
+      ],
+      "year": 2015,
+      "path": "sources/methodology/M16.md",
+      "language": "en",
+      "jurisdiction": "intl",
+      "url": null,
+      "url_verified": false,
+      "text_policy": "summary",
+      "factors": [
+        "rate.policy",
+        "fx",
+        "equity.index",
+        "spread.credit",
+        "gdp",
+        "inflation"
+      ],
+      "purpose": "Выбор сценария по эмпирическому правдоподобию",
+      "status": "planned",
+      "verify": false,
+      "notes": "Журнал по подписке: хранить конспект",
+      "file": {
+        "url": "https://www.financialresearch.gov/working-papers/files/OFRwp0007_GlassermanKangKang_StressScenarioSelectionbyEmpiricalLikelihood.pdf",
+        "published": "2013-04-09",
+        "note": "OFR Working Paper 13-07, версия до журнальной"
+      }
+    },
+    {
+      "id": "M17",
+      "kind": "methodology",
+      "title": "Методика макро-стресс-тестирования банковского сектора",
+      "publisher": "Банк России",
+      "editions": [
+        "2017",
+        "2020"
+      ],
+      "path": "sources/methodology/M17/<edition>.md",
+      "language": "ru",
+      "jurisdiction": "ru",
+      "url": null,
+      "url_verified": false,
+      "text_policy": "full",
+      "factors": [
+        "rate.policy",
+        "fx",
+        "equity.index",
+        "spread.credit",
+        "gdp",
+        "inflation"
+      ],
+      "purpose": "Как ЦБ строит стресс-сценарий для банков",
+      "status": "raw",
+      "verify": true,
+      "notes": "Отдельной методики нет: концепция 2017 года и аналитическая записка 2020 года",
+      "files": {
+        "2017": {
+          "url": "https://www.cbr.ru/Content/Document/File/50685/Consultation_Paper_171019.pdf",
+          "published": "2017-10-19",
+          "note": "Концепция макропруденциального стресс-тестирования, доклад для консультаций"
+        },
+        "2020": {
+          "url": "https://www.cbr.ru/Content/Document/File/117583/analytic_note_20201225_dfs.pdf",
+          "note": "Аналитическая записка «Анализ системных рисков в рамках макропруденциального стресс-тестирования»"
+        }
+      }
+    },
+    {
+      "id": "M18",
+      "kind": "methodology",
+      "title": "Conditional forecasts and scenario analysis with VARs",
+      "publisher": "International Journal of Forecasting",
+      "authors": [
+        "M. Bańbura",
+        "D. Giannone",
+        "M. Lenza"
+      ],
+      "year": 2015,
+      "path": "sources/methodology/M18.md",
+      "language": "en",
+      "jurisdiction": "intl",
+      "url": null,
+      "url_verified": false,
+      "text_policy": "full",
+      "factors": [
+        "rate.policy",
+        "fx",
+        "equity.index",
+        "spread.credit",
+        "gdp",
+        "inflation",
+        "rate.sovereign",
+        "unemployment"
+      ],
+      "purpose": "Условный прогноз BVAR: достраивание непрописанных переменных сценария",
+      "status": "raw",
+      "verify": true,
+      "notes": "Текст брать из открытой версии ECB Working Paper",
+      "file": {
+        "url": "https://www.ecb.europa.eu/pub/pdf/scpwps/ecbwp1733.pdf",
+        "note": "ECB Working Paper 1733, сентябрь 2014"
+      }
+    },
+    {
+      "id": "M19",
+      "kind": "methodology",
+      "title": "Международный стандарт финансовой отчётности (IFRS) 9 «Финансовые инструменты», раздел 5.5 «Обесценение»",
+      "publisher": "Минфин России",
+      "year": 2014,
+      "path": "sources/methodology/M19.md",
+      "language": "ru",
+      "jurisdiction": "ru",
+      "url": null,
+      "url_verified": false,
+      "text_policy": "full",
+      "factors": [
+        "gdp",
+        "unemployment",
+        "rate.policy",
+        "housing.prices"
+      ],
+      "purpose": "Ожидаемые кредитные убытки с прогнозными макросценариями",
+      "status": "raw",
+      "verify": true,
+      "notes": "Официальный текст, введённый приказом Минфина; год — выпуск IASB",
+      "file": {
+        "url": "https://minfin.gov.ru/common/upload/library/2015/09/main/91479_RU_GVT_IFRS_9_Standards_July_2014.pdf",
+        "published": "2015-09-30"
+      }
+    },
+    {
+      "id": "M20",
+      "kind": "methodology",
+      "title": "IFRS 9 implementation by EU institutions (monitoring report)",
+      "publisher": "EBA",
+      "editions": [
+        "2021",
+        "2023"
+      ],
+      "path": "sources/methodology/M20/<edition>.md",
+      "language": "en",
+      "jurisdiction": "intl",
+      "url": null,
+      "url_verified": false,
+      "text_policy": "full",
+      "factors": [
+        "gdp",
+        "unemployment",
+        "rate.policy",
+        "housing.prices"
+      ],
+      "purpose": "Как банки строят макросценарии и сателлитные модели PD по МСФО 9",
+      "status": "raw",
+      "verify": true,
+      "files": {
+        "2021": {
+          "url": "https://www.eba.europa.eu/sites/default/files/document_library/Publications/Reports/2021/1024609/IFRS9%20monitoring%20report.pdf"
+        },
+        "2023": {
+          "url": "https://www.eba.europa.eu/sites/default/files/2023-11/25b12d35-9c28-4335-a589-166c77198920/Final%20Report%20on%20IFRS9%20implementation%20by%20EU%20institutions.pdf"
+        }
+      }
+    },
+    {
+      "id": "M21",
+      "kind": "methodology",
+      "title": "Vulnerable Growth",
+      "publisher": "American Economic Review",
+      "authors": [
+        "T. Adrian",
+        "N. Boyarchenko",
+        "D. Giannone"
+      ],
+      "year": 2019,
+      "path": "sources/methodology/M21.md",
+      "language": "en",
+      "jurisdiction": "intl",
+      "url": null,
+      "url_verified": false,
+      "text_policy": "full",
+      "factors": [
+        "gdp",
+        "spread.credit",
+        "volatility"
+      ],
+      "purpose": "Growth-at-risk: распределение выпуска при заданных финансовых условиях",
+      "status": "raw",
+      "verify": false,
+      "notes": "Текст брать из открытой версии NY Fed Staff Report 794",
+      "file": {
+        "url": "https://www.newyorkfed.org/research/staff_reports/sr794.pdf",
+        "note": "NY Fed Staff Report 794, редакция ноября 2017"
+      }
+    },
+    {
+      "id": "S1",
+      "kind": "scenario_set",
+      "title": "Основные направления единой государственной денежно-кредитной политики",
+      "publisher": "Банк России",
+      "editions": [
+        "2014",
+        "2015",
+        "2016",
+        "2017",
+        "2018",
+        "2019",
+        "2020",
+        "2021",
+        "2022",
+        "2023",
+        "2024",
+        "2025",
+        "2026"
+      ],
+      "path": "sources/scenario-sets/S1/<edition>.md",
+      "language": "ru",
+      "jurisdiction": "ru",
+      "url": "https://www.cbr.ru/about_br/publ/ondkp/",
+      "url_verified": false,
+      "text_policy": "full",
+      "factors": [
+        "rate.policy",
+        "inflation",
+        "gdp",
+        "commodity.oil",
+        "fx",
+        "capital_flows"
+      ],
+      "purpose": "Базовый и рисковые сценарии ЦБ с путями ключевых переменных",
+      "status": "raw",
+      "verify": false,
+      "notes": "Издание обозначено годом публикации (осень)",
+      "files": {
+        "2014": {
+          "url": "https://www.cbr.ru/Content/Document/File/87372/on_2015(2016-2017).pdf"
+        },
+        "2015": {
+          "url": "https://www.cbr.ru/Content/Document/File/87371/on_2016(2017-2018).pdf"
+        },
+        "2016": {
+          "url": "https://www.cbr.ru/Content/Document/File/87369/on_2017(2018-2019).pdf"
+        },
+        "2017": {
+          "url": "https://www.cbr.ru/Content/Document/File/87367/on_2018(2019-2020).pdf"
+        },
+        "2018": {
+          "url": "https://www.cbr.ru/Content/Document/File/87362/on_2019(2020-2021).pdf"
+        },
+        "2019": {
+          "url": "https://www.cbr.ru/Content/Document/File/112392/on_2020(2021-2022).pdf"
+        },
+        "2020": {
+          "page": "https://www.cbr.ru/about_br/publ/ondkp/on_2021_2023/",
+          "match": "on_2021(\\(|%28)"
+        },
+        "2021": {
+          "url": "https://www.cbr.ru/Content/Document/File/126064/on_project_2022(2023-2024).pdf",
+          "note": "На странице издания on_2022_2024 выложен только этот файл с project в имени: сверить с одобренной редакцией"
+        },
+        "2022": {
+          "url": "https://www.cbr.ru/Content/Document/File/139691/on_2023(2024-2025).pdf"
+        },
+        "2023": {
+          "url": "https://www.cbr.ru/Content/Document/File/150582/on_2024(2025-2026).pdf"
+        },
+        "2024": {
+          "url": "https://www.cbr.ru/Content/Document/File/164702/on_2025(2026-2027).pdf"
+        },
+        "2025": {
+          "url": "https://www.cbr.ru/Content/Document/File/180751/on_2026(2027-2028).pdf"
+        },
+        "2026": {
+          "url": "https://www.cbr.ru/Content/Document/File/197907/on_2027(2028-2029).pdf"
+        }
+      }
+    },
+    {
+      "id": "S2",
+      "kind": "scenario_set",
+      "title": "Обзор финансовой стабильности",
+      "publisher": "Банк России",
+      "editions": [
+        "2014-1",
+        "2014-2",
+        "2015-1",
+        "2015-2",
+        "2016-1",
+        "2016-2",
+        "2017-1",
+        "2017-2",
+        "2018-1",
+        "2018-2",
+        "2019-1",
+        "2019-2",
+        "2020-1",
+        "2020-2",
+        "2021-1",
+        "2021-2",
+        "2022-1",
+        "2022-2",
+        "2023-1",
+        "2023-2",
+        "2024-1",
+        "2024-2",
+        "2025-1",
+        "2025-2",
+        "2026-1"
+      ],
+      "path": "sources/scenario-sets/S2/<edition>.md",
+      "language": "ru",
+      "jurisdiction": "ru",
+      "url": "https://www.cbr.ru/finstab/review/",
+      "url_verified": false,
+      "text_policy": "full",
+      "factors": [
+        "bank.solvency",
+        "bank.liquidity",
+        "spread.credit",
+        "fx",
+        "rate.sovereign",
+        "housing.mortgage"
+      ],
+      "purpose": "Разделы о стресс-тестах банков и системных рисках",
+      "status": "raw",
+      "verify": true,
+      "notes": "Проверить, с какого выпуска есть стресс-тесты. Издание YYYY-1 — майский обзор (IV квартал прошлого года – I квартал), YYYY-2 — ноябрьский (II–III кварталы)",
+      "files": {
+        "2014-1": {
+          "url": "https://www.cbr.ru/Collection/Collection/File/7866/fin-stab-2013-14_4-1r.pdf"
+        },
+        "2014-2": {
+          "url": "https://www.cbr.ru/Collection/Collection/File/7865/fin-stab-2014_2-3r.pdf"
+        },
+        "2015-1": {
+          "url": "https://www.cbr.ru/Collection/Collection/File/7864/fin-stab-2014-15_4-1r.pdf"
+        },
+        "2015-2": {
+          "url": "https://www.cbr.ru/Collection/Collection/File/7863/fin-stab-2015_2-3r.pdf"
+        },
+        "2016-1": {
+          "url": "https://www.cbr.ru/Collection/Collection/File/7862/fin-stab-2015-16_4-1r.pdf"
+        },
+        "2016-2": {
+          "url": "https://www.cbr.ru/Collection/Collection/File/7861/fin-stab-2016_2-3r.pdf"
+        },
+        "2017-1": {
+          "url": "https://www.cbr.ru/Collection/Collection/File/7860/OFS_17-01.pdf"
+        },
+        "2017-2": {
+          "url": "https://www.cbr.ru/Collection/Collection/File/7859/OFS_17-02.pdf"
+        },
+        "2018-1": {
+          "url": "https://www.cbr.ru/Collection/Collection/File/7858/OFS_17-03.pdf"
+        },
+        "2018-2": {
+          "url": "https://www.cbr.ru/Collection/Collection/File/10438/OFS_18-02.pdf"
+        },
+        "2019-1": {
+          "url": "https://www.cbr.ru/Collection/Collection/File/19790/OFS_19-01.pdf"
+        },
+        "2019-2": {
+          "url": "https://www.cbr.ru/Collection/Collection/File/25489/OFS_19-02.pdf"
+        },
+        "2020-1": {
+          "url": "https://www.cbr.ru/Collection/Collection/File/27911/OFS_20-01.pdf"
+        },
+        "2020-2": {
+          "url": "https://www.cbr.ru/Collection/Collection/File/31582/OFS_20-2.pdf"
+        },
+        "2021-1": {
+          "url": "https://www.cbr.ru/Collection/Collection/File/33327/OFS_21-1.pdf"
+        },
+        "2021-2": {
+          "url": "https://www.cbr.ru/Collection/Collection/File/39346/2_3_q_2021.pdf"
+        },
+        "2022-1": {
+          "page": "https://www.cbr.ru/analytics/finstab/ofs/4q_2021-1q_2022/",
+          "match": "^Скачать$"
+        },
+        "2022-2": {
+          "page": "https://www.cbr.ru/analytics/finstab/ofs/2_3_q_2022/",
+          "match": "^Скачать$"
+        },
+        "2023-1": {
+          "page": "https://www.cbr.ru/analytics/finstab/ofs/4_q_2022_1_q_2023/",
+          "match": "^Скачать$"
+        },
+        "2023-2": {
+          "page": "https://www.cbr.ru/analytics/finstab/ofs/2_3_q_2023/",
+          "match": "^Скачать$"
+        },
+        "2024-1": {
+          "page": "https://www.cbr.ru/analytics/finstab/ofs/4_2023_1_q_2024/",
+          "match": "^Скачать$"
+        },
+        "2024-2": {
+          "page": "https://www.cbr.ru/analytics/finstab/ofs/2q_3q_2024/",
+          "match": "^Скачать$"
+        },
+        "2025-1": {
+          "page": "https://www.cbr.ru/analytics/finstab/ofs/4q_2024_1q_2025/",
+          "match": "^Скачать$"
+        },
+        "2025-2": {
+          "page": "https://www.cbr.ru/analytics/finstab/ofs/2q_3q_2025/",
+          "match": "^Скачать$"
+        },
+        "2026-1": {
+          "page": "https://www.cbr.ru/analytics/finstab/ofs/4q_2025_1q_2026/",
+          "match": "^Скачать$"
+        }
+      }
+    },
+    {
+      "id": "S3",
+      "kind": "scenario_set",
+      "title": "Прогноз социально-экономического развития Российской Федерации",
+      "publisher": "Минэкономразвития России",
+      "editions": [
+        "2018",
+        "2019",
+        "2020",
+        "2021",
+        "2022",
+        "2023",
+        "2024",
+        "2025",
+        "2026"
+      ],
+      "path": "sources/scenario-sets/S3/<edition>.md",
+      "language": "ru",
+      "jurisdiction": "ru",
+      "url": null,
+      "url_verified": false,
+      "text_policy": "full",
+      "factors": [
+        "gdp",
+        "inflation",
+        "fx",
+        "commodity.oil",
+        "unemployment"
+      ],
+      "purpose": "Базовый и консервативный варианты прогноза",
+      "status": "raw",
+      "verify": true,
+      "notes": "Издание — год публикации осенью, прогноз на следующий год и плановый период",
+      "files": {
+        "2020": {
+          "url": "https://legalacts.ru/doc/prognoz-sotsialno-ekonomicheskogo-razvitija-rossiiskoi-federatsii-na-2021-god-i/",
+          "format": "html",
+          "note": "Копия текста на legalacts.ru: economy.gov.ru не отвечает на запросы из-за рубежа"
+        },
+        "2021": {
+          "url": "https://legalacts.ru/doc/prognoz-sotsialno-ekonomicheskogo-razvitija-rossiiskoi-federatsii-na-2022-god-i/",
+          "format": "html",
+          "note": "Копия текста на legalacts.ru: economy.gov.ru не отвечает на запросы из-за рубежа"
+        },
+        "2022": {
+          "url": "https://legalacts.ru/doc/prognoz-sotsialno-ekonomicheskogo-razvitija-rossiiskoi-federatsii-na-2023-god-i/",
+          "format": "html",
+          "note": "Копия текста на legalacts.ru: economy.gov.ru не отвечает на запросы из-за рубежа"
+        },
+        "2023": {
+          "url": "https://legalacts.ru/doc/prognoz-sotsialno-ekonomicheskogo-razvitija-rossiiskoi-federatsii-na-2024-god-i/",
+          "format": "html",
+          "note": "Копия текста на legalacts.ru: economy.gov.ru не отвечает на запросы из-за рубежа"
+        },
+        "2024": {
+          "url": "https://legalacts.ru/doc/prognoz-sotsialno-ekonomicheskogo-razvitija-rossiiskoi-federatsii-na-2025-god-i/",
+          "format": "html",
+          "note": "Копия текста на legalacts.ru: economy.gov.ru не отвечает на запросы из-за рубежа"
+        },
+        "2025": {
+          "url": "https://legalacts.ru/doc/prognoz-sotsialno-ekonomicheskogo-razvitija-rossiiskoi-federatsii-na-2026-god-i/",
+          "format": "html",
+          "note": "Копия текста на legalacts.ru: economy.gov.ru не отвечает на запросы из-за рубежа"
+        },
+        "2026": {
+          "url": "https://legalacts.ru/doc/prognoz-sotsialno-ekonomicheskogo-razvitija-rossiiskoi-federatsii-na-2027-god-i/",
+          "format": "html",
+          "note": "Копия текста на legalacts.ru: economy.gov.ru не отвечает на запросы из-за рубежа"
+        }
+      }
+    },
+    {
+      "id": "S4",
+      "kind": "scenario_set",
+      "title": "Stress Test Scenarios",
+      "publisher": "Federal Reserve",
+      "editions": [
+        "2014",
+        "2015",
+        "2016",
+        "2017",
+        "2018",
+        "2019",
+        "2020",
+        "2021",
+        "2022",
+        "2023",
+        "2024",
+        "2025",
+        "2026"
+      ],
+      "path": "sources/scenario-sets/S4/<edition>.md",
+      "language": "en",
+      "jurisdiction": "us",
+      "url": null,
+      "url_verified": false,
+      "text_policy": "full",
+      "factors": [
+        "rate.policy",
+        "fx",
+        "equity.index",
+        "spread.credit",
+        "gdp",
+        "inflation",
+        "unemployment",
+        "housing.prices",
+        "rate.sovereign",
+        "volatility"
+      ],
+      "purpose": "Baseline и severely adverse с квартальными путями 28 переменных",
+      "status": "raw",
+      "verify": false,
+      "files": {
+        "2014": {
+          "url": "https://www.federalreserve.gov/bankinforeg/bcreg20131101a1.pdf",
+          "published": "2013-11-01"
+        },
+        "2015": {
+          "page": "https://www.federalreserve.gov/newsevents/pressreleases/bcreg20141023a.htm",
+          "match": "bcreg20141023a\\d\\.pdf"
+        },
+        "2016": {
+          "page": "https://www.federalreserve.gov/newsevents/pressreleases/bcreg20160128a.htm",
+          "match": "bcreg20160128a\\d\\.pdf"
+        },
+        "2017": {
+          "url": "https://www.federalreserve.gov/newsevents/pressreleases/files/bcreg20170203a5.pdf",
+          "published": "2017-02-03"
+        },
+        "2018": {
+          "url": "https://www.federalreserve.gov/newsevents/pressreleases/files/bcreg20180201a1.pdf",
+          "published": "2018-02-01"
+        },
+        "2019": {
+          "page": "https://www.federalreserve.gov/publications/2019-february-supervisory-scenarios.htm",
+          "match": "\\.pdf(\\?|$)"
+        },
+        "2020": {
+          "page": "https://www.federalreserve.gov/publications/2020-february-supervisory-scenarios.htm",
+          "match": "\\.pdf(\\?|$)"
+        },
+        "2021": {
+          "page": "https://www.federalreserve.gov/publications/stress-test-scenarios-february-2021.htm",
+          "match": "\\.pdf(\\?|$)"
+        },
+        "2022": {
+          "url": "https://www.federalreserve.gov/newsevents/pressreleases/files/bcreg20220210a1.pdf",
+          "published": "2022-02-10"
+        },
+        "2023": {
+          "url": "https://www.federalreserve.gov/newsevents/pressreleases/files/bcreg20230209a1.pdf",
+          "published": "2023-02-09"
+        },
+        "2024": {
+          "page": "https://www.federalreserve.gov/supervisionreg/dfa-stress-tests-2024.htm",
+          "match": "(?i)stress-test-scenarios.*\\.pdf",
+          "published": "2024-02-15"
+        },
+        "2025": {
+          "url": "https://www.federalreserve.gov/publications/files/2025-stress-test-scenarios-20250205.pdf",
+          "published": "2025-02-05"
+        },
+        "2026": {
+          "url": "https://www.federalreserve.gov/publications/files/2026-final-supervisory-stress-test-scenarios-20260204.pdf",
+          "published": "2026-02-04"
+        }
+      }
+    },
+    {
+      "id": "S5",
+      "kind": "scenario_set",
+      "title": "Adverse macro-financial scenario for the EU-wide banking sector stress test",
+      "publisher": "ESRB",
+      "editions": [
+        "2016",
+        "2018",
+        "2021",
+        "2023",
+        "2025"
+      ],
+      "path": "sources/scenario-sets/S5/<edition>.md",
+      "language": "en",
+      "jurisdiction": "eu",
+      "url": null,
+      "url_verified": false,
+      "text_policy": "full",
+      "factors": [
+        "rate.policy",
+        "fx",
+        "equity.index",
+        "spread.credit",
+        "gdp",
+        "inflation",
+        "rate.sovereign",
+        "housing.prices"
+      ],
+      "purpose": "Неблагоприятный сценарий с нарративом и путями по странам",
+      "status": "raw",
+      "verify": false,
+      "files": {
+        "2016": {
+          "url": "https://www.eba.europa.eu/sites/default/files/documents/10180/1383302/13b83208-9fb8-4b0d-8f9c-253d25f7a568/2016%20EU-wide%20stress%20test-Adverse%20macro-financial%20scenario.pdf"
+        },
+        "2018": {
+          "url": "https://www.eba.europa.eu/sites/default/files/documents/10180/2106649/56989522-f7e5-413e-accc-5c39d23fdffa/Adverse%20macroeconomic%20scenario%20for%20the%20EBA%202018%20Stress%20Test.pdf"
+        },
+        "2021": {
+          "url": "https://www.esrb.europa.eu/mppa/stress/shared/pdf/esrb.stress_test210120~0879635930.en.pdf"
+        },
+        "2023": {
+          "page": "https://www.eba.europa.eu/risk-and-data-analysis/risk-analysis/eu-wide-stress-testing/stress-test-2023",
+          "match": "(?i)macro.?financial.?scenario"
+        },
+        "2025": {
+          "url": "https://www.eba.europa.eu/sites/default/files/2025-02/f23c8470-a2e1-410f-b752-55aff8f8e8f4/2025-02-26%20-%20ESRB%20-%20Macrofinancial%20scenario%20for%20the%202025%20EU-wide%20banking%20sector%20stress%20test%20%28updated%2026%20February%202025%29.pdf",
+          "published": "2025-02-26",
+          "note": "Обновлённая редакция 26.02.2025"
+        }
+      }
+    },
+    {
+      "id": "S6",
+      "kind": "scenario_set",
+      "title": "Annual cyclical scenario",
+      "publisher": "Bank of England",
+      "editions": [
+        "2014",
+        "2015",
+        "2016",
+        "2017",
+        "2018",
+        "2019",
+        "2021",
+        "2022",
+        "2024",
+        "2025"
+      ],
+      "path": "sources/scenario-sets/S6/<edition>.md",
+      "language": "en",
+      "jurisdiction": "uk",
+      "url": null,
+      "url_verified": false,
+      "text_policy": "full",
+      "factors": [
+        "rate.policy",
+        "fx",
+        "equity.index",
+        "spread.credit",
+        "gdp",
+        "inflation",
+        "housing.prices",
+        "unemployment"
+      ],
+      "purpose": "Циклический сценарий BoE",
+      "status": "raw",
+      "verify": true,
+      "notes": "В карте раздела stress-testing сайта Банка Англии (bankofengland.co.uk/sitemap/stress-testing) нет документа сценария банковского стресс-теста за 2020 и 2023 годы: эти издания убраны. Пути переменных лежат там же в xlsx",
+      "files": {
+        "2014": {
+          "url": "https://www.bankofengland.co.uk/-/media/boe/files/stress-testing/2014/key-elements-of-the-2014-stress-test"
+        },
+        "2015": {
+          "url": "https://www.bankofengland.co.uk/-/media/boe/files/stress-testing/2015/stress-testing-the-uk-banking-system-key-elements-of-the-2015-stress-test.pdf"
+        },
+        "2016": {
+          "url": "https://www.bankofengland.co.uk/-/media/boe/files/stress-testing/2016/key-elements-of-the-2016-stress-test.pdf"
+        },
+        "2018": {
+          "url": "https://www.bankofengland.co.uk/-/media/boe/files/stress-testing/2018/stress-testing-the-uk-banking-system-key-elements-of-the-2018-stress-test.pdf"
+        },
+        "2019": {
+          "url": "https://www.bankofengland.co.uk/-/media/boe/files/stress-testing/2019/stress-testing-the-uk-banking-system-key-elements-of-the-2019-stress-test"
+        },
+        "2021": {
+          "url": "https://www.bankofengland.co.uk/-/media/boe/files/stress-testing/2021/key-elements-of-the-2021-stress-test.pdf"
+        },
+        "2022": {
+          "url": "https://www.bankofengland.co.uk/stress-testing/2022/key-elements-of-the-2022-stress-test",
+          "format": "html"
+        },
+        "2025": {
+          "url": "https://www.bankofengland.co.uk/stress-testing/2025/key-elements-bank-capital",
+          "format": "html"
+        },
+        "2017": {
+          "url": "https://www.bankofengland.co.uk/-/media/boe/files/stress-testing/2017/stress-testing-the-uk-banking-system-key-elements-of-the-2017-stress-test.pdf"
+        },
+        "2024": {
+          "url": "https://www.bankofengland.co.uk/stress-testing/2024/stress-testing-uk-banking-system-scenarios-2024-desk-based",
+          "format": "html",
+          "note": "В 2024 году вместо ACS — desk-based stress test"
+        }
+      }
+    },
+    {
+      "id": "S7",
+      "kind": "scenario_set",
+      "title": "Russian Federation: Financial System Stability Assessment and FSAP Technical Notes",
+      "publisher": "IMF",
+      "year": 2016,
+      "path": "sources/scenario-sets/S7.md",
+      "language": "en",
+      "jurisdiction": "ru",
+      "url": null,
+      "url_verified": false,
+      "text_policy": "full",
+      "factors": [
+        "rate.policy",
+        "fx",
+        "equity.index",
+        "spread.credit",
+        "gdp",
+        "inflation",
+        "bank.solvency"
+      ],
+      "purpose": "Внешний взгляд на стресс-тесты российской системы",
+      "status": "raw",
+      "verify": true,
+      "file": {
+        "url": "https://www.imf.org/external/pubs/ft/scr/2016/cr16231.pdf",
+        "note": "IMF Country Report 16/231"
+      }
+    },
+    {
+      "id": "T1",
+      "kind": "transmission",
+      "title": "Доклад о денежно-кредитной политике",
+      "publisher": "Банк России",
+      "editions": [
+        "2014-2",
+        "2014-4",
+        "2015-1",
+        "2016-1",
+        "2017-4",
+        "2018-2",
+        "2018-3",
+        "2019-3",
+        "2020-2",
+        "2021-2",
+        "2022-1",
+        "2022-2",
+        "2022-4",
+        "2023-4"
+      ],
+      "path": "sources/transmission/T1/<edition>.md",
+      "language": "ru",
+      "jurisdiction": "ru",
+      "url": "https://www.cbr.ru/about_br/publ/ddkp/",
+      "url_verified": false,
+      "text_policy": "full",
+      "factors": [
+        "rate.policy",
+        "rate.money_market",
+        "rate.sovereign",
+        "fx",
+        "inflation",
+        "housing.mortgage"
+      ],
+      "purpose": "Механизм передачи ставки, обоснование решений",
+      "status": "raw",
+      "verify": false,
+      "notes": "Издание YYYY-N — N-й выпуск года; отобраны выпуски рядом с эпизодами R13–R31. С февраля 2024 года доклад не выходит, его заменили резюме обсуждения ключевой ставки",
+      "files": {
+        "2014-2": {
+          "url": "https://www.cbr.ru/Collection/Collection/File/7852/2014_02_ddcp.pdf",
+          "note": "После R13 (март 2014)"
+        },
+        "2014-4": {
+          "url": "https://www.cbr.ru/Collection/Collection/File/7850/2014_04_ddcp.pdf",
+          "note": "R14–R16"
+        },
+        "2015-1": {
+          "url": "https://www.cbr.ru/Collection/Collection/File/7847/2015_01_ddcp.pdf",
+          "note": "После R16"
+        },
+        "2016-1": {
+          "url": "https://www.cbr.ru/Collection/Collection/File/7839/2016_01_ddcp.pdf",
+          "note": "После R17"
+        },
+        "2017-4": {
+          "url": "https://www.cbr.ru/Collection/Collection/File/7828/2017_04_ddcp.pdf",
+          "note": "После R18"
+        },
+        "2018-2": {
+          "url": "https://www.cbr.ru/Collection/Collection/File/7823/2018_02_ddcp.pdf",
+          "note": "После R19"
+        },
+        "2018-3": {
+          "url": "https://www.cbr.ru/Collection/Collection/File/7822/2018_03_ddcp.pdf",
+          "note": "R20, R21"
+        },
+        "2019-3": {
+          "url": "https://www.cbr.ru/Collection/Collection/File/23678/2019_03_ddcp.pdf",
+          "note": "R22"
+        },
+        "2020-2": {
+          "page": "https://www.cbr.ru/analytics/dkp/ddcp/longread_2_30/",
+          "match": "_ddcp\\.pdf$",
+          "note": "R23, R24"
+        },
+        "2021-2": {
+          "page": "https://www.cbr.ru/analytics/dkp/ddcp/longread_2_34/",
+          "match": "_ddcp\\.pdf$",
+          "note": "R25"
+        },
+        "2022-1": {
+          "page": "https://www.cbr.ru/about_br/publ/ddkp/longread_1_37/",
+          "match": "_ddcp\\.pdf$",
+          "note": "R26, перед R27"
+        },
+        "2022-2": {
+          "page": "https://www.cbr.ru/about_br/publ/ddkp/longread_2_38/",
+          "match": "_ddcp\\.pdf$",
+          "note": "R27, R28"
+        },
+        "2022-4": {
+          "page": "https://www.cbr.ru/about_br/publ/ddkp/longread_4_40/",
+          "match": "_ddcp\\.pdf$",
+          "note": "R29"
+        },
+        "2023-4": {
+          "page": "https://www.cbr.ru/about_br/publ/ddkp/longread_4_44/",
+          "match": "_ddcp\\.pdf$",
+          "note": "R31"
+        }
+      }
+    },
+    {
+      "id": "T2",
+      "kind": "transmission",
+      "title": "Серия докладов об экономических исследованиях и аналитические записки",
+      "publisher": "Банк России",
+      "editions": [
+        "wps-9",
+        "wps-3",
+        "wps-11",
+        "wps-13",
+        "wp-24",
+        "wp-29",
+        "wp-38",
+        "wp-45",
+        "wp-55",
+        "wp-99",
+        "wp-regional-pass-through",
+        "wp-regional-investment"
+      ],
+      "path": "sources/transmission/T2/<edition>.md",
+      "language": "ru",
+      "jurisdiction": "ru",
+      "url": null,
+      "url_verified": false,
+      "text_policy": "full",
+      "factors": [
+        "rate.policy",
+        "fx",
+        "housing.mortgage",
+        "spread.credit",
+        "rate.sovereign"
+      ],
+      "purpose": "Трансмиссия: ставка → кредит, ипотека, курс, ОФЗ, спреды",
+      "status": "raw",
+      "verify": false,
+      "notes": "Издание — номер доклада серии; отобраны работы о передаче ставки, курса и кредита со страницы cbr.ru/ec_research/ser/",
+      "files": {
+        "wps-9": {
+          "url": "https://www.cbr.ru/Content/Document/File/16731/wps_9.pdf",
+          "note": "Ставки денежного рынка → ставки по кредитам"
+        },
+        "wps-3": {
+          "url": "https://www.cbr.ru/Content/Document/File/16738/wps_3.pdf",
+          "note": "Спрос и предложение кредитов"
+        },
+        "wps-11": {
+          "url": "https://www.cbr.ru/Content/Document/File/16729/wps_11.pdf",
+          "note": "Ожидания ставок из доходности ОФЗ"
+        },
+        "wps-13": {
+          "url": "https://www.cbr.ru/Content/Document/File/16727/wps_13.pdf",
+          "note": "Равновесная процентная ставка"
+        },
+        "wp-24": {
+          "url": "https://www.cbr.ru/Content/Document/File/25503/wp_24.pdf",
+          "note": "Макрофинансовые взаимосвязи"
+        },
+        "wp-29": {
+          "url": "https://www.cbr.ru/Content/Document/File/36151/wp29.pdf",
+          "note": "Долговая нагрузка по отраслям"
+        },
+        "wp-38": {
+          "url": "https://www.cbr.ru/Content/Document/File/85378/wp_38.pdf",
+          "note": "Трансмиссия шоков иностранной ДКП"
+        },
+        "wp-45": {
+          "url": "https://www.cbr.ru/Content/Document/File/79935/wp_45.pdf",
+          "note": "Асимметрия переноса курса в инфляцию"
+        },
+        "wp-55": {
+          "url": "https://www.cbr.ru/Content/Document/File/113282/wp_55.pdf",
+          "note": "Коэффициент обслуживания долга"
+        },
+        "wp-99": {
+          "url": "https://www.cbr.ru/Content/Document/File/139700/wp_99.pdf",
+          "note": "Сюрпризы ДКП"
+        },
+        "wp-regional-pass-through": {
+          "url": "https://www.cbr.ru/Content/Document/File/118010/wp_dgu_jan.pdf",
+          "note": "Региональный перенос курса в инфляцию"
+        },
+        "wp-regional-investment": {
+          "url": "https://www.cbr.ru/Content/Document/File/123108/wp_sgu_may.pdf",
+          "note": "ДКП и инвестиции в регионах"
+        }
+      }
+    },
+    {
+      "id": "T3",
+      "kind": "transmission",
+      "title": "О чём говорят тренды",
+      "publisher": "Банк России",
+      "editions": [
+        "2015-02",
+        "2016-04",
+        "2017-06",
+        "2018-05",
+        "2018-06",
+        "2019-05",
+        "2020-02",
+        "2020-03",
+        "2021-03",
+        "2022-02",
+        "2022-05"
+      ],
+      "path": "sources/transmission/T3/<edition>.md",
+      "language": "ru",
+      "jurisdiction": "ru",
+      "url": null,
+      "url_verified": false,
+      "text_policy": "full",
+      "factors": [
+        "gdp",
+        "inflation",
+        "fx"
+      ],
+      "purpose": "Макроэкономический мониторинг рядом с эпизодами",
+      "status": "raw",
+      "verify": false,
+      "notes": "Издание YYYY-NN — номер бюллетеня в году; отобраны выпуски рядом с эпизодами R17–R29. С 2023 года на странице cbr.ru/ec_research/mb/ выпуски даны без PDF",
+      "files": {
+        "2015-02": {
+          "url": "https://www.cbr.ru/Collection/Collection/File/362/bulletin_15-02.pdf",
+          "note": "R17"
+        },
+        "2016-04": {
+          "url": "https://www.cbr.ru/Collection/Collection/File/360/bulletin_16-04.pdf",
+          "note": "R17"
+        },
+        "2017-06": {
+          "url": "https://www.cbr.ru/Collection/Collection/File/655/bulletin_17-06.pdf",
+          "note": "R18"
+        },
+        "2018-05": {
+          "url": "https://www.cbr.ru/Collection/Collection/File/7394/bulletin_18-05.pdf",
+          "note": "R19"
+        },
+        "2018-06": {
+          "url": "https://www.cbr.ru/Collection/Collection/File/7477/bulletin_18-06.pdf",
+          "note": "R20, R21"
+        },
+        "2019-05": {
+          "url": "https://www.cbr.ru/Collection/Collection/File/21139/bulletin_19-05.pdf",
+          "note": "R22"
+        },
+        "2020-02": {
+          "url": "https://www.cbr.ru/Collection/Collection/File/27780/bulletin_20-02.pdf",
+          "note": "R23"
+        },
+        "2020-03": {
+          "url": "https://www.cbr.ru/Collection/Collection/File/27931/bulletin_20-03.pdf",
+          "note": "R24; версия от 11.06.2020"
+        },
+        "2021-03": {
+          "url": "https://www.cbr.ru/Collection/Collection/File/32198/bulletin_21-03.pdf",
+          "note": "R25"
+        },
+        "2022-02": {
+          "url": "https://www.cbr.ru/Collection/Collection/File/40953/bulletin_22-02.pdf",
+          "note": "R27, R28"
+        },
+        "2022-05": {
+          "url": "https://www.cbr.ru/Collection/Collection/File/42297/bulletin_22-05.pdf",
+          "note": "R29"
+        }
+      }
+    },
+    {
+      "id": "T4",
+      "kind": "transmission",
+      "title": "BIS Quarterly Review: статьи о передаче курсовых и процентных шоков",
+      "publisher": "BIS",
+      "editions": [
+        "2013-09-a",
+        "2014-09-g",
+        "2015-09-a",
+        "2020-03-a"
+      ],
+      "path": "sources/transmission/T4/<edition>.md",
+      "language": "en",
+      "jurisdiction": "intl",
+      "url": null,
+      "url_verified": false,
+      "text_policy": "full",
+      "factors": [
+        "fx",
+        "rate.sovereign",
+        "capital_flows"
+      ],
+      "purpose": "Передача шоков в развивающихся экономиках",
+      "status": "raw",
+      "verify": false,
+      "notes": "Издание — выпуск и буква статьи (r_qtYYMMx); старые адреса bis.org/publ/qtrpdf ведут на страницу статьи, с неё берётся PDF",
+      "files": {
+        "2013-09-a": {
+          "page": "https://www.bis.org/publ/qtrpdf/r_qt1309a.pdf",
+          "match": "\\.pdf$",
+          "note": "Markets precipitate tightening: taper tantrum, X17"
+        },
+        "2014-09-g": {
+          "page": "https://www.bis.org/publ/qtrpdf/r_qt1409g.pdf",
+          "match": "\\.pdf$",
+          "note": "Трансграничное банковское кредитование во время taper tantrum"
+        },
+        "2015-09-a": {
+          "page": "https://www.bis.org/publ/qtrpdf/r_qt1509a.pdf",
+          "match": "\\.pdf$",
+          "note": "Обзор рынков сентября 2015: девальвация юаня, X21"
+        },
+        "2020-03-a": {
+          "page": "https://www.bis.org/publications/rude-awakening-investors",
+          "match": "\\.pdf$",
+          "note": "A rude awakening for investors: COVID, G35, X27"
+        }
+      }
+    },
+    {
+      "id": "T5",
+      "kind": "transmission",
+      "title": "Global Financial Stability Report: главы о шоках ставок и потоках капитала",
+      "publisher": "IMF",
+      "editions": [
+        "2019-10-5",
+        "2020-04-3",
+        "2026-04-2"
+      ],
+      "path": "sources/transmission/T5/<edition>.md",
+      "language": "en",
+      "jurisdiction": "intl",
+      "url": null,
+      "url_verified": false,
+      "text_policy": "full",
+      "factors": [
+        "rate.sovereign",
+        "capital_flows",
+        "spread.credit"
+      ],
+      "purpose": "Глобальные каналы передачи",
+      "status": "raw",
+      "verify": false,
+      "notes": "главы GFSR: издание YYYY-MM-<номер главы>",
+      "files": {
+        "2019-10-5": {
+          "url": "https://www.imf.org/-/media/files/publications/gfsr/2019/october/english/ch5.pdf",
+          "note": "Banks' US Dollar Funding Fragility"
+        },
+        "2020-04-3": {
+          "url": "https://www.imf.org/-/media/files/publications/gfsr/2020/april/english/ch3.pdf",
+          "note": "Emerging and Frontier Markets: Managing Volatile Portfolio Flows"
+        },
+        "2026-04-2": {
+          "url": "https://www.imf.org/-/media/files/publications/gfsr/2026/april/english/ch2.pdf",
+          "note": "Capital Flows to Emerging Markets: The Role of Global Nonbank Investors"
+        }
+      }
+    }
+  ],
+  "data_series": [
+    {
+      "id": "D1",
+      "title": "Статистика Банка России",
+      "publisher": "Банк России",
+      "series": [
+        "ключевая ставка",
+        "официальные курсы",
+        "инфляция",
+        "кредиты и ставки по ним",
+        "ставки денежного рынка (RUONIA, MIACR)"
+      ],
+      "factors": [
+        "rate.policy",
+        "rate.money_market",
+        "fx",
+        "inflation",
+        "housing.mortgage"
+      ]
+    },
+    {
+      "id": "D2",
+      "title": "Московская биржа",
+      "publisher": "MOEX",
+      "series": [
+        "индекс MOEX",
+        "кривая бескупонной доходности ОФЗ (G-curve)",
+        "индексы корпоративных облигаций"
+      ],
+      "factors": [
+        "equity.index",
+        "rate.sovereign",
+        "spread.credit"
+      ]
+    },
+    {
+      "id": "D3",
+      "title": "FRED",
+      "publisher": "Federal Reserve Bank of St. Louis",
+      "series": [
+        "ставка ФРС",
+        "доходности Treasuries",
+        "спреды IG и HY",
+        "VIX",
+        "Brent и WTI"
+      ],
+      "factors": [
+        "rate.policy",
+        "rate.sovereign",
+        "spread.credit",
+        "volatility",
+        "commodity.oil"
+      ]
+    },
+    {
+      "id": "D4",
+      "title": "International Financial Statistics",
+      "publisher": "IMF",
+      "series": [
+        "курсы",
+        "ставки",
+        "инфляция",
+        "резервы"
+      ],
+      "factors": [
+        "fx",
+        "rate.policy",
+        "inflation",
+        "capital_flows"
+      ]
+    },
+    {
+      "id": "D5",
+      "title": "BIS statistics",
+      "publisher": "BIS",
+      "series": [
+        "ставки центральных банков",
+        "эффективные курсы",
+        "цены жилья",
+        "кредит частному сектору"
+      ],
+      "factors": [
+        "rate.policy",
+        "fx",
+        "housing.prices"
+      ]
+    }
+  ],
+  "episodes": [
+    {
+      "id": "R1",
+      "start": "1994-10",
+      "region": "ru",
+      "country": "RU",
+      "title": "«Чёрный вторник»: однодневный обвал рубля",
+      "factors": [
+        "fx",
+        "rate.policy",
+        "inflation"
+      ],
+      "data": [
+        "D1",
+        "D2"
+      ],
+      "path": "episodes/ru/R1.md",
+      "status": "draft",
+      "flags": [
+        "data_sparse"
+      ]
+    },
+    {
+      "id": "R2",
+      "start": "1995-08",
+      "region": "ru",
+      "country": "RU",
+      "title": "Межбанковский кризис ликвидности",
+      "factors": [
+        "rate.money_market",
+        "bank.liquidity"
+      ],
+      "data": [
+        "D1",
+        "D2"
+      ],
+      "path": "episodes/ru/R2.md",
+      "status": "draft",
+      "flags": [
+        "data_sparse"
+      ]
+    },
+    {
+      "id": "R3",
+      "start": "1997-10",
+      "region": "ru",
+      "country": "RU",
+      "title": "Азиатский кризис: отток нерезидентов из ГКО",
+      "factors": [
+        "rate.sovereign",
+        "rate.policy",
+        "capital_flows"
+      ],
+      "data": [
+        "D1",
+        "D2"
+      ],
+      "path": "episodes/ru/R3.md",
+      "status": "draft",
+      "flags": [
+        "data_sparse"
+      ]
+    },
+    {
+      "id": "R4",
+      "start": "1998-05",
+      "region": "ru",
+      "country": "RU",
+      "title": "Повышение ставки ЦБ до 150 %",
+      "factors": [
+        "rate.policy",
+        "rate.sovereign",
+        "capital_flows"
+      ],
+      "data": [
+        "D1",
+        "D2"
+      ],
+      "path": "episodes/ru/R4.md",
+      "status": "draft",
+      "flags": [
+        "data_sparse"
+      ]
+    },
+    {
+      "id": "R5",
+      "start": "1998-08",
+      "region": "ru",
+      "country": "RU",
+      "title": "Дефолт по ГКО и девальвация рубля",
+      "factors": [
+        "sovereign.default",
+        "fx",
+        "rate.sovereign",
+        "bank.liquidity",
+        "bank.solvency"
+      ],
+      "data": [
+        "D1",
+        "D2"
+      ],
+      "path": "episodes/ru/R5.md",
+      "status": "draft"
+    },
+    {
+      "id": "R6",
+      "start": "2004-05",
+      "region": "ru",
+      "country": "RU",
+      "title": "Кризис доверия к банкам (Содбизнесбанк, Гута-банк)",
+      "factors": [
+        "rate.money_market",
+        "bank.liquidity"
+      ],
+      "data": [
+        "D1",
+        "D2"
+      ],
+      "path": "episodes/ru/R6.md",
+      "status": "draft"
+    },
+    {
+      "id": "R7",
+      "start": "2008-05",
+      "region": "ru",
+      "country": "RU",
+      "title": "Начало падения рынка акций и отток капитала",
+      "factors": [
+        "equity.index",
+        "capital_flows",
+        "commodity.oil"
+      ],
+      "data": [
+        "D1",
+        "D2"
+      ],
+      "path": "episodes/ru/R7.md",
+      "status": "draft"
+    },
+    {
+      "id": "R8",
+      "start": "2008-09",
+      "region": "ru",
+      "country": "RU",
+      "title": "Остановка торгов и кризис ликвидности банков",
+      "factors": [
+        "equity.index",
+        "rate.money_market",
+        "bank.liquidity",
+        "spread.credit"
+      ],
+      "data": [
+        "D1",
+        "D2"
+      ],
+      "path": "episodes/ru/R8.md",
+      "status": "draft"
+    },
+    {
+      "id": "R9",
+      "start": "2008-11",
+      "region": "ru",
+      "country": "RU",
+      "title": "Плавная девальвация рубля",
+      "factors": [
+        "fx",
+        "rate.policy",
+        "capital_flows"
+      ],
+      "data": [
+        "D1",
+        "D2"
+      ],
+      "path": "episodes/ru/R9.md",
+      "status": "draft"
+    },
+    {
+      "id": "R10",
+      "start": "2010-08",
+      "region": "ru",
+      "country": "RU",
+      "title": "Засуха и запрет экспорта зерна",
+      "factors": [
+        "inflation",
+        "commodity.agri"
+      ],
+      "data": [
+        "D1",
+        "D2"
+      ],
+      "path": "episodes/ru/R10.md",
+      "status": "draft"
+    },
+    {
+      "id": "R11",
+      "start": "2011-08",
+      "region": "ru",
+      "country": "RU",
+      "title": "Даунгрейд США: рынок акций и рубль",
+      "factors": [
+        "equity.index",
+        "fx",
+        "volatility"
+      ],
+      "data": [
+        "D1",
+        "D2"
+      ],
+      "path": "episodes/ru/R11.md",
+      "status": "draft"
+    },
+    {
+      "id": "R12",
+      "start": "2013-11",
+      "region": "ru",
+      "country": "RU",
+      "title": "Отзыв лицензии Мастер-банка, начало расчистки сектора",
+      "factors": [
+        "bank.liquidity",
+        "bank.solvency",
+        "rate.money_market"
+      ],
+      "data": [
+        "D1",
+        "D2"
+      ],
+      "path": "episodes/ru/R12.md",
+      "status": "draft"
+    },
+    {
+      "id": "R13",
+      "start": "2014-03",
+      "region": "ru",
+      "country": "RU",
+      "title": "Присоединение Крыма: ставка 5,5 → 7 %",
+      "factors": [
+        "rate.policy",
+        "fx",
+        "equity.index",
+        "sanctions"
+      ],
+      "data": [
+        "D1",
+        "D2"
+      ],
+      "path": "episodes/ru/R13.md",
+      "status": "draft"
+    },
+    {
+      "id": "R14",
+      "start": "2014-07",
+      "region": "ru",
+      "country": "RU",
+      "title": "Секторальные санкции и закрытие внешнего фондирования",
+      "factors": [
+        "sanctions",
+        "spread.credit",
+        "capital_flows"
+      ],
+      "data": [
+        "D1",
+        "D2"
+      ],
+      "path": "episodes/ru/R14.md",
+      "status": "draft"
+    },
+    {
+      "id": "R15",
+      "start": "2014-11",
+      "region": "ru",
+      "country": "RU",
+      "title": "Переход к плавающему курсу",
+      "factors": [
+        "fx",
+        "rate.policy"
+      ],
+      "data": [
+        "D1",
+        "D2"
+      ],
+      "path": "episodes/ru/R15.md",
+      "status": "draft"
+    },
+    {
+      "id": "R16",
+      "start": "2014-12",
+      "region": "ru",
+      "country": "RU",
+      "title": "Ставка 17 % и обвал рубля",
+      "factors": [
+        "rate.policy",
+        "fx",
+        "rate.sovereign",
+        "spread.credit",
+        "bank.liquidity"
+      ],
+      "data": [
+        "D1",
+        "D2"
+      ],
+      "path": "episodes/ru/R16.md",
+      "status": "draft"
+    },
+    {
+      "id": "R17",
+      "start": "2015-12",
+      "region": "ru",
+      "country": "RU",
+      "title": "Нефть ниже 30 $, рубль выше 80 за доллар",
+      "factors": [
+        "commodity.oil",
+        "fx",
+        "equity.index"
+      ],
+      "data": [
+        "D1",
+        "D2"
+      ],
+      "path": "episodes/ru/R17.md",
+      "status": "draft"
+    },
+    {
+      "id": "R18",
+      "start": "2017-08",
+      "region": "ru",
+      "country": "RU",
+      "title": "Санация Открытия, Бинбанка и Промсвязьбанка",
+      "factors": [
+        "bank.solvency",
+        "bank.liquidity",
+        "spread.credit"
+      ],
+      "data": [
+        "D1",
+        "D2"
+      ],
+      "path": "episodes/ru/R18.md",
+      "status": "draft"
+    },
+    {
+      "id": "R19",
+      "start": "2018-04",
+      "region": "ru",
+      "country": "RU",
+      "title": "Санкции против Русала и Дерипаски",
+      "factors": [
+        "sanctions",
+        "equity.index",
+        "fx",
+        "commodity.metals"
+      ],
+      "data": [
+        "D1",
+        "D2"
+      ],
+      "path": "episodes/ru/R19.md",
+      "status": "draft"
+    },
+    {
+      "id": "R20",
+      "start": "2018-08",
+      "region": "ru",
+      "country": "RU",
+      "title": "Угроза санкций против госдолга, отток нерезидентов из ОФЗ",
+      "factors": [
+        "sanctions",
+        "rate.sovereign",
+        "fx",
+        "capital_flows"
+      ],
+      "data": [
+        "D1",
+        "D2"
+      ],
+      "path": "episodes/ru/R20.md",
+      "status": "draft"
+    },
+    {
+      "id": "R21",
+      "start": "2018-09",
+      "region": "ru",
+      "country": "RU",
+      "title": "Повышение ставки после цикла снижения",
+      "factors": [
+        "rate.policy",
+        "fx"
+      ],
+      "data": [
+        "D1",
+        "D2"
+      ],
+      "path": "episodes/ru/R21.md",
+      "status": "draft"
+    },
+    {
+      "id": "R22",
+      "start": "2019-06",
+      "region": "ru",
+      "country": "RU",
+      "title": "Цикл снижения ставки 7,75 → 6,25 %",
+      "factors": [
+        "rate.policy",
+        "rate.sovereign"
+      ],
+      "data": [
+        "D1",
+        "D2"
+      ],
+      "path": "episodes/ru/R22.md",
+      "status": "draft"
+    },
+    {
+      "id": "R23",
+      "start": "2020-03",
+      "region": "ru",
+      "country": "RU",
+      "title": "COVID и распад сделки ОПЕК+",
+      "factors": [
+        "commodity.oil",
+        "fx",
+        "equity.index",
+        "spread.credit"
+      ],
+      "data": [
+        "D1",
+        "D2"
+      ],
+      "path": "episodes/ru/R23.md",
+      "status": "draft"
+    },
+    {
+      "id": "R24",
+      "start": "2020-04",
+      "region": "ru",
+      "country": "RU",
+      "title": "Запуск льготной ипотеки",
+      "factors": [
+        "housing.mortgage",
+        "housing.prices"
+      ],
+      "data": [
+        "D1",
+        "D2"
+      ],
+      "path": "episodes/ru/R24.md",
+      "status": "draft"
+    },
+    {
+      "id": "R25",
+      "start": "2021-03",
+      "region": "ru",
+      "country": "RU",
+      "title": "Цикл повышения ставки 4,25 → 8,5 %",
+      "factors": [
+        "rate.policy",
+        "rate.sovereign",
+        "inflation"
+      ],
+      "data": [
+        "D1",
+        "D2"
+      ],
+      "path": "episodes/ru/R25.md",
+      "status": "draft"
+    },
+    {
+      "id": "R26",
+      "start": "2021-12",
+      "region": "ru",
+      "country": "RU",
+      "title": "Угроза санкций, падение рынка акций",
+      "factors": [
+        "sanctions",
+        "equity.index",
+        "fx"
+      ],
+      "data": [
+        "D1",
+        "D2"
+      ],
+      "path": "episodes/ru/R26.md",
+      "status": "draft"
+    },
+    {
+      "id": "R27",
+      "start": "2022-02",
+      "region": "ru",
+      "country": "RU",
+      "title": "Ставка 20 %, санкции, закрытие биржи",
+      "factors": [
+        "rate.policy",
+        "fx",
+        "equity.index",
+        "rate.sovereign",
+        "bank.liquidity",
+        "sanctions"
+      ],
+      "data": [
+        "D1",
+        "D2"
+      ],
+      "path": "episodes/ru/R27.md",
+      "status": "draft"
+    },
+    {
+      "id": "R28",
+      "start": "2022-04",
+      "region": "ru",
+      "country": "RU",
+      "title": "Укрепление рубля и снижение ставки",
+      "factors": [
+        "fx",
+        "rate.policy"
+      ],
+      "data": [
+        "D1",
+        "D2"
+      ],
+      "path": "episodes/ru/R28.md",
+      "status": "draft"
+    },
+    {
+      "id": "R29",
+      "start": "2022-09",
+      "region": "ru",
+      "country": "RU",
+      "title": "Мобилизация: шок рынка акций",
+      "factors": [
+        "equity.index",
+        "rate.sovereign"
+      ],
+      "data": [
+        "D1",
+        "D2"
+      ],
+      "path": "episodes/ru/R29.md",
+      "status": "draft"
+    },
+    {
+      "id": "R30",
+      "start": "2023-06",
+      "region": "ru",
+      "country": "RU",
+      "title": "Мятеж: однодневный шок",
+      "factors": [
+        "equity.index",
+        "fx"
+      ],
+      "data": [
+        "D1",
+        "D2"
+      ],
+      "path": "episodes/ru/R30.md",
+      "status": "draft"
+    },
+    {
+      "id": "R31",
+      "start": "2023-08",
+      "region": "ru",
+      "country": "RU",
+      "title": "Экстренное повышение ставки до 12 %",
+      "factors": [
+        "rate.policy",
+        "fx",
+        "rate.sovereign"
+      ],
+      "data": [
+        "D1",
+        "D2"
+      ],
+      "path": "episodes/ru/R31.md",
+      "status": "draft"
+    },
+    {
+      "id": "R32",
+      "start": "2025-06",
+      "region": "ru",
+      "country": "RU",
+      "title": "Начало снижения ставки с 21 %",
+      "factors": [
+        "rate.policy",
+        "rate.sovereign"
+      ],
+      "data": [
+        "D1",
+        "D2"
+      ],
+      "path": "episodes/ru/R32.md",
+      "status": "draft",
+      "flags": [
+        "verify"
+      ]
+    },
+    {
+      "id": "X1",
+      "start": "1982-08",
+      "region": "em",
+      "country": "MX",
+      "title": "Мексика: долговой кризис",
+      "factors": [
+        "sovereign.default",
+        "fx"
+      ],
+      "data": [
+        "D4",
+        "D5"
+      ],
+      "path": "episodes/em/X1.md",
+      "status": "draft",
+      "flags": [
+        "data_sparse"
+      ]
+    },
+    {
+      "id": "X2",
+      "start": "1994-12",
+      "region": "em",
+      "country": "MX",
+      "title": "Мексика: кризис «текилы»",
+      "factors": [
+        "fx",
+        "rate.policy",
+        "capital_flows"
+      ],
+      "data": [
+        "D4",
+        "D5"
+      ],
+      "path": "episodes/em/X2.md",
+      "status": "draft"
+    },
+    {
+      "id": "X3",
+      "start": "1997-07",
+      "region": "em",
+      "country": "TH",
+      "title": "Таиланд: девальвация бата",
+      "factors": [
+        "fx",
+        "capital_flows",
+        "bank.liquidity"
+      ],
+      "data": [
+        "D4",
+        "D5"
+      ],
+      "path": "episodes/em/X3.md",
+      "status": "draft"
+    },
+    {
+      "id": "X4",
+      "start": "1997-08",
+      "region": "em",
+      "country": "ID",
+      "title": "Индонезия: обвал рупии",
+      "factors": [
+        "fx",
+        "bank.solvency",
+        "capital_flows"
+      ],
+      "data": [
+        "D4",
+        "D5"
+      ],
+      "path": "episodes/em/X4.md",
+      "status": "draft"
+    },
+    {
+      "id": "X5",
+      "start": "1997-11",
+      "region": "em",
+      "country": "KR",
+      "title": "Корея: кризис воны и программа МВФ",
+      "factors": [
+        "fx",
+        "rate.policy",
+        "bank.solvency"
+      ],
+      "data": [
+        "D4",
+        "D5"
+      ],
+      "path": "episodes/em/X5.md",
+      "status": "draft"
+    },
+    {
+      "id": "X6",
+      "start": "1999-01",
+      "region": "em",
+      "country": "BR",
+      "title": "Бразилия: девальвация реала",
+      "factors": [
+        "fx",
+        "rate.policy"
+      ],
+      "data": [
+        "D4",
+        "D5"
+      ],
+      "path": "episodes/em/X6.md",
+      "status": "draft"
+    },
+    {
+      "id": "X7",
+      "start": "2001-02",
+      "region": "em",
+      "country": "TR",
+      "title": "Турция: отказ от привязки лиры",
+      "factors": [
+        "fx",
+        "rate.money_market",
+        "bank.solvency"
+      ],
+      "data": [
+        "D4",
+        "D5"
+      ],
+      "path": "episodes/em/X7.md",
+      "status": "draft"
+    },
+    {
+      "id": "X8",
+      "start": "2001-12",
+      "region": "em",
+      "country": "AR",
+      "title": "Аргентина: дефолт и отмена currency board",
+      "factors": [
+        "sovereign.default",
+        "fx",
+        "bank.liquidity"
+      ],
+      "data": [
+        "D4",
+        "D5"
+      ],
+      "path": "episodes/em/X8.md",
+      "status": "draft"
+    },
+    {
+      "id": "X9",
+      "start": "2002-06",
+      "region": "em",
+      "country": "BR",
+      "title": "Бразилия: выборы и суверенные спреды",
+      "factors": [
+        "spread.sovereign",
+        "fx"
+      ],
+      "data": [
+        "D4",
+        "D5"
+      ],
+      "path": "episodes/em/X9.md",
+      "status": "draft"
+    },
+    {
+      "id": "X10",
+      "start": "2002-07",
+      "region": "em",
+      "country": "UY",
+      "title": "Уругвай: банковский кризис",
+      "factors": [
+        "bank.liquidity",
+        "fx"
+      ],
+      "data": [
+        "D4",
+        "D5"
+      ],
+      "path": "episodes/em/X10.md",
+      "status": "draft"
+    },
+    {
+      "id": "X11",
+      "start": "2006-05",
+      "region": "em",
+      "country": "EM",
+      "title": "Распродажа на развивающихся рынках",
+      "factors": [
+        "equity.index",
+        "fx",
+        "capital_flows"
+      ],
+      "data": [
+        "D4",
+        "D5"
+      ],
+      "path": "episodes/em/X11.md",
+      "status": "draft"
+    },
+    {
+      "id": "X12",
+      "start": "2008-10",
+      "region": "em",
+      "country": "IS",
+      "title": "Исландия: крах банков и кроны",
+      "factors": [
+        "bank.solvency",
+        "fx"
+      ],
+      "data": [
+        "D4",
+        "D5"
+      ],
+      "path": "episodes/em/X12.md",
+      "status": "draft"
+    },
+    {
+      "id": "X13",
+      "start": "2008-10",
+      "region": "em",
+      "country": "HU",
+      "title": "Венгрия: форинт и программа МВФ",
+      "factors": [
+        "fx",
+        "rate.policy",
+        "housing.mortgage"
+      ],
+      "data": [
+        "D4",
+        "D5"
+      ],
+      "path": "episodes/em/X13.md",
+      "status": "draft"
+    },
+    {
+      "id": "X14",
+      "start": "2008-11",
+      "region": "em",
+      "country": "UA",
+      "title": "Украина: девальвация гривны",
+      "factors": [
+        "fx",
+        "bank.solvency"
+      ],
+      "data": [
+        "D4",
+        "D5"
+      ],
+      "path": "episodes/em/X14.md",
+      "status": "draft"
+    },
+    {
+      "id": "X15",
+      "start": "2009-02",
+      "region": "em",
+      "country": "KZ",
+      "title": "Казахстан: девальвация тенге",
+      "factors": [
+        "fx",
+        "bank.solvency"
+      ],
+      "data": [
+        "D4",
+        "D5"
+      ],
+      "path": "episodes/em/X15.md",
+      "status": "draft"
+    },
+    {
+      "id": "X16",
+      "start": "2011-05",
+      "region": "em",
+      "country": "BY",
+      "title": "Беларусь: девальвация и инфляция",
+      "factors": [
+        "fx",
+        "inflation"
+      ],
+      "data": [
+        "D4",
+        "D5"
+      ],
+      "path": "episodes/em/X16.md",
+      "status": "draft"
+    },
+    {
+      "id": "X17",
+      "start": "2013-05",
+      "region": "em",
+      "country": "EM",
+      "title": "Taper tantrum: «хрупкая пятёрка»",
+      "factors": [
+        "fx",
+        "rate.sovereign",
+        "capital_flows"
+      ],
+      "data": [
+        "D4",
+        "D5"
+      ],
+      "path": "episodes/em/X17.md",
+      "status": "draft"
+    },
+    {
+      "id": "X18",
+      "start": "2014-02",
+      "region": "em",
+      "country": "KZ",
+      "title": "Казахстан: девальвация тенге",
+      "factors": [
+        "fx"
+      ],
+      "data": [
+        "D4",
+        "D5"
+      ],
+      "path": "episodes/em/X18.md",
+      "status": "draft"
+    },
+    {
+      "id": "X19",
+      "start": "2014-02",
+      "region": "em",
+      "country": "UA",
+      "title": "Украина: гривна и банковский кризис 2014–2015",
+      "factors": [
+        "fx",
+        "bank.solvency",
+        "inflation"
+      ],
+      "data": [
+        "D4",
+        "D5"
+      ],
+      "path": "episodes/em/X19.md",
+      "status": "draft"
+    },
+    {
+      "id": "X20",
+      "start": "2015-08",
+      "region": "em",
+      "country": "KZ",
+      "title": "Казахстан: свободное плавание тенге",
+      "factors": [
+        "fx",
+        "commodity.oil"
+      ],
+      "data": [
+        "D4",
+        "D5"
+      ],
+      "path": "episodes/em/X20.md",
+      "status": "draft"
+    },
+    {
+      "id": "X21",
+      "start": "2015-08",
+      "region": "em",
+      "country": "CN",
+      "title": "Китай: девальвация юаня и рынок акций",
+      "factors": [
+        "fx",
+        "equity.index",
+        "capital_flows"
+      ],
+      "data": [
+        "D4",
+        "D5"
+      ],
+      "path": "episodes/em/X21.md",
+      "status": "draft"
+    },
+    {
+      "id": "X22",
+      "start": "2015-09",
+      "region": "em",
+      "country": "BR",
+      "title": "Бразилия: потеря инвестиционного рейтинга, Selic 14,25 %",
+      "factors": [
+        "rate.policy",
+        "spread.sovereign",
+        "fx"
+      ],
+      "data": [
+        "D4",
+        "D5"
+      ],
+      "path": "episodes/em/X22.md",
+      "status": "draft"
+    },
+    {
+      "id": "X23",
+      "start": "2016-06",
+      "region": "em",
+      "country": "NG",
+      "title": "Нигерия: отказ от привязки найры",
+      "factors": [
+        "fx",
+        "commodity.oil"
+      ],
+      "data": [
+        "D4",
+        "D5"
+      ],
+      "path": "episodes/em/X23.md",
+      "status": "draft"
+    },
+    {
+      "id": "X24",
+      "start": "2018-04",
+      "region": "em",
+      "country": "AR",
+      "title": "Аргентина: ставка до 60 %",
+      "factors": [
+        "rate.policy",
+        "fx"
+      ],
+      "data": [
+        "D4",
+        "D5"
+      ],
+      "path": "episodes/em/X24.md",
+      "status": "draft"
+    },
+    {
+      "id": "X25",
+      "start": "2018-08",
+      "region": "em",
+      "country": "TR",
+      "title": "Турция: кризис лиры",
+      "factors": [
+        "fx",
+        "rate.policy",
+        "spread.credit"
+      ],
+      "data": [
+        "D4",
+        "D5"
+      ],
+      "path": "episodes/em/X25.md",
+      "status": "draft"
+    },
+    {
+      "id": "X26",
+      "start": "2019-08",
+      "region": "em",
+      "country": "AR",
+      "title": "Аргентина: первичные выборы и обвал песо",
+      "factors": [
+        "fx",
+        "equity.index",
+        "spread.sovereign"
+      ],
+      "data": [
+        "D4",
+        "D5"
+      ],
+      "path": "episodes/em/X26.md",
+      "status": "draft"
+    },
+    {
+      "id": "X27",
+      "start": "2020-03",
+      "region": "em",
+      "country": "EM",
+      "title": "Отток капитала с развивающихся рынков",
+      "factors": [
+        "capital_flows",
+        "fx",
+        "rate.sovereign"
+      ],
+      "data": [
+        "D4",
+        "D5"
+      ],
+      "path": "episodes/em/X27.md",
+      "status": "draft"
+    },
+    {
+      "id": "X28",
+      "start": "2021-12",
+      "region": "em",
+      "country": "TR",
+      "title": "Турция: снижение ставки при высокой инфляции",
+      "factors": [
+        "rate.policy",
+        "fx",
+        "inflation"
+      ],
+      "data": [
+        "D4",
+        "D5"
+      ],
+      "path": "episodes/em/X28.md",
+      "status": "draft"
+    },
+    {
+      "id": "X29",
+      "start": "2022-04",
+      "region": "em",
+      "country": "LK",
+      "title": "Шри-Ланка: дефолт",
+      "factors": [
+        "sovereign.default",
+        "fx",
+        "inflation"
+      ],
+      "data": [
+        "D4",
+        "D5"
+      ],
+      "path": "episodes/em/X29.md",
+      "status": "draft"
+    },
+    {
+      "id": "X30",
+      "start": "2022-03",
+      "region": "em",
+      "country": "EG",
+      "title": "Египет: девальвации 2022–2024",
+      "factors": [
+        "fx",
+        "rate.policy",
+        "inflation"
+      ],
+      "data": [
+        "D4",
+        "D5"
+      ],
+      "path": "episodes/em/X30.md",
+      "status": "draft"
+    },
+    {
+      "id": "X31",
+      "start": "2021-09",
+      "region": "em",
+      "country": "CN",
+      "title": "Китай: Evergrande и кризис девелоперов",
+      "factors": [
+        "spread.credit",
+        "housing.prices"
+      ],
+      "data": [
+        "D4",
+        "D5"
+      ],
+      "path": "episodes/em/X31.md",
+      "status": "draft"
+    },
+    {
+      "id": "X32",
+      "start": "2019-10",
+      "region": "em",
+      "country": "LB",
+      "title": "Ливан: банковский кризис",
+      "factors": [
+        "bank.solvency",
+        "fx",
+        "sovereign.default"
+      ],
+      "data": [
+        "D4",
+        "D5"
+      ],
+      "path": "episodes/em/X32.md",
+      "status": "draft"
+    },
+    {
+      "id": "X33",
+      "start": "2022-12",
+      "region": "em",
+      "country": "GH",
+      "title": "Гана: дефолт",
+      "factors": [
+        "sovereign.default",
+        "fx"
+      ],
+      "data": [
+        "D4",
+        "D5"
+      ],
+      "path": "episodes/em/X33.md",
+      "status": "draft"
+    },
+    {
+      "id": "X34",
+      "start": "2023-06",
+      "region": "em",
+      "country": "TR",
+      "title": "Турция: ставка 8,5 → 50 %",
+      "factors": [
+        "rate.policy",
+        "fx"
+      ],
+      "data": [
+        "D4",
+        "D5"
+      ],
+      "path": "episodes/em/X34.md",
+      "status": "draft"
+    },
+    {
+      "id": "X35",
+      "start": "2023-12",
+      "region": "em",
+      "country": "AR",
+      "title": "Аргентина: девальвация песо",
+      "factors": [
+        "fx",
+        "inflation"
+      ],
+      "data": [
+        "D4",
+        "D5"
+      ],
+      "path": "episodes/em/X35.md",
+      "status": "draft"
+    },
+    {
+      "id": "G1",
+      "start": "1973-10",
+      "region": "dm",
+      "country": "US",
+      "title": "Нефтяное эмбарго",
+      "factors": [
+        "commodity.oil",
+        "inflation"
+      ],
+      "data": [
+        "D3",
+        "D5"
+      ],
+      "path": "episodes/dm/G1.md",
+      "status": "draft",
+      "flags": [
+        "data_sparse"
+      ]
+    },
+    {
+      "id": "G2",
+      "start": "1979-10",
+      "region": "dm",
+      "country": "US",
+      "title": "Шок Волкера",
+      "factors": [
+        "rate.policy",
+        "rate.sovereign"
+      ],
+      "data": [
+        "D3",
+        "D5"
+      ],
+      "path": "episodes/dm/G2.md",
+      "status": "draft",
+      "flags": [
+        "data_sparse"
+      ]
+    },
+    {
+      "id": "G3",
+      "start": "1986-01",
+      "region": "dm",
+      "country": "US",
+      "title": "Обвал нефти",
+      "factors": [
+        "commodity.oil"
+      ],
+      "data": [
+        "D3",
+        "D5"
+      ],
+      "path": "episodes/dm/G3.md",
+      "status": "draft",
+      "flags": [
+        "data_sparse"
+      ]
+    },
+    {
+      "id": "G4",
+      "start": "1987-10",
+      "region": "dm",
+      "country": "US",
+      "title": "«Чёрный понедельник»",
+      "factors": [
+        "equity.index",
+        "volatility"
+      ],
+      "data": [
+        "D3",
+        "D5"
+      ],
+      "path": "episodes/dm/G4.md",
+      "status": "draft"
+    },
+    {
+      "id": "G5",
+      "start": "1990-01",
+      "region": "dm",
+      "country": "JP",
+      "title": "Япония: крах пузыря",
+      "factors": [
+        "equity.index",
+        "housing.prices",
+        "bank.solvency"
+      ],
+      "data": [
+        "D3",
+        "D5"
+      ],
+      "path": "episodes/dm/G5.md",
+      "status": "draft"
+    },
+    {
+      "id": "G6",
+      "start": "1990-08",
+      "region": "dm",
+      "country": "US",
+      "title": "Война в Заливе: нефть",
+      "factors": [
+        "commodity.oil",
+        "equity.index"
+      ],
+      "data": [
+        "D3",
+        "D5"
+      ],
+      "path": "episodes/dm/G6.md",
+      "status": "draft"
+    },
+    {
+      "id": "G7",
+      "start": "1991-09",
+      "region": "dm",
+      "country": "SE",
+      "title": "Скандинавия: банковский кризис",
+      "factors": [
+        "bank.solvency",
+        "housing.prices",
+        "rate.policy"
+      ],
+      "data": [
+        "D3",
+        "D5"
+      ],
+      "path": "episodes/dm/G7.md",
+      "status": "draft"
+    },
+    {
+      "id": "G8",
+      "start": "1992-09",
+      "region": "dm",
+      "country": "GB",
+      "title": "Кризис ERM",
+      "factors": [
+        "fx",
+        "rate.policy"
+      ],
+      "data": [
+        "D3",
+        "D5"
+      ],
+      "path": "episodes/dm/G8.md",
+      "status": "draft"
+    },
+    {
+      "id": "G9",
+      "start": "1994-02",
+      "region": "dm",
+      "country": "US",
+      "title": "Обвал облигаций США",
+      "factors": [
+        "rate.policy",
+        "rate.sovereign"
+      ],
+      "data": [
+        "D3",
+        "D5"
+      ],
+      "path": "episodes/dm/G9.md",
+      "status": "draft"
+    },
+    {
+      "id": "G10",
+      "start": "1998-08",
+      "region": "dm",
+      "country": "US",
+      "title": "LTCM и бегство в качество",
+      "factors": [
+        "spread.credit",
+        "volatility",
+        "bank.liquidity"
+      ],
+      "data": [
+        "D3",
+        "D5"
+      ],
+      "path": "episodes/dm/G10.md",
+      "status": "draft"
+    },
+    {
+      "id": "G11",
+      "start": "2000-03",
+      "region": "dm",
+      "country": "US",
+      "title": "Доткомы",
+      "factors": [
+        "equity.index"
+      ],
+      "data": [
+        "D3",
+        "D5"
+      ],
+      "path": "episodes/dm/G11.md",
+      "status": "draft"
+    },
+    {
+      "id": "G12",
+      "start": "2001-09",
+      "region": "dm",
+      "country": "US",
+      "title": "11 сентября",
+      "factors": [
+        "equity.index",
+        "rate.policy",
+        "volatility"
+      ],
+      "data": [
+        "D3",
+        "D5"
+      ],
+      "path": "episodes/dm/G12.md",
+      "status": "draft"
+    },
+    {
+      "id": "G13",
+      "start": "2002-07",
+      "region": "dm",
+      "country": "US",
+      "title": "Корпоративные скандалы и спреды",
+      "factors": [
+        "spread.credit",
+        "equity.index"
+      ],
+      "data": [
+        "D3",
+        "D5"
+      ],
+      "path": "episodes/dm/G13.md",
+      "status": "draft"
+    },
+    {
+      "id": "G14",
+      "start": "2005-05",
+      "region": "dm",
+      "country": "US",
+      "title": "Даунгрейд GM и Ford",
+      "factors": [
+        "spread.credit"
+      ],
+      "data": [
+        "D3",
+        "D5"
+      ],
+      "path": "episodes/dm/G14.md",
+      "status": "draft"
+    },
+    {
+      "id": "G15",
+      "start": "2007-02",
+      "region": "dm",
+      "country": "US",
+      "title": "Начало ипотечного кризиса США",
+      "factors": [
+        "housing.prices",
+        "spread.credit",
+        "housing.mortgage"
+      ],
+      "data": [
+        "D3",
+        "D5"
+      ],
+      "path": "episodes/dm/G15.md",
+      "status": "draft"
+    },
+    {
+      "id": "G16",
+      "start": "2007-08",
+      "region": "dm",
+      "country": "EU",
+      "title": "Заморозка фондов BNP Paribas",
+      "factors": [
+        "rate.money_market",
+        "bank.liquidity"
+      ],
+      "data": [
+        "D3",
+        "D5"
+      ],
+      "path": "episodes/dm/G16.md",
+      "status": "draft"
+    },
+    {
+      "id": "G17",
+      "start": "2008-03",
+      "region": "dm",
+      "country": "US",
+      "title": "Bear Stearns",
+      "factors": [
+        "spread.credit",
+        "bank.liquidity"
+      ],
+      "data": [
+        "D3",
+        "D5"
+      ],
+      "path": "episodes/dm/G17.md",
+      "status": "draft"
+    },
+    {
+      "id": "G18",
+      "start": "2008-07",
+      "region": "dm",
+      "country": "US",
+      "title": "Пик и обвал нефти",
+      "factors": [
+        "commodity.oil"
+      ],
+      "data": [
+        "D3",
+        "D5"
+      ],
+      "path": "episodes/dm/G18.md",
+      "status": "draft"
+    },
+    {
+      "id": "G19",
+      "start": "2008-09",
+      "region": "dm",
+      "country": "US",
+      "title": "Lehman",
+      "factors": [
+        "spread.credit",
+        "equity.index",
+        "bank.liquidity",
+        "volatility",
+        "rate.money_market"
+      ],
+      "data": [
+        "D3",
+        "D5"
+      ],
+      "path": "episodes/dm/G19.md",
+      "status": "draft"
+    },
+    {
+      "id": "G20",
+      "start": "2010-05",
+      "region": "dm",
+      "country": "GR",
+      "title": "Греция и flash crash",
+      "factors": [
+        "spread.sovereign",
+        "equity.index",
+        "volatility"
+      ],
+      "data": [
+        "D3",
+        "D5"
+      ],
+      "path": "episodes/dm/G20.md",
+      "status": "draft"
+    },
+    {
+      "id": "G21",
+      "start": "2010-11",
+      "region": "dm",
+      "country": "IE",
+      "title": "Ирландия: банки и госдолг",
+      "factors": [
+        "bank.solvency",
+        "spread.sovereign"
+      ],
+      "data": [
+        "D3",
+        "D5"
+      ],
+      "path": "episodes/dm/G21.md",
+      "status": "draft"
+    },
+    {
+      "id": "G22",
+      "start": "2011-03",
+      "region": "dm",
+      "country": "JP",
+      "title": "Землетрясение в Японии",
+      "factors": [
+        "fx",
+        "equity.index"
+      ],
+      "data": [
+        "D3",
+        "D5"
+      ],
+      "path": "episodes/dm/G22.md",
+      "status": "draft"
+    },
+    {
+      "id": "G23",
+      "start": "2011-08",
+      "region": "dm",
+      "country": "US",
+      "title": "Даунгрейд США",
+      "factors": [
+        "equity.index",
+        "rate.sovereign",
+        "volatility"
+      ],
+      "data": [
+        "D3",
+        "D5"
+      ],
+      "path": "episodes/dm/G23.md",
+      "status": "draft"
+    },
+    {
+      "id": "G24",
+      "start": "2011-11",
+      "region": "dm",
+      "country": "IT",
+      "title": "Италия: суверенные спреды",
+      "factors": [
+        "spread.sovereign"
+      ],
+      "data": [
+        "D3",
+        "D5"
+      ],
+      "path": "episodes/dm/G24.md",
+      "status": "draft"
+    },
+    {
+      "id": "G25",
+      "start": "2013-03",
+      "region": "dm",
+      "country": "CY",
+      "title": "Кипр: bail-in",
+      "factors": [
+        "bank.solvency",
+        "bank.liquidity"
+      ],
+      "data": [
+        "D3",
+        "D5"
+      ],
+      "path": "episodes/dm/G25.md",
+      "status": "draft"
+    },
+    {
+      "id": "G26",
+      "start": "2014-06",
+      "region": "dm",
+      "country": "US",
+      "title": "Обвал нефти 2014–2016",
+      "factors": [
+        "commodity.oil",
+        "spread.credit"
+      ],
+      "data": [
+        "D3",
+        "D5"
+      ],
+      "path": "episodes/dm/G26.md",
+      "status": "draft"
+    },
+    {
+      "id": "G27",
+      "start": "2014-10",
+      "region": "dm",
+      "country": "US",
+      "title": "Flash rally Treasuries",
+      "factors": [
+        "rate.sovereign",
+        "volatility"
+      ],
+      "data": [
+        "D3",
+        "D5"
+      ],
+      "path": "episodes/dm/G27.md",
+      "status": "draft"
+    },
+    {
+      "id": "G28",
+      "start": "2015-01",
+      "region": "dm",
+      "country": "CH",
+      "title": "Отмена привязки франка",
+      "factors": [
+        "fx"
+      ],
+      "data": [
+        "D3",
+        "D5"
+      ],
+      "path": "episodes/dm/G28.md",
+      "status": "draft"
+    },
+    {
+      "id": "G29",
+      "start": "2016-02",
+      "region": "dm",
+      "country": "US",
+      "title": "Нефть и спреды HY энергетики",
+      "factors": [
+        "commodity.oil",
+        "spread.credit"
+      ],
+      "data": [
+        "D3",
+        "D5"
+      ],
+      "path": "episodes/dm/G29.md",
+      "status": "draft"
+    },
+    {
+      "id": "G30",
+      "start": "2016-06",
+      "region": "dm",
+      "country": "GB",
+      "title": "Brexit",
+      "factors": [
+        "fx",
+        "equity.index"
+      ],
+      "data": [
+        "D3",
+        "D5"
+      ],
+      "path": "episodes/dm/G30.md",
+      "status": "draft"
+    },
+    {
+      "id": "G31",
+      "start": "2018-02",
+      "region": "dm",
+      "country": "US",
+      "title": "Volmageddon",
+      "factors": [
+        "volatility",
+        "equity.index"
+      ],
+      "data": [
+        "D3",
+        "D5"
+      ],
+      "path": "episodes/dm/G31.md",
+      "status": "draft"
+    },
+    {
+      "id": "G32",
+      "start": "2018-05",
+      "region": "dm",
+      "country": "IT",
+      "title": "Италия: политический кризис",
+      "factors": [
+        "spread.sovereign"
+      ],
+      "data": [
+        "D3",
+        "D5"
+      ],
+      "path": "episodes/dm/G32.md",
+      "status": "draft"
+    },
+    {
+      "id": "G33",
+      "start": "2018-12",
+      "region": "dm",
+      "country": "US",
+      "title": "Распродажа после решения ФРС",
+      "factors": [
+        "equity.index",
+        "spread.credit"
+      ],
+      "data": [
+        "D3",
+        "D5"
+      ],
+      "path": "episodes/dm/G33.md",
+      "status": "draft"
+    },
+    {
+      "id": "G34",
+      "start": "2019-09",
+      "region": "dm",
+      "country": "US",
+      "title": "Скачок ставок репо",
+      "factors": [
+        "rate.money_market",
+        "bank.liquidity"
+      ],
+      "data": [
+        "D3",
+        "D5"
+      ],
+      "path": "episodes/dm/G34.md",
+      "status": "draft"
+    },
+    {
+      "id": "G35",
+      "start": "2020-03",
+      "region": "dm",
+      "country": "US",
+      "title": "COVID: dash for cash",
+      "factors": [
+        "equity.index",
+        "spread.credit",
+        "rate.sovereign",
+        "bank.liquidity",
+        "volatility"
+      ],
+      "data": [
+        "D3",
+        "D5"
+      ],
+      "path": "episodes/dm/G35.md",
+      "status": "draft"
+    },
+    {
+      "id": "G36",
+      "start": "2020-04",
+      "region": "dm",
+      "country": "US",
+      "title": "Отрицательная цена WTI",
+      "factors": [
+        "commodity.oil"
+      ],
+      "data": [
+        "D3",
+        "D5"
+      ],
+      "path": "episodes/dm/G36.md",
+      "status": "draft"
+    },
+    {
+      "id": "G37",
+      "start": "2021-09",
+      "region": "dm",
+      "country": "EU",
+      "title": "Газ в Европе",
+      "factors": [
+        "commodity.gas",
+        "inflation"
+      ],
+      "data": [
+        "D3",
+        "D5"
+      ],
+      "path": "episodes/dm/G37.md",
+      "status": "draft"
+    },
+    {
+      "id": "G38",
+      "start": "2022-03",
+      "region": "dm",
+      "country": "US",
+      "title": "Начало цикла ФРС",
+      "factors": [
+        "rate.policy",
+        "rate.sovereign"
+      ],
+      "data": [
+        "D3",
+        "D5"
+      ],
+      "path": "episodes/dm/G38.md",
+      "status": "draft"
+    },
+    {
+      "id": "G39",
+      "start": "2022-03",
+      "region": "dm",
+      "country": "GB",
+      "title": "Никель на LME",
+      "factors": [
+        "commodity.metals",
+        "bank.liquidity"
+      ],
+      "data": [
+        "D3",
+        "D5"
+      ],
+      "path": "episodes/dm/G39.md",
+      "status": "draft"
+    },
+    {
+      "id": "G40",
+      "start": "2022-09",
+      "region": "dm",
+      "country": "GB",
+      "title": "Кризис гилтов (LDI)",
+      "factors": [
+        "rate.sovereign",
+        "bank.liquidity"
+      ],
+      "data": [
+        "D3",
+        "D5"
+      ],
+      "path": "episodes/dm/G40.md",
+      "status": "draft"
+    },
+    {
+      "id": "G41",
+      "start": "2023-03",
+      "region": "dm",
+      "country": "US",
+      "title": "SVB и Credit Suisse",
+      "factors": [
+        "bank.solvency",
+        "rate.sovereign",
+        "bank.liquidity"
+      ],
+      "data": [
+        "D3",
+        "D5"
+      ],
+      "path": "episodes/dm/G41.md",
+      "status": "draft"
+    },
+    {
+      "id": "G42",
+      "start": "2024-08",
+      "region": "dm",
+      "country": "JP",
+      "title": "Разворот carry trade в иене",
+      "factors": [
+        "fx",
+        "equity.index",
+        "volatility"
+      ],
+      "data": [
+        "D3",
+        "D5"
+      ],
+      "path": "episodes/dm/G42.md",
+      "status": "draft"
+    },
+    {
+      "id": "G43",
+      "start": "2025-04",
+      "region": "dm",
+      "country": "US",
+      "title": "Пошлины США",
+      "factors": [
+        "equity.index",
+        "volatility",
+        "rate.sovereign"
+      ],
+      "data": [
+        "D3",
+        "D5"
+      ],
+      "path": "episodes/dm/G43.md",
+      "status": "draft"
+    }
+  ]
+}

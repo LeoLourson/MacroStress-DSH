@@ -2,7 +2,7 @@
 
 ## MCP-инструменты
 
-Сервер `macrostress` (`src/mst/mcp.py`) даёт три инструмента. Ошибка в аргументах
+Сервер `macrostress` (`src/mst/mcp.py`) даёт четыре инструмента. Ошибка в аргументах
 возвращается как ошибка вызова с текстом, где перечислены допустимые значения.
 Инструмент, который запускает задачу, возвращает `{"job": <id>, "argv": [...]}` сразу,
 не дожидаясь её конца.
@@ -27,6 +27,19 @@
 | `update` | `quantity` | Задача на ресурсе `series`: каталог величины находит объекты, затем загружаются их ряды (`python -m mst.drivers update`) |
 
 `ids` и `quantity` вместе не принимаются.
+
+### `corpus`
+
+Корень корпуса — `<workspace>/corpus`. `search` и `get` читают индекс и сети не требуют.
+
+| `action` | Аргументы | Результат |
+|---|---|---|
+| `search` | `query`, `as_of`, `kind`, `region`, `factors`, `k` (8) | Лучшие фрагменты, видимые на `as_of`: `chunk_id`, документ, путь заголовков, страницы, текст |
+| `get` | `id` — `chunk_id`, `as_of` | Один фрагмент; вышедший позже `as_of` — ошибка с датой публикации |
+| `list` | — | Что в манифесте: источники и их файлы (адрес, скачан, переведён), эпизоды, статусы |
+| `add` | `key`, `file`, `url` | Регистрирует скачанный руками файл в `raw/` и `downloads.json`, как `fetch` |
+| `index` | — | Задача на `corpus`: `python -m mst.corpus index` |
+| `fetch` | `ids` (ключи документов) | Задача на `corpus`: `python -m mst.corpus fetch` |
 
 ### `model`
 
@@ -63,10 +76,15 @@ python -m mst.drivers check --macro SHA256 --store DIR --models DIR --drivers FI
 
 # сервер
 python -m mst.mcp --workspace DIR
+
+# корпус
+python -m mst.corpus index --corpus DIR
+python -m mst.corpus search QUERY --as-of DAY --corpus DIR
 ```
 
 Здесь `--store` — `<workspace>/series`, `--models` — `<workspace>/models`, `--drivers` —
-`<workspace>/drivers/catalog.json`, `--corpus` — `<workspace>/corpus/manifest.json`.
+`<workspace>/drivers/catalog.json`, `--corpus` — `<workspace>/corpus/manifest.json` (у
+`mst.corpus` — корень `<workspace>/corpus`).
 
 `backtest` печатает покрытие интервала $[P_5, P_{95}]$ по эпизодам и по переменным;
 каждый файл `--signs` — альтернативная таблица знаков в формате `[[shocks]]` реестра, и

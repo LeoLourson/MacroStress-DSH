@@ -17,7 +17,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 Kind = Literal["methodology", "scenario_set", "transmission", "episode"]
 Region = Literal["ru", "em", "dm"]
 SourceStatus = Literal["planned", "raw", "ready"]
-"""``planned``: no text yet. ``raw``: text extracted from the original by ``msa-corpus convert``
+"""``planned``: no text yet. ``raw``: text extracted from the original by ``mst.corpus convert``
 and not proofread; the index takes it. ``ready``: proofread, every edition present."""
 EpisodeStatus = Literal["planned", "draft", "ready"]
 """``draft``: the card exists with its movements table; the chronology is not written yet."""

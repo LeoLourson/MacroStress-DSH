@@ -12,6 +12,14 @@ dependencies = [
   "fastmcp==2.14.7",
   # Excel tables of the Bank of Russia and Rosstat archives.
   "openpyxl==3.1.5",
+  # Corpus: PDF text extraction, the YAML header of a document, BM25 stems.
+  "pypdf==6.21.4",
+  "pyyaml==6.0.3",
+  "snowballstemmer==3.1.1",
+  # Corpus search vectors: multilingual-e5-small on the CPU through ONNX Runtime.
+  "onnxruntime==1.31.1",
+  "tokenizers==0.23.2",
+  "huggingface-hub==1.33.0",
 ]
 
 [dependency-groups]
