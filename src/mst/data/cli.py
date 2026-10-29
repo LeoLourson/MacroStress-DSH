@@ -53,13 +53,14 @@ def main(argv: list[str] | None = None) -> int:
     run.add_argument("--workspace", required=True, type=Path)
     args = parser.parse_args(argv)
 
-    sources = load_sources()
+    workspace = Workspace(args.workspace)
+    sources = load_sources(extra=workspace.sources)
     unknown = sorted(set(args.series) - set(sources))
     if unknown:
         parser.error(f"no source for {', '.join(unknown)}")
     chosen = {series: sources[series] for series in args.series} if args.series else sources
 
-    store = SeriesStore(Workspace(args.workspace).series)
+    store = SeriesStore(workspace.series)
     with client() as http:
         outcome = update(store, chosen, http, fetched_on=date.today(), start=START)
     for series, added in outcome.added.items():

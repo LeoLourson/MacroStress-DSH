@@ -52,6 +52,11 @@ class Workspace:
         return self.root / "workspace.json"
 
     @property
+    def sources(self) -> Path:
+        """Series sources added from the workspace, read on top of the shipped ``sources.toml``."""
+        return self.root / "sources.toml"
+
+    @property
     def series(self) -> Path:
         return self.root / "series"
 
