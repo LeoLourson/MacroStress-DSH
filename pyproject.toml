@@ -70,7 +70,7 @@ module-name = "mst"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-pythonpath = ["src"]
+pythonpath = ["."]
 addopts = "-ra"
 markers = [
   "slow: estimates the BVAR and takes minutes",
