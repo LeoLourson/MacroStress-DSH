@@ -185,7 +185,7 @@ def _alive(pid: int | None) -> bool:
             return False
         except PermissionError:
             return True
-        return True
+        return not _zombie(pid)
     kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
     handle = kernel32.OpenProcess(QUERY_LIMITED_INFORMATION, False, pid)
     if not handle:
@@ -197,6 +197,25 @@ def _alive(pid: int | None) -> bool:
         return code.value == STILL_ACTIVE
     finally:
         kernel32.CloseHandle(handle)
+
+
+def _zombie(pid: int) -> bool:
+    """Whether the process is a finished child that nobody has reaped yet.
+
+    Such a process answers ``kill(pid, 0)`` although it runs nothing: it keeps the job
+    marked as running and its resource locked. Reaping it here is the point, and a child
+    that belongs to another process is told apart through ``/proc``.
+    """
+    try:
+        if os.waitpid(pid, os.WNOHANG)[0] == pid:
+            return True
+    except ChildProcessError:
+        pass
+    try:
+        stat = Path(f"/proc/{pid}/stat").read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return False
+    return stat.rsplit(")", 1)[-1].split()[:1] == ["Z"]
 
 
 def _wait_gone(pid: int, timeout: float = 10.0) -> None:
