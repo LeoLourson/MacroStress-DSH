@@ -18,6 +18,7 @@ on any finding. ``demo-run`` calculates the demo cases and prints P5/P50/P95 per
 
 import argparse
 import importlib.util
+import json
 import keyword
 import re
 import sys
@@ -39,18 +40,33 @@ FILES = {
     "README.md.tmpl": "README.md",
 }
 _ID = re.compile(r"^[a-z][a-z0-9_]*$")
+_PLACEHOLDER = re.compile(r"\{\{([a-z_]+)\}\}")
 
 
 def _template(name: str) -> str:
     return (TEMPLATES / name).read_text(encoding="utf-8")
 
 
+def _literal(value: str) -> str:
+    """``value`` as the inside of a double-quoted Python string literal."""
+    return json.dumps(value, ensure_ascii=False)[1:-1]
+
+
 def _render(text: str, values: dict) -> str:
-    for key, value in values.items():
-        text = text.replace("{{" + key + "}}", value)
-    if "{{" in text:
-        raise ValueError(f"unfilled placeholder in template: {text[text.index('{{') :][:40]}")
-    return text
+    """Replace the template placeholders in one pass: user values are never re-scanned."""
+    missing = []
+
+    def replace(match):
+        key = match.group(1)
+        if key not in values:
+            missing.append(key)
+            return match.group(0)
+        return values[key]
+
+    rendered = _PLACEHOLDER.sub(replace, text)
+    if missing:
+        raise ValueError(f"unknown placeholder {missing[0]!r} in the template")
+    return rendered
 
 
 def new(plugin_id: str, *, type_id: str | None = None, label: str | None = None, dest=None) -> Path:
@@ -63,27 +79,37 @@ def new(plugin_id: str, *, type_id: str | None = None, label: str | None = None,
     type_id = type_id or f"{plugin_id}_position"
     if not _ID.match(type_id):
         raise SystemExit(f"type id must be lowercase letters, digits and _, got {type_id!r}")
+    label = label or plugin_id
     values = {
         "plugin_id": plugin_id,
         "type_id": type_id,
-        "label": label or plugin_id,
+        "label": _literal(label),
+        "label_text": label,
         "class": "".join(part.title() for part in plugin_id.split("_")) + "Model",
-        "description": "Позиция, стоимость которой следует пути одного драйвера.",
+        "description": _literal("Позиция, стоимость которой следует пути одного драйвера."),
+    }
+    # Render everything before creating the directory: a bad template leaves no half package.
+    rendered = {
+        name.format(plugin_id=plugin_id): _render(_template(template), values)
+        for template, name in FILES.items()
     }
     target.mkdir(parents=True)
-    for template, name in FILES.items():
-        path = target / name.format(plugin_id=plugin_id)
+    for name, text in rendered.items():
+        path = target / name
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(_render(_template(template), values), encoding="utf-8")
+        path.write_text(text, encoding="utf-8")
     return target
 
 
 def load(path) -> Plugin:
     """The ``plugin`` of a package outside ``mst.plugins`` (a plugin being developed)."""
     path = Path(path).resolve()
+    init = path / "__init__.py"
+    if not init.is_file():
+        raise SystemExit(f"{path} is not a Python package: no __init__.py")
     name = f"mst_plugin_{path.name}"
     spec = importlib.util.spec_from_file_location(
-        name, path / "__init__.py", submodule_search_locations=[str(path)]
+        name, init, submodule_search_locations=[str(path)]
     )
     if spec is None or spec.loader is None:
         raise SystemExit(f"{path} is not a Python package")
@@ -93,7 +119,12 @@ def load(path) -> Plugin:
     for key in [key for key in sys.modules if key == name or key.startswith(name + ".")]:
         del sys.modules[key]
     sys.modules[name] = module
-    spec.loader.exec_module(module)
+    try:
+        spec.loader.exec_module(module)
+    except SystemExit:
+        raise
+    except Exception as error:  # noqa: BLE001 - a broken package must name itself
+        raise SystemExit(f"{path} cannot be imported: {type(error).__name__}: {error}") from None
     declared = getattr(module, "plugin", None)
     if not isinstance(declared, Plugin):
         raise SystemExit(f"{path} exports no `plugin = Plugin(...)` declaration")
@@ -113,7 +144,10 @@ def check(plugin_id: str | None = None, *, path=None) -> list[str]:
     if plugin_id is not None and path is not None:
         raise SystemExit("check: give a plugin id or --path, not both")
     if path is not None:
-        plugin = load(path)
+        try:
+            plugin = load(path)
+        except SystemExit as error:
+            return [str(error)]
         problems = _problems(plugin)
         if problems:
             return problems
@@ -127,7 +161,10 @@ def check(plugin_id: str | None = None, *, path=None) -> list[str]:
             return error.problems
         return []
     if plugin_id is not None:
-        registry = plugins.registry()
+        try:
+            registry = plugins.registry()
+        except plugins.PluginError as error:
+            return error.problems
         if plugin_id not in registry.plugins:
             raise SystemExit(
                 f"no installed plugin {plugin_id!r}; known: {sorted(registry.plugins)}"
@@ -160,7 +197,10 @@ def _chosen(plugin_id: str | None, path) -> tuple[Plugin, plugins.Registry]:
         return plugin, registry
     if plugin_id is None:
         raise SystemExit("demo-run needs a plugin id or --path")
-    registry = plugins.registry()
+    try:
+        registry = plugins.registry()
+    except plugins.PluginError as error:
+        raise SystemExit("\n".join(error.problems)) from None
     if plugin_id not in registry.plugins:
         raise SystemExit(
             f"no installed plugin {plugin_id!r}; known: {sorted(registry.plugins)}"
@@ -231,7 +271,7 @@ def main(argv=None) -> int:
             args.plugin_id, type_id=args.type_id, label=args.label, dest=args.dest
         )
         print(f"created {target}")
-        where = f" --path {target}" if args.dest else f" {args.plugin_id}"
+        where = f' --path "{target}"' if args.dest else f" {args.plugin_id}"
         print(f"next: python -m mst.plugin check{where}")
         return 0
     if args.command == "check":

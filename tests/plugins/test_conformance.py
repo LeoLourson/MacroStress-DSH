@@ -20,6 +20,23 @@ def test_a_plugin_without_a_model_is_rejected():
     assert any("no calculation model" in str(finding) for finding in findings)
 
 
+def test_a_plugin_without_a_demo_is_rejected():
+    findings = check_plugin(fakes.plugin(demo=()))
+    assert any("demo case" in str(finding) for finding in findings)
+
+
+def test_a_demo_driver_must_exist_in_the_paths():
+    case = replace(fakes.CASE, drivers={"gold_price": "gold_price:missing"})
+    findings = check_plugin(fakes.plugin(demo=(case,)))
+    assert any("do not carry" in str(finding) for finding in findings)
+
+
+def test_a_demo_without_paths_is_a_finding():
+    case = replace(fakes.CASE, paths=None)
+    findings = check_plugin(fakes.plugin(demo=(case,)))
+    assert any("demo case" in str(finding) for finding in findings)
+
+
 def test_a_required_metric_must_be_declared():
     class Undeclared(fakes.DemoModel):
         required_metrics = ("gold.pnl",)
@@ -35,6 +52,21 @@ def test_a_demo_that_cannot_complete_is_a_finding():
 
     findings = check_plugin(fakes.plugin(models=(Broken(),)))
     assert any("boom" in str(finding) for finding in findings)
+
+
+def test_a_demo_that_changes_between_calls_is_a_finding():
+    class Changing(fakes.DemoModel):
+        calls = 0
+
+        def calculate(self, prepared, context):
+            Changing.calls += 1
+            result = super().calculate(prepared, context)
+            return result.model_copy(
+                update={"value_change": [float(Changing.calls)] * len(result.value_change)}
+            )
+
+    findings = check_plugin(fakes.plugin(models=(Changing(),)))
+    assert any(finding.check == "determinism" for finding in findings)
 
 
 def test_every_required_driver_must_be_mapped_to_a_demo_path():
