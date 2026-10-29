@@ -1,0 +1,41 @@
+[project]
+name = "macrostress-dsh"
+version = "0.1.0"
+description = "MacroStress as a DSH plugin: series, macro model, drivers, corpus, scenarios, portfolios, runs"
+readme = "README.md"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+  "numpy==2.4.4",
+  "scipy==1.17.1",
+  "pydantic==2.12.5",
+  "httpx==0.28.1",
+  "fastmcp==2.14.7",
+  # Excel tables of the Bank of Russia and Rosstat archives.
+  "openpyxl==3.1.5",
+]
+
+[dependency-groups]
+dev = [
+  "pytest==8.4.2",
+  "ruff==0.12.12",
+]
+
+[build-system]
+requires = ["uv_build>=0.12.13,<0.13.0"]
+build-backend = "uv_build"
+
+# The package is mst, not macrostress_dsh: the name in the layout of the plan.
+[tool.uv.build-backend]
+module-name = "mst"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+addopts = "-ra"
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
