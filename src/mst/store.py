@@ -56,6 +56,11 @@ class Workspace:
         return self.root / "series"
 
     @property
+    def drivers(self) -> Path:
+        """The catalog of drivers: the objects and quantities every source lists."""
+        return self.root / "drivers"
+
+    @property
     def corpus(self) -> Path:
         return self.root / "corpus"
 

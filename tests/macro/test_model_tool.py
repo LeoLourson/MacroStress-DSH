@@ -62,7 +62,7 @@ def test_estimate_and_backtest_become_tasks_on_the_models_resource(tmp_path):
 def test_another_kind_is_refused(tmp_path):
     ws = store.Workspace(tmp_path)
     try:
-        call(ws, "model", {"kind": "satellites", "action": "list"})
+        call(ws, "model", {"kind": "corpus", "action": "list"})
     except Exception as error:
         assert "unknown kind" in str(error)
     else:

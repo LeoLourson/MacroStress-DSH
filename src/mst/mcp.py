@@ -11,6 +11,7 @@ from . import jobs as tasks
 from . import store
 from .data import sources
 from .data.store import SeriesStore
+from .drivers import version as satellite_version
 from .macro import version as macro_version
 
 
@@ -40,8 +41,13 @@ def build(ws: store.Workspace) -> FastMCP:
         text: str | None = None,
         entry: dict[str, Any] | None = None,
         ids: list[str] | None = None,
+        quantity: str | None = None,
     ) -> dict:
-        """Stored series. Actions: search, get, add, update."""
+        """Stored series. Actions: search, get, add, update.
+
+        ``update`` fetches the named ``ids``; with ``quantity`` it instead discovers the
+        objects of that driver quantity and fetches their series.
+        """
         if action == "search":
             return {"sources": sources.search(_need(text, "text"))}
         if action == "get":
@@ -49,6 +55,10 @@ def build(ws: store.Workspace) -> FastMCP:
         if action == "add":
             return {"id": sources.add(_need(entry, "entry"))}
         if action == "update":
+            if quantity:
+                if ids:
+                    raise ValueError("series update: give ids or a quantity, not both")
+                return _update_drivers(ws, quantity)
             return _update(ws, ids or [])
         raise ValueError(f"series: unknown action {action!r}, try search, get, add, update")
 
@@ -60,9 +70,23 @@ def build(ws: store.Workspace) -> FastMCP:
         as_of: str | None = None,
         only: list[str] | None = None,
     ) -> dict:
-        """Model versions. kind: macro. Actions: list, describe, estimate, backtest."""
+        """Model versions. kind: macro, satellites. Actions: list, describe, estimate, backtest.
+
+        ``version`` names the version: the macro one to describe or backtest, or, for
+        ``satellites``, the macro version whose panel the satellites are estimated on.
+        """
+        if kind == "satellites":
+            if action == "list":
+                return {"versions": satellite_version.catalogue(ws.models)}
+            if action == "describe":
+                return satellite_version.describe(ws.models, _need(version, "version"))
+            if action == "estimate":
+                return _start(ws, "models", _satellites_argv(ws, _need(version, "version")))
+            raise ValueError(
+                f"model: unknown action {action!r} for satellites, try list, describe, estimate"
+            )
         if kind != "macro":
-            raise ValueError(f"model: unknown kind {kind!r}, try macro")
+            raise ValueError(f"model: unknown kind {kind!r}, try macro, satellites")
         if action == "list":
             return {"versions": macro_version.catalogue(ws.models)}
         if action == "describe":
@@ -108,6 +132,41 @@ def _need(value: Any, name: str) -> Any:
     if value is None or value == "":
         raise ValueError(f"{name} is required for this action")
     return value
+
+
+def _satellites_argv(ws: store.Workspace, macro: str) -> list[str]:
+    """The command line of ``python -m mst.drivers estimate`` for this workspace."""
+    return [
+        "-m",
+        "mst.drivers",
+        "estimate",
+        "--macro",
+        macro,
+        "--store",
+        str(ws.series),
+        "--models",
+        str(ws.models),
+        "--drivers",
+        str(ws.drivers / "catalog.json"),
+    ]
+
+
+def _update_drivers(ws: store.Workspace, quantity: str) -> dict:
+    """Discover the objects of ``quantity`` and fetch their series, as a task on series."""
+    return _start(
+        ws,
+        "series",
+        [
+            "-m",
+            "mst.drivers",
+            "update",
+            quantity,
+            "--store",
+            str(ws.series),
+            "--drivers",
+            str(ws.drivers / "catalog.json"),
+        ],
+    )
 
 
 def _rows(ws: store.Workspace, series_id: str, as_of: str | None) -> dict:
