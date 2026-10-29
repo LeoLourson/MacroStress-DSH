@@ -60,6 +60,10 @@ class Workspace:
         return self.root / "corpus"
 
     @property
+    def models(self) -> Path:
+        return self.root / "models"
+
+    @property
     def macro_models(self) -> Path:
         return self.root / "models" / "macro"
 

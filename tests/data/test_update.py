@@ -3,8 +3,10 @@ from datetime import date
 import httpx
 
 from mst.data.release import Release
+from mst.data.sources import load_sources
 from mst.data.store import SeriesStore
 from mst.data.update import update
+from mst.macro.registry import load_registry
 
 
 class Fixed(Release):
@@ -38,3 +40,8 @@ def test_update_stores_new_rows_once_and_reports_failures_per_series(tmp_path):
         store, sources, httpx.Client(), fetched_on=date(2012, 3, 2), start=date(2012, 1, 1)
     )
     assert again.added == {"gl.vix": 0}
+
+
+def test_every_source_feeds_a_registered_variable():
+    variables = {variable.id for variable in load_registry().variables}
+    assert set(load_sources()) <= variables
