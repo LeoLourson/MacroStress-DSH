@@ -16,6 +16,7 @@ import httpx
 
 from mst.data.store import SeriesStore
 from mst.data.update import update as update_series
+from mst.store import write_json
 
 from .objects import series_id
 from .registry import Registry
@@ -76,12 +77,6 @@ def update(
             "sources": {o: found.drivers[o].model_dump(mode="json") for o in kept},
         }
         outcome.drivers[quantity.id] = len(kept)
-    catalog.parent.mkdir(parents=True, exist_ok=True)
-    text = json.dumps(
-        {"updated": fetched_on.isoformat(), "quantities": quantities},
-        ensure_ascii=False,
-        indent=1,
-        sort_keys=True,
-    )
-    catalog.write_text(text + "\n", encoding="utf-8")
+    # Every estimate reads this file, so a crash must leave the old one or the new one.
+    write_json(catalog, {"updated": fetched_on.isoformat(), "quantities": quantities})
     return outcome

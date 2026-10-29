@@ -14,6 +14,8 @@ realized values known on ``--as-of``, once with the sign table of the registry a
 each ``--signs`` file (a TOML file of ``[[shocks]]`` in the registry format). Episode start
 months come from the corpus manifest at ``--corpus``. It prints the coverage of ``[P5, P95]`` by
 episode and by variable; ``--details`` also writes every month's quantiles and realized value.
+It exits with 1 when an episode was not checked: missing from the manifest, too short a history
+or an infeasible scenario. Episode versions go to ``<models>/backtest/``, not ``<models>/macro/``.
 """
 
 import argparse
@@ -95,6 +97,10 @@ def backtest(args, spec, registry: Registry) -> int:
     for check in plan.episodes:
         if args.only and check.id not in args.only:
             continue
+        if check.id not in starts:
+            problems.append(f"{check.id}: not in the corpus manifest {args.corpus}")
+            rows.append([check.id, "-", "-", "", "", *["not estimated"] * len(tables)])
+            continue
         try:
             case, panel, history = prepare(
                 check, starts[check.id], plan, store, registry, spec, args.as_of
@@ -168,7 +174,7 @@ def backtest(args, spec, registry: Registry) -> int:
         print(problem)
     if args.details:
         args.details.write_text(json.dumps(details, ensure_ascii=False), encoding="utf-8")
-    return 0
+    return 1 if problems else 0
 
 
 def _share(hits: int, count: int) -> str:

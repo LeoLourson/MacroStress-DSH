@@ -3,8 +3,7 @@
 A row ``month, value, published, approximate`` says that the value of ``month`` became known
 on ``published``. A revision adds a row and keeps the old one, so ``as_of(day)`` recovers what
 was known on that day. ``approximate`` marks a row whose publication date is estimated from
-the release lag rather than observed (docs/scenario-implementation-plan.md, section 4,
-decision 2).
+the release lag rather than observed.
 """
 
 import calendar
@@ -30,6 +29,12 @@ class Observation:
 
 def month_end(month: date) -> date:
     return month.replace(day=calendar.monthrange(month.year, month.month)[1])
+
+
+def shift(month: date, k: int) -> date:
+    """The first day of the month ``k`` months after the month of ``month``; ``k`` may be < 0."""
+    index = month.year * 12 + month.month - 1 + k
+    return date(index // 12, index % 12 + 1, 1)
 
 
 def new_versions(

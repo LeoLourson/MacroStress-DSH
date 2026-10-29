@@ -8,6 +8,7 @@ import pytest
 from fastmcp import Client
 
 from mst import importer, jobs, store
+from mst.data import sources
 from mst.data.store import Observation, SeriesStore
 from mst.mcp import build
 
@@ -50,6 +51,19 @@ def test_search_reaches_the_shipped_sources(tmp_path):
     ws = store.Workspace(tmp_path)
     answer = call(ws, "series", {"action": "search", "text": "moex_index"}).data
     assert answer["sources"] == [{"id": "ru.imoex", "loader": "moex_index"}]
+
+
+def test_add_writes_to_the_workspace_and_leaves_the_shipped_file(tmp_path):
+    ws = store.Workspace(tmp_path)
+    shipped = sources.SOURCES_PATH.read_bytes()
+    entry = {"id": "gl.test", "loader": "fred", "series_id": "X", "lag_days": 1, "revised": False}
+
+    assert call(ws, "series", {"action": "add", "entry": entry}).data == {"id": "gl.test"}
+
+    assert sources.SOURCES_PATH.read_bytes() == shipped
+    assert "gl.test" in sources.load_sources(extra=ws.sources)
+    found = call(ws, "series", {"action": "search", "text": "gl.test"}).data
+    assert found["sources"] == [{"id": "gl.test", "loader": "fred"}]
 
 
 def test_add_without_an_entry_is_refused(tmp_path):

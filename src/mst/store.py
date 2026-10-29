@@ -7,6 +7,8 @@ import tempfile
 from pathlib import Path
 from typing import Any
 
+from . import versions
+
 
 def sha256_of(obj: Any) -> str:
     """The hash of an object: sha256 of its canonical JSON.
@@ -50,6 +52,11 @@ class Workspace:
     @property
     def state_file(self) -> Path:
         return self.root / "workspace.json"
+
+    @property
+    def sources(self) -> Path:
+        """Series sources added from the workspace, read on top of the shipped ``sources.toml``."""
+        return self.root / "sources.toml"
 
     @property
     def series(self) -> Path:
@@ -115,11 +122,9 @@ def write_state(ws: Workspace) -> dict[str, Any]:
 
 
 def _latest(directory: Path) -> str | None:
-    """The newest entry of ``directory`` by modification time, or None when it is empty."""
-    if not directory.is_dir():
-        return None
-    entries = sorted(directory.iterdir(), key=lambda entry: entry.stat().st_mtime)
-    return entries[-1].name if entries else None
+    """The newest finished version of ``directory``, or None when there is none."""
+    found = versions.folders(directory)
+    return found[0].name if found else None
 
 
 def _count(directory: Path, suffix: str = "") -> int:

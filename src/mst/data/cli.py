@@ -23,7 +23,7 @@ from .store import SeriesStore
 from .update import update
 
 START = date(2012, 1, 1)
-"""T0 of docs/scenario-implementation-plan.md, section 4, decision 1."""
+"""T0, the first month of history of the macro model (docs/scenario-formalization.md, 4.1)."""
 
 ROOTS_PATH = SOURCES_PATH.with_name("mintsifry-roots.pem")
 """Roots and sub CAs of the Russian Trusted Root CA (Mintsifry), which signs rosstat.gov.ru."""
@@ -53,13 +53,14 @@ def main(argv: list[str] | None = None) -> int:
     run.add_argument("--workspace", required=True, type=Path)
     args = parser.parse_args(argv)
 
-    sources = load_sources()
+    workspace = Workspace(args.workspace)
+    sources = load_sources(extra=workspace.sources)
     unknown = sorted(set(args.series) - set(sources))
     if unknown:
         parser.error(f"no source for {', '.join(unknown)}")
     chosen = {series: sources[series] for series in args.series} if args.series else sources
 
-    store = SeriesStore(Workspace(args.workspace).series)
+    store = SeriesStore(workspace.series)
     with client() as http:
         outcome = update(store, chosen, http, fetched_on=date.today(), start=START)
     for series, added in outcome.added.items():

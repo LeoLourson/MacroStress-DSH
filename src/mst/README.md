@@ -8,8 +8,9 @@
 | Модуль или пакет | Что делает |
 |---|---|
 | `mcp.py` | Сервер FastMCP с инструментами `jobs`, `series`, `model` ([../../docs/tools.md](../../docs/tools.md)); `python -m mst.mcp --workspace DIR` |
-| `jobs.py` | Задачи: дочерний процесс `python <argv>` с логом в `jobs/<id>/`, блокировка ресурса (`series`, `models`, `corpus`, `code`), отмена дерева процессов |
+| `jobs.py` | Задачи: дочерний процесс `python <argv>` под обёрткой `python -m mst.jobs`, которая пишет код выхода, с логом в `jobs/<id>/`, блокировка ресурса (`series`, `models`, `corpus`, `code`), отмена дерева процессов |
 | `store.py` | Каталоги workspace (`Workspace`), атомарная запись JSON, канонический хеш `sha256_of`, снимок `workspace.json` |
+| `versions.py` | Версии моделей на диске: хеш по метаданным и массивам, запись через черновик, чтение с проверкой хеша и имени, список без черновиков |
 | `contracts.py` | Базовый класс контрактов pydantic (`extra="forbid"`, без NaN и бесконечностей) и общие типы: идентификатор, хеш, горизонт, сид |
 | `importer.py` | Разовый перенос рядов старого проекта (`<old>/data/series/*.csv`) в workspace |
 | [data/](data/README.md) | Загрузка и хранение месячных рядов |

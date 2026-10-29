@@ -123,10 +123,16 @@ class Registry(Contract):
         return self
 
     def quantity(self, id_: str) -> Quantity:
-        return next(q for q in self.quantities if q.id == id_)
+        for item in self.quantities:
+            if item.id == id_:
+                return item
+        raise KeyError(id_)
 
     def object(self, id_: str) -> Object:
-        return next(o for o in self.objects if o.id == id_)
+        for item in self.objects:
+            if item.id == id_:
+                return item
+        raise KeyError(id_)
 
     def ancestors(self, id_: str) -> list[str]:
         """The objects above ``id_``, nearest first."""

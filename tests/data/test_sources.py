@@ -51,3 +51,18 @@ def test_a_taken_id_or_an_unknown_field_is_refused(tmp_path):
 def test_table_writes_dates_arrays_and_inline_tables():
     text = table("x", {"a": [date(2020, 1, 1)], "b": [{"k": 1}], "c": "строка", "d": True})
     assert text == '["x"]\na = [2020-01-01]\nb = [{ k = 1 }]\nc = "строка"\nd = true\n'
+
+
+def test_a_workspace_file_adds_to_the_shipped_sources_and_cannot_repeat_them(tmp_path):
+    shipped = tmp_path / "shipped.toml"
+    shipped.write_text(VIX, encoding="utf-8")
+    added = tmp_path / "workspace" / "sources.toml"
+    entry = {"id": "gl.oil", "loader": "fred", "series_id": "X", "lag_days": 1, "revised": False}
+
+    assert add(entry, added, base=shipped) == "gl.oil"
+
+    assert set(load_sources(shipped, extra=added)) == {"gl.vix", "gl.oil"}
+    assert [row["id"] for row in search("oil", shipped, extra=added)] == ["gl.oil"]
+    assert shipped.read_text(encoding="utf-8") == VIX
+    with pytest.raises(ValueError, match="already has a source"):
+        add({**entry, "id": "gl.vix"}, added, base=shipped)

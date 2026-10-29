@@ -1,7 +1,7 @@
-# The estimation specification of the macro model (docs/scenario-formalization.md, section 4;
-# docs/scenario-implementation-plan.md, stage 2). A model version stores this file as it was.
+# The estimation specification of the macro model (docs/scenario-formalization.md, section 4).
+# A model version stores this file as it was.
 
-# T0: the first month of history (plan, section 4, decision 1).
+# T0: the first month of history.
 start = 2012-01-01
 # p: months of the past each variable depends on.
 lags = 3

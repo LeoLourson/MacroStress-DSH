@@ -1,6 +1,7 @@
 """The state summary the prompt section and the jobs tool both read."""
 
 import json
+import os
 
 from mst import store
 
@@ -38,6 +39,12 @@ def test_state_counts_entries_and_names_the_newest_version(tmp_path):
     older.mkdir(parents=True)
     newer.mkdir(parents=True)
     (newer / "meta.json").write_text("{}", encoding="utf-8")
+    draft = ws.macro_models / ".draft-xyz"
+    draft.mkdir()
+    (draft / "meta.json").write_text("{}", encoding="utf-8")
+    # A version being written is newer than any finished one.
+    later = newer.stat().st_mtime + 60
+    os.utime(draft, (later, later))
 
     snapshot = store.state(ws)
     assert snapshot["portfolios"] == 1

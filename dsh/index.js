@@ -3,8 +3,10 @@
  * that describe how to work with it, and the system prompt section that tells every
  * agent which model versions a run would use.
  *
- * The workspace path is the one `cordis.patch.yml` passes to the server, so the
- * section and the tools always describe the same directory.
+ * `cordis.patch.yml` names the workspace once, as the YAML anchor `&workspace`, and
+ * passes it both to the server and to this plugin's config, so the section and the
+ * tools describe the same directory. Without a config the plugin falls back to
+ * `<repository>/workspace`.
  */
 
 import { readdirSync, readFileSync, statSync } from 'node:fs';

@@ -13,7 +13,7 @@ from datetime import date
 
 import numpy as np
 
-from mst.data.store import SeriesStore
+from mst.data.store import SeriesStore, shift
 
 from .registry import Registry
 
@@ -32,11 +32,6 @@ class Panel:
 def months_between(first: date, last: date) -> list[date]:
     count = (last.year - first.year) * 12 + last.month - first.month + 1
     return [shift(first, k) for k in range(count)]
-
-
-def shift(month: date, k: int) -> date:
-    index = month.year * 12 + month.month - 1 + k
-    return date(index // 12, index % 12 + 1, 1)
 
 
 def deseasonalize(y: np.ndarray, months: list[date]) -> np.ndarray:

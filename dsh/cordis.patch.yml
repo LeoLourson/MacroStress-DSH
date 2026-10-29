@@ -13,9 +13,12 @@
           - '-m'
           - 'mst.mcp'
           - '--workspace'
-          - 'C:\Users\LeoLeon\Documents\MacroStress\macrostress-dsh\workspace'
+          # The one place the workspace is named: the plugin below reads the same anchor.
+          - &workspace 'C:\Users\LeoLeon\Documents\MacroStress\macrostress-dsh\workspace'
         env:
           PYTHONUTF8: '1'
         failOnStartupError: false
     - id: dsh-macrostress
       name: 'dsh-macrostress'
+      config:
+        workspace: *workspace

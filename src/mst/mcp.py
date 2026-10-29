@@ -49,11 +49,11 @@ def build(ws: store.Workspace) -> FastMCP:
         objects of that driver quantity and fetches their series.
         """
         if action == "search":
-            return {"sources": sources.search(_need(text, "text"))}
+            return {"sources": sources.search(_need(text, "text"), extra=ws.sources)}
         if action == "get":
             return _rows(ws, _need(id, "id"), as_of)
         if action == "add":
-            return {"id": sources.add(_need(entry, "entry"))}
+            return {"id": sources.add(_need(entry, "entry"), ws.sources)}
         if action == "update":
             if quantity:
                 if ids:

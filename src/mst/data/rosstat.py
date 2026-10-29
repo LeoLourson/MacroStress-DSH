@@ -20,6 +20,7 @@ from openpyxl.utils.exceptions import InvalidFileException
 from pydantic import model_validator
 
 from .release import Release
+from .store import shift
 
 ROOT = "https://rosstat.gov.ru"
 MONTHS = {
@@ -115,17 +116,15 @@ def _month(cell) -> int | None:
 def chain(changes: dict[date, float], base: date) -> dict[date, float]:
     """Levels with 100 in ``base`` from percent changes to the previous month after it."""
     levels, month = {base: 100.0}, base
-    while (following := _next(month)) in changes:
+    while (following := shift(month, 1)) in changes:
         levels[following] = levels[month] * changes[following] / 100
         month = following
     gap = [later for later in changes if later > month]
     if gap:
-        raise ValueError(f"no change for {_next(month):%Y-%m} breaks the chain to {max(gap):%Y-%m}")
+        raise ValueError(
+            f"no change for {shift(month, 1):%Y-%m} breaks the chain to {max(gap):%Y-%m}"
+        )
     return levels
-
-
-def _next(month: date) -> date:
-    return date(month.year + month.month // 12, month.month % 12 + 1, 1)
 
 
 class Rosstat(Release):
