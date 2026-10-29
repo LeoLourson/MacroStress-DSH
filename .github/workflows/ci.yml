@@ -36,7 +36,7 @@ jobs:
           enable-cache: true
           python-version: ${{ matrix.python }}
       - run: uv sync --locked
-      - run: uv run pytest -q -m "not slow"
+      - run: uv run pytest -q -m "not slow" --timeout=180
 
   dsh-plugin:
     runs-on: ubuntu-latest
