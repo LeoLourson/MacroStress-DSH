@@ -1,0 +1,228 @@
+# Where each series of the store comes from. The table name is the series id.
+# lag_days: days from the end of a month to the release of its value.
+# revised: whether the source revises values after their first release.
+# Market quotes are not revised and are known the day after the month ends.
+
+["gl.brent"]
+loader = "fred"
+series_id = "DCOILBRENTEU"
+lag_days = 1
+revised = false
+
+["gl.fed_rate"]
+loader = "fred"
+series_id = "FEDFUNDS"
+lag_days = 1
+revised = false
+
+["gl.ust_10y"]
+loader = "fred"
+series_id = "DGS10"
+lag_days = 1
+revised = false
+
+["gl.vix"]
+loader = "fred"
+series_id = "VIXCLS"
+lag_days = 1
+revised = false
+
+# Calendar-day means of the rate in force. The key rate exists since 13.09.2013; before it the
+# minimum rate of one-week repo auctions played its part. These two steps are entered by hand
+# and are not yet checked against the Bank of Russia press releases.
+["ru.key_rate"]
+loader = "cbr_key_rate"
+lag_days = 1
+revised = false
+before = [
+  { since = 2011-12-26, value = 5.25 },
+  { since = 2012-09-14, value = 5.5 },
+]
+
+# Published on the next business day.
+["ru.ruonia"]
+loader = "cbr_ruonia"
+lag_days = 3
+revised = false
+
+["ru.usdrub"]
+loader = "cbr_currency"
+code = "R01235"
+lag_days = 1
+revised = false
+
+["ru.cnyrub"]
+loader = "cbr_currency"
+code = "R01375"
+lag_days = 1
+revised = false
+
+# Zero-coupon yields of the Moscow Exchange curve as the Bank of Russia publishes them daily.
+["ru.ofz_1y"]
+loader = "cbr_zcyc"
+years = "1"
+lag_days = 1
+revised = false
+
+["ru.ofz_5y"]
+loader = "cbr_zcyc"
+years = "5"
+lag_days = 1
+revised = false
+
+["ru.ofz_10y"]
+loader = "cbr_zcyc"
+years = "10"
+lag_days = 1
+revised = false
+
+["ru.imoex"]
+loader = "moex_index"
+secid = "IMOEX"
+lag_days = 1
+revised = false
+
+# Debt on credits to legal entities and sole proprietors plus households, all currencies, mln
+# roubles at the end of the month. The service starts with January 2019; earlier months come
+# from the archive tables 302-01M and 302-02M (stocks on the first day of the next month). The
+# two have no common month. The Bank updated the August 2026 debt of households on 30 September
+# and that of organisations on 7 October 2026, hence 37 days.
+["ru.credit"]
+loader = "cbr_credit"
+lag_days = 37
+revised = true
+element = 35
+groups = [
+  { publication = 22, dataset = 50, measure = 22, archive = "302-01M" },
+  { publication = 20, dataset = 42, measure = 22, archive = "302-02M" },
+]
+
+# Weighted average rate of mortgage loans in roubles issued in the month. The service starts
+# with December 2017; earlier months come from the archive table 4-3, which ends with December
+# 2018 and differs from the service by at most 0.03 points in the 13 common months. The Bank
+# updated the August 2026 rate on 30 September 2026, hence 30 days.
+["ru.mortgage_rate"]
+loader = "cbr_mortgage_rate"
+lag_days = 30
+revised = true
+publication = 14
+dataset = 29
+element = 36
+archive = "4-3"
+
+# Corporate bond spreads: index yield over the OFZ curve at the index duration, p.p.
+# Spliced at 2021-01: earlier months come from the international-scale CBI CP indices
+# (RUCBICPBBB / BB / B, published until 2023-05), later ones from the national-scale indices
+# (RUCBCP…NS, with yields from 2020-12-02). The level jumps at the splice; stage 2 adds a step
+# dummy at the splice month instead of shifting either part.
+["ru.spread_aa"]
+loader = "moex_spread"
+old = "RUCBICPBBB"
+new = "RUCBCPAANS"
+splice = 2021-01-01
+lag_days = 1
+revised = false
+
+["ru.spread_a"]
+loader = "moex_spread"
+old = "RUCBICPBB"
+new = "RUCBCPANS"
+splice = 2021-01-01
+lag_days = 1
+revised = false
+
+["ru.spread_bbb"]
+loader = "moex_spread"
+old = "RUCBICPB"
+new = "RUCBCPBBBNS"
+splice = 2021-01-01
+# Days when a defaulting bond lifted the index yield to 1.5 times its level before and after,
+# until the bond left the index (in 2026 up to 308 094 %). The jumps of 24.02.2022 and
+# 28.03.2022 went through every index and stay.
+skip = [
+    [2016-10-17, 2016-10-26],
+    [2025-03-17, 2025-03-24],
+    [2025-09-08, 2025-09-24],
+    [2025-10-27, 2025-11-05],
+    [2025-12-22, 2025-12-26],
+    [2026-09-28, 2026-10-20],
+]
+lag_days = 1
+revised = false
+
+# Rosstat workbooks, raw (not seasonally adjusted). A file name changes with every release, so
+# `file` is a pattern of it on `page`. Rosstat revises; lag_days is its usual first release.
+# RF figures exclude the DNR, LNR, Zaporozhye and Kherson regions throughout (table footnotes),
+# so no break is spliced for them. `base`: the month whose level is 100 when the table gives
+# percent changes to the previous month.
+
+# Percent to the previous month since 1991, chained from 2011-12 = 100. Released ~10 days on.
+["ru.cpi"]
+loader = "rosstat_monthly"
+page = "https://rosstat.gov.ru/statistics/price"
+file = 'ipc_mes_\d{2}-\d{4}\.xlsx'
+sheet = "01"
+base = 2011-12-01
+lag_days = 14
+revised = true
+
+# ИВБО (index of output of basic industries, 2021 prices), percent to the previous month since
+# 2013-02, chained from 2013-01 = 100. Not seasonally adjusted. No monthly ИВБО for 2012 on the
+# site: the OKVED 2007 link of the page serves a Dagestan table.
+["ru.output"]
+loader = "rosstat_monthly"
+page = "https://rosstat.gov.ru/statistics/accounts"
+file = 'IVBO_OKVED2_\d{2}-\d{4}\.xlsx'
+sheet = "2"
+base = 2013-01-01
+lag_days = 30
+revised = true
+
+# «Краткосрочные экономические показатели», table 4.1: LFS unemployment rate, %, one decimal.
+# Ages 15-72 up to 2016 (4.1.5), 15 and over from 2017 (4.1.6), when Rosstat widened the survey;
+# both give the same values for 2017.
+["ru.unemployment"]
+loader = "rosstat_short_term"
+page = "https://rosstat.gov.ru/compendium/document/50802"
+file = 'ind_\d{2}-\d{4}\.xlsx'
+sheet = "4.1"
+sections = ["4.1.5.", "4.1.6."]
+lag_days = 35
+revised = true
+
+# Table 4.2.2: real accrued wage, percent to the previous month, chained from 2011-12 = 100.
+# Wages come out about two months after the month.
+["ru.real_wage"]
+loader = "rosstat_short_term"
+page = "https://rosstat.gov.ru/compendium/document/50802"
+file = 'ind_\d{2}-\d{4}\.xlsx'
+sheet = "4.2"
+sections = ["4.2.2."]
+block = "в % к предыдущему периоду"
+base = 2011-12-01
+lag_days = 65
+revised = true
+
+# Table 1.12: retail trade turnover at constant prices, percent to the previous month, chained
+# from 2011-12 = 100.
+["ru.retail"]
+loader = "rosstat_short_term"
+page = "https://rosstat.gov.ru/compendium/document/50802"
+file = 'ind_\d{2}-\d{4}\.xlsx'
+sheet = "1.12"
+sections = ["1.12."]
+block = "в % к предыдущему периоду"
+base = 2011-12-01
+lag_days = 35
+revised = true
+
+# Average price of a square metre on the primary market, all flat types, end of period. Not
+# monthly: year ends (in December) up to 2020, quarters (in March, June, September, December)
+# since 2021; the months in between stay empty for stage 2 to handle.
+["ru.housing_price"]
+loader = "rosstat_housing_price"
+page = "https://rosstat.gov.ru/statistics/price"
+annual = 'dinamika_sred_\d{4}-\d{4}\.xlsx'
+quarterly = 'sred_cen_perv_\dkv-(\d{4})_?\.xlsx'
+lag_days = 35
+revised = true

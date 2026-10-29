@@ -68,6 +68,6 @@ def test_jobs_without_an_id_is_refused(tmp_path):
     try:
         call(ws, "jobs", {"action": "status"})
     except Exception as error:
-        assert "needs id" in str(error)
+        assert "id is required" in str(error)
     else:
         raise AssertionError("status without an id must not be accepted")
