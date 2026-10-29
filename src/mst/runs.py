@@ -4,7 +4,8 @@
 (the scenario, the two versions, the seed and the horizon), ``paths.npz`` (the macro variables and
 drivers of every repetition) and the results of every position: ``results.json`` with the metrics
 and the reason of a position that was not calculated, and ``changes.npz`` with the value change
-of each repetition.
+of each repetition. A run of a portfolio also writes ``summary.json`` — its loss at P5, P50 and
+P95 and the severity ``delta`` of the scenario.
 
 A run is a job: the tool writes the request and starts ``python -m mst.runs <id>``; the job builds
 the paths from the scenario and writes the rest. Repeating a request with the same seed gives the
@@ -28,6 +29,8 @@ from .drivers import version as satellite_version
 from .engine import run as calculate_run
 from .macro import version as macro_version
 from .plugin_sdk import FixedPaths, Position
+from .portfolio import report as portfolio_report
+from .portfolio import tool as portfolio_tool
 from .scenario import build as scenario_build
 from .scenario import tool as scenario_tool
 from .scenario.spec import Spec
@@ -37,17 +40,21 @@ ID = re.compile(r"^[0-9]{8}T[0-9]{6}-[0-9a-f]{4}$")
 
 
 class RunRequest(Contract):
-    """What to run: a scenario, how many repetitions, the seed and the positions."""
+    """What to run: a scenario, how many repetitions, the seed and what is calculated on them."""
 
     scenario: Identifier
     draws: int = Field(strict=True, ge=1)
     seed: Seed
+    #: The base currency of ad-hoc ``positions``; a portfolio brings its own.
     base_currency: Currency = "RUB"
-    positions: list[Position] = Field(min_length=1)
+    positions: list[Position] | None = None
+    portfolio: Identifier | None = None
 
     @model_validator(mode="after")
-    def unique(self):
-        ids = [position.id for position in self.positions]
+    def one_source(self):
+        if (self.positions is None) == (self.portfolio is None):
+            raise ValueError("a run names positions or a portfolio, not both and not neither")
+        ids = [position.id for position in self.positions or []]
         if len(set(ids)) != len(ids):
             raise ValueError("two positions share one id")
         return self
@@ -98,12 +105,19 @@ def execute(ws: store.Workspace, run_id: str) -> dict:
         paths = scenario_build.build(
             spec, model, satellites, draws=request.draws, seed=request.seed
         )
+        portfolio = (
+            portfolio_tool.load(ws.portfolios, request.portfolio) if request.portfolio else None
+        )
+        positions = portfolio.positions if portfolio is not None else request.positions
+        base_currency = (
+            portfolio.base_currency if portfolio is not None else request.base_currency
+        )
         batch = calculate_run(
-            request.positions,
+            positions,
             readable(paths),
             drivers=satellites.registry,
             served=satellites.served(),
-            base_currency=request.base_currency,
+            base_currency=base_currency,
         )
     except BaseException as error:
         store.write_json(
@@ -116,8 +130,10 @@ def execute(ws: store.Workspace, run_id: str) -> dict:
             },
         )
         raise
-    _write(directory, run_id, request, spec, stored, paths, batch)
-    return {"id": run_id, "status": batch.status, "positions": len(batch.results)}
+    written = _write(
+        directory, run_id, request, spec, stored, paths, batch, portfolio, base_currency
+    )
+    return {"id": run_id, "status": written["status"], "positions": len(batch.results)}
 
 
 def meta(ws: store.Workspace, run_id: str) -> dict:
@@ -129,10 +145,14 @@ def meta(ws: store.Workspace, run_id: str) -> dict:
 
 
 def result(ws: store.Workspace, run_id: str) -> dict:
-    """The meta and the per-position results of a run."""
+    """The meta, the per-position results of a run and the summary of a portfolio run."""
     stored = meta(ws, run_id)
     positions = store.read_json(folder(ws, run_id) / "results.json")
-    return {"run": stored, "positions": [] if positions is None else positions["positions"]}
+    return {
+        "run": stored,
+        "positions": [] if positions is None else positions["positions"],
+        "summary": store.read_json(folder(ws, run_id) / "summary.json"),
+    }
 
 
 def catalogue(ws: store.Workspace) -> dict:
@@ -181,8 +201,10 @@ def _write(
     stored: dict,
     paths,
     batch,
-) -> None:
-    """The paths, the results of every position and the meta that names them."""
+    portfolio,
+    base_currency: str,
+) -> dict:
+    """The paths, the results of every position, the report and the meta that names them."""
     months = [month.isoformat() for month in paths.months]
     # An invalid position keeps its column of zeros: the report reads the status, never the column.
     changes = np.zeros((paths.draws, len(batch.results)))
@@ -200,50 +222,46 @@ def _write(
             ]
         },
     )
-    store.write_json(
-        directory / "meta.json",
-        {
-            "id": run_id,
-            "scenario": request.scenario,
-            "narrative": spec.narrative,
-            "macro": spec.macro,
-            "satellites": spec.satellites,
-            "as_of": stored["as_of"],
-            "horizon": len(paths.months) - 1,
-            "draws": paths.draws,
-            "seed": paths.seed,
-            "base_currency": request.base_currency,
-            "months": months,
-            "variables": list(paths.ids),
-            "drivers": list(paths.drivers.ids),
-            "driver_flags": {
-                driver: sorted(paths.drivers.flags[driver]) for driver in paths.drivers.ids
-            },
-            "severity": _severity(paths.severity),
-            "models": {
-                result.position_id: {
-                    "model": result.model_id,
-                    "version": result.model_version,
-                }
-                for result in batch.results
-            },
-            "position_ids": [result.position_id for result in batch.results],
-            "positions": len(batch.results),
-            "status": batch.status,
-            "finished": _now(),
-        },
+    summary = (
+        portfolio_report.build(portfolio, batch.results, severity_found=paths.severity)
+        if portfolio is not None
+        else None
     )
-
-
-def _severity(found) -> dict | None:
-    """The severity ``delta`` of the scenario, or None when it carries no constraints."""
-    if found is None:
-        return None
-    return {
-        "distance": found.distance,
-        "exceeded": found.exceeded,
-        "probabilities": [float(value) for value in found.probabilities],
+    if summary is not None:
+        store.write_json(directory / "summary.json", summary)
+    written = {
+        "id": run_id,
+        "scenario": request.scenario,
+        "narrative": spec.narrative,
+        "macro": spec.macro,
+        "satellites": spec.satellites,
+        "as_of": stored["as_of"],
+        "horizon": len(paths.months) - 1,
+        "draws": paths.draws,
+        "seed": paths.seed,
+        "base_currency": base_currency,
+        "portfolio": request.portfolio,
+        "months": months,
+        "variables": list(paths.ids),
+        "drivers": list(paths.drivers.ids),
+        "driver_flags": {
+            driver: sorted(paths.drivers.flags[driver]) for driver in paths.drivers.ids
+        },
+        "severity": portfolio_report.severity(paths.severity),
+        "models": {
+            result.position_id: {
+                "model": result.model_id,
+                "version": result.model_version,
+            }
+            for result in batch.results
+        },
+        "position_ids": [result.position_id for result in batch.results],
+        "positions": len(batch.results),
+        "status": summary["status"] if summary is not None else batch.status,
+        "finished": _now(),
     }
+    store.write_json(directory / "meta.json", written)
+    return written
 
 
 def _now() -> str:

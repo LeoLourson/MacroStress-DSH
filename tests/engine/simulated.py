@@ -82,11 +82,14 @@ DRIVERS = [
     {"quantity": "share_price", "object": "sber"},
     {"quantity": "share_price", "object": "gazp"},
     {"quantity": "bond_spread", "object": "corp"},
+    # A driver without history of its own: the check has nothing above it to take parameters from.
+    {"quantity": "bond_spread", "object": "sber", "series": None},
     {"quantity": "overdue_share", "object": "mining"},
     {"quantity": "housing_price_primary", "object": "belgorod"},
 ]
 DRIVERS = [
-    {**driver, "series": series_id(driver["quantity"], driver["object"])} for driver in DRIVERS
+    {**driver, "series": driver.get("series", series_id(driver["quantity"], driver["object"]))}
+    for driver in DRIVERS
 ]
 
 
@@ -117,6 +120,8 @@ def store(root: Path, data: Panel, seed: int = 2) -> SeriesStore:
     result = SeriesStore(root)
     columns = {name: index for index, name in enumerate(data.ids)}
     for driver in DRIVERS:
+        if driver["series"] is None:
+            continue
         quantity = next(item for item in QUANTITIES if item[0] == driver["quantity"])
         gamma, sigma = DRIFTS[driver["quantity"]]
         x = data.y[:, columns[quantity[2]]]

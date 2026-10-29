@@ -1,16 +1,14 @@
 """mst.runs: a run of a scenario writes its paths, its results and its meta in the workspace."""
 
 import asyncio
-import shutil
 import time
 
 import numpy as np
 import pytest
 from fastmcp import Client
 
-from mst import jobs, runs, store
+from mst import jobs, runs
 from mst.mcp import build
-from mst.scenario import tool as scenario_tool
 
 POSITIONS = [
     {
@@ -43,25 +41,6 @@ POSITIONS = [
     },
 ]
 REQUEST = {"scenario": "oil", "draws": 5, "seed": 11, "positions": POSITIONS}
-
-
-@pytest.fixture
-def workspace(tmp_path, versions):
-    """A workspace with the two versions of the session and one scenario."""
-    ws = store.Workspace(tmp_path)
-    for kind, name in (("macro", versions.macro), ("satellites", versions.satellites)):
-        shutil.copytree(versions.models / kind / name, ws.models / kind / name)
-    scenario_tool.save(
-        ws.scenarios,
-        "oil",
-        {
-            "narrative": "нефть",
-            "horizon": 3,
-            "macro": versions.macro,
-            "satellites": versions.satellites,
-        },
-    )
-    return ws
 
 
 def start(ws, request=None, run_id=None):
