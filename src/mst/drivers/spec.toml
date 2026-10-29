@@ -7,6 +7,11 @@
 # standard deviation of the driver; the constant has `constant_spread` times it.
 spread = 0.1
 constant_spread = 10.0
+# The largest share of the previous month a driver may keep. A draw above it is cut by the
+# truncated conditional: an explosive root has no finite path, and the tridiagonal precision of
+# the drawn history stops being positive definite (share_price:gazc, 13 months over 141, broke
+# the Cholesky at 1.10).
+rho_max = 0.99
 # Months of the out-of-sample check (formalization, section 9): the models are estimated on the
 # history before the last `holdout` months, and from every month of the holdout the driver is
 # forecast `reach` months ahead on the realized macro variables.

@@ -22,6 +22,7 @@ class Sampler(Contract):
 class Spec(Contract):
     spread: Positive
     constant_spread: Positive
+    rho_max: Annotated[float, Field(strict=True, gt=0, lt=1)]
     holdout: Count
     reach: Count
     sampler: Sampler

@@ -28,6 +28,7 @@ def small_spec() -> Spec:
     return Spec(
         spread=0.1,
         constant_spread=10.0,
+        rho_max=0.99,
         holdout=24,
         reach=12,
         sampler=Sampler(draws=10, burn=5, seed=7),
