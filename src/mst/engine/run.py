@@ -3,7 +3,8 @@
 The run draws the paths once (``mst.scenario.build``) and hands the same object to every model.
 A position whose model or driver is missing stays in the run with its reason; the report reads
 only the positions that were calculated, and ``invalid`` results never enter portfolio
-arithmetic.
+arithmetic. The engine reads the SDK protocol ``mst.plugin_sdk.Paths``; the scenario's own
+``mst.scenario.build.Paths`` is wrapped by ``mst.runs.readable``.
 """
 
 from dataclasses import dataclass
@@ -41,17 +42,19 @@ def run(
     served=None,
     catalog: Catalog = default_catalog,
     base_currency: str = "RUB",
+    as_of=None,
 ) -> Batch:
     """The results of ``positions`` on ``paths``.
 
     ``drivers`` is the driver registry of the run's satellite version and ``served`` the drivers
-    it serves; without ``served`` every registered driver resolves.
+    it serves; without ``served`` every registered driver resolves. ``as_of`` is the calculation
+    date the run names; without it the run takes the first month of the paths.
     """
     ids = [position.id for position in positions]
     if len(set(ids)) != len(ids):
         raise ValueError("two positions share one id")
     options = RunOptions(
-        as_of=paths.months[0], horizon=paths.horizon, base_currency=base_currency
+        as_of=as_of or paths.months[0], horizon=paths.horizon, base_currency=base_currency
     )
     context = CalculationContext(
         as_of=options.as_of,
@@ -80,8 +83,12 @@ def _unprepared(
     """A position that has no prepared inputs — no model, or terms its model cannot read."""
     try:
         value_current = fx.exposure(position, paths, context.base_currency)
-    except ValueError:
+    except ValueError as error:
         value_current = 0.0
+        diagnostics = [
+            *diagnostics,
+            Diagnostic(code=f"fx_missing:{position.currency}", message=str(error)),
+        ]
     return CalculationResult(
         position_id=position.id,
         name=position.name,
@@ -91,6 +98,5 @@ def _unprepared(
         status="invalid",
         base_currency=context.base_currency,
         value_current=value_current,
-        flags=[item.code for item in diagnostics if item.severity == "error"],
         diagnostics=diagnostics,
     )

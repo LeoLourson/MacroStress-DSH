@@ -14,6 +14,7 @@ from .data import sources
 from .data.store import SeriesStore
 from .drivers import version as satellite_version
 from .macro import version as macro_version
+from .portfolio import tool as portfolio_tool
 from .scenario import tool as scenario_tool
 
 
@@ -139,6 +140,7 @@ def build(ws: store.Workspace) -> FastMCP:
         action: str,
         id: str | None = None,
         scenario: str | None = None,
+        portfolio: str | None = None,
         positions: list[dict[str, Any]] | None = None,
         draws: int | None = None,
         seed: int | None = None,
@@ -146,26 +148,37 @@ def build(ws: store.Workspace) -> FastMCP:
     ) -> dict:
         """Runs on the paths of a scenario. Actions: start, status, result, list.
 
-        ``start`` draws the scenario's paths and calculates ``positions`` on them as a job on
-        the ``runs`` resource; ``status`` reports that job and what the run has written,
-        ``result`` the per-position results and ``list`` every run of the workspace.
+        ``start`` draws the scenario's paths and calculates a portfolio's positions — or the
+        ``positions`` given in the call — on them, as a job on the ``runs`` resource; ``status``
+        reports that job and what the run has written, ``result`` the per-position results and
+        the report of a portfolio run, ``list`` every run of the workspace. ``base_currency`` is
+        the base of ``positions``; a portfolio brings its own.
         """
         if action == "start":
+            if portfolio and positions:
+                raise ValueError("run start: give portfolio or positions, not both")
+            request = {
+                "scenario": _need(scenario, "scenario"),
+                "draws": _need(draws, "draws"),
+                "seed": _need(seed, "seed"),
+            }
+            if portfolio:
+                request["portfolio"] = portfolio
+            else:
+                request["positions"] = _need(positions, "positions")
+                request["base_currency"] = base_currency
             run_id = runs.new_id()
-            runs.begin(
-                ws,
-                run_id,
-                {
-                    "scenario": _need(scenario, "scenario"),
-                    "draws": _need(draws, "draws"),
-                    "seed": _need(seed, "seed"),
-                    "base_currency": base_currency,
-                    "positions": _need(positions, "positions"),
-                },
-            )
-            job = tasks.start(
-                ws, "runs", ["-m", "mst.runs", run_id, "--workspace", str(ws.root)]
-            )
+            runs.begin(ws, run_id, request)
+            try:
+                job = tasks.start(
+                    ws, "runs", ["-m", "mst.runs", run_id, "--workspace", str(ws.root)]
+                )
+            except Exception as error:
+                store.write_json(
+                    runs.folder(ws, run_id) / "meta.json",
+                    {"id": run_id, "status": "failed", "error": f"{type(error).__name__}: {error}"},
+                )
+                raise
             store.write_json(runs.folder(ws, run_id) / "job.json", {"job": job})
             return {"run": run_id, "job": job}
         if action == "status":
@@ -181,6 +194,36 @@ def build(ws: store.Workspace) -> FastMCP:
         if action == "list":
             return runs.catalogue(ws)
         raise ValueError(f"run: unknown action {action!r}, try start, status, result, list")
+
+    @server.tool
+    def portfolio(
+        action: str,
+        id: str | None = None,
+        spec: dict[str, Any] | None = None,
+        scenario: str | None = None,
+    ) -> dict:
+        """Stored portfolios. Actions: list, get, save, delete, check, exposure.
+
+        ``save`` checks the contract and writes ``portfolios/<id>.json``; ``check`` names every
+        position the scenario's macro and satellite versions cannot serve, with the reason of a
+        driver the out-of-sample check rejected; ``exposure`` values the positions at the
+        calculation month of the scenario's macro version.
+        """
+        if action == "list":
+            return portfolio_tool.catalogue(ws.portfolios)
+        if action == "get":
+            return portfolio_tool.get(ws.portfolios, _need(id, "id"))
+        if action == "save":
+            return portfolio_tool.save(ws.portfolios, _need(id, "id"), _need(spec, "spec"))
+        if action == "delete":
+            return portfolio_tool.delete(ws.portfolios, _need(id, "id"))
+        if action == "check":
+            return portfolio_tool.check(ws, _need(id, "id"), _need(scenario, "scenario"))
+        if action == "exposure":
+            return portfolio_tool.exposure(ws, _need(id, "id"), _need(scenario, "scenario"))
+        raise ValueError(
+            f"portfolio: unknown action {action!r}, try list, get, save, delete, check, exposure"
+        )
 
     @server.tool
     def model(

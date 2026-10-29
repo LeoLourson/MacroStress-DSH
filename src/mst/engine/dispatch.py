@@ -47,10 +47,21 @@ def prepare(
         problems = terms_problems(model.terms_schema, position.terms)
         if problems:
             return None, problems
+    elif position.terms:
+        return None, [Diagnostic(code="terms_invalid", message="the model takes no terms")]
     try:
         needs = model.requirements(position, options)
     except (ValidationError, ValueError) as error:
         return None, [Diagnostic(code="requirements_failed", message=str(error))]
+    keys = [requirement.key for requirement in needs.drivers]
+    duplicated = sorted({key for key in keys if keys.count(key) > 1})
+    if duplicated:
+        return None, [
+            Diagnostic(
+                code="requirements_failed",
+                message=f"two driver requirements share the key {', '.join(duplicated)}",
+            )
+        ]
     problems = [
         Diagnostic(
             code=f"macro_missing:{variable}",
@@ -131,13 +142,16 @@ def calculate(
     )
 
 
-def not_run(
-    prepared: PreparedInputs, diagnostics: list[Diagnostic], model
-) -> CalculationResult:
-    """A position that was not calculated stays in the run with its reason, without numbers."""
-    blocking = [item for item in diagnostics if item.severity == "error"] or [
-        Diagnostic(code="not_calculated", message="the position was not run")
-    ]
+def not_run(prepared: PreparedInputs, diagnostics: list[Diagnostic], model) -> CalculationResult:
+    """A position that was not calculated stays in the run with its reason, without numbers.
+
+    The reason lives in ``diagnostics``; ``flags`` carries disclosures of calculated positions.
+    """
+    if not any(item.severity == "error" for item in diagnostics):
+        diagnostics = [
+            *diagnostics,
+            Diagnostic(code="not_calculated", message="the position was not run"),
+        ]
     return CalculationResult(
         position_id=prepared.position.id,
         name=prepared.position.name,
@@ -147,7 +161,6 @@ def not_run(
         status="invalid",
         base_currency=prepared.base_currency,
         value_current=prepared.value_current,
-        flags=[item.code for item in blocking],
         diagnostics=diagnostics,
     )
 
@@ -192,8 +205,8 @@ def required_driver_problems(
             Diagnostic(
                 code=code,
                 message=(
-                    f"нет драйвера {requirement.quantity} "
-                    f"для {selector(requirement, position)}"
+                    f"the run serves no {requirement.quantity} "
+                    f"for {selector(requirement, position)}"
                 ),
             )
         )

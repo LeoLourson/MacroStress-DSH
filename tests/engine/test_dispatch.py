@@ -11,6 +11,7 @@ from mst.plugin_sdk import (
     CalculationModel,
     CalculationResult,
     DataRequirements,
+    DriverRequirement,
     FixedPaths,
     Position,
     RunOptions,
@@ -20,6 +21,11 @@ from tests.engine.fixed import paths
 from tests.engine.simulated import registry
 
 OPTIONS = RunOptions(as_of=date(2026, 9, 1), horizon=2)
+
+
+def errors(result):
+    """The codes of the diagnostics that stopped a position."""
+    return [item.code for item in result.diagnostics if item.severity == "error"]
 
 
 def equity(**changes) -> Position:
@@ -65,7 +71,7 @@ def test_a_position_without_a_served_driver_is_not_calculated_and_names_the_code
     batch = run([equity()], paths(), drivers=registry(), served={"share_price:gazp"})
     result = batch.results[0]
     assert result.status == "invalid"
-    assert "driver_missing:share_price" in result.flags
+    assert errors(result) == ["driver_missing:share_price"]
     assert result.value_change == [] and result.metrics == {}
     message = "; ".join(item.message for item in result.diagnostics)
     assert "share_price" in message and "secid SBER" in message
@@ -73,7 +79,7 @@ def test_a_position_without_a_served_driver_is_not_calculated_and_names_the_code
 
 def test_a_driver_the_catalog_does_not_know_is_missing_the_same_way():
     batch = run([equity(codes={"secid": "NOWHERE"})], paths(), drivers=registry())
-    assert batch.results[0].flags == ["driver_missing:share_price"]
+    assert errors(batch.results[0]) == ["driver_missing:share_price"]
 
 
 def test_an_unknown_instrument_type_is_refused_with_its_name():
@@ -82,7 +88,7 @@ def test_an_unknown_instrument_type_is_refused_with_its_name():
     )
     result = batch.results[0]
     assert result.status == "invalid"
-    assert result.flags == ["no_model"]
+    assert errors(result) == ["no_model"]
     assert "option" in result.diagnostics[0].message
 
 
@@ -90,7 +96,7 @@ def test_terms_are_checked_against_the_model_schema():
     missing = run([bond(terms={})], paths(), drivers=registry(), served={"bond_spread:corp"})
     result = missing.results[0]
     assert result.status == "invalid"
-    assert result.flags == ["terms_invalid"]
+    assert errors(result) == ["terms_invalid"]
     assert "duration" in result.diagnostics[0].message
 
     given = run([bond()], paths(), drivers=registry(), served={"bond_spread:corp"})
@@ -99,7 +105,7 @@ def test_terms_are_checked_against_the_model_schema():
 
 def test_a_currency_without_a_macro_path_is_refused():
     batch = run([equity(currency="GBP")], paths(), drivers=registry(), served={"share_price:sber"})
-    assert batch.results[0].flags == ["fx_missing:GBP"]
+    assert errors(batch.results[0]) == ["fx_missing:GBP"]
 
 
 def test_a_declared_macro_variable_the_paths_lack_is_named():
@@ -110,7 +116,7 @@ def test_a_declared_macro_variable_the_paths_lack_is_named():
     batch = run(
         [equity(currency="USD")], without_rate, drivers=registry(), served={"share_price:sber"}
     )
-    assert batch.results[0].flags == ["macro_missing:ru.usdrub"]
+    assert errors(batch.results[0]) == ["macro_missing:ru.usdrub"]
     assert "ru.usdrub" in batch.results[0].diagnostics[0].message
 
 
@@ -149,10 +155,75 @@ def test_a_result_of_the_wrong_shape_is_invalid():
     batch = run([position], paths(), drivers=registry(), catalog=catalog)
     result = batch.results[0]
     assert result.status == "invalid"
-    assert result.flags == ["output:value_change"]
+    assert errors(result) == ["output:value_change"]
     assert "1 realisations" in result.diagnostics[0].message
 
 
 def test_a_duplicate_position_id_is_refused():
     with pytest.raises(ValueError, match="share one id"):
         run([equity(), equity()], paths(), drivers=registry())
+
+
+class TakesNoTerms(CalculationModel):
+    """A model that declares no terms schema."""
+
+    model_id = "bare.v1"
+    version = "0"
+    label = "bare"
+    instrument_types = ("bare",)
+    terms_schema = None
+
+    def requirements(self, position, options):
+        return DataRequirements()
+
+    def validate(self, prepared):
+        return []
+
+    def calculate(self, prepared, context):
+        raise AssertionError("a position with terms is not calculated")
+
+
+class RepeatedKeys(CalculationModel):
+    """A model whose requirements name one key twice."""
+
+    model_id = "repeated.v1"
+    version = "0"
+    label = "repeated"
+    instrument_types = ("repeated",)
+
+    def requirements(self, position, options):
+        return DataRequirements(
+            drivers=[
+                DriverRequirement(key="price", quantity="share_price"),
+                DriverRequirement(key="price", quantity="bond_spread"),
+            ]
+        )
+
+    def validate(self, prepared):
+        return []
+
+    def calculate(self, prepared, context):
+        raise AssertionError("a position with broken requirements is not calculated")
+
+
+def test_terms_of_a_model_that_takes_none_are_refused():
+    catalog = Catalog((TakesNoTerms(),))
+    batch = run(
+        [equity(id="bare", type="bare", terms={"x": 1})],
+        paths(),
+        drivers=registry(),
+        catalog=catalog,
+    )
+    result = batch.results[0]
+    assert errors(result) == ["terms_invalid"]
+    assert "takes no terms" in result.diagnostics[0].message
+
+
+def test_two_requirements_with_one_key_are_refused():
+    catalog = Catalog((RepeatedKeys(),))
+    batch = run(
+        [equity(id="rep", type="repeated")], paths(), drivers=registry(), catalog=catalog
+    )
+    result = batch.results[0]
+    assert errors(result) == ["requirements_failed"]
+    assert "share the key price" in result.diagnostics[0].message

@@ -47,8 +47,13 @@ class Paths(Protocol):
 
 
 def relative(path: np.ndarray) -> np.ndarray:
-    """``X_t / X_0`` for months ``t = 0 .. H``: the ratio a model applies to a value today."""
+    """``X_t / X_0`` for months ``t = 0 .. H``: the ratio a model applies to a value today.
+
+    Raises when the value at ``t = 0`` is zero: the ratio to it is not defined.
+    """
     path = np.asarray(path, dtype=float)
+    if np.any(path[:, 0] == 0):
+        raise ValueError("relative() needs a value other than zero at t = 0")
     return path / path[:, :1]
 
 
@@ -62,7 +67,7 @@ def change(path: np.ndarray) -> np.ndarray:
 class FixedPaths:
     """``Paths`` from given arrays, for a model's tests and hand-checked examples."""
 
-    macros: dict[str, np.ndarray]
+    macros: dict[str, np.ndarray] = field(default_factory=dict)
     drivers: dict[str, np.ndarray] = field(default_factory=dict)
     driver_flags: dict[str, frozenset[str]] = field(default_factory=dict)
     start: date = date(2026, 9, 1)
