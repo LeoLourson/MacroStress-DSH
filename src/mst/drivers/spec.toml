@@ -1,0 +1,19 @@
+# The estimation of the satellite models (docs/scenario-formalization.md, section 6.2; plan,
+# stage 4). A satellite version stores this file as it was.
+
+# The columns of z_t except the constant are centred and divided by their standard deviation
+# within objects before estimation. In that scale the deviation of a coefficient of an object
+# from the level above has a prior standard deviation of `spread` times the within-object
+# standard deviation of the driver; the constant has `constant_spread` times it.
+spread = 0.1
+constant_spread = 10.0
+# Months of the out-of-sample check (formalization, section 9): the models are estimated on the
+# history before the last `holdout` months, and from every month of the holdout the driver is
+# forecast `reach` months ahead on the realized macro variables.
+holdout = 24
+reach = 12
+
+[sampler]
+draws = 1000
+burn = 500
+seed = 20261029

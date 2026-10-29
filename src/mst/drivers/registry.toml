@@ -1,0 +1,138 @@
+# Drivers and their satellite models (docs/scenario-formalization.md, section 6; plan, stage 4).
+#
+# A quantity is measured on objects; a driver is a quantity of one object. The object above an
+# object (`parent`) carries the same quantity a level higher, and the satellite parameters of
+# an object are drawn around those of its parent (section 6.2). Objects and drivers come from
+# the quantity's `catalog` (src/mst/drivers/catalogs): `python -m mst.drivers update` lists them,
+# fetches their series and writes <workspace>/drivers/catalog.json. An object no catalog covers
+# can be added here as [[objects]] with [[drivers]]; a driver without `series` has no history of
+# its own and takes the parameters of the level above.
+#
+# regressors: macro variables of x_t in the model scale y = g(X); features: declared
+# max(0, y - above) terms of x_t; lags: the deepest lag of x in the equation; span: months one
+# stored value covers (3 for a quarter's average), the months in between are drawn.
+
+[[quantities]]
+id = "share_price"
+label = "Цена акции"
+unit = "руб. за акцию"
+transform = "log100"
+regressors = ["ru.imoex", "ru.usdrub", "ru.key_rate", "gl.brent"]
+lags = 1
+
+[quantities.catalog]
+loader = "moex_shares"
+board = "TQBR"
+boards = ["EQBR", "EQNE", "EQNL", "EQBS", "EQLV", "TQBR", "TQNE", "TQNL", "TQBS", "TQLV"]
+root = "shares"
+root_label = "Акции Московской биржи"
+lag_days = 1
+revised = false
+sectors = [
+  { id = "oil_gas", label = "Нефть и газ", index = "MOEXOG" },
+  { id = "metals", label = "Металлы и добыча", index = "MOEXMM" },
+  { id = "financials", label = "Финансы", index = "MOEXFN" },
+  { id = "telecom", label = "Телекоммуникации", index = "MOEXTL" },
+  { id = "consumer", label = "Потребительский сектор", index = "MOEXCN" },
+  { id = "electric", label = "Электроэнергетика", index = "MOEXEU" },
+  { id = "transport", label = "Транспорт", index = "MOEXTN" },
+  { id = "chemicals", label = "Химия и нефтехимия", index = "MOEXCH" },
+  { id = "it", label = "Информационные технологии", index = "MOEXIT" },
+  { id = "real_estate", label = "Строительные компании и недвижимость", index = "MOEXRE" },
+]
+
+[[quantities]]
+id = "bond_spread"
+label = "Спред облигации к кривой ОФЗ"
+unit = "п. п."
+transform = "identity"
+regressors = ["ru.spread_aa", "ru.spread_a", "ru.spread_bbb", "ru.key_rate", "ru.ofz_5y"]
+lags = 1
+
+[quantities.catalog]
+loader = "moex_bonds"
+root = "bonds"
+root_label = "Корпоративные облигации"
+lag_days = 1
+revised = false
+groups = [
+  { id = "group_aa", label = "Рейтинговая группа AA", index = "RUCBCPAANS" },
+  { id = "group_a", label = "Рейтинговая группа A", index = "RUCBCPANS" },
+  { id = "group_bbb", label = "Рейтинговая группа BBB", index = "RUCBCPBBBNS" },
+]
+
+[[quantities]]
+id = "overdue_share"
+label = "Доля просроченной задолженности по кредитам организациям"
+unit = "доля"
+transform = "logit"
+regressors = ["ru.key_rate", "ru.output", "ru.usdrub", "ru.imoex"]
+features = [{ id = "key_rate_above_15", variable = "ru.key_rate", above = 15.0 }]
+lags = 1
+
+# Table 01_02_A of the Bank of Russia (OKVED 2007 grouping); `okved` lists the OKVED 2 codes
+# each row covers, for matching a borrower to its activity.
+[quantities.catalog]
+loader = "cbr_activities"
+lag_days = 37
+revised = true
+skip = ["на завершение расчетов"]
+
+[quantities.catalog.okved]
+"ВСЕГО" = ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9"]
+"добыча полезных ископаемых" = ["05", "06", "07", "08", "09"]
+"добыча топливно-энергетических полезных ископаемых" = ["05", "06"]
+"обрабатывающие производства" = ["10", "11", "12", "13", "14", "15", "16", "17", "18", "19", "20", "21", "22", "23", "24", "25", "26", "27", "28", "29", "30", "31", "32", "33"]
+"производство пищевых продуктов, включая напитки, и табака" = ["10", "11", "12"]
+"обработка древесины и производство изделий из дерева" = ["16"]
+"целлюлозно-бумажное производство, издательская и полиграфическая деятельность" = ["17", "18"]
+"производство кокса, нефтепродуктов и ядерных материалов" = ["19"]
+"химическое производство" = ["20", "21"]
+"производство прочих неметаллических минеральных продуктов" = ["23"]
+"металлургическое производство и производство готовых металлических изделий" = ["24", "25"]
+"производство машин и оборудования" = ["26", "27", "28"]
+"производство машин и оборудования для сельского и лесного хозяйства" = ["28.3"]
+"производство транспортных средств и оборудования" = ["29", "30"]
+"производство автомобилей" = ["29.1"]
+"производство и распределение электроэнергии, газа и воды" = ["35", "36"]
+"сельское хозяйство, охота и лесное хозяйство" = ["01", "02"]
+"сельское хозяйство, охота и предоставление услуг в этих областях" = ["01"]
+"строительство" = ["41", "42", "43"]
+"строительство зданий и сооружений" = ["41", "42"]
+"транспорт и связь" = ["49", "50", "51", "52", "53", "61"]
+"деятельность воздушного транспорта, подчиняющегося и не подчиняющегося расписанию" = ["51"]
+"оптовая и розничная торговля, ремонт автотранспортных средств, мотоциклов, бытовых изделий и предметов личного пользования" = ["45", "46", "47"]
+"операции с недвижимым имуществом, аренда и предоставление услуг" = ["62", "63", "68", "69", "70", "71", "72", "73", "74", "77", "78", "79", "80", "81", "82"]
+
+# Average prices of a square metre by subject, a quarter each, since 2021.
+[[quantities]]
+id = "housing_price_primary"
+label = "Цена квадратного метра на первичном рынке жилья"
+unit = "руб. за м²"
+transform = "log100"
+regressors = ["ru.mortgage_rate", "ru.key_rate", "ru.cpi", "ru.real_wage"]
+lags = 1
+span = 3
+
+[quantities.catalog]
+loader = "rosstat_regions"
+page = "https://rosstat.gov.ru/statistics/price"
+quarterly = 'sred_cen_perv_\dkv-(\d{4})_?\.xlsx'
+lag_days = 35
+revised = true
+
+[[quantities]]
+id = "housing_price_secondary"
+label = "Цена квадратного метра на вторичном рынке жилья"
+unit = "руб. за м²"
+transform = "log100"
+regressors = ["ru.mortgage_rate", "ru.key_rate", "ru.cpi", "ru.real_wage"]
+lags = 1
+span = 3
+
+[quantities.catalog]
+loader = "rosstat_regions"
+page = "https://rosstat.gov.ru/statistics/price"
+quarterly = 'sred_cen_vtor_\dkv-(\d{4})_?\.xlsx'
+lag_days = 35
+revised = true
