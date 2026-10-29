@@ -1,9 +1,31 @@
 [project]
-name = "macrostress-dsh"
+name = "macrostress"
 version = "0.1.0"
-description = "MacroStress as a DSH plugin: series, macro model, drivers, corpus, scenarios, portfolios, runs"
+description = "Portfolio stress testing over macroeconomic scenarios, as an MCP server"
 readme = "README.md"
-requires-python = ">=3.12,<3.13"
+license = "MIT"
+license-files = ["LICENSE"]
+requires-python = ">=3.12"
+authors = [{ name = "LeoLourson" }]
+keywords = [
+  "stress-testing",
+  "scenario-analysis",
+  "macroeconomic",
+  "bvar",
+  "portfolio-risk",
+  "mcp",
+]
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "Intended Audience :: Financial and Insurance Industry",
+  "Intended Audience :: Science/Research",
+  "Operating System :: OS Independent",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Topic :: Office/Business :: Financial :: Investment",
+  "Topic :: Scientific/Engineering :: Mathematics",
+]
 dependencies = [
   "numpy==2.4.4",
   "scipy==1.17.1",
@@ -22,6 +44,16 @@ dependencies = [
   "huggingface-hub==1.33.0",
 ]
 
+[project.urls]
+Homepage = "https://github.com/LeoLourson/MacroStress-DSH"
+Documentation = "https://github.com/LeoLourson/MacroStress-DSH/blob/main/docs/README.md"
+Repository = "https://github.com/LeoLourson/MacroStress-DSH"
+Issues = "https://github.com/LeoLourson/MacroStress-DSH/issues"
+Changelog = "https://github.com/LeoLourson/MacroStress-DSH/blob/main/CHANGELOG.md"
+
+[project.scripts]
+macrostress = "mst.mcp:main"
+
 [dependency-groups]
 dev = [
   "pytest==8.4.2",
@@ -32,7 +64,7 @@ dev = [
 requires = ["uv_build>=0.12.13,<0.13.0"]
 build-backend = "uv_build"
 
-# The package is mst, not macrostress_dsh: the name in the layout of the plan.
+# The import package is mst; the distribution is macrostress.
 [tool.uv.build-backend]
 module-name = "mst"
 
@@ -40,6 +72,9 @@ module-name = "mst"
 testpaths = ["tests"]
 pythonpath = ["src"]
 addopts = "-ra"
+markers = [
+  "slow: estimates the BVAR and takes minutes",
+]
 
 [tool.ruff]
 target-version = "py312"

@@ -1,0 +1,17 @@
+cff-version: 1.2.0
+message: "If you use MacroStress in academic work, cite it as below."
+title: "MacroStress: portfolio stress testing over macroeconomic scenarios"
+abstract: "An MCP server that builds a consistent macroeconomic scenario with a BVAR, translates it into driver paths with satellite models, and reports the distribution of portfolio losses."
+authors:
+  - name: "LeoLourson"
+repository-code: "https://github.com/LeoLourson/MacroStress-DSH"
+url: "https://github.com/LeoLourson/MacroStress-DSH"
+license: MIT
+version: 0.1.0
+date-released: 2026-10-29
+keywords:
+  - stress testing
+  - scenario analysis
+  - BVAR
+  - portfolio risk
+  - MCP

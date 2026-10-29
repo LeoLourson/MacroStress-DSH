@@ -13,6 +13,8 @@ from mst.macro.var import responses
 
 from . import simulated as sim
 
+pytestmark = pytest.mark.slow
+
 
 def shock(id_, rises=(), falls=()):
     return Shock(id=id_, label=id_, rises=list(rises), falls=list(falls))

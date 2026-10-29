@@ -1,7 +1,16 @@
 .venv/
+.venv*/
 __pycache__/
 .pytest_cache/
+.pytest-tmp/
 .ruff_cache/
 *.egg-info/
+dist/
+build/
+.idea/
+.vscode/
+.code-review-graph/
 # The workspace is data, not code: a run reproduces it from the repository and the sources.
 workspace/
+# The thesis concept stays local; it is not part of the published repository.
+docs/thesis.md

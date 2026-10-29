@@ -1,0 +1,33 @@
+name: Feature request
+description: A new source, driver, asset type, or tool action.
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What cannot be done today.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposal
+      description: The input, the output, and how it fits the contracts in docs/platform.md.
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - series
+        - macro model
+        - drivers
+        - corpus
+        - scenario
+        - portfolio
+        - run and report
+        - plugins
+        - DSH plugin
+        - documentation

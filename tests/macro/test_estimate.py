@@ -7,6 +7,8 @@ from mst.macro.estimate import estimate, impute
 
 from . import simulated as sim
 
+pytestmark = pytest.mark.slow
+
 
 def covered(draws: np.ndarray, truth: np.ndarray) -> np.ndarray:
     low, high = np.quantile(draws, [0.05, 0.95], axis=0)

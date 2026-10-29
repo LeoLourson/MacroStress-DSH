@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Documentation
+    url: https://github.com/LeoLourson/MacroStress-DSH/blob/main/docs/README.md
+    about: Install, tools, contracts, and the method.
+  - name: Questions
+    url: https://github.com/LeoLourson/MacroStress-DSH/discussions
+    about: Ask how to set up a scenario or plug in an asset type.

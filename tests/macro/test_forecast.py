@@ -21,6 +21,8 @@ from mst.scenario.contracts import Scenario
 
 from . import simulated as sim
 
+pytestmark = pytest.mark.slow
+
 SHOCKS = [
     Shock(id="gl.s", label="g", rises=["gl.a"]),
     Shock(id="ru.t", label="t", rises=["ru.b", "ru.c"]),

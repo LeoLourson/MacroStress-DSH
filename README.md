@@ -1,118 +1,117 @@
-# MacroStress DSH
+# MacroStress
 
-MacroStress считает, сколько портфель потеряет при заданном макроэкономическом сценарии.
-Аналитик или агент задаёт пути нескольких макропеременных (например, ключевая ставка 21 %
-весь следующий год) и называет шоки, которые эти пути вызвали. Макромодель, оценённая на
-истории, достраивает согласованные пути остальных переменных, сателлитные модели переводят
-их в драйверы (цены акций, спреды облигаций, просрочку отраслей, цены жилья), а по
-драйверам оценивается каждая позиция портфеля. Метод описан в
-[docs/scenario-formalization.md](docs/scenario-formalization.md).
+[English](README.md) | [Русский](README.ru.md) | [中文](README.zh.md)
 
-Система собрана как плагин [DSH](docs/install.md): агент в окне DSH работает через
-MCP-инструменты, а всё состояние лежит в одном каталоге `workspace/` на диске. Веба, базы
-данных и оркестратора нет.
+[![CI](https://github.com/LeoLourson/MacroStress-DSH/actions/workflows/ci.yml/badge.svg)](https://github.com/LeoLourson/MacroStress-DSH/actions/workflows/ci.yml)
+[![MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![Python 3.12+](https://img.shields.io/badge/python-3.12%2B-blue.svg)](pyproject.toml)
 
-## Что уже работает
+MacroStress answers one question: how much does a portfolio lose under a given macroeconomic
+scenario? An analyst or an agent names paths for a few macro variables (say, the policy rate at
+21 % for the next year) and the shocks behind them. A BVAR estimated on history completes
+consistent paths for the other variables, satellite models turn those paths into drivers (equity
+prices, bond spreads, industry overdue shares, housing prices), and every position is repriced
+along the same draws. The output is a loss distribution with $P_5$, $P_{50}$, $P_{95}$, ES95 and
+the scenario severity $\delta$. The method is described in
+[docs/scenario-formalization.md](docs/scenario-formalization.md) (Russian).
 
-Проект переносится со старого репозитория `macrostress-core` по шагам из [PLAN.md](PLAN.md).
+The server speaks MCP, so any client can drive it: Claude Desktop, Cursor, Claude Code. A
+DeepSeek Harness plugin in `dsh/` adds three skills and a workspace snapshot for the agent
+prompt. All state lives in one `workspace/` directory; there is no web app, no database, and no
+scheduler.
 
-| Часть | Состояние |
+## What it does
+
+| Part | What it does |
 |---|---|
-| Ряды: загрузка из MOEX, Банка России, Росстата, FRED с датой публикации каждого значения | готово |
-| Макромодель: BVAR со стохастической волатильностью, знаковая идентификация шоков, условный прогноз, тяжесть сценария, проверка на эпизодах | готово |
-| Драйверы: каталоги объектов, иерархические сателлиты, проверка вне выборки, пути драйверов | готово |
-| MCP-инструменты `jobs`, `series`, `corpus`, `scenario`, `run`, `portfolio`, `model` | готово |
-| Корпус источников: манифест, загрузка, Markdown, карточки эпизодов, индекс и поиск с отсечкой по дате | готово |
-| Сценарий: файл $(N, C, D, O)$, проверки и пути — условный прогноз и драйверы на тех же розыгрышах | готово |
-| Модели позиций: акция, облигация, кредит или депозит, недвижимость | готово |
-| Портфель, прогон на путях сценария и отчёт с $P_5$, $P_{50}$, $P_{95}$ и $\delta$ | готово |
-| Типы активов как расширения: плагины, `python -m mst.plugin`, контрактные тесты | готово |
-| Скиллы DSH: сценарий из корпуса, отчёт, драйверы; раздел промпта из `workspace.json` | готово |
+| Series | Monthly series from MOEX, the Bank of Russia, Rosstat, and FRED, with the release date of every value |
+| Macro model | BVAR with stochastic volatility, sign restrictions, conditional forecasts, scenario severity, and checks on historical episodes |
+| Drivers | Object catalogs, hierarchical satellite models, out-of-sample checks, driver paths on the macro draws |
+| Scenario | A $(N, C, D, O)$ file with validation and paths: conditional forecast and drivers on the same draws |
+| Positions | Equity, bond, credit or deposit, housing |
+| Run and report | Positions along scenario paths, with $P_5$, $P_{50}$, $P_{95}$, ES95, and $\delta$ |
+| Extensions | A new asset type is a plugin: `python -m mst.plugin new`, contract checks, a demo run |
+| DSH plugin | Scenario from the corpus, report, drivers; the prompt section built from `workspace.json` |
 
-Поэтому сейчас можно загрузить данные, оценить и проверить модели, собрать портфель и
-посчитать его потери в сценарии.
+MCP tools: `jobs`, `series`, `corpus`, `scenario`, `run`, `portfolio`, `model`. The reference is
+in [docs/tools.md](docs/tools.md) (Russian).
 
-## Установка
+## Install
 
-Коротко: Python 3.12 и `uv sync`, затем подключение папки `dsh/` к профилю DSH и правка
-путей в `dsh/cordis.patch.yml`. Шаги и проверка — в [docs/install.md](docs/install.md).
+Python 3.12 or newer and [uv](https://docs.astral.sh/uv/) are enough.
 
-```powershell
+```bash
+git clone https://github.com/LeoLourson/MacroStress-DSH
+cd MacroStress-DSH
 uv sync
-.venv\Scripts\python.exe -m pytest -q
+uv run macrostress --workspace C:/data/macrostress
 ```
 
-## Первый сеанс
+The server speaks over stdio and prints only errors; it waits for a client. Configuration for
+Claude Desktop, Cursor, and any other MCP client is in [docs/mcp.md](docs/mcp.md). The DeepSeek
+Harness plugin is covered in [docs/install.md](docs/install.md).
 
-После подключения плагина агенту в DSH доступны семь инструментов. Долгие операции
-запускаются задачами: инструмент сразу возвращает `job`, а ход работы виден через `jobs`.
-Три скилла плагина — `scenario-from-corpus`, `run-report`, `drivers` — объясняют, как
-собрать сценарий, прочитать отчёт и обновить драйверы.
+## First session
 
-1. `jobs(action="state")` — что лежит в workspace: версии моделей, индекс корпуса, число задач.
-2. `series(action="update")` — загрузить все макроряды. Для FRED нужен ключ в переменной
-   окружения `FRED_API_KEY`.
-3. `jobs(action="status", id=...)` и `jobs(action="log", id=...)` — ждать конца задачи.
-4. `model(kind="macro", action="estimate", as_of="2026-10-29")` — оценить макромодель на
-   данных, известных к этой дате. Получится версия с хешем в имени.
-5. `series(action="update", quantity="share_price")` — найти объекты величины и загрузить их
-   ряды; так же для `bond_spread`, `overdue_share`, `housing_price_primary`,
+Once a client is connected, it sees seven tools. Long operations start jobs: a tool returns a
+`job` at once, and `jobs` shows the progress.
+
+1. `jobs(action="state")` — what is in the workspace: model versions, corpus index, jobs.
+2. `series(action="update")` — download the macro series. FRED needs a key in `FRED_API_KEY`.
+3. `jobs(action="status", id=...)` and `jobs(action="log", id=...)` — wait for the job.
+4. `model(kind="macro", action="estimate", as_of="2026-10-29")` — estimate the macro model on the
+   data known at that date. The version is a hash.
+5. `series(action="update", quantity="share_price")` — find the objects of a quantity and
+   download their series; the same for `bond_spread`, `overdue_share`, `housing_price_primary`,
    `housing_price_secondary`.
-6. `model(kind="satellites", action="estimate", version=<хеш макроверсии>)` — оценить
-   сателлиты на панели этой макроверсии.
-7. `model(kind="satellites", action="describe", version=<хеш>)` — какие драйверы прошли
-   проверку вне выборки и почему остальные отклонены.
-8. `corpus(action="search", query=..., as_of=...)` — фрагменты корпуса, известные на дату;
-   `corpus(action="index")` пересобирает индекс задачей.
-9. `scenario(action="save", id=..., spec={...})` — сохранить сценарий;
-   `scenario(action="validate", id=...)` — назвать всё, что мешает его посчитать.
-10. `portfolio(action="save", id=..., spec={...})` — сохранить портфель;
-    `portfolio(action="check", id=..., scenario=...)` — проверить его против сценария.
-11. `run(action="start", scenario=..., portfolio=..., draws=..., seed=...)` — запустить
-    прогон; `run(action="result", id=...)` — прочитать $P_5$/$P_{50}$/$P_{95}$, $\delta$ и
-    покрытие.
+6. `model(kind="satellites", action="estimate", version=<macro hash>)` — estimate the satellites
+   on that macro version.
+7. `model(kind="satellites", action="describe", version=<hash>)` — which drivers passed the
+   out-of-sample check and why the rest were rejected.
+8. `corpus(action="search", query=..., as_of=...)` — fragments known at the date;
+   `corpus(action="index")` rebuilds the index as a job.
+9. `scenario(action="save", id=..., spec={...})` — save a scenario;
+   `scenario(action="validate", id=...)` — list everything that blocks the calculation.
+10. `portfolio(action="save", id=..., spec={...})` — save a portfolio;
+    `portfolio(action="check", id=..., scenario=...)` — check it against the scenario.
+11. `run(action="start", scenario=..., portfolio=..., draws=..., seed=...)` — start a run;
+    `run(action="result", id=...)` — read $P_5$/$P_{50}$/$P_{95}$, $\delta$, and coverage.
 
-Справочник по инструментам — [docs/tools.md](docs/tools.md).
+## Documentation
 
-## Документация
+The docs are in Russian for now; [docs/mcp.md](docs/mcp.md) is in English.
 
-- [docs/install.md](docs/install.md) — установка и подключение к DSH;
-- [docs/architecture.md](docs/architecture.md) — части системы, workspace, версии, задачи;
-- [docs/tools.md](docs/tools.md) — MCP-инструменты и команды `python -m mst.*`;
-- [docs/plugins.md](docs/plugins.md) — как сделать тип актива плагином;
-- [docs/platform.md](docs/platform.md) — контракты расчёта: позиция, пути, модель, реестр;
-- [docs/scenario-formalization.md](docs/scenario-formalization.md) — математика метода и что
-  из неё реализовано;
-- [docs/thesis.md](docs/thesis.md) — концепция магистерской диссертации: тяжесть сценария,
-  обратный стресс-тест, эмпирический дизайн;
-- [PLAN.md](PLAN.md) — оставшиеся шаги переноса.
+- [docs/mcp.md](docs/mcp.md) — any MCP client, the first session, troubleshooting;
+- [docs/install.md](docs/install.md) — the Python package and the DeepSeek Harness plugin;
+- [docs/architecture.md](docs/architecture.md) — packages, workspace, versions, jobs;
+- [docs/tools.md](docs/tools.md) — MCP tools and `python -m mst.*` commands;
+- [docs/plugins.md](docs/plugins.md) — a new asset type as a plugin;
+- [docs/platform.md](docs/platform.md) — the contracts: position, paths, model, registry;
+- [docs/scenario-formalization.md](docs/scenario-formalization.md) — the method and what the code
+  implements.
 
-У каждой папки кода свой README.
+Every package folder has its own README that names its files.
 
-## Словарь
+## Development
 
-| Термин | Что это |
-|---|---|
-| Ряд | Временной ряд с датой публикации каждого значения (`series/<id>.csv`) |
-| Источник | Загрузчик рядов одного вида (MOEX ISS, ЦБ, Росстат) |
-| Макромодель | BVAR с идентификацией шоков; версия — файлы с хешем |
-| Величина | Вид драйвера: цена акции, спред облигации, доля просрочки отрасли, цена жилья |
-| Объект | То, у чего есть драйвер: бумага, эмитент, отрасль, регион; у него есть коды `secid`, `isin`, `inn`, `okved`, `okato` |
-| Каталог | Находит все объекты величины у источника |
-| Сателлит | Модель драйвера от макропеременных; версия сателлитов — файлы с хешем |
-| Тип актива | Расширение: какие входы нужны позиции, как их найти, как оценить позицию на путях |
-| Сценарий | Нарратив $N$, ограничения $C$, движущие шоки $D$, надбавки $O$, ссылки на фрагменты корпуса |
-| Пути | $R$ розыгрышей на $H$ месяцев: макропеременные и драйверы в исходных единицах |
-| Прогон | Портфель × сценарий × версии × дата × сид; повтор даёт те же числа побитно |
-
-## Проверки
-
-```powershell
-.venv\Scripts\python.exe -m pytest -q
-.venv\Scripts\python.exe -m ruff check --no-cache .
+```bash
+uv sync
+uv run pytest -q -m "not slow"
+uv run ruff check .
 ```
 
-`--no-cache` нужен, потому что на машине автора ruff не может создать свой кэш; сама проверка
-от этого не меняется. Тяжёлые тесты оценки BVAR (`tests/macro/test_estimate.py`,
-`test_forecast.py`, `test_identify.py`) идут минуты; как их пропустить, написано в
-[PLAN.md](PLAN.md).
+The `slow` tests estimate the BVAR and take minutes; the night workflow runs the full suite.
+CI runs the fast suite on Linux and Windows with Python 3.12 and 3.13.
+
+## Status
+
+0.1.0, beta. Interfaces may change before 1.0. The data sources are the Russian market (MOEX,
+the Bank of Russia, Rosstat) plus FRED for global series.
+
+## Contributing and license
+
+Contributing rules and the release process are in [CONTRIBUTING.md](CONTRIBUTING.md);
+vulnerabilities go through [SECURITY.md](SECURITY.md). The code is MIT-licensed, see
+[LICENSE](LICENSE). Series from MOEX, the Bank of Russia, Rosstat, FRED, and BIS are not part of
+this repository: you load them under the terms of each source, and the license does not cover
+that data. Citations are described in [CITATION.cff](CITATION.cff).
