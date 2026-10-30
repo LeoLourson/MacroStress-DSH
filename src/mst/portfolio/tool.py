@@ -9,7 +9,6 @@ the calculation month of the scenario's macro version, before any path is drawn.
 """
 
 import re
-from datetime import date
 from pathlib import Path
 from typing import Any
 
@@ -91,11 +90,13 @@ def check(
     ws: store.Workspace, id: str, scenario: str, catalog: Catalog = default_catalog
 ) -> dict:
     """Every problem that keeps the portfolio from running under ``scenario``, each one named."""
+    from mst import plugins
+
     portfolio = load(ws.portfolios, id)
     spec = scenario_tool.load(ws.scenarios, scenario)
-    posterior, meta = macro_version.load(ws.models, spec.macro)
+    macro = macro_version.load(ws.models, spec.macro, plugins.registry().macro)
     satellites = satellite_version.load(ws.models, spec.satellites)
-    as_of = date.fromisoformat(meta["as_of"])
+    as_of = macro.as_of
     problems = []
     if satellites.macro != spec.macro:
         problems.append(
@@ -104,7 +105,7 @@ def check(
         )
     corpus = ws.corpus if (ws.corpus / "index" / "chunks.jsonl").is_file() else None
     problems += scenario_build.validate(
-        spec, posterior, satellites, as_of=as_of, corpus=corpus
+        spec, macro, satellites, as_of=as_of, corpus=corpus
     )["problems"]
     options = RunOptions(
         as_of=as_of, horizon=spec.horizon, base_currency=portfolio.base_currency
@@ -112,7 +113,7 @@ def check(
     for position in portfolio.positions:
         problems += [
             f"{position.id}: {problem}"
-            for problem in _position_problems(position, options, posterior, satellites, catalog)
+            for problem in _position_problems(position, options, macro, satellites, catalog)
         ]
     return {"id": id, "scenario": scenario, "ok": not problems, "problems": problems}
 
@@ -121,7 +122,7 @@ def exposure(ws: store.Workspace, id: str, scenario: str) -> dict:
     """The value of every position at the calculation month of the scenario's macro version."""
     portfolio = load(ws.portfolios, id)
     spec = scenario_tool.load(ws.scenarios, scenario)
-    panel, as_of = satellite_version.macro_panel(ws.models, spec.macro)
+    panel, as_of = macro_version.panel_of(ws.models, spec.macro)
     macro = macro_registry.load_registry()
     index = {name: position for position, name in enumerate(panel.ids)}
     rows, problems = [], []
@@ -159,7 +160,7 @@ def exposure(ws: store.Workspace, id: str, scenario: str) -> dict:
 
 
 def _position_problems(
-    position: Position, options: RunOptions, posterior, satellites, catalog: Catalog
+    position: Position, options: RunOptions, macro, satellites, catalog: Catalog
 ) -> list[str]:
     """Why the portfolio's scenario cannot serve this position; empty when it can."""
     try:
@@ -185,7 +186,7 @@ def _position_problems(
     problems = [
         f"the macro version has no {variable}"
         for variable in needs.macro
-        if variable not in posterior.ids
+        if variable not in macro.ids
     ]
     served = set(satellites.served())
     for requirement in needs.drivers:

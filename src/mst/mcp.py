@@ -8,7 +8,7 @@ from typing import Any
 from fastmcp import FastMCP
 
 from . import jobs as tasks
-from . import runs, store
+from . import models, runs, store
 from .corpus import tool as corpus_tool
 from .data import sources
 from .data.store import SeriesStore
@@ -232,13 +232,20 @@ def build(ws: store.Workspace) -> FastMCP:
         version: str | None = None,
         as_of: str | None = None,
         only: list[str] | None = None,
+        model_id: str | None = None,
     ) -> dict:
-        """Model versions. kind: macro, satellites. Actions: list, describe, estimate, backtest.
+        """Model versions and plugins. kind: macro, satellites, catalog.
 
-        ``version`` is the macro version for ``macro`` describe and backtest and for
-        ``satellites`` estimate; for ``satellites`` describe it is the satellite version.
-        ``list`` takes no version.
+        Actions for ``macro``: list, describe, estimate, backtest; for ``satellites``: list,
+        describe, estimate; for ``catalog``: list, the installed model plugins.
+        ``model_id`` names the macro model to estimate or backtest — the only one installed
+        when omitted. ``version`` is the version hash ``describe`` reads and the macro version
+        the satellites of an ``estimate`` are built on; ``list`` takes no version.
         """
+        if kind == "catalog":
+            if action != "list":
+                raise ValueError("model: unknown action for catalog, try list")
+            return models.catalog()
         if kind == "satellites":
             if action == "list":
                 return {"versions": satellite_version.catalogue(ws.models)}
@@ -250,16 +257,33 @@ def build(ws: store.Workspace) -> FastMCP:
                 f"model: unknown action {action!r} for satellites, try list, describe, estimate"
             )
         if kind != "macro":
-            raise ValueError(f"model: unknown kind {kind!r}, try macro, satellites")
+            raise ValueError(f"model: unknown kind {kind!r}, try macro, satellites, catalog")
         if action == "list":
             return {"versions": macro_version.catalogue(ws.models)}
         if action == "describe":
             return macro_version.describe(ws.models, _need(version, "version"))
         if action == "estimate":
-            return _start(ws, "models", _macro_argv(ws, "estimate", _need(as_of, "as_of")))
+            return _start(
+                ws,
+                "models",
+                _macro_argv(
+                    ws,
+                    "estimate-macro",
+                    _need(as_of, "as_of"),
+                    models.selected(model_id).model_id,
+                ),
+            )
         if action == "backtest":
             return _start(
-                ws, "models", _macro_argv(ws, "backtest", _need(as_of, "as_of"), only or [])
+                ws,
+                "models",
+                _macro_argv(
+                    ws,
+                    "backtest",
+                    _need(as_of, "as_of"),
+                    models.selected(model_id).model_id,
+                    only or [],
+                ),
             )
         raise ValueError(
             f"model: unknown action {action!r}, try list, describe, estimate, backtest"
@@ -284,14 +308,19 @@ def _indexed(ws: store.Workspace) -> Path | None:
 
 
 def _macro_argv(
-    ws: store.Workspace, command: str, as_of: str, only: list[str] | None = None
+    ws: store.Workspace,
+    command: str,
+    as_of: str,
+    model_id: str,
+    only: list[str] | None = None,
 ) -> list[str]:
-    """The command line of ``python -m mst.macro`` for this workspace."""
+    """The command line of ``python -m mst.models`` for this workspace."""
     day = date.fromisoformat(as_of).isoformat()
     argv = [
         "-m",
-        "mst.macro",
+        "mst.models",
         command,
+        model_id,
         "--as-of",
         day,
         "--store",

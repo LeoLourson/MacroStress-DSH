@@ -12,8 +12,8 @@ from mst.drivers.registry import Registry, from_model, load_registry, to_model
 from mst.drivers.simulate import OVERLAY, PARAMETERS_FROM_ABOVE, NotServed, simulate
 from mst.drivers.spec import load_spec
 from mst.drivers.version import build, load, save
-from mst.macro.forecast import Simulation
 from mst.macro.registry import load_registry as load_macro_registry
+from mst.model_sdk.contracts import MacroSimulation as Simulation
 from mst.scenario.contracts import Overlay
 
 from . import simulated

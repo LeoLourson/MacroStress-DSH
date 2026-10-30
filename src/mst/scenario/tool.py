@@ -8,7 +8,6 @@ disk.
 """
 
 import re
-from datetime import date
 from pathlib import Path
 from typing import Any
 
@@ -61,10 +60,14 @@ def save(root: Path, id: str, raw: dict[str, Any]) -> dict:
 
 def validate(root: Path, id: str, models: Path, corpus: Path | None = None) -> dict:
     """Every problem of the scenario with the versions it names, or that all is well."""
+    from mst import plugins
+
     spec = load(root, id)
-    model, meta = macro_version.load(models, spec.macro)
+    macro = macro_version.load(models, spec.macro, plugins.registry().macro)
     satellites = satellite_version.load(models, spec.satellites)
-    report = check(spec, model, satellites, as_of=date.fromisoformat(meta["as_of"]), corpus=corpus)
+    report = check(
+        spec, macro, satellites, as_of=macro.as_of, corpus=corpus
+    )
     return {"id": id, **report}
 
 

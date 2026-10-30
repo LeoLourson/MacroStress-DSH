@@ -14,7 +14,7 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from mst.macro.forecast import Simulation
+from mst.model_sdk.contracts import MacroSimulation
 from mst.scenario.contracts import Overlay
 
 from .estimate import regressors
@@ -64,7 +64,7 @@ def _nearest(hist, node: int, rows: np.ndarray) -> int:
 
 def simulate(
     sat: Satellites,
-    macro: Simulation,
+    macro: MacroSimulation,
     drivers: list[str],
     overlays: list[Overlay] = (),
     *,

@@ -11,13 +11,16 @@ from mst.drivers import version as satellite_version
 from mst.drivers.spec import Sampler
 from mst.drivers.spec import load_spec as load_drivers_spec
 from mst.macro import version as macro_version
-from mst.macro.estimate import Posterior, estimate
-from mst.macro.identify import identify
 from mst.macro.panel import Panel, months_between, shift
-from mst.macro.registry import Shock
+from mst.macro.version import MacroVersion
+from mst.plugins.bvar import MODEL
+from mst.plugins.bvar.estimate import Posterior, estimate
+from mst.plugins.bvar.identify import identify
+from mst.plugins.bvar.model import parts
+from mst.plugins.bvar.signs import Shock
 
+from ..bvar import simulated as macro
 from ..drivers import simulated as drivers
-from ..macro import simulated as macro
 
 IDS = ["gl.brent", "ru.key_rate", "ru.usdrub"]
 MONTHS = 120
@@ -45,6 +48,8 @@ class Versions:
     macro: str
     satellites: str
     model: Posterior
+    loaded: MacroVersion
+    """The macro version loaded back, as a run receives it."""
     satellite: satellite_version.Satellites
     data: Panel
     store: SeriesStore
@@ -56,7 +61,8 @@ def build(models: Path, series: Path) -> Versions:
     data_store = drivers.store(series, data)
     spec = macro.spec(draws=40, burn=0, seed=2, stationary=IDS)
     model = identify(estimate(data, spec), [SHOCK], sign_lag=0, tries=500, seed=1)
-    name = macro_version.save(model, spec, data, AS_OF, models)
+    estimate_ = parts(model, spec, data, AS_OF)
+    name = macro_version.save("bvar.sv", estimate_.meta, estimate_.arrays, models)
     satellite_spec = load_drivers_spec().model_copy(
         update={"sampler": Sampler(draws=300, burn=100, seed=7)}
     )
@@ -68,6 +74,7 @@ def build(models: Path, series: Path) -> Versions:
         macro=name,
         satellites=satellite_version.save(satellite, models),
         model=model,
+        loaded=macro_version.load(models, name, {"bvar.sv": MODEL}),
         satellite=satellite,
         data=data,
         store=data_store,

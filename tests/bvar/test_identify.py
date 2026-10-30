@@ -1,4 +1,4 @@
-"""mst.macro.identify: sign restrictions by uniform rotations."""
+"""Sign restrictions by uniform rotations."""
 
 from dataclasses import replace
 
@@ -6,12 +6,11 @@ import numpy as np
 import pytest
 from scipy import stats
 
-from mst.macro.estimate import estimate
-from mst.macro.identify import identify, impact, rotate
-from mst.macro.registry import Shock
-from mst.macro.var import responses
-
-from . import simulated as sim
+from mst.plugins.bvar.estimate import estimate
+from mst.plugins.bvar.identify import identify, impact, rotate
+from mst.plugins.bvar.signs import Shock
+from mst.plugins.bvar.var import responses
+from tests.bvar import simulated as sim
 
 pytestmark = pytest.mark.slow
 

@@ -1,13 +1,14 @@
-"""mst.macro.backtest: the check of the macro model on historical episodes."""
+"""The episode check of the BVAR plugin on historical episodes."""
 
 from datetime import date
 
 import numpy as np
 
 from mst.data.store import Observation, SeriesStore
-from mst.macro import cli
 from mst.macro import version as macro_version
-from mst.macro.backtest import (
+from mst.macro.panel import months_between
+from mst.macro.registry import Registry, block_of, load_registry
+from mst.plugins.bvar.backtest import (
     Case,
     Exclusion,
     calculation_date,
@@ -18,19 +19,17 @@ from mst.macro.backtest import (
     models_for,
     realized_paths,
 )
-from mst.macro.estimate import Posterior
-from mst.macro.forecast import Simulation
-from mst.macro.panel import months_between
-from mst.macro.registry import Registry, Shock, block_of, load_registry
-from mst.macro.spec import load_spec
-
-from . import simulated as sim
+from mst.plugins.bvar.estimate import Posterior
+from mst.plugins.bvar.forecast import Simulation
+from mst.plugins.bvar.signs import Shock, load_signs
+from mst.plugins.bvar.spec import load_spec
+from tests.bvar import simulated as sim
 
 
 def test_every_episode_of_backtest_toml_fits_the_registry():
-    plan, registry = load_backtest(), load_registry()
+    plan, registry, signs = load_backtest(), load_registry(), load_signs()
     variables = {v.id for v in registry.variables}
-    shocks = {s.id for s in registry.shocks}
+    shocks = set(signs.ids)
     for check in plan.episodes:
         assert set(check.constrained) <= variables, check.id
         assert set(check.driving) <= shocks, check.id
@@ -158,8 +157,10 @@ def test_episode_models_stay_out_of_the_versions_of_the_workspace(tmp_path):
     tables = {"registry": [Shock(id="ru.t", label="t", rises=["ru.b"])]}
     models = tmp_path / "models"
 
-    first = models_for(panel, spec, date(2010, 1, 1), tables, models)
-    again = models_for(panel, spec, date(2010, 1, 1), tables, models)
+    from mst.plugins.bvar import MODEL
+
+    first = models_for(MODEL, panel, spec, date(2010, 1, 1), tables, models)
+    again = models_for(MODEL, panel, spec, date(2010, 1, 1), tables, models)
 
     assert macro_version.catalogue(models) == []
     assert again["registry"][0] == first["registry"][0]
@@ -173,10 +174,15 @@ def test_an_episode_missing_from_the_manifest_is_reported_not_raised(tmp_path, c
         ' "episodes": []}',
         encoding="utf-8",
     )
-    code = cli.main(
-        ["backtest", "--as-of", "2026-10-29", "--only", "R13", "--store", str(tmp_path / "s"),
-         "--models", str(tmp_path / "m"), "--corpus", str(manifest)]
-    )  # fmt: skip
+    from mst.plugins.bvar import MODEL
+
+    code = MODEL.backtest(
+        store=tmp_path / "s",
+        models=tmp_path / "m",
+        corpus=manifest,
+        as_of=date(2026, 10, 29),
+        only=["R13"],
+    )
 
     assert code == 1
     assert "R13: not in the corpus manifest" in capsys.readouterr().out

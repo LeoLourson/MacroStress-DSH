@@ -28,15 +28,17 @@ from pydantic import Field, field_validator
 
 from mst.contracts import Contract, Identifier, Seed
 from mst.data.store import SeriesStore
+from mst.macro import version as macro_version
+from mst.macro.panel import Panel, build_panel, seasonal_profile, shift
+from mst.macro.registry import Registry
 from mst.scenario.contracts import Scenario
 
 from .estimate import Posterior, estimate
-from .forecast import Simulation
+from .forecast import InfeasibleScenario, Simulation, simulate
 from .identify import identify
-from .panel import Panel, build_panel, seasonal_profile, shift
-from .registry import Registry, Shock
-from .spec import Count, Spec, first_of_month
-from .version import load, save
+from .model import BvarModel, parts
+from .signs import Shock, load_signs
+from .spec import Count, Spec, first_of_month, load_spec
 
 BACKTEST_PATH = Path(__file__).with_name("backtest.toml")
 LOW, HIGH = 5, 95
@@ -220,7 +222,12 @@ def _key(panel: Panel, spec: Spec, as_of: date, shocks: list[Shock]) -> str:
 
 
 def models_for(
-    panel: Panel, spec: Spec, as_of: date, tables: dict[str, list[Shock]], root: Path
+    plugin: BvarModel,
+    panel: Panel,
+    spec: Spec,
+    as_of: date,
+    tables: dict[str, list[Shock]],
+    root: Path,
 ) -> dict[str, tuple[str, Posterior]]:
     """The model version of each sign table on the calculation date, estimated once.
 
@@ -237,7 +244,8 @@ def models_for(
         if pointer.exists():
             version = pointer.read_text(encoding="utf-8").strip()
             if (folder / "macro" / version).is_dir():
-                found[name] = (version, load(folder, version)[0])
+                meta, arrays = macro_version.read(folder, version)
+                found[name] = (version, plugin.load(meta, arrays))
     missing = [name for name in tables if name not in found]
     if missing:
         posterior = estimate(panel, spec)
@@ -249,7 +257,10 @@ def models_for(
                 tries=spec.rotation_tries,
                 seed=spec.sampler.seed,
             )
-            version = save(model, spec, panel, as_of, folder)
+            estimate_ = parts(model, spec, panel, as_of)
+            version = macro_version.save(
+                plugin.model_id, estimate_.meta, estimate_.arrays, folder
+            )
             (folder / keys[name]).write_text(version + "\n", encoding="utf-8")
             found[name] = (version, model)
     return found
@@ -267,3 +278,138 @@ def explosive_share(model: Posterior, limit: float = EXPLOSIVE) -> float:
     companion[:, :n] = np.concatenate(list(model.lags.transpose(1, 0, 2, 3)), axis=2)
     companion[:, n:, :-n] = np.eye(n * (p - 1))
     return float((np.abs(np.linalg.eigvals(companion)).max(axis=1) > limit).mean())
+
+
+def run(
+    plugin: BvarModel,
+    *,
+    store,
+    models: Path,
+    corpus: Path,
+    as_of: date,
+    only: list[str] = (),
+    details: Path | None = None,
+) -> int:
+    """The episode check of the BVAR: one table (its own signs), printed as Markdown tables.
+
+    ``store`` is the series store of the workspace, ``models`` its models root and ``corpus``
+    the manifest of the episodes. Exits with 1 when an episode could not be checked: missing
+    from the manifest, too short a history or an infeasible scenario.
+    """
+    from mst.corpus import manifest
+    from mst.macro.registry import load_registry
+
+    plan = load_backtest()
+    signs = load_signs()
+    tables = {"signs": signs.shocks}
+    registry = load_registry()
+    starts = {e.id: e.start_month for e in manifest.load(corpus).episodes}
+    unknown = [id_ for id_ in only if id_ not in {c.id for c in plan.episodes}]
+    if unknown:
+        raise SystemExit(f"not in backtest.toml: {', '.join(unknown)}")
+    data_store = SeriesStore(store)
+    rows, problems, detail = [], [], {}
+    hits = {name: {} for name in tables}
+    counts = {name: {} for name in tables}
+    for check in plan.episodes:
+        if only and check.id not in only:
+            continue
+        if check.id not in starts:
+            problems.append(f"{check.id}: not in the corpus manifest {corpus}")
+            rows.append([check.id, "-", "-", "", "", *["not estimated"] * len(tables)])
+            continue
+        try:
+            case, panel, history = prepare(
+                check, starts[check.id], plan, data_store, registry, load_spec(), as_of
+            )
+            found = models_for(
+                plugin, panel, history, case.as_of, tables, models
+            )
+        except ValueError as error:
+            # Too short a history on the calculation date: the episode is reported, not run.
+            problems.append(f"{check.id}: {error}")
+            rows.append([check.id, "-", "-", "", "", *["not estimated"] * len(tables)])
+            continue
+        cells = []
+        for name in tables:
+            unknown_shocks = [
+                s for s in case.scenario.driving_shocks if s not in signs.ids
+            ]
+            if unknown_shocks:
+                problems.append(f"{check.id}: unknown shocks {', '.join(unknown_shocks)}")
+                cells.append("unknown shock")
+                continue
+            version, model = found[name]
+            try:
+                simulation = simulate(model, case.scenario, draws=plan.draws, seed=plan.seed)
+            except InfeasibleScenario as error:
+                problems.append(f"{check.id} / {name}: {error}")
+                cells.append("infeasible")
+                continue
+            result = coverage(case, simulation)
+            for id_ in result.counts:
+                hits[name][id_] = hits[name].get(id_, 0) + result.hits[id_]
+                counts[name][id_] = counts[name].get(id_, 0) + result.counts[id_]
+            cells.append(
+                f"{_share(sum(result.hits.values()), sum(result.counts.values()))}; "
+                f"{model.draws}/{model.diagnostics['estimated']} draws, "
+                f"{explosive_share(model):.0%} explosive"
+            )
+            detail.setdefault(check.id, {})[name] = {
+                "version": version,
+                "as_of": case.as_of.isoformat(),
+                "months": [m.isoformat() for m in case.months],
+                "ids": simulation.ids,
+                "constrained": case.constrained,
+                "realized": _rows(case.realized),
+                "p5": _rows(result.quantiles[0]),
+                "p50": _rows(result.quantiles[1]),
+                "p95": _rows(result.quantiles[2]),
+            }
+        rows.append(
+            [
+                check.id,
+                case.as_of.isoformat(),
+                str(len(case.months)),
+                ", ".join(check.constrained),
+                ", ".join(check.driving),
+                *cells,
+            ]
+        )
+    names = list(tables)
+    print("## Episodes\n")
+    _table(["episode", "as of", "months", "constrained", "driving", *names], rows)
+    print("\n## Variables\n")
+    ids = [v.id for v in registry.variables if any(v.id in counts[n] for n in names)]
+    _table(
+        ["variable", *names],
+        [
+            [id_, *(_share(hits[n].get(id_, 0), counts[n].get(id_, 0)) for n in names)]
+            for id_ in ids
+        ],
+    )
+    print("\n## All\n")
+    _table(
+        ["", *names],
+        [["all", *(_share(sum(hits[n].values()), sum(counts[n].values())) for n in names)]],
+    )
+    for problem in problems:
+        print(problem)
+    if details is not None:
+        details.write_text(json.dumps(detail, ensure_ascii=False), encoding="utf-8")
+    return 1 if problems else 0
+
+
+def _share(hits: int, count: int) -> str:
+    return f"{hits / count:.2f} ({count})" if count else "-"
+
+
+def _rows(array) -> list[list[float | None]]:
+    return [[None if x != x else round(float(x), 4) for x in row] for row in array]
+
+
+def _table(header: list[str], rows: list[list[str]]) -> None:
+    print("| " + " | ".join(header) + " |")
+    print("|" + "---|" * len(header))
+    for row in rows:
+        print("| " + " | ".join(row) + " |")

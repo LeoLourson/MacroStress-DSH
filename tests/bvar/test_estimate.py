@@ -1,11 +1,10 @@
-"""mst.macro.estimate: posterior intervals cover the parameters of a known model."""
+"""Posterior intervals cover the parameters of a known model."""
 
 import numpy as np
 import pytest
 
-from mst.macro.estimate import estimate, impute
-
-from . import simulated as sim
+from mst.plugins.bvar.estimate import estimate, impute
+from tests.bvar import simulated as sim
 
 pytestmark = pytest.mark.slow
 

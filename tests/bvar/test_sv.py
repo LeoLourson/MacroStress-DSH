@@ -1,9 +1,9 @@
-"""mst.macro.sv: the Gibbs steps of stochastic volatility with Student tails."""
+"""The Gibbs steps of stochastic volatility with Student tails."""
 
 import numpy as np
 import pytest
 
-from mst.macro import sv
+from mst.plugins.bvar import sv
 
 
 def test_mixture_has_the_mean_and_variance_of_log_chi_square_one():

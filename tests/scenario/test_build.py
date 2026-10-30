@@ -9,8 +9,8 @@ import pytest
 from mst.corpus.index import Chunk
 from mst.corpus.index import write as write_index
 from mst.drivers.simulate import OVERLAY
-from mst.macro.forecast import InfeasibleScenario
 from mst.macro.registry import load_registry
+from mst.model_sdk import InfeasibleScenario
 from mst.scenario.build import build, validate
 from mst.scenario.contracts import Overlay
 from mst.scenario.spec import Spec
@@ -49,7 +49,7 @@ def change(variable: str, month: int, other: int, value: float) -> dict:
 
 
 def paths_of(versions, spec):
-    return build(spec, versions.model, versions.satellite, draws=DRAWS, seed=SEED)
+    return build(spec, versions.loaded, versions.satellite, draws=DRAWS, seed=SEED)
 
 
 def test_the_paths_run_from_the_last_month_of_the_panel_for_the_horizon(versions):
@@ -88,7 +88,7 @@ def test_the_paths_repeat_bit_for_bit_for_the_same_seed(versions):
     again = paths_of(versions, spec)
     assert np.array_equal(first.macro, again.macro)
     assert np.array_equal(first.drivers.paths, again.drivers.paths)
-    other = build(spec, versions.model, versions.satellite, draws=DRAWS, seed=SEED + 1)
+    other = build(spec, versions.loaded, versions.satellite, draws=DRAWS, seed=SEED + 1)
     assert not np.array_equal(first.macro, other.macro)
 
 
@@ -127,7 +127,7 @@ def test_an_overlay_on_a_rejected_driver_names_the_reason(versions):
     with pytest.raises(ValueError, match="not more accurate"):
         build(
             scenario(versions, overlays=[overlay]),
-            versions.model,
+            versions.loaded,
             satellite,
             draws=DRAWS,
             seed=SEED,
@@ -136,7 +136,7 @@ def test_an_overlay_on_a_rejected_driver_names_the_reason(versions):
 
 def test_validate_accepts_a_scenario_the_model_can_compute(versions):
     spec = scenario(versions, constraints=[fixed("gl.brent", 2, 1.0)])
-    report = validate(spec, versions.model, versions.satellite, as_of=versions.data.months[-1])
+    report = validate(spec, versions.loaded, versions.satellite, as_of=versions.data.months[-1])
     assert report == {"ok": True, "problems": []}
 
 
@@ -146,11 +146,12 @@ def test_validate_names_every_unknown_variable_and_shock(versions):
         constraints=[fixed("gl.nowhere", 2, 1.0), fixed("ru.nowhere", 3, 1.0)],
         driving_shocks=["ru.nosuch"],
     )
-    report = validate(spec, versions.model, versions.satellite, as_of=versions.data.months[-1])
+    report = validate(spec, versions.loaded, versions.satellite, as_of=versions.data.months[-1])
+    problems = "; ".join(report["problems"])
     assert report["ok"] is False
-    assert "unknown variable gl.nowhere" in report["problems"][0]
-    assert "unknown variable ru.nowhere" in report["problems"][0]
-    assert "unknown shock ru.nosuch" in report["problems"][0]
+    assert "unknown variable gl.nowhere" in problems
+    assert "unknown variable ru.nowhere" in problems
+    assert "unknown shock ru.nosuch" in problems
 
 
 def test_a_constraint_the_driving_shocks_cannot_move_is_refused_by_name(versions):
@@ -162,7 +163,7 @@ def test_a_constraint_the_driving_shocks_cannot_move_is_refused_by_name(versions
     )
     with pytest.raises(InfeasibleScenario, match="cannot meet constraints 2"):
         paths_of(versions, spec)
-    report = validate(spec, versions.model, versions.satellite, as_of=versions.data.months[-1])
+    report = validate(spec, versions.loaded, versions.satellite, as_of=versions.data.months[-1])
     assert report["ok"] is False
     assert any("cannot meet constraints 2" in problem for problem in report["problems"])
 
@@ -175,7 +176,7 @@ def test_validate_names_an_overlay_on_a_rejected_driver(versions):
     overlay = Overlay(driver="price:alpha", start=1, end=2, delta=1.0, reason="r", sources=["s"])
     report = validate(
         scenario(versions, overlays=[overlay]),
-        versions.model,
+        versions.loaded,
         satellite,
         as_of=versions.data.months[-1],
     )
@@ -183,7 +184,10 @@ def test_validate_names_an_overlay_on_a_rejected_driver(versions):
 
 
 def test_validate_names_the_satellites_of_another_macro_version(versions):
-    shorter = replace(versions.model, months=versions.model.months[:-1])
+    shorter = replace(
+        versions.loaded,
+        meta={**versions.loaded.meta, "months": versions.loaded.meta["months"][:-1]},
+    )
     report = validate(scenario(versions), shorter, versions.satellite, as_of=date(2010, 1, 1))
     assert report["ok"] is False and "the satellites are estimated up to" in report["problems"][0]
 
@@ -207,9 +211,9 @@ def test_validate_checks_that_the_cited_fragments_are_visible_on_the_day(version
     write_index([chunk], tmp_path / "index")
     spec = scenario(versions, sources=["S1/2020#1/1"])
     assert validate(
-        spec, versions.model, versions.satellite, as_of=date(2020, 4, 1), corpus=tmp_path
+        spec, versions.loaded, versions.satellite, as_of=date(2020, 4, 1), corpus=tmp_path
     )["ok"]
     report = validate(
-        spec, versions.model, versions.satellite, as_of=date(2020, 1, 1), corpus=tmp_path
+        spec, versions.loaded, versions.satellite, as_of=date(2020, 1, 1), corpus=tmp_path
     )
     assert report["ok"] is False and "S1/2020#1/1" in report["problems"][0]

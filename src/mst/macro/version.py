@@ -1,39 +1,111 @@
-"""A macro model version: ``<root>/macro/<sha256>/``, written and read by ``mst.versions``.
+"""Macro model versions: ``<root>/macro/<sha256>/``, written and read by ``mst.versions``.
 
-``meta.json`` holds the spec, calculation date, variables, months, shock labels and
-diagnostics; ``arrays.npz`` the identified posterior and the panel it was estimated on.
-Versions live in the workspace, out of git.
+A version is the metadata and arrays a macro model plugin returned from its ``estimate``; the
+platform checks the keys the model SDK names (``model``, ``as_of``, ``ids``, ``n_global``,
+``months``, ``shocks``, the panel arrays) and stores the rest untouched. Only the plugin that
+estimated a version reads it back: ``load`` dispatches on the ``model`` the meta records, so a
+version never depends on the code that reads it. Versions live in the workspace, out of git.
 """
 
 import json
+from collections.abc import Mapping
+from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
 
 from mst import versions
+from mst.macro.panel import Panel
+from mst.model_sdk.contracts import (
+    MACRO_ARRAYS_REQUIRED,
+    MACRO_META_REQUIRED,
+    MacroModel,
+)
 
-from .estimate import Posterior
-from .panel import Panel
-from .spec import Dummy, Spec
-
-ARRAYS = ("const", "lags", "dummy", "chol", "logvar", "volvol", "dof", "history", "rotation")
+# The keys of the meta a macro version must record, beyond the model SDK's own: the block
+# structure of the panel, which ``panel_of`` needs to rebuild it.
+META_REQUIRED = (*MACRO_META_REQUIRED, "n_global")
 
 
-def save(model: Posterior, spec: Spec, panel: Panel, as_of: date, root: Path) -> str:
-    """Writes the version unless it exists; returns its hash."""
-    if model.rotation is None:
-        raise ValueError("only an identified posterior is a model version")
-    meta = {
-        "spec": spec.model_dump(mode="json"),
-        "as_of": as_of.isoformat(),
-        "ids": model.ids,
-        "n_global": model.n_global,
-        "months": [m.isoformat() for m in model.months],
-        "shocks": model.shocks,
-        "diagnostics": model.diagnostics,
-    }
-    arrays = {name: getattr(model, name) for name in ARRAYS}
-    arrays |= {"panel_y": panel.y, "panel_approximate": panel.approximate}
-    return versions.save(root / "macro", meta, arrays)
+@dataclass(frozen=True)
+class MacroVersion:
+    """A macro version loaded back: its plugin, the model it loaded and the recorded meta."""
+
+    plugin: MacroModel
+    model: object
+    meta: dict
+
+    @property
+    def as_of(self) -> date:
+        return date.fromisoformat(self.meta["as_of"])
+
+    @property
+    def ids(self) -> list[str]:
+        return list(self.meta["ids"])
+
+    @property
+    def months(self) -> list[date]:
+        return [date.fromisoformat(m) for m in self.meta["months"]]
+
+    @property
+    def shocks(self) -> list[str]:
+        return list(self.meta["shocks"])
+
+
+def save(model_id: str, meta: dict, arrays: dict, root: Path) -> str:
+    """Write a version of ``model_id`` unless it exists; returns its hash.
+
+    ``meta`` is stored with ``model`` prepended, so the version names the plugin that
+    estimated it and ``load`` can dispatch on it.
+    """
+    full = {"model": model_id, **meta}
+    missing = [key for key in META_REQUIRED if key not in full]
+    if missing:
+        raise ValueError(
+            f"a macro version must record {', '.join(META_REQUIRED)}: no {', '.join(missing)}"
+        )
+    absent = [key for key in MACRO_ARRAYS_REQUIRED if key not in arrays]
+    if absent:
+        raise ValueError(
+            f"a macro version must carry {', '.join(MACRO_ARRAYS_REQUIRED)}: "
+            f"no {', '.join(absent)}"
+        )
+    return versions.save(Path(root) / "macro", full, arrays)
+
+
+def read(root: Path, name: str) -> tuple[dict, dict]:
+    """The meta and arrays of a version; refuses a changed version."""
+    return versions.read(Path(root) / "macro", name, "macro version")
+
+
+def load(root: Path, name: str, models: Mapping[str, MacroModel]) -> MacroVersion:
+    """The version ``name`` loaded by the plugin that estimated it.
+
+    ``models`` maps model ids to the installed macro models (``mst.plugins.registry().macro``).
+    A version estimated by a model that is not installed is refused with its name.
+    """
+    meta, arrays = read(root, name)
+    model_id = meta.get("model")
+    if model_id not in models:
+        raise KeyError(
+            f"macro version {name} was estimated by {model_id!r}, which is not "
+            f"installed; installed: {', '.join(sorted(models)) or 'none'}"
+        )
+    return MacroVersion(
+        plugin=models[model_id], model=models[model_id].load(meta, arrays), meta=meta
+    )
+
+
+def panel_of(root: Path, name: str) -> tuple[Panel, date]:
+    """The panel a macro version was estimated on, and its calculation date."""
+    meta, arrays = read(root, name)
+    panel = Panel(
+        ids=meta["ids"],
+        n_global=meta["n_global"],
+        months=[date.fromisoformat(m) for m in meta["months"]],
+        y=arrays["panel_y"],
+        approximate=arrays["panel_approximate"],
+    )
+    return panel, date.fromisoformat(meta["as_of"])
 
 
 def catalogue(root: Path) -> list[dict]:
@@ -42,16 +114,17 @@ def catalogue(root: Path) -> list[dict]:
 
 
 def describe(root: Path, name: str) -> dict:
-    """One version: the meta it stores and the share of its draws the signs identified."""
-    _, meta = load(root, name)
-    diagnostics = meta["diagnostics"]
+    """One version: the model that estimated it, its dates, variables and shocks."""
+    meta, _ = read(root, name)
+    diagnostics = meta.get("diagnostics", {})
     identified, estimated = diagnostics.get("identified"), diagnostics.get("estimated")
     return {
         "version": name,
-        "as_of": meta["as_of"],
-        "ids": meta["ids"],
-        "months": meta["months"],
-        "shocks": meta["shocks"],
+        "model": meta.get("model"),
+        "as_of": meta.get("as_of"),
+        "ids": meta.get("ids"),
+        "months": meta.get("months"),
+        "shocks": meta.get("shocks"),
         "diagnostics": diagnostics,
         "identification_share": identified / estimated if identified and estimated else None,
     }
@@ -59,29 +132,13 @@ def describe(root: Path, name: str) -> dict:
 
 def _summary(folder: Path) -> dict:
     meta = json.loads((folder / "meta.json").read_text(encoding="utf-8"))
-    diagnostics = meta["diagnostics"]
+    diagnostics = meta.get("diagnostics", {})
     return {
         "version": folder.name,
-        "as_of": meta["as_of"],
-        "months": len(meta["months"]),
-        "shocks": meta["shocks"],
+        "model": meta.get("model"),
+        "as_of": meta.get("as_of"),
+        "months": len(meta.get("months", [])),
+        "shocks": meta.get("shocks"),
         "identified": diagnostics.get("identified"),
         "estimated": diagnostics.get("estimated"),
     }
-
-
-def load(root: Path, name: str) -> tuple[Posterior, dict]:
-    """The identified posterior and the meta of a version; refuses a changed version."""
-    meta, arrays = versions.read(root / "macro", name, "model version")
-    spec = Spec.model_validate(meta["spec"])
-    model = Posterior(
-        ids=meta["ids"],
-        n_global=meta["n_global"],
-        months=[date.fromisoformat(m) for m in meta["months"]],
-        lags_count=spec.lags,
-        dummies=[Dummy.model_validate(d) for d in meta["spec"]["dummies"]],
-        diagnostics=meta["diagnostics"],
-        shocks=meta["shocks"],
-        **{key: arrays[key] for key in ARRAYS},
-    )
-    return model, meta

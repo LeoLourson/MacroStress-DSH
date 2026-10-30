@@ -20,6 +20,7 @@ from dataclasses import dataclass
 import numpy as np
 from scipy.special import ndtr
 
+from mst.macro.panel import shift
 from mst.model_sdk.conditional import (
     SWEEPS,
     InfeasibleScenario,
@@ -32,7 +33,6 @@ from mst.model_sdk.contracts import MacroSimulation, Severity
 from mst.scenario.contracts import Scenario
 
 from .estimate import Posterior
-from .panel import shift
 from .var import iterate, responses
 
 Simulation = MacroSimulation

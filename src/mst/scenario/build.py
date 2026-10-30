@@ -1,14 +1,15 @@
 """The paths of a scenario: the conditional forecast, then the drivers under it.
 
-``build`` draws ``draws`` paths of the macro variables under the constraints (``mst.macro``),
-turns them back into each variable's own unit, and drives the satellites of the same macro
-version over exactly those draws (``mst.drivers``) with the overlays of the scenario. The macro
-month ``t = 0`` is the last month of the version's panel, so a run is a function of the
-scenario, the two model versions and the seed alone.
+``build`` asks the macro plugin of the scenario's macro version to draw ``draws`` paths of
+the macro variables under the constraints, turns them back into each variable's own unit,
+and drives the satellites of the same macro version over exactly those draws with the
+overlays of the scenario. The macro month ``t = 0`` is the last month of the version's panel,
+so a run is a function of the scenario, the two model versions and the seed alone.
 
-Severity ``delta`` of the scenario comes from the unconditional forecast of the same version:
+Severity ``delta`` of the scenario comes from the unconditional forecast of the same model:
 the distance of the constrained paths from what the model expects without them. A scenario
-without constraints has no severity.
+without constraints has no severity, and a macro model that does not measure it leaves the
+severity empty.
 """
 
 from dataclasses import dataclass
@@ -22,10 +23,15 @@ from ..drivers.registry import from_model
 from ..drivers.simulate import DriverPaths
 from ..drivers.simulate import simulate as simulate_drivers
 from ..drivers.version import Satellites
-from ..macro.estimate import Posterior
-from ..macro.forecast import InfeasibleScenario, Severity, severity
-from ..macro.forecast import simulate as simulate_macro
 from ..macro.registry import load_registry
+from ..macro.version import MacroVersion
+from ..model_sdk.conditional import InfeasibleScenario
+from ..model_sdk.contracts import (
+    LinearConstraint,
+    LinearTerm,
+    ScenarioPlan,
+    Severity,
+)
 from .spec import Spec
 
 
@@ -46,17 +52,42 @@ class Paths:
     draws: int
 
 
+def plan_of(spec: Spec) -> ScenarioPlan:
+    """The scenario's constraints and driving shocks as the macro model reads them."""
+    return ScenarioPlan(
+        horizon=spec.horizon,
+        constraints=tuple(
+            LinearConstraint(
+                terms=tuple(
+                    LinearTerm(variable=term.variable, month=term.month, weight=term.weight)
+                    for term in constraint.terms
+                ),
+                low=constraint.low,
+                high=constraint.high,
+            )
+            for constraint in spec.constraints
+        ),
+        driving_shocks=tuple(spec.driving_shocks),
+    )
+
+
 def build(
-    spec: Spec, model: Posterior, satellites: Satellites, *, draws: int, seed: int
+    spec: Spec,
+    macro: MacroVersion,
+    satellites: Satellites,
+    *,
+    draws: int,
+    seed: int,
 ) -> Paths:
-    """The paths of ``spec`` from the macro version ``model`` and its ``satellites``.
+    """The paths of ``spec`` from its macro version and the satellites of that version.
 
     Raises ``InfeasibleScenario`` when the driving shocks cannot meet the constraints, and
     ``ValueError`` naming an overlay on a driver the satellites do not serve.
     """
-    simulation = simulate_macro(model, spec, draws=draws, seed=seed)
+    plan = plan_of(spec)
+    simulation = macro.plugin.simulate(macro.model, plan, draws=draws, seed=seed)
     registry = load_registry()
-    macro = np.stack(
+    own = np.stack(
         [
             registry.variable(id_).from_model(simulation.paths[..., k])
             for k, id_ in enumerate(simulation.ids)
@@ -69,9 +100,13 @@ def build(
     return Paths(
         months=simulation.months,
         ids=simulation.ids,
-        macro=macro,
+        macro=own,
         drivers=_own_units(satellites, drivers),
-        severity=severity(model, spec, draws=draws, seed=seed) if spec.constraints else None,
+        severity=(
+            macro.plugin.severity(macro.model, plan, draws=draws, seed=seed)
+            if spec.constraints
+            else None
+        ),
         seed=seed,
         draws=draws,
     )
@@ -79,7 +114,7 @@ def build(
 
 def validate(
     spec: Spec,
-    model: Posterior,
+    macro: MacroVersion,
     satellites: Satellites,
     *,
     as_of: date,
@@ -96,11 +131,16 @@ def validate(
         load_registry().check(spec)
     except ValueError as error:
         problems.append(str(error))
+    problems += [
+        f"unknown shock {shock}: the macro version knows {', '.join(macro.shocks)}"
+        for shock in spec.driving_shocks
+        if shock not in macro.shocks
+    ]
     problems += _overlay_problems(satellites, spec)
-    problems += _version_problems(model, satellites)
+    problems += _version_problems(macro, satellites)
     if spec.constraints:
         try:
-            simulate_macro(model, spec, draws=1, seed=0)
+            macro.plugin.simulate(macro.model, plan_of(spec), draws=1, seed=0)
         except (InfeasibleScenario, ValueError) as error:
             problems.append(str(error))
     if corpus is not None and spec.sources:
@@ -138,14 +178,14 @@ def _overlay_problems(satellites: Satellites, spec: Spec) -> list[str]:
     return problems
 
 
-def _version_problems(model: Posterior, satellites: Satellites) -> list[str]:
+def _version_problems(macro: MacroVersion, satellites: Satellites) -> list[str]:
     """The satellites of another macro version are not the ones these paths were drawn on."""
     last = next(iter(satellites.fits.values()), None)
-    if last is None or last.history.months[-1] == model.months[-1]:
+    if last is None or last.history.months[-1] == macro.months[-1]:
         return []
     return [
         f"the satellites are estimated up to {last.history.months[-1]:%Y-%m}, "
-        f"the macro version ends at {model.months[-1]:%Y-%m}"
+        f"the macro version ends at {macro.months[-1]:%Y-%m}"
     ]
 
 

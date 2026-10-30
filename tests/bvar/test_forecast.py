@@ -1,4 +1,4 @@
-"""mst.macro.forecast: conditional paths and severity of a scenario."""
+"""Conditional paths and severity of a scenario under the BVAR."""
 
 from dataclasses import replace
 
@@ -6,13 +6,12 @@ import numpy as np
 import pytest
 from scipy import stats
 
-from mst.macro.estimate import estimate
-from mst.macro.forecast import InfeasibleScenario, severity, simulate
-from mst.macro.identify import identify
-from mst.macro.registry import Shock
+from mst.plugins.bvar.estimate import estimate
+from mst.plugins.bvar.forecast import InfeasibleScenario, severity, simulate
+from mst.plugins.bvar.identify import identify
+from mst.plugins.bvar.signs import Shock
 from mst.scenario.contracts import Scenario
-
-from . import simulated as sim
+from tests.bvar import simulated as sim
 
 pytestmark = pytest.mark.slow
 

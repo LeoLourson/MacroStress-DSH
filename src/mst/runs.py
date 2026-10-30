@@ -18,7 +18,7 @@ import json
 import os
 import re
 import sys
-from datetime import UTC, date, datetime
+from datetime import UTC, datetime
 from pathlib import Path
 
 import numpy as np
@@ -96,6 +96,8 @@ def execute(ws: store.Workspace, run_id: str) -> dict:
     The run's ``meta.json`` says ``running`` from the first moment, so a job that dies leaves the
     reason next to the request instead of an empty folder.
     """
+    from mst import plugins
+
     directory = folder(ws, run_id)
     request = RunRequest.model_validate(store.read_json(directory / "request.json"))
     meta = {
@@ -109,7 +111,8 @@ def execute(ws: store.Workspace, run_id: str) -> dict:
     store.write_json(directory / "meta.json", meta)
     try:
         spec = scenario_tool.load(ws.scenarios, request.scenario)
-        model, stored = macro_version.load(ws.models, spec.macro)
+        installed = plugins.registry()
+        macro = macro_version.load(ws.models, spec.macro, installed.macro)
         satellites = satellite_version.load(ws.models, spec.satellites)
         if satellites.macro != spec.macro:
             raise ValueError(
@@ -117,7 +120,7 @@ def execute(ws: store.Workspace, run_id: str) -> dict:
                 f"{satellites.macro}, the scenario names {spec.macro}"
             )
         paths = scenario_build.build(
-            spec, model, satellites, draws=request.draws, seed=request.seed
+            spec, macro, satellites, draws=request.draws, seed=request.seed
         )
         portfolio = (
             portfolio_tool.load(ws.portfolios, request.portfolio) if request.portfolio else None
@@ -132,14 +135,14 @@ def execute(ws: store.Workspace, run_id: str) -> dict:
             drivers=satellites.registry,
             served=satellites.served(),
             base_currency=base_currency,
-            as_of=date.fromisoformat(stored["as_of"]),
+            as_of=macro.as_of,
         )
         written = _write(
             directory,
             run_id,
             request,
             spec,
-            stored,
+            macro.meta,
             paths,
             batch,
             portfolio,

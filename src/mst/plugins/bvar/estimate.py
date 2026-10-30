@@ -35,8 +35,9 @@ from scipy import sparse
 from scipy.linalg import solve_triangular
 from scipy.stats import invwishart
 
+from mst.macro.panel import Panel
+
 from . import sv
-from .panel import Panel
 from .spec import Dummy, Spec
 from .var import allowed, regressors, split
 

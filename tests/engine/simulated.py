@@ -18,9 +18,10 @@ from mst.drivers.registry import Registry, from_model
 from mst.drivers.spec import Sampler
 from mst.drivers.spec import load_spec as load_drivers_spec
 from mst.macro import version as macro_version
-from mst.macro.estimate import Posterior, estimate
-from mst.macro.identify import identify
 from mst.macro.panel import Panel
+from mst.plugins.bvar.estimate import Posterior, estimate
+from mst.plugins.bvar.identify import identify
+from mst.plugins.bvar.model import parts
 from tests.drivers import simulated as drivers
 from tests.scenario import simulated as scenario
 
@@ -155,7 +156,8 @@ def build(models: Path, series: Path) -> Versions:
     data_store = store(series, data)
     spec = scenario.macro.spec(draws=40, burn=0, seed=2, stationary=scenario.IDS)
     model = identify(estimate(data, spec), [scenario.SHOCK], sign_lag=0, tries=500, seed=1)
-    name = macro_version.save(model, spec, data, scenario.AS_OF, models)
+    estimate_ = parts(model, spec, data, scenario.AS_OF)
+    name = macro_version.save("bvar.sv", estimate_.meta, estimate_.arrays, models)
     satellite_spec = load_drivers_spec().model_copy(
         update={"sampler": Sampler(draws=300, burn=100, seed=7)}
     )

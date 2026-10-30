@@ -5,7 +5,7 @@ from datetime import date
 import numpy as np
 
 from mst.macro.panel import Panel, months_between, shift
-from mst.macro.spec import Spec
+from mst.plugins.bvar.spec import Spec
 
 START = date(2000, 1, 1)
 

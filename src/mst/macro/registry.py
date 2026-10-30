@@ -1,10 +1,14 @@
-"""Macro variables and named shocks (docs/scenario-formalization.md, sections 2 and 4.2).
+"""Macro variables: the data contract of level 0 (docs/scenario-formalization.md, section 2).
 
 An id starts with its block, ``gl.`` or ``ru.``. Global variables move Russian ones and never
-the reverse, so a Russian shock cannot be restricted to move a global variable. Models work
-with ``y = g(X)``: ``identity`` keeps rates and spreads in their units, ``log100`` takes
-``100 ln X`` of prices, indices and volumes, so a difference of two values is about a
-percentage change.
+the reverse. Models work with ``y = g(X)``: ``identity`` keeps rates and spreads in their
+units, ``log100`` takes ``100 ln X`` of prices, indices and volumes, so a difference of two
+values is about a percentage change.
+
+The registry names the variables every macro model is estimated on and every scenario
+constraint refers to. The named shocks — the ``J`` set with the signs a model is identified
+by — belong to the macro model plugin that uses them (``mst.plugins.bvar.signs``), and a
+scenario's driving shocks are checked against the version it runs on.
 """
 
 import tomllib
@@ -51,30 +55,10 @@ class Variable(Contract):
         return y if self.transform == "identity" else np.exp(np.asarray(y) / 100)
 
 
-class Shock(Contract):
-    """A named shock moves ``rises`` up and ``falls`` down when it occurs."""
-
-    id: BlockId
-    label: Identifier
-    rises: list[BlockId] = []
-    falls: list[BlockId] = []
-
-    @model_validator(mode="after")
-    def consistent_signs(self):
-        if not self.rises and not self.falls:
-            raise ValueError(f"{self.id} restricts no variable")
-        for both in sorted(set(self.rises) & set(self.falls)):
-            raise ValueError(f"{self.id} both raises and lowers {both}")
-        if block_of(self.id) == "ru":
-            for moved in self.rises + self.falls:
-                if block_of(moved) == "gl":
-                    raise ValueError(f"Russian shock {self.id} cannot move {moved}")
-        return self
-
-
 class Registry(Contract):
+    """The macro variables: what every macro model estimates on and a scenario constrains."""
+
     variables: list[Variable] = Field(min_length=1)
-    shocks: list[Shock] = []
 
     @model_validator(mode="after")
     def known_names(self):
@@ -83,14 +67,6 @@ class Registry(Contract):
             if item.id in known:
                 raise ValueError(f"{item.id} is registered twice")
             known.add(item.id)
-        shocks = set()
-        for shock in self.shocks:
-            if shock.id in shocks:
-                raise ValueError(f"shock {shock.id} is registered twice")
-            shocks.add(shock.id)
-            for moved in shock.rises + shock.falls:
-                if moved not in known:
-                    raise ValueError(f"{shock.id} restricts unknown {moved}")
         return self
 
     def variable(self, id_: str) -> Variable:
@@ -100,17 +76,13 @@ class Registry(Contract):
         raise KeyError(id_)
 
     def check(self, scenario: Scenario) -> None:
-        """Raises ``ValueError`` naming every variable and shock the registry does not know."""
+        """Raises ``ValueError`` naming every variable the registry does not know."""
         variables = {item.id for item in self.variables}
-        shocks = {item.id for item in self.shocks}
         problems = []
         for constraint in scenario.constraints:
             for term in constraint.terms:
                 if term.variable not in variables:
                     problems.append(f"unknown variable {term.variable}")
-        for shock in scenario.driving_shocks:
-            if shock not in shocks:
-                problems.append(f"unknown shock {shock}")
         if problems:
             raise ValueError("; ".join(dict.fromkeys(problems)))
 

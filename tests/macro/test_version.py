@@ -1,21 +1,24 @@
-"""mst.macro.version and ``python -m mst.macro estimate``: a version is named by its content."""
+"""mst.macro.version and ``mst.models.estimate_macro``: a version is named by its content."""
 
-import json
 from datetime import date
 
 import numpy as np
 import pytest
 
+from mst import models as models_pkg
 from mst.data.store import Observation, SeriesStore
-from mst.macro import cli
-from mst.macro.estimate import estimate
-from mst.macro.identify import identify
 from mst.macro.panel import months_between
-from mst.macro.registry import Registry, Shock
-from mst.macro.spec import load_spec
-from mst.macro.version import load, save
+from mst.macro.registry import Registry
+from mst.macro.version import load, read, save
+from mst.plugins.bvar import MODEL
+from mst.plugins.bvar.estimate import estimate
+from mst.plugins.bvar.identify import identify
+from mst.plugins.bvar.model import parts
+from mst.plugins.bvar.signs import Shock, Signs
+from mst.plugins.bvar.spec import load_spec
+from tests.bvar import simulated as sim
 
-from . import simulated as sim
+MACRO = {"bvar.sv": MODEL}
 
 
 @pytest.fixture(scope="module")
@@ -30,35 +33,66 @@ def estimated():
 
 def test_a_saved_version_loads_back_unchanged(tmp_path, estimated):
     model, spec, panel = estimated
-    name = save(model, spec, panel, date(2010, 1, 1), tmp_path)
+    estimate_ = parts(model, spec, panel, date(2010, 1, 1))
+    name = save("bvar.sv", estimate_.meta, estimate_.arrays, tmp_path)
 
-    loaded, meta = load(tmp_path, name)
+    version = load(tmp_path, name, MACRO)
 
-    assert len(name) == 64 and meta["as_of"] == "2010-01-01"
-    assert loaded.shocks == model.shocks and loaded.months == model.months
-    assert np.array_equal(loaded.rotation, model.rotation)
-    assert np.array_equal(loaded.dof, model.dof)
-    assert save(loaded, spec, panel, date(2010, 1, 1), tmp_path) == name
+    assert len(name) == 64 and version.meta["as_of"] == "2010-01-01"
+    assert version.model.shocks == model.shocks and version.model.months == model.months
+    assert np.array_equal(version.model.rotation, model.rotation)
+    assert np.array_equal(version.model.dof, model.dof)
+    again = parts(version.model, spec, panel, date(2010, 1, 1))
+    assert save("bvar.sv", again.meta, again.arrays, tmp_path) == name
+
+
+def test_a_version_names_the_model_that_estimated_it(tmp_path, estimated):
+    model, spec, panel = estimated
+    estimate_ = parts(model, spec, panel, date(2010, 1, 1))
+    name = save("bvar.sv", estimate_.meta, estimate_.arrays, tmp_path)
+    assert load(tmp_path, name, MACRO).plugin is MODEL
+    with pytest.raises(KeyError, match="which is not installed"):
+        load(tmp_path, name, {})
 
 
 def test_a_changed_version_is_refused(tmp_path, estimated):
     model, spec, panel = estimated
-    name = save(model, spec, panel, date(2010, 1, 1), tmp_path)
+    estimate_ = parts(model, spec, panel, date(2010, 1, 1))
+    name = save("bvar.sv", estimate_.meta, estimate_.arrays, tmp_path)
     meta = tmp_path / "macro" / name / "meta.json"
     meta.write_text(meta.read_text(encoding="utf-8").replace("2010-01-01", "2010-01-02"))
     with pytest.raises(ValueError, match="does not match"):
-        load(tmp_path, name)
+        read(tmp_path, name)
 
 
-def test_estimate_command_publishes_a_version_from_the_store(tmp_path, monkeypatch, capsys):
+def test_a_version_without_the_required_keys_is_refused(tmp_path):
+    full = {"as_of": "2010-01-01", "ids": [], "months": [], "shocks": [], "n_global": 0}
+    with pytest.raises(ValueError, match="a macro version must record"):
+        save("bvar.sv", {}, {"panel_y": np.zeros((2, 2))}, tmp_path)
+    with pytest.raises(ValueError, match="a macro version must carry"):
+        save("bvar.sv", full, {}, tmp_path)
+
+
+def test_the_panel_of_a_version_is_rebuilt(tmp_path, estimated):
+    model, spec, panel = estimated
+    estimate_ = parts(model, spec, panel, date(2010, 1, 1))
+    name = save("bvar.sv", estimate_.meta, estimate_.arrays, tmp_path)
+    from mst.macro.version import panel_of
+
+    rebuilt, as_of = panel_of(tmp_path, name)
+    assert rebuilt.ids == panel.ids and rebuilt.months == panel.months
+    assert np.array_equal(rebuilt.y, panel.y)
+    assert as_of == date(2010, 1, 1)
+
+
+def test_estimate_macro_publishes_a_version_from_the_store(tmp_path, monkeypatch):
     ids = ["gl.a", "ru.b", "ru.c"]
     registry = Registry.model_validate(
         {
             "variables": [
                 {"id": i, "label": i, "unit": "u", "transform": "identity", "source": "t"}
                 for i in ids
-            ],
-            "shocks": [{"id": "ru.t", "label": "t", "rises": ["ru.b"]}],
+            ]
         }
     )
     spec = load_spec().model_copy(
@@ -71,28 +105,24 @@ def test_estimate_command_publishes_a_version_from_the_store(tmp_path, monkeypat
             "sampler": sim.spec(draws=5).sampler,
         }
     )
+    table = Signs.model_validate({"shocks": [Shock(id="ru.t", label="t", rises=["ru.b"])]})
     y = sim.simulate(60, np.random.default_rng(3))
     store = SeriesStore(tmp_path / "series")
     months = months_between(sim.START, date(2004, 12, 1))
     for k, id_ in enumerate(ids):
         store.write(id_, [Observation(m, float(y[t, k]), m, False) for t, m in enumerate(months)])
-    monkeypatch.setattr(cli, "load_registry", lambda: registry)
-    monkeypatch.setattr(cli, "load_spec", lambda: spec)
 
-    code = cli.main(
-        [
-            "estimate",
-            "--as-of",
-            "2005-01-01",
-            "--store",
-            str(tmp_path / "series"),
-            "--models",
-            str(tmp_path / "models"),
-        ]
+    from mst.plugins.bvar import model as bvar_model
+
+    monkeypatch.setattr(bvar_model, "load_spec", lambda: spec)
+    monkeypatch.setattr(bvar_model, "load_signs", lambda: table)
+    monkeypatch.setattr(models_pkg, "load_macro_registry", lambda: registry)
+
+    name = models_pkg.estimate_macro(
+        None, store=tmp_path / "series", models=tmp_path / "models", as_of=date(2005, 1, 1)
     )
 
-    name, diagnostics = capsys.readouterr().out.splitlines()
-    assert code == 0
-    assert json.loads(diagnostics)["estimated"] == 5
-    model, meta = load(tmp_path / "models", name)
-    assert meta["months"][-1] == "2004-12-01" and model.shocks[1] == "ru.t"
+    version = load(tmp_path / "models", name, MACRO)
+    assert version.meta["months"][-1] == "2004-12-01"
+    assert version.model.shocks[1] == "ru.t"
+    assert version.plugin is MODEL

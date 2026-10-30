@@ -17,8 +17,10 @@ from dataclasses import replace
 import numpy as np
 from scipy.linalg import block_diag
 
+from mst.macro.registry import block_of
+
 from .estimate import Posterior
-from .registry import Shock, block_of
+from .signs import Shock
 from .var import responses
 
 BATCH = 1000

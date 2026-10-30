@@ -4,7 +4,7 @@ import numpy as np
 import pytest
 from pydantic import ValidationError
 
-from mst.drivers import version as satellite_version
+from mst.macro import version as macro_version
 from mst.portfolio import tool
 from mst.scenario import tool as scenario_tool
 
@@ -93,7 +93,7 @@ def test_exposure_converts_a_foreign_position_at_the_panel_rate(workspace, posit
     tool.save(workspace.portfolios, "demo", {"positions": positions})
     report = tool.exposure(workspace, "demo", "oil")
     row = report["exposures"][0]
-    panel, _ = satellite_version.macro_panel(workspace.models, versions.macro)
+    panel, _ = macro_version.panel_of(workspace.models, versions.macro)
     rate = float(np.exp(panel.y[-1, panel.ids.index("ru.usdrub")] / 100))
     assert row["fx"] == pytest.approx(rate)
     assert row["value"] == pytest.approx(row["notional"] * rate)

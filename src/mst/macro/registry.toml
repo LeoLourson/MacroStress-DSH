@@ -162,33 +162,3 @@ label = "индекс MOEX"
 unit = "пункты"
 transform = "log100"
 source = "MOEX"
-
-[[shocks]]
-id = "ru.monetary"
-label = "денежно-кредитный"
-rises = ["ru.key_rate", "ru.ruonia", "ru.ofz_1y"]
-falls = ["ru.usdrub", "ru.imoex"]
-
-[[shocks]]
-id = "ru.inflation"
-label = "инфляционный"
-rises = ["ru.cpi", "ru.key_rate"]
-falls = ["ru.real_wage"]
-
-[[shocks]]
-id = "ru.fx_risk"
-label = "курсовой и риск-премии"
-rises = ["ru.usdrub", "ru.ofz_10y", "ru.spread_bbb"]
-falls = ["ru.imoex"]
-
-[[shocks]]
-id = "gl.oil"
-label = "нефтяной"
-rises = ["gl.brent"]
-falls = ["ru.usdrub"]
-
-[[shocks]]
-id = "gl.financial"
-label = "глобальный финансовый"
-rises = ["gl.vix"]
-falls = ["gl.ust_10y", "ru.imoex"]
