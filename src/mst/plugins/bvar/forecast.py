@@ -62,7 +62,7 @@ class _Plan:
 
 def _plan(model: Posterior, scenario: Scenario) -> _Plan:
     if model.rotation is None:
-        raise ValueError("the posterior is not identified; run mst.macro.identify first")
+        raise ValueError("the posterior is not identified; run mst.plugins.bvar.identify first")
     index = {id_: i for i, id_ in enumerate(model.ids)}
     terms, problems = [], []
     for constraint in scenario.constraints:
@@ -163,14 +163,17 @@ def simulate(
         eps = rng.standard_normal((horizon, n))
         if plan.terms:
             z = _loadings(plan, rep)
+            z_all = z.reshape(len(z), -1)
             z_d = z[:, :, driving].reshape(len(z), -1)
-            bad = dependent_rows(z_d, z.reshape(len(z), -1))
+            bad = dependent_rows(z_d, z_all)
             if bad:
                 raise InfeasibleScenario(bad)
             offset = _level(plan, rep.mean) + np.einsum(
                 "csj,sj->c", z[:, :, ~driving], eps[:, ~driving]
             )
-            drawn = draw_driving(z_d, plan.low - offset, plan.high - offset, rng, sweeps)
+            drawn = draw_driving(
+                z_d, plan.low - offset, plan.high - offset, rng, sweeps, every=z_all
+            )
             eps[:, driving] = drawn.reshape(horizon, driving.sum())
         shocks = np.einsum("tij,tj->ti", rep.impacts, eps)
         future = iterate(rep.history, rep.lags, rep.intercept, shocks)

@@ -12,7 +12,7 @@ from pathlib import Path
 from pydantic import model_validator
 
 from mst.contracts import Contract, Identifier
-from mst.macro.registry import BlockId, block_of
+from mst.macro.registry import BlockId, block_of, load_registry
 
 SIGNS_PATH = Path(__file__).with_name("signs.toml")
 
@@ -57,6 +57,24 @@ class Signs(Contract):
         return [shock.id for shock in self.shocks]
 
 
+def check_variables(signs: Signs, known: set[str] | None = None) -> Signs:
+    """Raises ``ValueError`` naming a shock that restricts a variable the registry lacks.
+
+    The table is the model's own file, so an unknown id would otherwise surface as a bare
+    ``KeyError`` from ``identify``, deep inside estimation.
+    """
+    if known is None:
+        known = {variable.id for variable in load_registry().variables}
+    for shock in signs.shocks:
+        for moved in shock.rises + shock.falls:
+            if moved not in known:
+                raise ValueError(
+                    f"{shock.id} restricts unknown variable {moved}: "
+                    "the macro registry does not hold it"
+                )
+    return signs
+
+
 def load_signs(path: Path = SIGNS_PATH) -> Signs:
     with path.open("rb") as file:
-        return Signs.model_validate(tomllib.load(file))
+        return check_variables(Signs.model_validate(tomllib.load(file)))

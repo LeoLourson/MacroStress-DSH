@@ -76,6 +76,13 @@ def test_interval_constraints_keep_paths_inside_their_bounds(model):
     assert np.allclose(run.paths[:, 2, 1], 1.0, atol=1e-9, rtol=0)
 
 
+def test_a_repeated_constraint_is_redundant_and_still_holds(model):
+    # Two copies of one constraint are consistent: the redundant row is dropped, not refused.
+    chosen = scenario([value("ru.c", 2, 5.0), value("ru.c", 2, 5.0)])
+    run = simulate(model, chosen, draws=30, seed=3)
+    assert np.allclose(run.paths[:, 2, 2], 5.0, atol=1e-9, rtol=0)
+
+
 def test_same_seed_repeats_the_paths_bit_for_bit(model):
     chosen = scenario([value("ru.c", 2, 5.0, 6.0)], shocks=["ru.t"])
     first = simulate(model, chosen, draws=20, seed=5).paths

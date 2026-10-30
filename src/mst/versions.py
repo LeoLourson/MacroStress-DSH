@@ -3,7 +3,7 @@
 A version is a folder ``<directory>/<sha256>/`` with ``meta.json`` and ``arrays.npz``. The hash
 covers the JSON of the meta (sorted keys) and every array's name, type, shape and bytes, so
 the same estimation gives the same name and a changed file no longer loads. The macro model
-(``mst.macro.version``) and the satellites (``mst.drivers.version``) keep their versions so.
+(``mst.macro.version``) and the satellites (``mst.drivers.bundle``) keep their versions so.
 
 The hash is not ``store.sha256_of``: it also covers arrays, and it stays as it is so that the
 versions already written keep their names.

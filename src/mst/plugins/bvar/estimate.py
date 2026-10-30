@@ -67,7 +67,8 @@ class Posterior:
     dof: np.ndarray  # (S, n) nu_j; inf for normal errors
     history: np.ndarray  # (S, p, n) the last p months, drawn where unknown
     diagnostics: dict = field(default_factory=dict)
-    rotation: np.ndarray | None = None  # (S, n, n) Q of mst.macro.identify; B = C diag Q
+    # (S, n, n) Q of mst.plugins.bvar.identify: B = C diag Q
+    rotation: np.ndarray | None = None
     shocks: list[str] = field(default_factory=list)  # the shock of each column of B
 
     @property

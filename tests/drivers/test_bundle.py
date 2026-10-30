@@ -9,7 +9,7 @@ import pytest
 from mst.drivers import bundle as satellite_bundle
 from mst.drivers.registry import Registry
 from mst.macro.panel import shift
-from mst.model_sdk import AdditiveImpact, DriverPaths, SatelliteModel
+from mst.model_sdk import PART_META_REQUIRED, AdditiveImpact, DriverPaths, SatelliteModel
 from mst.model_sdk.contracts import MacroSimulation, SatelliteEstimate, SatellitePart
 from tests.drivers import simulated
 
@@ -104,6 +104,37 @@ class FakeSatellite(SatelliteModel):
         return DriverPaths(ids=list(drivers), paths=paths, flags=flags)
 
 
+class MinimalSatellite(FakeSatellite):
+    """A model whose part carries exactly the keys the published contract requires."""
+
+    def estimate(self, context):
+        parts, residuals = {}, {}
+        for quantity in context.quantities:
+            parts[quantity] = SatellitePart(
+                meta={
+                    "months": [m.isoformat() for m in context.panel.months],
+                    "nodes": ["sector"],
+                    "driver": [f"{quantity}:sector"],
+                    "rows": [len(context.panel.months)],
+                    "checks": {
+                        "0": {
+                            "satellite": 1.0,
+                            "baseline": 2.0,
+                            "forecasts": 3,
+                            "served": True,
+                            "reason": "",
+                        },
+                    },
+                },
+                arrays={"d": np.zeros((len(context.panel.months), 1))},
+            )
+            residuals[f"{quantity}:sector"] = np.arange(10, dtype=float)
+        return SatelliteEstimate(parts=parts, residuals=residuals)
+
+    def load(self, parts):
+        return {quantity: part.meta for quantity, part in parts.items()}
+
+
 def _context(registry, quantities):
     from mst.model_sdk.contracts import SatelliteEstimateContext
 
@@ -161,6 +192,37 @@ def test_a_bundle_holds_one_model_per_quantity_and_loads_back(tmp_path):
     assert np.allclose(np.diag(bundle.correlation), 1.0)
 
 
+def test_load_dispatches_a_legacy_bundle_to_its_only_declarer(tmp_path):
+    from mst import versions
+
+    registry = registry_of("price")
+    one = FakeSatellite("one.a", quantities=("price",))
+    estimate = one.estimate(_context(registry, ("price",)))
+    meta, arrays = satellite_bundle.assemble(
+        registry, "macro-sha", AS_OF, {"one.a": estimate}
+    )
+    # A version from before 0.2: no model or quantity in its part, written by versions.save
+    # because the contract of the new bundle.save rightly refuses such a part.
+    legacy = {
+        **meta,
+        "quantities": {
+            quantity: {
+                key: value
+                for key, value in part.items()
+                if key not in ("model", "quantity")
+            }
+            for quantity, part in meta["quantities"].items()
+        },
+    }
+    name = versions.save(tmp_path / "satellites", legacy, arrays)
+
+    bundle = satellite_bundle.load(tmp_path, name, {"one.a": one})
+
+    assert bundle.quantity_model == {"price": "one.a"}
+    assert bundle.models == {"one.a": {"price": "a"}}
+    assert satellite_bundle.catalogue(tmp_path)[0]["models"] == ["legacy"]
+
+
 def test_simulate_dispatches_each_quantity_to_its_own_model(tmp_path):
     registry = registry_of("price", "spread")
     one = FakeSatellite("one.a", quantities=("price",))
@@ -172,14 +234,15 @@ def test_simulate_dispatches_each_quantity_to_its_own_model(tmp_path):
         macro_simulation(), ["spread:sector", "price:sector"], impacts, seed=3
     )
 
-    # Each model simulated its own drivers, with its own stream and its own impacts;
-    # the streams follow the alphabetical order of the model ids.
-    assert one.calls == [(("price:sector",), 0, ())]
-    assert two.calls == [(("spread:sector",), 1, ("spread:sector",))]
+    # Each model simulated its own drivers, with its own stream and its own impacts; the
+    # streams follow the alphabetical order of the model ids and start at 1, as the
+    # pre-plugin simulator numbered them.
+    assert one.calls == [(("price:sector",), 1, ())]
+    assert two.calls == [(("spread:sector",), 2, ("spread:sector",))]
     assert found.ids == ["spread:sector", "price:sector"]
-    assert found.paths[0, 0, 0] == ord("b") + 1
-    assert found.paths[0, 0, 1] == ord("a")
-    assert np.all(found.paths[:, 1:3, 0] == ord("b") + 1 + 5)
+    assert found.paths[0, 0, 0] == ord("b") + 2
+    assert found.paths[0, 0, 1] == ord("a") + 1
+    assert np.all(found.paths[:, 1:3, 0] == ord("b") + 2 + 5)
     # The fake's paths sit far outside its all-zero history, so the range flag is set too.
     assert found.flags["spread:sector"] == frozenset({"impact", "outside_training_range"})
 
@@ -206,6 +269,61 @@ def test_a_part_without_the_required_keys_is_refused(tmp_path):
     del meta["quantities"]["price"]["checks"]
     with pytest.raises(ValueError, match="the part of price must record"):
         satellite_bundle.save(meta, arrays, tmp_path)
+
+
+def test_a_minimal_part_round_trips_through_assemble_and_save(tmp_path):
+    # Exactly the published keys, no model's own extras: the bundle must work all the same.
+    registry = registry_of("price")
+    model = MinimalSatellite("one.a", quantities=("price",))
+    estimate = model.estimate(_context(registry, ("price",)))
+    assert set(estimate.parts["price"].meta) == set(PART_META_REQUIRED) - {"model"}
+
+    meta, arrays = satellite_bundle.assemble(
+        registry, "macro-sha", AS_OF, {model.model_id: estimate}
+    )
+    name = satellite_bundle.save(meta, arrays, tmp_path)
+    bundle = satellite_bundle.load(tmp_path, name, {model.model_id: model})
+
+    assert bundle.quantity_model == {"price": "one.a"}
+    assert bundle.parts["price"]["model"] == "one.a"
+    assert bundle.served() == ["price:sector"]
+
+
+def test_a_part_without_rows_is_refused(tmp_path):
+    registry = registry_of("price")
+    model = MinimalSatellite("one.a", quantities=("price",))
+    estimate = model.estimate(_context(registry, ("price",)))
+    del estimate.parts["price"].meta["rows"]
+    with pytest.raises(ValueError, match="the part of price must record .*: no rows"):
+        satellite_bundle.assemble(registry, "macro-sha", AS_OF, {model.model_id: estimate})
+
+    estimate = model.estimate(_context(registry, ("price",)))
+    meta, arrays = satellite_bundle.assemble(
+        registry, "macro-sha", AS_OF, {model.model_id: estimate}
+    )
+    del meta["quantities"]["price"]["rows"]
+    with pytest.raises(ValueError, match="the part of price must record .*: no rows"):
+        satellite_bundle.save(meta, arrays, tmp_path)
+
+
+def test_the_model_that_estimated_a_part_cannot_be_spoofed(tmp_path):
+    registry = registry_of("price")
+    model = MinimalSatellite("one.a", quantities=("price",))
+
+    spoofed = model.estimate(_context(registry, ("price",)))
+    spoofed.parts["price"].meta["model"] = "someone.else"
+    with pytest.raises(ValueError, match="names model 'someone.else', but 'one.a'"):
+        satellite_bundle.assemble(
+            registry, "macro-sha", AS_OF, {model.model_id: spoofed}
+        )
+
+    # A part that repeats its own id is accepted, and the platform records that same id.
+    honest = model.estimate(_context(registry, ("price",)))
+    honest.parts["price"].meta["model"] = "one.a"
+    meta, arrays = satellite_bundle.assemble(
+        registry, "macro-sha", AS_OF, {model.model_id: honest}
+    )
+    assert meta["quantities"]["price"]["model"] == "one.a"
 
 
 def test_the_assignment_picks_the_model_of_every_quantity():

@@ -110,7 +110,11 @@ class BvarModel(MacroModel):
         return parts(model, spec, panel, context.as_of)
 
     def load(self, meta: dict, arrays: dict) -> Posterior:
-        spec = Spec.model_validate(meta["spec"])
+        # A pre-plugin version recorded the seasonal variables in its spec; the panel build owns
+        # them now, so the stored key is dropped instead of being re-added to Spec.
+        stored = dict(meta["spec"])
+        stored.pop("seasonal", None)
+        spec = Spec.model_validate(stored)
         return Posterior(
             ids=meta["ids"],
             n_global=meta["n_global"],

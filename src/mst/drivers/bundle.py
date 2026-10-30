@@ -13,6 +13,12 @@ dispatching to each model with its own drivers, its own impacts and its slice of
 correlation matrix. A driver whose simulated path leaves the range of the history it was
 estimated on — the convention is an array named ``<quantity>.d`` — is marked
 ``outside_training_range`` when at least one percent of the paths do.
+
+A version written before 0.2 records no model in its parts: ``load`` dispatches such a part to
+the only installed model that declares its quantity, and the legacy rows stay readable. The
+correlation matrix is imposed inside every model: when a bundle's quantities are served by
+several models, the residuals of drivers of different models are drawn independently, so a
+cross-model correlation measured by ``assemble`` is not applied to their joint paths.
 """
 
 import json
@@ -120,7 +126,9 @@ class SatelliteBundle:
             by_model.setdefault(self.quantity_model[self.node(driver)[0]], []).append(driver)
         paths = np.empty((macro.paths.shape[0], macro.paths.shape[1], len(drivers)))
         flags: dict[str, set[str]] = {driver: set() for driver in drivers}
-        for stream, model_id in enumerate(sorted(by_model)):
+        # Streams start at 1: the pre-0.2 simulator seeded [seed, 1, repetition], so a
+        # one-model bundle reproduces the stored runs at the same seed.
+        for stream, model_id in enumerate(sorted(by_model), start=1):
             found = self.plugins[model_id].simulate(
                 self.models[model_id],
                 macro,
@@ -130,6 +138,11 @@ class SatelliteBundle:
                 seed=seed,
                 stream=stream,
             )
+            if sorted(found.ids) != sorted(by_model[model_id]):
+                raise ValueError(
+                    f"{model_id} returned the drivers {', '.join(found.ids) or 'none'}; "
+                    f"the run asked for {', '.join(by_model[model_id])}"
+                )
             for k, driver in enumerate(found.ids):
                 column = drivers.index(driver)
                 paths[:, :, column] = found.paths[:, :, k]
@@ -155,7 +168,9 @@ def assemble(
 
     The residuals every model returned are correlated in the order of the registry's
     quantities and the node order inside each part, so the same estimates give the same
-    matrix whatever model estimated what.
+    matrix whatever model estimated what. The platform writes ``meta["model"]`` of every part
+    itself: a part that carries a different model id is refused, so provenance cannot be
+    spoofed.
     """
     parts: dict[str, dict] = {}
     arrays: dict[str, np.ndarray] = {}
@@ -163,7 +178,18 @@ def assemble(
     owners: dict[str, SatelliteEstimate] = {}
     for model_id, estimate in estimates.items():
         for quantity, part in estimate.parts.items():
-            parts[quantity] = {"model": model_id, **part.meta}
+            absent = [
+                key for key in PART_META_REQUIRED if key != "model" and key not in part.meta
+            ]
+            if absent:
+                raise ValueError(_missing_keys(quantity, absent))
+            named = part.meta.get("model")
+            if named is not None and named != model_id:
+                raise ValueError(
+                    f"the part of {quantity} names model {named!r}, but {model_id!r} "
+                    "estimated it: the platform writes the model id itself"
+                )
+            parts[quantity] = {**part.meta, "model": model_id}
             owners[quantity] = estimate
             for name, value in part.arrays.items():
                 arrays[f"{quantity}.{name}"] = value
@@ -201,22 +227,35 @@ def save(meta: dict, arrays: dict, root: Path) -> str:
     for quantity, part in meta["quantities"].items():
         absent = [key for key in PART_META_REQUIRED if key not in part]
         if absent:
-            raise ValueError(
-                f"the part of {quantity} must record {', '.join(PART_META_REQUIRED)}: "
-                f"no {', '.join(absent)}"
-            )
+            raise ValueError(_missing_keys(quantity, absent))
     if "correlation" not in arrays:
         raise ValueError("a satellite version must carry the correlation matrix")
     return versions.save(Path(root) / "satellites", meta, arrays)
 
 
+def _missing_keys(quantity: str, absent: list[str]) -> str:
+    """The message of a part that does not hold every key the platform reads."""
+    return (
+        f"the part of {quantity} must record {', '.join(PART_META_REQUIRED)}: "
+        f"no {', '.join(absent)}"
+    )
+
+
 def load(
     root: Path, name: str, models: Mapping[str, SatelliteModel]
 ) -> SatelliteBundle:
-    """The bundle ``name`` loaded by the plugins that estimated its quantities."""
+    """The bundle ``name`` loaded by the plugins that estimated its quantities.
+
+    A part of a version written before 0.2 names no model: it is dispatched to the only
+    installed model that declares its quantity, and the part gets the quantity it describes,
+    which the legacy meta did not record either.
+    """
     meta, arrays = versions.read(Path(root) / "satellites", name, "satellite version")
     registry = Registry.model_validate(meta["registry"])
-    quantity_model = {q: part["model"] for q, part in meta["quantities"].items()}
+    quantity_model = {
+        quantity: _recorded_model(name, quantity, part, models)
+        for quantity, part in meta["quantities"].items()
+    }
     missing = sorted(
         {model_id for model_id in quantity_model.values() if model_id not in models}
     )
@@ -232,8 +271,8 @@ def load(
             for key, value in arrays.items()
             if key.startswith(quantity + ".")
         }
-        parts_by_model.setdefault(part["model"], {})[quantity] = SatellitePart(
-            meta=part, arrays=own
+        parts_by_model.setdefault(quantity_model[quantity], {})[quantity] = SatellitePart(
+            meta=_part_meta(registry, quantity, part), arrays=own
         )
     loaded = {
         model_id: models[model_id].load(parts)
@@ -256,6 +295,37 @@ def load(
         correlation=arrays["correlation"],
         arrays=arrays,
     )
+
+
+def _recorded_model(
+    name: str, quantity: str, part: dict, models: Mapping[str, SatelliteModel]
+) -> str:
+    """The model a part records; a pre-0.2 part names none, so its only declarer is used."""
+    recorded = part.get("model")
+    if recorded is not None:
+        return recorded
+    declarers = sorted(
+        model_id
+        for model_id, model in models.items()
+        if quantity in getattr(model, "quantities", ())
+    )
+    if len(declarers) == 1:
+        return declarers[0]
+    raise KeyError(
+        f"satellite version {name}: the part of {quantity} names no model, which only a "
+        f"version from before 0.2 does; installed models declaring it: "
+        f"{', '.join(declarers) or 'none'}"
+    )
+
+
+def _part_meta(registry: Registry, quantity: str, part: dict) -> dict:
+    """The part meta with the quantity it describes, which a legacy part did not name."""
+    if "quantity" in part:
+        return part
+    return {
+        **part,
+        "quantity": registry.quantity(quantity).model_dump(mode="json", by_alias=True),
+    }
 
 
 def catalogue(root: Path) -> list[dict]:
@@ -286,7 +356,9 @@ def describe(root: Path, name: str) -> dict:
         "version": name,
         "macro": meta["macro"],
         "as_of": meta["as_of"],
-        "models": {q: part["model"] for q, part in meta["quantities"].items()},
+        "models": {
+            q: part.get("model", "legacy") for q, part in meta["quantities"].items()
+        },
         "served": served,
         "rejected": rejected,
     }
@@ -301,7 +373,9 @@ def _summary(folder: Path) -> dict:
         "version": folder.name,
         "macro": meta["macro"],
         "as_of": meta["as_of"],
-        "models": sorted({part["model"] for part in meta["quantities"].values()}),
+        "models": sorted(
+            {part.get("model", "legacy") for part in meta["quantities"].values()}
+        ),
         "quantities": sorted(meta["quantities"]),
         "served": sum(1 for row in checks if row["served"]),
         "checked": len(checks),

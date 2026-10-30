@@ -4,9 +4,9 @@ The models themselves live in plugins (``mst.plugins``); this package estimates 
 history of a workspace, publishes their versions, lists and describes them. A macro model is
 chosen by its id, or the only one installed. A satellite bundle is assembled from the
 quantities each satellite model serves: by default the model that declares a quantity
-estimates it — a quantity claimed by two models is a start-up error, so the default is
-unambiguous — and an explicit ``quantity=model_id`` assignment overrides the default for any
-installed satellite model.
+estimates it — several models may declare it, and an ambiguous assignment is refused until a
+name resolves it — and an explicit ``quantity=model_id`` assignment overrides the default for
+any installed satellite model, even one that does not declare the quantity.
 
 Nothing here estimates anything itself: ``estimate_macro`` and ``estimate_satellites`` build
 the context each plugin estimates on and store what it returns, untouched beyond the keys the
@@ -56,6 +56,8 @@ def selected(model_id: str | None = None) -> MacroModel:
         return models[model_id]
     if len(models) == 1:
         return next(iter(models.values()))
+    if not models:
+        raise ValueError("no macro model is installed")
     raise ValueError(
         "several macro models are installed, name one: " + ", ".join(sorted(models))
     )
@@ -93,6 +95,12 @@ def assignment(
 
     installed = plugins.registry()
     models = dict(installed.satellites)
+    stray = sorted(set(overrides or {}) - set(quantities))
+    if stray:
+        raise ValueError(
+            f"no quantity {', '.join(stray)}; the registry holds "
+            f"{', '.join(quantities) or 'none'}"
+        )
     unknown = sorted(
         {model_id for model_id in (overrides or {}).values() if model_id not in models}
     )

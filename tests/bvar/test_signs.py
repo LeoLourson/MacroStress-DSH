@@ -46,3 +46,13 @@ def test_a_shock_needs_a_sign():
 def test_shock_ids_are_unique():
     with pytest.raises(ValidationError, match=r"shock gl\.oil is registered twice"):
         signs([shock("gl.oil", rises=["gl.brent"]), shock("gl.oil", rises=["gl.brent"])])
+
+
+def test_an_unknown_variable_is_named_at_load(tmp_path):
+    path = tmp_path / "signs.toml"
+    path.write_text(
+        '[[shocks]]\nid = "ru.monetary"\nlabel = "t"\nrises = ["ru.key_rat"]\n',
+        encoding="utf-8",
+    )
+    with pytest.raises(ValueError, match=r"ru\.monetary restricts unknown variable ru\.key_rat"):
+        load_signs(path)
