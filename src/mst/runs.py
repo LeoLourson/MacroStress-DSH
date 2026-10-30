@@ -4,8 +4,10 @@
 (the scenario, the two versions, the seed and the horizon), ``paths.npz`` (the macro variables and
 drivers of every repetition) and the results of every position: ``results.json`` with the metrics
 and the reason of a position that was not calculated, and ``changes.npz`` with the value change
-of each repetition. A run of a portfolio also writes ``summary.json`` — its loss at P5, P50 and
-P95 and the severity ``delta`` of the scenario.
+of each repetition. The conditional forecast of the target indicators — the quantiles of every
+target driver by month, in its own unit — is written to ``forecast.json``: a run answers both
+the distribution of the indicators and the portfolio on them. A run of a portfolio also writes
+``summary.json`` — its loss at P5, P50 and P95 and the severity ``delta`` of the scenario.
 
 A run is a job: the tool writes the request and starts ``python -m mst.runs <id>``; the job builds
 the paths from the scenario and writes the rest. Repeating a request with the same seed gives the
@@ -50,6 +52,8 @@ class RunRequest(Contract):
     base_currency: Currency = "RUB"
     positions: list[Position] | None = None
     portfolio: Identifier | None = None
+    targets: list[Identifier] | None = None
+    """The target indicators of the conditional forecast, by driver id; every driver by default."""
 
     @model_validator(mode="after")
     def one_source(self):
@@ -62,6 +66,8 @@ class RunRequest(Contract):
         ids = [position.id for position in self.positions or []]
         if len(set(ids)) != len(ids):
             raise ValueError("two positions share one id")
+        if self.targets is not None and not self.targets:
+            raise ValueError("targets name the drivers of the forecast, or stay empty")
         return self
 
 
@@ -148,6 +154,7 @@ def execute(ws: store.Workspace, run_id: str) -> dict:
             portfolio,
             base_currency,
             meta["started"],
+            forecast(paths, request.targets),
         )
     except BaseException as error:
         store.write_json(
@@ -172,14 +179,45 @@ def meta(ws: store.Workspace, run_id: str) -> dict:
 
 
 def result(ws: store.Workspace, run_id: str) -> dict:
-    """The meta, the per-position results of a run and the summary of a portfolio run."""
+    """The meta, the forecast, the results and the summary of a run."""
     stored = meta(ws, run_id)
     positions = store.read_json(folder(ws, run_id) / "results.json")
     return {
         "run": stored,
         "positions": [] if positions is None else positions["positions"],
+        "forecast": store.read_json(folder(ws, run_id) / "forecast.json"),
         "summary": store.read_json(folder(ws, run_id) / "summary.json"),
     }
+
+
+def forecast(paths, targets: list[str] | None = None) -> dict:
+    """The conditional forecast of the target indicators: quantiles by month, in own units.
+
+    The targets name drivers of the paths; without them every driver is a target. A named
+    driver the paths do not carry is an error, not a silent omission.
+    """
+    drivers = list(paths.drivers.ids)
+    chosen = list(targets) if targets is not None else drivers
+    missing = [driver for driver in chosen if driver not in drivers]
+    if missing:
+        raise ValueError(
+            f"the paths carry no drivers {', '.join(missing)}; they carry "
+            f"{', '.join(drivers) or 'none'}"
+        )
+    months = [month.isoformat() for month in paths.months]
+    rows = {}
+    for driver in chosen:
+        k = drivers.index(driver)
+        column = paths.drivers.paths[:, 1:, k]
+        low, mid, high = np.percentile(column, [5, 50, 95], axis=0)
+        rows[driver] = {
+            "unit_months": months[1:],
+            "p05": [round(float(x), 6) for x in low],
+            "p50": [round(float(x), 6) for x in mid],
+            "p95": [round(float(x), 6) for x in high],
+            "flags": sorted(paths.drivers.flags[driver]),
+        }
+    return {"targets": chosen, "months": months[1:], "drivers": rows}
 
 
 def catalogue(ws: store.Workspace) -> dict:
@@ -231,6 +269,7 @@ def _write(
     portfolio,
     base_currency: str,
     started: str,
+    forecast_rows: dict,
 ) -> dict:
     """The paths, the results of every position, the report and the meta that names them."""
     months = [month.isoformat() for month in paths.months]
@@ -258,6 +297,7 @@ def _write(
     )
     if summary is not None:
         store.write_json(directory / "summary.json", summary)
+    store.write_json(directory / "forecast.json", forecast_rows)
     written = {
         "id": run_id,
         "scenario": request.scenario,
@@ -288,6 +328,7 @@ def _write(
         },
         "position_ids": [result.position_id for result in batch.results],
         "positions": len(batch.results),
+        "targets": forecast_rows["targets"],
         "status": summary["status"] if summary is not None else batch.status,
     }
     store.write_json(directory / "meta.json", written)

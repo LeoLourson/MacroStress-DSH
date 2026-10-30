@@ -1,10 +1,11 @@
 """The paths of a scenario: the conditional forecast, then the drivers under it.
 
 ``build`` asks the macro plugin of the scenario's macro version to draw ``draws`` paths of
-the macro variables under the constraints, turns them back into each variable's own unit,
-and drives the satellites of the same macro version over exactly those draws with the
-overlays of the scenario. The macro month ``t = 0`` is the last month of the version's panel,
-so a run is a function of the scenario, the two model versions and the seed alone.
+the macro variables under the constraints, adds the scenario's impacts on the macro variables
+(level 0, before anything below it is simulated), turns the paths back into each variable's
+own unit, and drives the satellites of the same macro version over exactly those draws with
+the impacts on the drivers. The macro month ``t = 0`` is the last month of the version's
+panel, so a run is a function of the scenario, the two model versions and the seed alone.
 
 Severity ``delta`` of the scenario comes from the unconditional forecast of the same model:
 the distance of the constrained paths from what the model expects without them. A scenario
@@ -29,9 +30,11 @@ from ..model_sdk.contracts import (
     DriverPaths,
     LinearConstraint,
     LinearTerm,
+    MacroSimulation,
     ScenarioPlan,
     Severity,
 )
+from .contracts import Impact
 from .spec import Spec
 
 
@@ -86,6 +89,7 @@ def build(
     """
     plan = plan_of(spec)
     simulation = macro.plugin.simulate(macro.model, plan, draws=draws, seed=seed)
+    simulation = _with_macro_impacts(simulation, spec.impacts)
     registry = load_registry()
     own = np.stack(
         [
@@ -96,15 +100,13 @@ def build(
     )
     drivers = satellites.simulate(
         simulation,
-        _drivers(satellites, spec),
+        _drivers(satellites, spec, macro),
         [
             AdditiveImpact(
-                target=overlay.driver,
-                start=overlay.start,
-                end=overlay.end,
-                delta=overlay.delta,
+                target=impact.target, start=impact.start, end=impact.end, delta=impact.delta
             )
-            for overlay in spec.overlays
+            for impact in spec.impacts
+            if impact.on_driver
         ],
         seed=seed,
     )
@@ -147,7 +149,7 @@ def validate(
         for shock in spec.driving_shocks
         if shock not in macro.shocks
     ]
-    problems += _overlay_problems(satellites, spec)
+    problems += _impact_problems(spec, macro, satellites)
     problems += _version_problems(macro, satellites)
     if spec.constraints:
         try:
@@ -161,32 +163,61 @@ def validate(
     return {"ok": not problems, "problems": problems}
 
 
-def _drivers(satellites: SatelliteBundle, spec: Spec) -> list[str]:
+def _drivers(satellites: SatelliteBundle, spec: Spec, macro: MacroVersion) -> list[str]:
     """The drivers the run simulates: everything the satellites serve, in a stable order."""
     served = sorted(satellites.served())
-    problems = _overlay_problems(satellites, spec)
+    problems = _impact_problems(spec, macro, satellites)
     if problems:
         raise ValueError("; ".join(problems))
     return served
 
 
-def _overlay_problems(satellites: SatelliteBundle, spec: Spec) -> list[str]:
-    """Overlays on a driver the satellite version does not simulate, with the reason."""
+def _impact_problems(spec: Spec, macro: MacroVersion, satellites: SatelliteBundle) -> list[str]:
+    """Impacts on a variable the macro version lacks or a driver the satellites do not serve."""
     served = set(satellites.served())
     problems = []
-    for overlay in spec.overlays:
-        if overlay.driver in served:
+    for impact in spec.impacts:
+        if not impact.on_driver:
+            if impact.target not in macro.ids:
+                problems.append(
+                    f"impact on {impact.target}: the macro version has no such variable"
+                )
+            continue
+        if impact.target in served:
             continue
         try:
-            quantity, node = satellites.node(overlay.driver)
+            quantity, node = satellites.node(impact.target)
         except KeyError:
             problems.append(
-                f"overlay on {overlay.driver}: the satellite version knows no such driver"
+                f"impact on {impact.target}: the satellite version knows no such driver"
             )
             continue
         reason = satellites.checks[quantity][node].reason
-        problems.append(f"overlay on {overlay.driver}, which is not served: {reason}")
+        problems.append(f"impact on {impact.target}, which is not served: {reason}")
     return problems
+
+
+def _with_macro_impacts(
+    simulation: MacroSimulation, impacts: list[Impact]
+) -> MacroSimulation:
+    """The macro paths with the scenario's impacts on the macro variables added.
+
+    The impact is in the model scale of its variable; the satellites below see the shifted
+    paths, as the scheme prescribes: an impact on a level enters before the levels under it.
+    """
+    of_macro = [impact for impact in impacts if not impact.on_driver]
+    if not of_macro:
+        return simulation
+    paths = simulation.paths.copy()
+    for impact in of_macro:
+        k = simulation.ids.index(impact.target)
+        paths[:, impact.start : impact.end + 1, k] += impact.delta
+    return MacroSimulation(
+        ids=simulation.ids,
+        months=simulation.months,
+        paths=paths,
+        history=simulation.history,
+    )
 
 
 def _version_problems(macro: MacroVersion, satellites: SatelliteBundle) -> list[str]:

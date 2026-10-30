@@ -79,6 +79,30 @@ def test_a_run_writes_meta_paths_results_and_changes(workspace):
     assert all(item["status"] == "ok" for item in stored["positions"])
     assert all("value_change" not in item for item in stored["positions"])
 
+    # The conditional forecast of the target indicators: quantiles by month, own units.
+    forecast = stored["forecast"]
+    assert forecast["targets"] == meta["drivers"]
+    assert forecast["months"] == meta["months"][1:]
+    for name in meta["drivers"]:
+        row = forecast["drivers"][name]
+        assert len(row["p05"]) == len(row["p50"]) == len(row["p95"]) == meta["horizon"]
+        assert all(low <= mid <= high for low, mid, high in zip(row["p05"], row["p50"], row["p95"]))
+
+
+def test_named_targets_are_the_forecast_of_the_run(workspace):
+    request = dict(REQUEST, targets=["share_price:sber"])
+    run_id, summary = start(workspace, request)
+    stored = runs.result(workspace, run_id)
+    assert stored["forecast"]["targets"] == ["share_price:sber"]
+    assert list(stored["forecast"]["drivers"]) == ["share_price:sber"]
+    assert stored["run"]["targets"] == ["share_price:sber"]
+
+
+def test_a_target_the_paths_do_not_carry_is_refused(workspace):
+    request = dict(REQUEST, targets=["share_price:nowhere"])
+    with pytest.raises(ValueError, match="the paths carry no drivers"):
+        start(workspace, request)
+
 
 def test_every_position_is_the_formula_of_its_model(workspace):
     run_id, _ = start(workspace)

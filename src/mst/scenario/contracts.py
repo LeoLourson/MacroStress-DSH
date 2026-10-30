@@ -1,4 +1,4 @@
-"""The scenario of a stress test: a narrative, constraints, driving shocks and overlays.
+"""The scenario of a stress test: narrative, constraints, driving shocks and impacts.
 
 ``Scenario`` is the scenario (N, C, D, O) of docs/scenario-formalization.md, section 3; the
 bounds of a constraint are in the model scale ``y = g(X)`` of each variable. Variable and
@@ -48,15 +48,27 @@ class Constraint(Contract):
         return self
 
 
-class Overlay(Contract):
-    """Adds ``delta`` to driver ``driver`` in months ``start..end``, with its reason."""
+class Impact(Contract):
+    """A direct impact ``o_l``: ``delta`` added to ``target`` in months ``start..end``.
 
-    driver: Identifier
+    The target is a macro variable (level 0, its id names it) or a driver
+    ``<quantity>:<object>`` of a level above, in the model scale of its level. The impact of
+    a level is applied before the levels below it are simulated, so an impact on a macro
+    variable reaches every satellite; an impact on a driver moves that driver alone. Every
+    impact carries its reason and the corpus sources it rests on.
+    """
+
+    target: Identifier
     start: Month
     end: Month
     delta: Number
     reason: Identifier
     sources: list[Identifier] = Field(min_length=1)
+
+    @property
+    def on_driver(self) -> bool:
+        """Whether the impact targets a driver rather than a macro variable."""
+        return ":" in self.target
 
     @model_validator(mode="after")
     def ordered(self):
@@ -72,12 +84,13 @@ class Scenario(Contract):
     constraints: list[Constraint] = []
     #: Shocks that cause the constrained paths; empty means any shock may.
     driving_shocks: list[Identifier] = []
-    overlays: list[Overlay] = []
+    impacts: list[Impact] = []
+    """The direct impacts ``O`` of the scenario, on the macro variables or on drivers."""
 
     @model_validator(mode="after")
     def within_horizon(self):
         months = [term.month for c in self.constraints for term in c.terms]
-        months += [overlay.end for overlay in self.overlays]
+        months += [impact.end for impact in self.impacts]
         for month in months:
             if month > self.horizon:
                 raise ValueError(f"month {month} is beyond the horizon of {self.horizon}")

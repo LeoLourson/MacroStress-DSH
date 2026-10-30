@@ -12,7 +12,7 @@ from mst.macro.registry import load_registry
 from mst.model_sdk import InfeasibleScenario
 from mst.plugins.hier.simulate import IMPACT
 from mst.scenario.build import build, validate
-from mst.scenario.contracts import Overlay
+from mst.scenario.contracts import Impact
 from mst.scenario.spec import Spec
 
 DRAWS, HORIZON, SEED = 8, 6, 5
@@ -97,28 +97,64 @@ def test_a_scenario_without_constraints_has_no_severity(versions):
     assert paths.severity is None
 
 
-def test_driver_paths_are_in_the_drivers_own_units_and_carry_overlays(versions):
-    overlay = Overlay(
-        driver="price:alpha", start=2, end=3, delta=10.0, reason="перебой", sources=["S1#1/1"]
+def test_driver_paths_are_in_the_drivers_own_units_and_carry_impacts(versions):
+    impact = Impact(
+        target="price:alpha", start=2, end=3, delta=10.0, reason="перебой", sources=["S1#1/1"]
     )
     plain = paths_of(versions, scenario(versions))
-    with_overlay = paths_of(versions, scenario(versions, overlays=[overlay]))
-    assert with_overlay.drivers.ids == sorted(versions.satellite.served())
-    k = with_overlay.drivers.ids.index("price:alpha")
-    difference = with_overlay.drivers.paths[:, :, k] - plain.drivers.paths[:, :, k]
+    with_impact = paths_of(versions, scenario(versions, impacts=[impact]))
+    assert with_impact.drivers.ids == sorted(versions.satellite.served())
+    k = with_impact.drivers.ids.index("price:alpha")
+    difference = with_impact.drivers.paths[:, :, k] - plain.drivers.paths[:, :, k]
     assert np.allclose(difference[:, 2:4], 10.0) and np.allclose(difference[:, [0, 4, 5, 6]], 0)
-    assert IMPACT in with_overlay.drivers.flags["price:alpha"]
-    assert with_overlay.drivers.flags["price:alpha"] <= {
+    assert IMPACT in with_impact.drivers.flags["price:alpha"]
+    assert with_impact.drivers.flags["price:alpha"] <= {
         IMPACT, "outside_training_range"
     }  # fmt: skip
 
 
-def test_an_overlay_on_a_driver_the_satellites_do_not_know_is_refused(versions):
-    overlay = Overlay(
-        driver="price:nowhere", start=1, end=2, delta=1.0, reason="r", sources=["s"]
+def test_an_impact_on_a_macro_variable_reaches_the_drivers(versions):
+    # A rise of the oil price in the model scale moves the drivers that read it — the
+    # impact enters level 0 before the satellites see the paths.
+    impact = Impact(
+        target="gl.brent", start=1, end=3, delta=2.0, reason="шок", sources=["S1#1/1"]
+    )
+    plain = paths_of(versions, scenario(versions))
+    with_impact = paths_of(versions, scenario(versions, impacts=[impact]))
+    macro_k = with_impact.ids.index("gl.brent")
+    # Brent is log100 in the model scale: a shift of 2 is a ratio of exp(0.02) in own units.
+    assert np.allclose(
+        with_impact.macro[:, 1:4, macro_k] / plain.macro[:, 1:4, macro_k], np.exp(2.0 / 100)
+    )
+    assert np.allclose(with_impact.macro[:, [0, 4], macro_k], plain.macro[:, [0, 4], macro_k])
+    changed = {
+        driver
+        for k, driver in enumerate(with_impact.drivers.ids)
+        if not np.allclose(with_impact.drivers.paths[:, :, k], plain.drivers.paths[:, :, k])
+    }
+    assert changed, "an impact on the key rate must move the drivers that read it"
+
+
+def test_an_impact_on_a_driver_the_satellites_do_not_know_is_refused(versions):
+    impact = Impact(
+        target="price:nowhere", start=1, end=2, delta=1.0, reason="r", sources=["s"]
     )
     with pytest.raises(ValueError, match="knows no such driver"):
-        paths_of(versions, scenario(versions, overlays=[overlay]))
+        paths_of(versions, scenario(versions, impacts=[impact]))
+
+
+def test_an_impact_on_a_variable_the_macro_version_lacks_is_refused(versions):
+    impact = Impact(
+        target="ru.nowhere", start=1, end=2, delta=1.0, reason="r", sources=["s"]
+    )
+    report = validate(
+        scenario(versions, impacts=[impact]),
+        versions.loaded,
+        versions.satellite,
+        as_of=versions.data.months[-1],
+    )
+    assert report["ok"] is False
+    assert "the macro version has no such variable" in "; ".join(report["problems"])
 
 
 def test_an_overlay_on_a_rejected_driver_names_the_reason(versions):
@@ -126,10 +162,10 @@ def test_an_overlay_on_a_rejected_driver_names_the_reason(versions):
     rejected = dict(versions.satellite.checks[quantity])
     rejected[node] = replace(rejected[node], served=False, reason="not more accurate")
     satellite = replace(versions.satellite, checks={quantity: rejected})
-    overlay = Overlay(driver="price:alpha", start=1, end=2, delta=1.0, reason="r", sources=["s"])
+    impact = Impact(target="price:alpha", start=1, end=2, delta=1.0, reason="r", sources=["s"])
     with pytest.raises(ValueError, match="not more accurate"):
         build(
-            scenario(versions, overlays=[overlay]),
+            scenario(versions, impacts=[impact]),
             versions.loaded,
             satellite,
             draws=DRAWS,
@@ -171,14 +207,14 @@ def test_a_constraint_the_driving_shocks_cannot_move_is_refused_by_name(versions
     assert any("cannot meet constraints 2" in problem for problem in report["problems"])
 
 
-def test_validate_names_an_overlay_on_a_rejected_driver(versions):
+def test_validate_names_an_impact_on_a_rejected_driver(versions):
     quantity, node = versions.satellite.node("price:alpha")
     rejected = dict(versions.satellite.checks[quantity])
     rejected[node] = replace(rejected[node], served=False, reason="not more accurate")
     satellite = replace(versions.satellite, checks={quantity: rejected})
-    overlay = Overlay(driver="price:alpha", start=1, end=2, delta=1.0, reason="r", sources=["s"])
+    impact = Impact(target="price:alpha", start=1, end=2, delta=1.0, reason="r", sources=["s"])
     report = validate(
-        scenario(versions, overlays=[overlay]),
+        scenario(versions, impacts=[impact]),
         versions.loaded,
         satellite,
         as_of=versions.data.months[-1],

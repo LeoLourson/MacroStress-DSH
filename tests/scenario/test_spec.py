@@ -3,7 +3,7 @@
 import pytest
 from pydantic import ValidationError
 
-from mst.scenario.contracts import Constraint, Overlay, Scenario
+from mst.scenario.contracts import Constraint, Impact, Scenario
 from mst.scenario.spec import Spec
 
 MACRO = "a" * 64
@@ -18,9 +18,9 @@ def rate_at(month, low, high=None):
     }
 
 
-def overlay(**changes):
+def impact(**changes):
     return {
-        "driver": "price:alpha",
+        "target": "price:alpha",
         "start": 1,
         "end": 6,
         "delta": -10.0,
@@ -37,11 +37,11 @@ def spec(**changes):
 
 def test_a_scenario_file_names_its_versions_and_the_contract_holds():
     built = Spec.model_validate(
-        spec(constraints=[rate_at(3, 21.0), rate_at(12, 15.0, 18.0)], overlays=[overlay()])
+        spec(constraints=[rate_at(3, 21.0), rate_at(12, 15.0, 18.0)], impacts=[impact()])
     )
     assert built.macro == MACRO and built.satellites == SATELLITES
     assert [(c.low, c.high) for c in built.constraints] == [(21.0, 21.0), (15.0, 18.0)]
-    assert built.overlays[0].driver == "price:alpha"
+    assert built.impacts[0].target == "price:alpha"
 
 
 def test_both_versions_are_required_and_are_hashes():
@@ -70,16 +70,16 @@ def test_a_constraint_month_must_lie_in_the_horizon():
         Spec.model_validate(spec(constraints=[rate_at(13, 21.0)]))
 
 
-def test_an_overlay_must_end_in_the_horizon_and_go_forwards():
+def test_an_impact_must_end_in_the_horizon_and_go_forwards():
     with pytest.raises(ValidationError, match="month 13 is beyond the horizon"):
-        Spec.model_validate(spec(overlays=[overlay(end=13)]))
+        Spec.model_validate(spec(impacts=[impact(end=13)]))
     with pytest.raises(ValidationError, match="start <= end"):
-        Overlay.model_validate(overlay(start=7, end=6))
+        Impact.model_validate(impact(start=7, end=6))
 
 
-def test_an_overlay_needs_a_reason_and_a_source():
+def test_an_impact_needs_a_reason_and_a_source():
     with pytest.raises(ValidationError, match="at least 1"):
-        Overlay.model_validate(overlay(sources=[]))
+        Impact.model_validate(impact(sources=[]))
 
 
 def test_driving_shocks_are_unique():
