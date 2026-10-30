@@ -1,4 +1,5 @@
-"""Macro variables: the data contract of level 0 (docs/scenario-formalization.md, section 2).
+"""Macro variables: the data contract of level 0
+(docs/concept/scenario-formalization.md, section 2).
 
 An id starts with its block, ``gl.`` or ``ru.``. Global variables move Russian ones and never
 the reverse. Models work with ``y = g(X)``: ``identity`` keeps rates and spreads in their

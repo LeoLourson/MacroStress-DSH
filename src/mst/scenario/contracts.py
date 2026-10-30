@@ -1,6 +1,6 @@
 """The scenario of a stress test: narrative, constraints, driving shocks and impacts.
 
-``Scenario`` is the scenario (N, C, D, O) of docs/scenario-formalization.md, section 3; the
+``Scenario`` is the scenario (N, C, D, O) of docs/concept/scenario-formalization.md, section 3; the
 bounds of a constraint are in the model scale ``y = g(X)`` of each variable. Variable and
 shock names are checked against the registry by ``mst.macro.registry.Registry.check``.
 """

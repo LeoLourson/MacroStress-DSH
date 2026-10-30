@@ -1,4 +1,4 @@
-# Macro variables (docs/scenario-formalization.md, section 2) and named shocks with their sign
+# Macro variables (docs/concept/scenario-formalization.md, section 2) and named shocks with their sign
 # restrictions (section 4.2). The id prefix is the block: gl. global, ru. Russian.
 # transform: identity for rates and spreads, log100 (100 ln X) for prices, indices and volumes.
 

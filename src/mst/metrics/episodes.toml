@@ -1,4 +1,4 @@
-# Episodes of the check of the macro model (docs/scenario-formalization.md, section 9).
+# Episodes of the check of the macro model (docs/concept/scenario-formalization.md, section 9).
 # The calculation date is the day before the start month of the corpus card; the
 # constrained variables follow their realized monthly path up to the end of the card's window;
 # the driving shocks are those the card's sources of the time name (registry.toml, [[shocks]]).

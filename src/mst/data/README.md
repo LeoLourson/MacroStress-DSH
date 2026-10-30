@@ -2,7 +2,7 @@
 
 Месячные ряды с датой публикации каждого значения и загрузчики, которые их получают.
 Как хранятся версии значений, описано в
-[../../../docs/architecture.md](../../../docs/architecture.md#ряды-и-даты-публикации).
+[../../../docs/concept/architecture.md](../../../docs/concept/architecture.md#ряды-и-даты-публикации).
 
 ```powershell
 python -m mst.data update [SERIES ...] --workspace DIR

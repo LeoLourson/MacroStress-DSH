@@ -13,7 +13,7 @@ consistent paths for the other variables, satellite models turn those paths into
 prices, bond spreads, industry overdue shares, housing prices), and every position is repriced
 along the same draws. The output is a loss distribution with $P_5$, $P_{50}$, $P_{95}$, ES95 and
 the scenario severity $\delta$. The method is described in
-[docs/scenario-formalization.md](docs/scenario-formalization.md) (Russian).
+[docs/concept/scenario-formalization.md](docs/concept/scenario-formalization.md) (Russian).
 
 The server speaks MCP, so any client can drive it: Claude Desktop, Cursor, Claude Code. A
 DeepSeek Harness plugin in `dsh/` adds three skills and a workspace snapshot for the agent
@@ -34,7 +34,7 @@ scheduler.
 | DSH plugin | Scenario from the corpus, report, drivers; the prompt section built from `workspace.json` |
 
 MCP tools: `jobs`, `series`, `corpus`, `scenario`, `run`, `portfolio`, `model`. The reference is
-in [docs/tools.md](docs/tools.md) (Russian).
+in [docs/reference/tools.md](docs/reference/tools.md) (Russian).
 
 ## Install
 
@@ -48,8 +48,8 @@ uv run macrostress --workspace C:/data/macrostress
 ```
 
 The server speaks over stdio and prints only errors; it waits for a client. Configuration for
-Claude Desktop, Cursor, and any other MCP client is in [docs/mcp.md](docs/mcp.md). The DeepSeek
-Harness plugin is covered in [docs/install.md](docs/install.md).
+Claude Desktop, Cursor, and any other MCP client is in [docs/howto/mcp.md](docs/howto/mcp.md). The DeepSeek
+Harness plugin is covered in [docs/howto/install.md](docs/howto/install.md).
 
 ## First session
 
@@ -85,16 +85,19 @@ Once a client is connected, it sees seven tools. Long operations start jobs: a t
 
 ## Documentation
 
-The documentation is in Russian, except [docs/mcp.md](docs/mcp.md), which is in English.
+The documentation is in Russian.
 
-- [docs/mcp.md](docs/mcp.md) — any MCP client, the first session, troubleshooting;
-- [docs/install.md](docs/install.md) — the Python package and the DeepSeek Harness plugin;
-- [docs/architecture.md](docs/architecture.md) — packages, workspace, versions, jobs;
-- [docs/tools.md](docs/tools.md) — MCP tools and `python -m mst.*` commands;
-- [docs/plugins.md](docs/plugins.md) — a new asset type as a plugin;
-- [docs/platform.md](docs/platform.md) — the contracts: position, paths, model, registry;
-- [docs/scenario-formalization.md](docs/scenario-formalization.md) — the method and what the code
-  implements.
+- [docs/concept/system-scheme.md](docs/concept/system-scheme.md) — the general scheme: levels, the
+  scenario $(N, D, C, O)$, the conditional forecast, and the quality metrics;
+- [docs/concept/scenario-formalization.md](docs/concept/scenario-formalization.md) — the method and
+  what the code implements;
+- [docs/concept/architecture.md](docs/concept/architecture.md) — packages, workspace, versions, jobs;
+- [docs/howto/install.md](docs/howto/install.md) — the Python package and the DeepSeek Harness plugin;
+- [docs/howto/mcp.md](docs/howto/mcp.md) — any MCP client and troubleshooting;
+- [docs/howto/first-session.md](docs/howto/first-session.md) — the first session, from series to report;
+- [docs/howto/plugins.md](docs/howto/plugins.md) — a new asset type, macro model or satellite as a plugin;
+- [docs/reference/tools.md](docs/reference/tools.md) — MCP tools and `python -m mst.*` commands;
+- [docs/reference/platform.md](docs/reference/platform.md) — the contracts: position, paths, model, registry.
 
 Every package folder has its own README that names its files.
 
@@ -111,7 +114,7 @@ CI runs the fast suite on Linux and Windows with Python 3.12 and 3.13.
 
 ## Status
 
-0.1.0, beta. Interfaces may change before 1.0. The data sources are the Russian market (MOEX,
+0.2.0, beta. Interfaces may change before 1.0. The data sources are the Russian market (MOEX,
 the Bank of Russia, Rosstat) plus FRED for global series.
 
 ## Contributing and license

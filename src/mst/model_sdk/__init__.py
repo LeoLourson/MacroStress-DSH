@@ -2,7 +2,7 @@
 
 A model plugin is developed outside the platform and connected to it: it declares
 ``plugin = Plugin(...)`` with ``macro=...`` or ``satellites=...``, is discovered like every
-other plugin (``docs/plugins.md``) and speaks only the contracts of this package. The macro
+other plugin (``docs/howto/plugins.md``) and speaks only the contracts of this package. The macro
 model estimates and simulates the paths of the macro variables under a scenario's constraints;
 a satellite model estimates and simulates the quantities of its objects on those paths. What a
 version holds is decided by the model that estimated it — the platform stores metadata and

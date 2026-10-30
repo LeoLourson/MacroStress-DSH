@@ -39,7 +39,7 @@ contracts; each package folder has its own README.
   the reason in the pull request.
 - Tests go next to the package they cover and never reach the network: sources are mocked, models
   are checked on data generated from known parameters.
-- A new asset type belongs in a plugin, not in `mst.engine`. See [docs/plugins.md](docs/plugins.md).
+- A new asset type belongs in a plugin, not in `mst.engine`. See [docs/howto/plugins.md](docs/howto/plugins.md).
 - Russian is the language of the docs and comments; code, tool names, and commit messages are in
   English.
 

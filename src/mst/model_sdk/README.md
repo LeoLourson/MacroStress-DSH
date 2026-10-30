@@ -20,6 +20,6 @@
    макромодель возвращает пути переменных под ограничениями, сателлит — пути своих
    драйверов на этих путях, с воздействиями и своим потоком случайных чисел.
 
-Ещё одна модель — пакет с другим `model_id` ([docs/plugins.md](../../../docs/plugins.md));
+Ещё одна модель — пакет с другим `model_id` ([docs/howto/plugins.md](../../../docs/howto/plugins.md));
 референсные реализации — [mst.plugins.bvar](../plugins/bvar/README.md) и
 [mst.plugins.hier](../plugins/hier/README.md). Тесты — [../../../tests/model_sdk](../../../tests/model_sdk/).

@@ -3,7 +3,7 @@
 Пакет плагина DSH `dsh-macrostress`. Он подключает MCP-сервер `macrostress`, регистрирует
 скиллы и добавляет в системный промпт агента раздел о состоянии workspace. Расчётов здесь
 нет: их делает Python-пакет `mst` из [../src](../src/README.md). Как подключить плагин к
-профилю, описано в [../docs/install.md](../docs/install.md).
+профилю, описано в [../docs/howto/install.md](../docs/howto/install.md).
 
 | Файл | Что делает |
 |---|---|

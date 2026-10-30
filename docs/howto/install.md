@@ -124,4 +124,4 @@ node dsh/test/smoke.mjs
 | `resource 'series' is busy with job ...` | Задача на этом ресурсе ещё идёт; дождитесь её или отмените `jobs(action="cancel", id=...)` |
 | `FRED needs an API key ...` в логе загрузки | Нет `FRED_API_KEY` в окружении сервера |
 | Ошибка сертификата на rosstat.gov.ru | Росстат подписан корнем Минцифры; корни лежат в `src/mst/data/mintsifry-roots.pem` и подключаются только для этого хоста. Если Минцифры сменило сертификат, файл надо обновить |
-| Оценка сателлитов идёт часами | Команда запущена не через `python -m mst.drivers`, и BLAS работает в много потоков; см. [tools.md](tools.md) |
+| Оценка сателлитов идёт часами | Команда запущена не через `python -m mst.drivers`, и BLAS работает в много потоков; см. [../reference/tools.md](../reference/tools.md) |

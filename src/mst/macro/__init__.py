@@ -1,1 +1,2 @@
-"""The macro model of docs/scenario-formalization.md: registry, estimation, conditional forecast."""
+"""The macro model of docs/concept/scenario-formalization.md:
+registry, estimation, conditional forecast."""

@@ -1,11 +1,11 @@
 # mst.macro
 
-Контракт уровня 0 [формализации](../../../docs/scenario-formalization.md): реестр
+Контракт уровня 0 [формализации](../../../docs/concept/scenario-formalization.md): реестр
 макропеременных, сборка панели на дату расчёта и хранилище версий макромодели. Сама
 макромодель — подключаемый плагин: BVAR со стохастической волатильностью живёт в
 [mst.plugins.bvar](../plugins/bvar/README.md), ещё одна модель — отдельный пакет со своим
 `model_id`, подключаемый через реестр `mst.plugins` (entry points, `MST_PLUGINS_PATH` или
-пакет в пространстве имён), см. [docs/plugins.md](../../../docs/plugins.md).
+пакет в пространстве имён), см. [docs/howto/plugins.md](../../../docs/howto/plugins.md).
 
 ```powershell
 python -m mst.models estimate-macro bvar.sv --as-of 2026-10-29 --store DIR --models DIR

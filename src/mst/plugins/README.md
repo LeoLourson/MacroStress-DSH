@@ -26,8 +26,8 @@ python -m mst.plugin demo-run <plugin_id> [--path DIR]
 
 Новая модель любого вида — пакет здесь или рядом (`--dest`, entry point, `MST_PLUGINS_PATH`),
 без правки ядра. Устройство плагина, контракты моделей и проверки — в
-[../../../docs/plugins.md](../../../docs/plugins.md); контракты расчёта — в
-[../../../docs/platform.md](../../../docs/platform.md).
+[../../../docs/howto/plugins.md](../../../docs/howto/plugins.md); контракты расчёта — в
+[../../../docs/reference/platform.md](../../../docs/reference/platform.md).
 
 Тесты реестра и конформанса — [../../../tests/plugins](../../../tests/plugins/);
 тесты BVAR — [../../../tests/bvar](../../../tests/bvar/), иерархического сателлита —

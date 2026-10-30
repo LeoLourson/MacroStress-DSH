@@ -1,4 +1,4 @@
-"""Estimation of the satellite models (docs/scenario-formalization.md, section 6.2).
+"""Estimation of the satellite models (docs/concept/scenario-formalization.md, section 6.2).
 
 Every driver ``k`` follows ``d_t = gamma_k' z_t + e_t`` with ``z_t = (1, d_{t-1}, x_t, ...,
 x_{t-L})``. The parameters of an object are drawn around those of the object above it, ``gamma_k

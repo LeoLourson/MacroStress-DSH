@@ -1,6 +1,6 @@
 """The contracts of the model plugins: the macro model ``G_0`` and the satellites ``G_l``.
 
-The platform keeps the scheme of docs/scenario-formalization.md: the macro model turns the
+The platform keeps the scheme of docs/concept/scenario-formalization.md: the macro model turns the
 shocks into the paths of the macro variables (level 0), and every satellite model turns the
 levels above it into the quantities of its objects (levels 1 and further). A model plugin is a
 package that declares ``plugin = Plugin(...)`` with ``macro=...`` and/or ``satellites=...``; it

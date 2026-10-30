@@ -3,12 +3,12 @@
 Ядро MacroStress: MCP-сервер, задачи, workspace и пакеты расчёта. Единственное состояние —
 файлы workspace; каждый инструмент MCP разбирает аргументы и вызывает одну функцию
 пакета или запускает задачу. Устройство целиком — в
-[../../docs/architecture.md](../../docs/architecture.md).
+[../../docs/concept/architecture.md](../../docs/concept/architecture.md).
 
 | Модуль или пакет | Что делает |
 |---|---|
-| `mcp.py` | Сервер FastMCP с инструментами `jobs`, `series`, `corpus`, `scenario`, `run`, `portfolio`, `model` ([../../docs/tools.md](../../docs/tools.md)); `python -m mst.mcp --workspace DIR` |
-| `plugin.py` | `python -m mst.plugin new --kind position\|satellite\|macro`, `check`, `demo-run`: пакет модели любого вида, его контракт и демо-расчёт ([../../docs/plugins.md](../../docs/plugins.md)) |
+| `mcp.py` | Сервер FastMCP с инструментами `jobs`, `series`, `corpus`, `scenario`, `run`, `portfolio`, `model` ([../../docs/reference/tools.md](../../docs/reference/tools.md)); `python -m mst.mcp --workspace DIR` |
+| `plugin.py` | `python -m mst.plugin new --kind position\|satellite\|macro`, `check`, `demo-run`: пакет модели любого вида, его контракт и демо-расчёт ([../../docs/howto/plugins.md](../../docs/howto/plugins.md)) |
 | `jobs.py` | Задачи: дочерний процесс `python <argv>` под обёрткой `python -m mst.jobs`, которая пишет код выхода, с логом в `jobs/<id>/`, блокировка ресурса (`series`, `models`, `corpus`, `code`, `runs`), отмена дерева процессов |
 | `runs.py` | Прогон на путях сценария: запрос, мета, пути, условный прогноз показателей (`forecast.json`), вклады позиций и отчёт в `runs/<id>/`; `python -m mst.runs <id> --workspace DIR` |
 | `store.py` | Каталоги workspace (`Workspace`), атомарная запись JSON, канонический хеш `sha256_of`, снимок `workspace.json` |
