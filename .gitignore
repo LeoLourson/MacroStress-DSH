@@ -3,6 +3,9 @@
 __pycache__/
 .pytest_cache/
 .pytest-tmp/
+# pytest's own temp tree when the system temp directory is not writable (it falls back to the
+# working directory): generated packages must never be linted or committed.
+pytest-of-*/
 .ruff_cache/
 *.egg-info/
 dist/
@@ -10,6 +13,7 @@ build/
 .idea/
 .vscode/
 .code-review-graph/
+experiments/
 # The workspace is data, not code: a run reproduces it from the repository and the sources.
 workspace/
 # The thesis concept stays local; it is not part of the published repository.
