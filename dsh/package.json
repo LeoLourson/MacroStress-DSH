@@ -1,6 +1,6 @@
 {
   "name": "dsh-macrostress",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "description": "MacroStress as one DSH plugin: portfolio stress test through MCP tools.",
   "type": "module",
