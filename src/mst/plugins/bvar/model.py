@@ -9,7 +9,6 @@ module works with.
 """
 
 from datetime import date
-from pathlib import Path
 
 from mst.macro.panel import build_panel
 from mst.model_sdk.contracts import (
@@ -87,12 +86,18 @@ class BvarModel(MacroModel):
 
     def estimate(self, context: MacroEstimateContext) -> MacroEstimate:
         spec = load_spec()
+        seasonal = [v.id for v in context.registry.variables if v.seasonal]
         panel = build_panel(
             context.store,
             context.registry,
             start=spec.start,
             as_of=context.as_of,
-            seasonal=spec.seasonal,
+            seasonal=seasonal,
+        )
+        # A model estimated on the data known at a date cannot know a regime change after
+        # the last month of its history: the dummies of later months are left out.
+        spec = spec.model_copy(
+            update={"dummies": [d for d in spec.dummies if d.month <= panel.months[-1]]}
         )
         posterior = estimate(panel, spec)
         model = identify(
@@ -122,14 +127,3 @@ class BvarModel(MacroModel):
 
     def severity(self, model, plan: ScenarioPlan, *, draws: int, seed: int) -> Severity | None:
         return severity_bvar(model, to_scenario(plan), draws=draws, seed=seed)
-
-    def backtest(
-        self, *, store, models: Path, corpus: Path, as_of: date, only=(), details=None
-    ) -> int:
-        """The episode check of the BVAR: coverage of the unconstrained variables by episode."""
-        from .backtest import run
-
-        return run(
-            self, store=store, models=models, corpus=corpus, as_of=as_of,
-            only=only, details=details,
-        )

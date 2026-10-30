@@ -240,6 +240,7 @@ def build(ws: store.Workspace) -> FastMCP:
     ) -> dict:
         """Model versions and plugins. kind: macro, satellites, catalog.
 
+        The episode check of the models is ``backtest`` (``python -m mst.metrics``).
         Actions for ``macro``: list, describe, estimate, backtest; for ``satellites``: list,
         describe, estimate; for ``catalog``: list, the installed model plugins.
         ``model_id`` names the macro model to estimate or backtest — the only one installed
@@ -281,16 +282,9 @@ def build(ws: store.Workspace) -> FastMCP:
                 ),
             )
         if action == "backtest":
+            model = models.selected(model_id).model_id
             return _start(
-                ws,
-                "models",
-                _macro_argv(
-                    ws,
-                    "backtest",
-                    _need(as_of, "as_of"),
-                    models.selected(model_id).model_id,
-                    only or [],
-                ),
+                ws, "models", _backtest_argv(ws, _need(as_of, "as_of"), model, only or [])
             )
         raise ValueError(
             f"model: unknown action {action!r}, try list, describe, estimate, backtest"
@@ -339,6 +333,32 @@ def _macro_argv(
         argv += ["--corpus", str(ws.corpus / "manifest.json")]
         if only:
             argv += ["--only", *only]
+    return argv
+
+
+def _backtest_argv(
+    ws: store.Workspace, as_of: str, model_id: str, only: list[str] | None = None
+) -> list[str]:
+    """The command line of ``python -m mst.metrics backtest`` for this workspace."""
+    day = date.fromisoformat(as_of).isoformat()
+    argv = [
+        "-m",
+        "mst.metrics",
+        "backtest",
+        model_id,
+        "--as-of",
+        day,
+        "--store",
+        str(ws.series),
+        "--models",
+        str(ws.models),
+        "--corpus",
+        str(ws.corpus / "manifest.json"),
+        "--drivers",
+        str(ws.drivers / "catalog.json"),
+    ]
+    if only:
+        argv += ["--only", *only]
     return argv
 
 

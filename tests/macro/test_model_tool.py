@@ -54,15 +54,20 @@ def test_a_saved_version_is_listed_and_described(tmp_path):
 
 def test_estimate_and_backtest_become_tasks_on_the_models_resource(tmp_path):
     ws = store.Workspace(tmp_path)
-    for action in ("estimate", "backtest"):
-        answer = call(ws, "model", {"kind": "macro", "action": action, "as_of": "2010-01-01"}).data
-        try:
-            assert answer["argv"][:2] == ["-m", "mst.models"]
-            assert answer["argv"][2] in ("estimate-macro", "backtest")
-            assert answer["argv"][3] == "bvar.sv"
-            assert jobs.status(ws, answer["job"])["resource"] == "models"
-        finally:
-            jobs.cancel(ws, answer["job"])
+    answer = call(ws, "model", {"kind": "macro", "action": "estimate", "as_of": "2010-01-01"}).data
+    try:
+        assert answer["argv"][:4] == ["-m", "mst.models", "estimate-macro", "bvar.sv"]
+        assert jobs.status(ws, answer["job"])["resource"] == "models"
+    finally:
+        jobs.cancel(ws, answer["job"])
+
+    answer = call(ws, "model", {"kind": "macro", "action": "backtest", "as_of": "2010-01-01"}).data
+    try:
+        assert answer["argv"][:4] == ["-m", "mst.metrics", "backtest", "bvar.sv"]
+        assert "--corpus" in answer["argv"] and "--drivers" in answer["argv"]
+        assert jobs.status(ws, answer["job"])["resource"] == "models"
+    finally:
+        jobs.cancel(ws, answer["job"])
 
 
 def test_an_unknown_model_id_is_refused(tmp_path):

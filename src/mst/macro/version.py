@@ -30,6 +30,8 @@ META_REQUIRED = (*MACRO_META_REQUIRED, "n_global")
 class MacroVersion:
     """A macro version loaded back: its plugin, the model it loaded and the recorded meta."""
 
+    name: str
+    """The hash that names the version's folder."""
     plugin: MacroModel
     model: object
     meta: dict
@@ -91,7 +93,10 @@ def load(root: Path, name: str, models: Mapping[str, MacroModel]) -> MacroVersio
             f"installed; installed: {', '.join(sorted(models)) or 'none'}"
         )
     return MacroVersion(
-        plugin=models[model_id], model=models[model_id].load(meta, arrays), meta=meta
+        name=name,
+        plugin=models[model_id],
+        model=models[model_id].load(meta, arrays),
+        meta=meta,
     )
 
 

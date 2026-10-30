@@ -106,6 +106,7 @@ label = "индекс потребительских цен"
 unit = "индекс"
 transform = "log100"
 source = "Росстат"
+seasonal = true
 
 [[variables]]
 id = "ru.output"
@@ -113,6 +114,7 @@ label = "индекс выпуска базовых видов деятельн�
 unit = "индекс"
 transform = "log100"
 source = "Росстат"
+seasonal = true
 
 [[variables]]
 id = "ru.unemployment"
@@ -120,6 +122,7 @@ label = "безработица"
 unit = "%"
 transform = "identity"
 source = "Росстат"
+seasonal = true
 
 [[variables]]
 id = "ru.real_wage"
@@ -127,6 +130,7 @@ label = "индекс реальной зарплаты"
 unit = "индекс"
 transform = "log100"
 source = "Росстат"
+seasonal = true
 
 [[variables]]
 id = "ru.retail"
@@ -134,6 +138,7 @@ label = "индекс оборота розничной торговли"
 unit = "индекс"
 transform = "log100"
 source = "Росстат"
+seasonal = true
 
 [[variables]]
 id = "ru.credit"

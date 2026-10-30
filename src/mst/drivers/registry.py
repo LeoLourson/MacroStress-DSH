@@ -72,6 +72,9 @@ class Quantity(Contract):
     lags: int = Field(strict=True, ge=0, le=3)
     span: int = Field(default=1, strict=True, ge=1, le=12)
     """Months one stored value covers: 1 for a monthly value, 3 for a quarter's average."""
+    domain: list[Number] | None = None
+    """The admissible range of the quantity in its own unit, [low, high]; None when any value
+    is admissible. The admission check of the metrics reads it."""
     catalog: CatalogSource | None = None
 
     @property

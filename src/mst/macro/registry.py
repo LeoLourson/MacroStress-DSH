@@ -37,6 +37,8 @@ class Variable(Contract):
     unit: Identifier
     transform: Literal["identity", "log100"]
     source: Identifier
+    seasonal: bool = False
+    """The series is stored with its calendar pattern, which the panel build removes."""
 
     @property
     def block(self) -> Block:

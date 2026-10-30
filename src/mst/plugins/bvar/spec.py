@@ -46,7 +46,6 @@ class Spec(Contract):
     tightness: Positive
     volatility: Literal["constant", "stochastic"]
     stationary: list[str] = []
-    seasonal: list[str] = []
     volvol_mean: Positive
     volvol_df: Annotated[float, Field(strict=True, gt=2)]
     sign_lag: Annotated[int, Field(strict=True, ge=0)]

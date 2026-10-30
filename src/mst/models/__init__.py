@@ -118,17 +118,23 @@ def estimate_satellites(
     *,
     store: Path,
     models: Path,
-    drivers: Path,
+    drivers: Path | None = None,
     overrides: Mapping[str, str] | None = None,
+    root: Path | None = None,
+    registry=None,
 ) -> tuple[str, dict]:
     """Estimate the satellite bundle of the macro version ``macro``; the hash and its summary.
 
     Every quantity with drivers is estimated by the satellite model assigned to it, one
     context per model; the parts are assembled into one version with the residual correlation
-    of every driver with history.
+    of every driver with history. ``models`` is where the macro version lives; ``root`` is
+    where the bundle is written — the workspace models directory by default, the episode
+    directory of a backtest for its cached bundles. ``registry`` overrides the driver registry
+    (an episode reads the one the backtest built); ``drivers`` names its catalog file.
     """
     panel, as_of = macro_version.panel_of(models, macro)
-    registry = load_drivers_registry(catalog=drivers)
+    if registry is None:
+        registry = load_drivers_registry(catalog=drivers)
     quantities = [
         quantity.id
         for quantity in registry.quantities
@@ -153,7 +159,7 @@ def estimate_satellites(
     meta, arrays = satellite_bundle.assemble(
         registry, macro, as_of, estimates, unserved=unserved
     )
-    name = satellite_bundle.save(meta, arrays, models)
+    name = satellite_bundle.save(meta, arrays, root if root is not None else models)
     return name, _checks_table(meta)
 
 

@@ -19,8 +19,6 @@ volvol_mean = 0.03
 volvol_df = 60.0
 # Variables whose prior returns them to their mean; every other one stays at its last value.
 stationary = ["gl.vix", "ru.spread_aa", "ru.spread_a", "ru.spread_bbb"]
-# Rosstat series are stored raw; their seasonality is removed when the panel is built.
-seasonal = ["ru.cpi", "ru.output", "ru.unemployment", "ru.real_wage", "ru.retail"]
 # Months after the impact month that a sign restriction also covers.
 sign_lag = 2
 # Rotations tried per parameter draw before the draw is dropped as unidentified.
