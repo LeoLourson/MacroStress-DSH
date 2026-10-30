@@ -1,0 +1,179 @@
+"""``{{plugin_id}}.sat.v1``: an autoregressive satellite of ``{{quantity}}``.
+
+Every driver follows ``d_t = a + rho d_{t-1} + beta' x_t + e_t``, fitted by ordinary least
+squares on its own history; an object without history of its own takes the coefficients of
+the object above it. This is the simplest honest satellite: replace the estimation and the
+simulation with your own model — the interface (``estimate``, ``load``, ``simulate``) stays.
+"""
+
+import numpy as np
+
+from mst.drivers.history import history, x_from_paths
+from mst.drivers.registry import Quantity
+from mst.model_sdk.contracts import (
+    AdditiveImpact,
+    DriverPaths,
+    MacroSimulation,
+    SatelliteEstimate,
+    SatelliteEstimateContext,
+    SatelliteModel,
+    SatellitePart,
+)
+
+QUANTITY = "{{quantity}}"
+MIN_ROWS = 8
+"""Months a driver needs before its satellite is trusted to serve it."""
+
+
+def _design(d: np.ndarray, x: np.ndarray, node: int):
+    """``(Z, y)`` of a node: a constant, its own lag and the current inputs ``x_t``."""
+    rows, targets = [], []
+    for t in range(1, len(d)):
+        z = np.concatenate([[1.0, d[t - 1, node]], x[t]])
+        if np.isfinite(d[t, node]) and np.all(np.isfinite(z)):
+            rows.append(z)
+            targets.append(d[t, node])
+    if not rows:
+        return np.zeros((0, 2 + x.shape[1])), np.zeros(0)
+    return np.array(rows), np.array(targets)
+
+
+def estimate_part(context: SatelliteEstimateContext, quantity: str) -> SatellitePart:
+    """The part of one quantity: the coefficients of every node and their checks."""
+    hist = history(context.registry, quantity, context.panel, context.store, context.as_of)
+    width = 2 + hist.x.shape[1]
+    coef = np.zeros((len(hist.nodes), width))
+    sigma = np.zeros(len(hist.nodes))
+    rows = np.zeros(len(hist.nodes), dtype=int)
+    checks: dict[str, dict] = {}
+    for node in range(len(hist.nodes)):
+        z, y = _design(hist.d, hist.x, node)
+        rows[node] = len(y)
+        above = coef[hist.parent[node]] if hist.parent[node] >= 0 else np.zeros(width)
+        if len(y) >= MIN_ROWS:
+            coef[node], *_ = np.linalg.lstsq(z, y, rcond=None)
+            residual = y - z @ coef[node]
+            sigma[node] = float(np.sqrt(residual @ residual / max(len(y) - 1, 1)))
+        else:
+            coef[node], sigma[node] = above, sigma[hist.parent[node]] if hist.parent[node] >= 0 else 0.0
+        driver = hist.driver[node]
+        if driver is None:
+            continue
+        if len(y) >= MIN_ROWS:
+            checks[str(node)] = {
+                "satellite": sigma[node],
+                "baseline": None,
+                "forecasts": len(y),
+                "served": True,
+                "reason": "",
+            }
+        else:
+            served = bool(hist.parent[node] >= 0 and checks.get(str(hist.parent[node]), {}).get("served"))
+            checks[str(node)] = {
+                "satellite": None,
+                "baseline": None,
+                "forecasts": len(y),
+                "served": served,
+                "reason": "" if served else f"fewer than {MIN_ROWS} months of history",
+            }
+    return SatellitePart(
+        meta={
+            "quantity": hist.quantity.model_dump(mode="json", by_alias=True),
+            "months": [m.isoformat() for m in hist.months],
+            "nodes": hist.nodes,
+            "parent": hist.parent.tolist(),
+            "classes": hist.classes,
+            "driver": hist.driver,
+            "rows": rows.tolist(),
+            "checks": checks,
+        },
+        arrays={
+            "coef": coef,
+            "sigma": sigma,
+            "d": hist.d,
+            "approximate": hist.approximate,
+            "x": hist.x,
+        },
+    )
+
+
+def residuals_of(part: SatellitePart) -> dict[str, np.ndarray]:
+    """The residual series of every driver with history, for the bundle correlation."""
+    coef, d, x = part.arrays["coef"], part.arrays["d"], part.arrays["x"]
+    out = {}
+    for node, driver in enumerate(part.meta["driver"]):
+        if driver is None or part.meta["rows"][node] == 0:
+            continue
+        column = np.full(len(d), np.nan)
+        for t in range(1, len(d)):
+            z = np.concatenate([[1.0, d[t - 1, node]], x[t]])
+            if np.isfinite(d[t, node]) and np.all(np.isfinite(z)):
+                column[t] = d[t, node] - coef[node] @ z
+        out[driver] = column
+    return out
+
+
+class {{class}}Model:
+    """The loaded model of a version: the part of every quantity it estimated."""
+
+    def __init__(self, parts: dict[str, SatellitePart]):
+        self.parts = parts
+
+
+class {{class}}(SatelliteModel):
+    """The satellite model of ``{{quantity}}``; the declaration lives in ``plugin.py``."""
+
+    model_id = "{{plugin_id}}.sat.v1"
+    version = "0.1.0"
+    label = "{{label}}"
+    quantities = ("{{quantity}}",)
+    description = "Авторегрессия каждого драйвера на своём прошлом и входах величины."
+
+    def estimate(self, context: SatelliteEstimateContext) -> SatelliteEstimate:
+        parts, residuals = {}, {}
+        for quantity in context.quantities:
+            parts[quantity] = estimate_part(context, quantity)
+            residuals.update(residuals_of(parts[quantity]))
+        return SatelliteEstimate(parts=parts, residuals=residuals)
+
+    def load(self, parts: dict[str, SatellitePart]) -> {{class}}Model:
+        return {{class}}Model(dict(parts))
+
+    def simulate(
+        self,
+        model: {{class}}Model,
+        macro: MacroSimulation,
+        drivers: list[str],
+        impacts: list[AdditiveImpact],
+        *,
+        correlation=None,
+        seed: int,
+        stream: int,
+    ) -> DriverPaths:
+        draws, horizon = macro.paths.shape[0], macro.paths.shape[1] - 1
+        rng = np.random.default_rng([seed, stream])
+        paths = np.empty((draws, horizon + 1, len(drivers)))
+        flags: dict[str, frozenset[str]] = {}
+        for k, driver in enumerate(drivers):
+            quantity = driver.split(":", 1)[0]
+            part = model.parts[quantity]
+            declared = Quantity.model_validate(part.meta["quantity"])
+            node = part.meta["driver"].index(driver)
+            coef, sigma = part.arrays["coef"][node], part.arrays["sigma"][node]
+            d, x = part.arrays["d"], part.arrays["x"]
+            # The inputs of the horizon months come from the macro paths, repetition by
+            # repetition; the panel months before them from the history the part carries.
+            future = x_from_paths(declared, macro.ids, macro.paths)
+            start = d[np.flatnonzero(np.isfinite(d[:, node]))[-1], node]
+            paths[:, 0, k] = start
+            value = np.full(draws, start)
+            for t in range(1, horizon + 1):
+                z = np.column_stack([np.ones(draws), value, future[:, t]])
+                value = z @ coef + sigma * rng.standard_normal(draws)
+                paths[:, t, k] = value
+            flags[driver] = frozenset()
+        for impact in impacts:
+            k = drivers.index(impact.target)
+            paths[:, impact.start : impact.end + 1, k] += impact.delta
+            flags[impact.target] = flags[impact.target] | {"impact"}
+        return DriverPaths(ids=list(drivers), paths=paths, flags=flags)

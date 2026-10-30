@@ -1,0 +1,53 @@
+"""The declaration of the plugin conforms, and its model answers its interface."""
+
+import numpy as np
+
+from mst.model_sdk.contracts import DriverPaths, MacroSimulation
+
+from ..plugin import MODEL, plugin
+
+
+def test_the_plugin_conforms():
+    from mst.plugin_sdk.testing import check_plugin
+
+    assert [str(finding) for finding in check_plugin(plugin)] == []
+
+
+def test_the_model_simulates_its_drivers():
+    from datetime import date
+
+    macro = MacroSimulation(
+        ids=["gl.brent"],
+        months=[date(2026, 9, 1), date(2026, 10, 1)],
+        paths=np.ones((2, 2, 1)),
+        history=np.ones((2, 1, 1)),
+    )
+
+    class _Part:
+        meta = {
+            "driver": ["{{quantity}}:demo"],
+            "quantity": {
+                "id": "{{quantity}}",
+                "label": "{{quantity}}",
+                "unit": "ед.",
+                "transform": "identity",
+                "regressors": ["gl.brent"],
+                "features": [],
+                "lags": 0,
+                "span": 1,
+            },
+        }
+        arrays = {
+            "coef": np.array([[0.1, 0.9, 0.5]]),
+            "sigma": np.array([0.01]),
+            "d": np.array([[0.0], [1.0]]),
+            "approximate": np.zeros((2, 1), dtype=bool),
+            "x": np.ones((2, 1)),
+        }
+
+    loaded = MODEL.load({"{{quantity}}": _Part()})
+    found = MODEL.simulate(
+        loaded, macro, ["{{quantity}}:demo"], [], seed=1, stream=0
+    )
+    assert isinstance(found, DriverPaths)
+    assert found.paths.shape == (2, 2, 1)

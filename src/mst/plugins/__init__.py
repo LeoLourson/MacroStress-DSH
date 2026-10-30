@@ -11,7 +11,9 @@ A plugin may carry position models, macro models and satellite models. Nothing o
 package branches on an instrument type or a driver quantity: the engine asks the registry for
 the model of a position, the run asks it for the macro model of a version and the satellite
 model of a quantity. A new asset type or a new satellite of a quantity is a package, not an
-edit of the core, and a quantity claimed by two satellite models is an error, not a choice.
+edit of the core. A quantity may be declared by several satellite models — a plugin being
+developed next to the installed one — and the assignment of ``mst.models`` names the one that
+estimates it; an ambiguous assignment without an explicit name is an error, not a choice.
 """
 
 import importlib
@@ -69,8 +71,8 @@ class Registry:
     satellites: dict[str, SatelliteModel] = field(default_factory=dict)
     """The satellite models ``G_l`` by model id."""
     satellite_owner: dict[str, str] = field(default_factory=dict)
-    quantity_model: dict[str, str] = field(default_factory=dict)
-    """The satellite model id every driver quantity is assigned to."""
+    quantity_model: dict[str, list[str]] = field(default_factory=dict)
+    """The satellite model ids that declare every driver quantity, in declaration order."""
 
 
 def load_package(path) -> Plugin:
@@ -488,14 +490,7 @@ def build(plugins: Iterable[Plugin]) -> Registry:
             for quantity in getattr(model, "quantities", ()) or ():
                 if not isinstance(quantity, str):
                     continue
-                if quantity in registry.quantity_model:
-                    other = registry.quantity_model[quantity]
-                    problems.append(
-                        f"quantity {quantity!r} is served by satellite models "
-                        f"{other} and {model_id}"
-                    )
-                    continue
-                registry.quantity_model[quantity] = model_id
+                registry.quantity_model.setdefault(quantity, []).append(model_id)
     served: dict[str, list[str]] = {}
     for model_id, model in registry.models.items():
         types = getattr(model, "instrument_types", ())

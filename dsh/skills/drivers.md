@@ -54,8 +54,7 @@ whenToUse: когда позиция не считается из-за драй�
 
 ```powershell
 python -m mst.drivers update share_price --store workspace/series --drivers workspace/drivers/catalog.json
-python -m mst.drivers estimate --macro <hash> --store workspace/series --models workspace/models --drivers workspace/drivers/catalog.json
-python -m mst.drivers check --macro <hash> --store workspace/series --models workspace/models --drivers workspace/drivers/catalog.json
+python -m mst.models estimate-satellites --macro <hash> --store workspace/series --models workspace/models --drivers workspace/drivers/catalog.json
 ```
 
 `estimate` пишет версию, `check` делает то же без записи. Новая величина — правка

@@ -115,3 +115,65 @@ def test_demo_run_names_a_broken_registry(monkeypatch):
     monkeypatch.setattr(plugin.plugins, "registry", broken)
     with pytest.raises(SystemExit, match="mst.plugins.bad exports no"):
         plugin.demo_run("gold")
+
+
+def test_a_fresh_satellite_package_passes_check(tmp_path):
+    target = plugin.new("arlink", kind="satellite", quantity="bond_spread", dest=tmp_path)
+    assert (target / "model.py").is_file() and (target / "tests").is_dir()
+    assert plugin.check(path=target) == []
+
+
+def test_a_fresh_macro_package_passes_check_and_meets_constraints(tmp_path):
+    target = plugin.new("walk", kind="macro", dest=tmp_path)
+    assert plugin.check(path=target) == []
+
+
+    import numpy as np
+
+    loaded = plugin.load(target)
+    model = next(iter(loaded.macro))
+    simulation = model.simulate(
+        _walk_model(),
+        _plan(),
+        draws=4,
+        seed=1,
+    )
+    assert simulation.paths.shape == (4, 4, 2)
+    assert np.allclose(simulation.paths[:, 2, 1], 18.0, atol=1e-9)
+
+
+def _walk_model():
+    from datetime import date
+
+    import numpy as np
+
+    class Fake:
+        ids = ["gl.brent", "ru.key_rate"]
+        last_month = date(2026, 8, 1)
+        last = np.array([100.0, 16.0])
+        drift = np.array([0.1, 0.0])
+        chol = np.eye(2)
+
+    return Fake()
+
+
+def _plan():
+    from mst.model_sdk.contracts import LinearConstraint, LinearTerm, ScenarioPlan
+
+    return ScenarioPlan(
+        horizon=3,
+        constraints=(
+            LinearConstraint(
+                terms=(LinearTerm(variable="ru.key_rate", month=2, weight=1.0),),
+                low=18.0,
+                high=18.0,
+            ),
+        ),
+        driving_shocks=("ru.key_rate",),
+    )
+
+
+def test_a_kind_must_be_known(tmp_path, capsys):
+    with pytest.raises(SystemExit) as caught:
+        plugin.main(["new", "odd", "--kind", "strange", "--dest", str(tmp_path)])
+    assert caught.value.code == 2  # argparse refuses the choice before the scaffold runs

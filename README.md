@@ -25,12 +25,12 @@ scheduler.
 | Part | What it does |
 |---|---|
 | Series | Monthly series from MOEX, the Bank of Russia, Rosstat, and FRED, with the release date of every value |
-| Macro model | BVAR with stochastic volatility, sign restrictions, conditional forecasts, scenario severity, and checks on historical episodes |
-| Drivers | Object catalogs, hierarchical satellite models, out-of-sample checks, driver paths on the macro draws |
-| Scenario | A $(N, C, D, O)$ file with validation and paths: conditional forecast and drivers on the same draws |
+| Macro model | A plugin: the shipped BVAR (`bvar.sv`) or any other; the core keeps the variables registry, the panel and the version store |
+| Drivers | Object catalogs, the satellite bundle — one model per quantity, assigned by declaration or explicitly — out-of-sample checks, driver paths on the macro draws |
+| Scenario | A $(N, C, D, O)$ file with impacts $O$ on any level, validation and paths: the conditional forecast and the drivers on the same draws |
 | Positions | Equity, bond, credit or deposit, housing |
-| Run and report | Positions along scenario paths, with $P_5$, $P_{50}$, $P_{95}$, ES95, and $\delta$ |
-| Extensions | A new asset type is a plugin: `python -m mst.plugin new`, contract checks, a demo run |
+| Run and report | The conditional forecast of the target indicators and the portfolio along the same paths, with $P_5$, $P_{50}$, $P_{95}$, ES95, and $\delta$ |
+| Extensions | A new asset type, macro model or satellite is a plugin: `python -m mst.plugin new --kind position\|satellite\|macro`, contract checks, a demo run |
 | DSH plugin | Scenario from the corpus, report, drivers; the prompt section built from `workspace.json` |
 
 MCP tools: `jobs`, `series`, `corpus`, `scenario`, `run`, `portfolio`, `model`. The reference is
@@ -59,13 +59,15 @@ Once a client is connected, it sees seven tools. Long operations start jobs: a t
 1. `jobs(action="state")` — what is in the workspace: model versions, corpus index, jobs.
 2. `series(action="update")` — download the macro series. FRED needs a key in `FRED_API_KEY`.
 3. `jobs(action="status", id=...)` and `jobs(action="log", id=...)` — wait for the job.
-4. `model(kind="macro", action="estimate", as_of="2026-10-29")` — estimate the macro model on the
-   data known at that date. The version is a hash.
+4. `model(kind="macro", action="estimate", as_of="2026-10-29")` — estimate the macro model
+   (`bvar.sv`, the only one installed; `model_id` names another) on the data known at that
+   date. The version is a hash.
 5. `series(action="update", quantity="share_price")` — find the objects of a quantity and
    download their series; the same for `bond_spread`, `overdue_share`, `housing_price_primary`,
    `housing_price_secondary`.
-6. `model(kind="satellites", action="estimate", version=<macro hash>)` — estimate the satellites
-   on that macro version.
+6. `model(kind="satellites", action="estimate", version=<macro hash>)` — assemble the
+   satellite bundle of that macro version: every quantity is estimated by the model assigned
+   to it (`hier.gibbs` by default; `assignment` names another).
 7. `model(kind="satellites", action="describe", version=<hash>)` — which drivers passed the
    out-of-sample check and why the rest were rejected.
 8. `corpus(action="search", query=..., as_of=...)` — fragments known at the date;
@@ -74,8 +76,12 @@ Once a client is connected, it sees seven tools. Long operations start jobs: a t
    `scenario(action="validate", id=...)` — list everything that blocks the calculation.
 10. `portfolio(action="save", id=..., spec={...})` — save a portfolio;
     `portfolio(action="check", id=..., scenario=...)` — check it against the scenario.
-11. `run(action="start", scenario=..., portfolio=..., draws=..., seed=...)` — start a run;
-    `run(action="result", id=...)` — read $P_5$/$P_{50}$/$P_{95}$, $\delta$, and coverage.
+11. `run(action="start", scenario=..., portfolio=..., draws=..., seed=..., targets=...)` —
+    start a run; `run(action="result", id=...)` — read the conditional forecast of the
+    target indicators ($P_5$/$P_{50}$/$P_{95}$ by month) and the portfolio report with
+    $\delta$ and coverage.
+12. `model(kind="macro", action="backtest", as_of=...)` — the episode check: CRPS,
+    calibration and admission of the models on historical events (`mst.metrics`).
 
 ## Documentation
 

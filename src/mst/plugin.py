@@ -28,8 +28,8 @@ from .plugin_sdk.plugin import Plugin
 from .plugin_sdk.testing import calculate_demo, check_plugin
 
 PLUGINS = Path(__file__).resolve().parent / "plugins"
-TEMPLATES = Path(__file__).resolve().parent / "templates" / "plugin"
-#: Template file -> the file it becomes, for a new asset plugin.
+TEMPLATES = Path(__file__).resolve().parent / "templates"
+#: Template file -> the file it becomes, for a new plugin of any kind.
 FILES = {
     "__init__.py.tmpl": "__init__.py",
     "plugin.py.tmpl": "plugin.py",
@@ -38,12 +38,9 @@ FILES = {
     "tests/test_plugin.py.tmpl": "tests/test_{plugin_id}.py",
     "README.md.tmpl": "README.md",
 }
+KINDS = ("position", "satellite", "macro")
 _ID = re.compile(r"^[a-z][a-z0-9_]*$")
 _PLACEHOLDER = re.compile(r"\{\{([a-z_]+)\}\}")
-
-
-def _template(name: str) -> str:
-    return (TEMPLATES / name).read_text(encoding="utf-8")
 
 
 def _literal(value: str) -> str:
@@ -68,28 +65,41 @@ def _render(text: str, values: dict) -> str:
     return rendered
 
 
-def new(plugin_id: str, *, type_id: str | None = None, label: str | None = None, dest=None) -> Path:
-    """Write a new package and return its directory."""
+def new(
+    plugin_id: str,
+    *,
+    kind: str = "position",
+    type_id: str | None = None,
+    quantity: str | None = None,
+    label: str | None = None,
+    dest=None,
+) -> Path:
+    """Write a new package of the named kind and return its directory."""
     if not _ID.match(plugin_id) or keyword.iskeyword(plugin_id):
         raise SystemExit(f"plugin id must be a lowercase Python identifier, got {plugin_id!r}")
+    if kind not in KINDS:
+        raise SystemExit(f"kind must be one of {', '.join(KINDS)}, got {kind!r}")
     target = (Path(dest) if dest else PLUGINS) / plugin_id
     if target.exists():
         raise SystemExit(f"{target} already exists")
     type_id = type_id or f"{plugin_id}_position"
     if not _ID.match(type_id):
         raise SystemExit(f"type id must be lowercase letters, digits and _, got {type_id!r}")
+    quantity = quantity or "share_price"
     label = label or plugin_id
     values = {
         "plugin_id": plugin_id,
         "type_id": type_id,
+        "quantity": quantity,
         "label": _literal(label),
         "label_text": label,
-        "class": "".join(part.title() for part in plugin_id.split("_")) + "Model",
+        "class": "".join(part.title() for part in plugin_id.split("_")),
         "description": _literal("Позиция, стоимость которой следует пути одного драйвера."),
     }
+    folder = TEMPLATES / ("plugin" if kind == "position" else kind)
     # Render everything before creating the directory: a bad template leaves no half package.
     rendered = {
-        name.format(plugin_id=plugin_id): _render(_template(template), values)
+        name.format(plugin_id=plugin_id): _render((folder / template).read_text("utf-8"), values)
         for template, name in FILES.items()
     }
     target.mkdir(parents=True)
@@ -226,7 +236,13 @@ def main(argv=None) -> int:
 
     create = commands.add_parser("new", help="scaffold a plugin package")
     create.add_argument("plugin_id")
-    create.add_argument("--type-id")
+    create.add_argument(
+        "--kind", choices=KINDS, default="position", help="position, satellite or macro"
+    )
+    create.add_argument("--type-id", help="the instrument type, for a position plugin")
+    create.add_argument(
+        "--quantity", help="the served quantity, for a satellite plugin; share_price by default"
+    )
     create.add_argument("--label")
     create.add_argument("--dest")
 
@@ -245,7 +261,12 @@ def main(argv=None) -> int:
 
     if args.command == "new":
         target = new(
-            args.plugin_id, type_id=args.type_id, label=args.label, dest=args.dest
+            args.plugin_id,
+            kind=args.kind,
+            type_id=args.type_id,
+            quantity=args.quantity,
+            label=args.label,
+            dest=args.dest,
         )
         print(f"created {target}")
         where = f' --path "{target}"' if args.dest else f" {args.plugin_id}"

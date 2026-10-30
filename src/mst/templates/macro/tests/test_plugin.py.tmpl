@@ -1,0 +1,41 @@
+"""The declaration conforms, and the model meets an exact constraint in every path."""
+
+from datetime import date
+
+import numpy as np
+
+from mst.model_sdk.contracts import LinearConstraint, LinearTerm, ScenarioPlan
+
+from ..plugin import MODEL, plugin
+
+
+def test_the_plugin_conforms():
+    from mst.plugin_sdk.testing import check_plugin
+
+    assert [str(finding) for finding in check_plugin(plugin)] == []
+
+
+def test_the_model_meets_its_constraints_in_every_path():
+    class _Fake:
+        ids = ["gl.brent", "ru.key_rate"]
+        last_month = date(2026, 8, 1)
+        last = np.array([100.0, 16.0])
+        drift = np.array([0.1, 0.0])
+        chol = np.eye(2)
+
+    plan = ScenarioPlan(
+        horizon=3,
+        constraints=(
+            LinearConstraint(
+                terms=(LinearTerm(variable="ru.key_rate", month=2, weight=1.0),),
+                low=18.0,
+                high=18.0,
+            ),
+        ),
+        driving_shocks=("ru.key_rate",),
+    )
+    simulation = MODEL.simulate(_Fake(), plan, draws=5, seed=1)
+    assert simulation.paths.shape == (5, 4, 2)
+    assert np.allclose(simulation.paths[:, 2, 1], 18.0, atol=1e-9)
+    # The other variable keeps walking on its own.
+    assert simulation.paths[:, 1, 0].std() > 0

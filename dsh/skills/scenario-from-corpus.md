@@ -45,7 +45,7 @@ whenToUse: когда нужен новый сценарий по докумен
 - ограничение должно быть выполнимо движущими шоками: `validate` назовёт связку, которую
   шоки не сдвигают.
 
-`driving_shocks` — id шоков из `src/mst/macro/registry.toml`: `ru.monetary`,
+`driving_shocks` — id шоков макромодели (`src/mst/plugins/bvar/signs.toml`): `ru.monetary`,
 `ru.inflation`, `ru.fx_risk`, `gl.oil`, `gl.financial`. Пустой список значит «любой шок».
 
 `overlays` — `{"driver": "<величина>:<объект>", "start": ..., "end": ..., "delta": ...,

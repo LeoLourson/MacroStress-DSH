@@ -38,7 +38,7 @@ def test_the_installed_packages_are_the_position_models_and_the_models():
     assert sorted(registry.macro) == ["bvar.sv"]
     assert registry.macro_owner["bvar.sv"] == "bvar"
     assert sorted(registry.satellites) == ["hier.gibbs"]
-    assert registry.quantity_model["share_price"] == "hier.gibbs"
+    assert registry.quantity_model["share_price"] == ["hier.gibbs"]
 
 
 def test_the_catalog_answers_by_id_and_by_type():
@@ -159,7 +159,7 @@ def test_a_model_plugin_without_position_models_is_registered_by_kind():
     assert registry.models == {}
     assert sorted(registry.macro) == ["gmodel.macro.v1"]
     assert sorted(registry.satellites) == ["gmodel.sat.v1"]
-    assert registry.quantity_model == {"share_price": "gmodel.sat.v1"}
+    assert registry.quantity_model == {"share_price": ["gmodel.sat.v1"]}
     assert registry.macro_owner["gmodel.macro.v1"] == "gmodel"
     assert registry.satellite_owner["gmodel.sat.v1"] == "gmodel"
 
@@ -187,12 +187,25 @@ def test_a_macro_model_names_known_variables_only():
         plugins.build([fakes.model_plugin(macro=(FarAway(),))])
 
 
-def test_one_quantity_is_served_by_one_satellite_model():
+def test_one_quantity_is_served_by_one_satellite_model(monkeypatch):
     class Other(fakes.DemoSatelliteModel):
         model_id = "gmodel.other.v1"
 
-    with pytest.raises(plugins.PluginError, match="quantity 'share_price' is served by"):
-        plugins.build([fakes.model_plugin(satellites=(fakes.DemoSatelliteModel(), Other()))])
+    registry = plugins.build(
+        [fakes.model_plugin(satellites=(fakes.DemoSatelliteModel(), Other()))]
+    )
+    # Both may declare it — a plugin under development beside the installed one — but the
+    # assignment refuses the ambiguity until a name resolves it.
+    assert registry.quantity_model["share_price"] == ["gmodel.sat.v1", "gmodel.other.v1"]
+    from mst import models as models_pkg
+
+    monkeypatch.setattr(plugins, "registry", lambda: registry)
+    with pytest.raises(ValueError, match="several satellite models declare share_price"):
+        models_pkg.assignment(["share_price"])
+    chosen, unserved = models_pkg.assignment(
+        ["share_price"], {"share_price": "gmodel.other.v1"}
+    )
+    assert chosen == {"share_price": "gmodel.other.v1"} and unserved == []
 
 
 def test_a_plugin_without_any_model_is_rejected():

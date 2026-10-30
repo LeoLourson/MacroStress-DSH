@@ -84,8 +84,10 @@ def assignment(
     """The satellite model of every quantity, and the quantities no model serves.
 
     ``overrides`` maps a quantity to a satellite model id explicitly; it names an installed
-    model or the assignment is refused. A quantity with no model and no override is unserved:
-    recorded, not estimated.
+    model or the assignment is refused. A quantity declared by one model is estimated by it;
+    a quantity declared by several is an error until an override names one — a plugin being
+    developed next to the installed one is exactly that case. A quantity no model declares
+    is unserved: recorded, not estimated.
     """
     from mst import plugins
 
@@ -101,15 +103,24 @@ def assignment(
         )
     chosen: dict[str, str] = {}
     unserved: list[str] = []
+    ambiguous: list[str] = []
     for quantity in quantities:
         if overrides and quantity in overrides:
             chosen[quantity] = overrides[quantity]
             continue
-        model_id = installed.quantity_model.get(quantity)
-        if model_id is None:
-            unserved.append(quantity)
+        declarers = installed.quantity_model.get(quantity, [])
+        if len(declarers) == 1:
+            chosen[quantity] = declarers[0]
+        elif len(declarers) > 1:
+            ambiguous.append(f"{quantity} ({', '.join(declarers)})")
         else:
-            chosen[quantity] = model_id
+            unserved.append(quantity)
+    if ambiguous:
+        raise ValueError(
+            "several satellite models declare "
+            + "; ".join(ambiguous)
+            + " — name one per quantity: --model QUANTITY=MODEL_ID"
+        )
     return chosen, unserved
 
 

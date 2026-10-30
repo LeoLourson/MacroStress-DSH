@@ -1,0 +1,177 @@
+"""``{{plugin_id}}.macro.v1``: a random walk with drift over the macro variables.
+
+Every variable follows ``y_t = y_{t-1} + drift + L eps_t``, where the drift is the average
+monthly change of its history and ``L`` the Cholesky factor of the covariance of the
+changes; the shocks of the model are each variable's own innovation, named like the
+variable. The scenario constraints are met with the shared conditional machinery of
+``mst.model_sdk.conditional``. This is the simplest honest macro model: replace the
+estimation and the simulation with your own — the interface stays.
+"""
+
+from datetime import date
+
+import numpy as np
+
+from mst.macro.panel import Panel, build_panel
+from mst.macro.registry import load_registry as load_variables
+from mst.model_sdk.conditional import InfeasibleScenario, dependent_rows, draw_driving
+from mst.model_sdk.contracts import (
+    LinearConstraint,
+    MacroEstimate,
+    MacroEstimateContext,
+    MacroModel,
+    MacroSimulation,
+    ScenarioPlan,
+)
+
+START = date(2012, 1, 1)
+"""The first month of the panel; a model of its own chooses its own history window."""
+
+
+def _panel(context: MacroEstimateContext) -> Panel:
+    registry = context.registry or load_variables()
+    seasonal = [v.id for v in registry.variables if v.seasonal]
+    return build_panel(
+        context.store, registry, start=START, as_of=context.as_of, seasonal=seasonal
+    )
+
+
+def _changes(y: np.ndarray) -> np.ndarray:
+    """The month-over-month changes of every variable, over the months both known."""
+    rows = []
+    for t in range(1, len(y)):
+        known = np.isfinite(y[t]) & np.isfinite(y[t - 1])
+        row = np.where(known, y[t] - y[t - 1], np.nan)
+        rows.append(row)
+    return np.array(rows)
+
+
+class {{class}}Model:
+    """The loaded model of a version: the last month, the drift and the Cholesky factor."""
+
+    def __init__(
+        self,
+        ids: list[str],
+        last_month: date,
+        last: np.ndarray,
+        drift: np.ndarray,
+        chol: np.ndarray,
+    ):
+        self.ids, self.last_month = ids, last_month
+        self.last, self.drift, self.chol = last, drift, chol
+
+
+class {{class}}(MacroModel):
+    """The macro model of the plugin; the declaration lives in ``plugin.py``."""
+
+    model_id = "{{plugin_id}}.macro.v1"
+    version = "0.1.0"
+    label = "{{label}}"
+    variables: tuple = ()
+    description = "Случайное блуждание с дрейфом; шоки — собственные инновации переменных."
+
+    def estimate(self, context: MacroEstimateContext) -> MacroEstimate:
+        panel = _panel(context)
+        changes = _changes(panel.y)
+        # A variable without a single known change keeps a zero drift and a unit scale.
+        drift = np.nan_to_num(np.nanmean(changes, axis=0))
+        filled = np.where(np.isnan(changes), 0.0, changes)
+        covariance = np.cov(filled, rowvar=False, ddof=1) if len(filled) > 2 else np.eye(len(drift))
+        covariance = np.atleast_2d(covariance) + np.eye(len(drift)) * 1e-8
+        chol = np.linalg.cholesky(covariance)
+        return MacroEstimate(
+            meta={
+                "as_of": context.as_of.isoformat(),
+                "ids": list(panel.ids),
+                "n_global": panel.n_global,
+                "months": [m.isoformat() for m in panel.months],
+                # The shock of each column of L is the own innovation of its variable.
+                "shocks": list(panel.ids),
+                "diagnostics": {"changes": int(np.isfinite(changes).any(axis=1).sum())},
+            },
+            arrays={
+                "panel_y": panel.y,
+                "panel_approximate": panel.approximate,
+                "drift": drift,
+                "chol": chol,
+            },
+        )
+
+    def load(self, meta: dict, arrays: dict) -> {{class}}Model:
+        panel = arrays["panel_y"]
+        last_row = np.flatnonzero(np.isfinite(panel).any(axis=1))[-1]
+        return {{class}}Model(
+            ids=list(meta["ids"]),
+            last_month=date.fromisoformat(meta["months"][last_row]),
+            last=panel[last_row],
+            drift=arrays["drift"],
+            chol=arrays["chol"],
+        )
+
+    def simulate(self, model: {{class}}Model, plan: ScenarioPlan, *, draws: int, seed: int):
+        horizon = plan.horizon
+        n = len(model.ids)
+        driving = np.zeros(n, dtype=bool)
+        index = {shock: k for k, shock in enumerate(model.ids)}
+        unknown = [shock for shock in plan.driving_shocks if shock not in index]
+        if unknown:
+            raise ValueError(f"unknown shock {', '.join(unknown)}")
+        for shock in plan.driving_shocks:
+            driving[index[shock]] = True
+        paths = np.empty((draws, horizon + 1, n))
+        months = [_shift_month(model.last_month, k) for k in range(horizon + 1)]
+        for r in range(draws):
+            rng = np.random.default_rng([seed, r])
+            eps = rng.standard_normal((horizon, n))
+            if plan.constraints:
+                z = _loadings(plan.constraints, model, horizon)
+                z_all = z.reshape(len(plan.constraints), -1)
+                z_driving = z[:, :, driving].reshape(len(plan.constraints), -1)
+                bad = dependent_rows(z_driving, z_all)
+                if bad:
+                    raise InfeasibleScenario(bad)
+                low = np.array([c.low for c in plan.constraints])
+                high = np.array([c.high for c in plan.constraints])
+                offset = _offset(plan.constraints, model)
+                offset += np.einsum(
+                    "csj,sj->c", z[:, :, ~driving], eps[:, ~driving]
+                )
+                drawn = draw_driving(z_driving, low - offset, high - offset, rng)
+                eps[:, driving] = drawn.reshape(horizon, driving.sum())
+            steps = eps @ model.chol.T + model.drift
+            paths[r] = np.vstack([model.last, model.last + np.cumsum(steps, axis=0)])
+        return MacroSimulation(
+            ids=model.ids, months=months, paths=paths, history=np.tile(model.last, (draws, 1, 1))
+        )
+
+
+def _loadings(constraints, model, horizon: int) -> np.ndarray:
+    """``(m, H, n)``: how a unit of each shock in each month moves each constraint."""
+    n = len(model.ids)
+    index = {id_: k for k, id_ in enumerate(model.ids)}
+    z = np.zeros((len(constraints), horizon, n))
+    for c, constraint in enumerate(constraints):
+        for term in constraint.terms:
+            column = model.chol[index[term.variable]]
+            for month in range(1, term.month + 1):
+                z[c, month - 1] += term.weight * column
+    return z
+
+
+def _offset(constraints, model) -> np.ndarray:
+    """The constraint level of the deterministic part: the start and the drift."""
+    index = {id_: k for k, id_ in enumerate(model.ids)}
+    return np.array(
+        [
+            sum(
+                term.weight * (model.last[index[term.variable]] + term.month * model.drift[index[term.variable]])
+                for term in constraint.terms
+            )
+            for constraint in constraints
+        ]
+    )
+
+
+def _shift_month(month: date, step: int) -> date:
+    index = month.year * 12 + month.month - 1 + step
+    return date(index // 12, index % 12 + 1, 1)

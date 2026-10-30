@@ -29,7 +29,7 @@ workspace.
 | Сценарий | Хранит файл $(N, C, D, O)$, проверяет его и строит пути: условный прогноз и драйверы на тех же розыгрышах |
 | Модели позиций | Акция, облигация, кредит, депозит, недвижимость |
 | Прогон и отчёт | Считает позиции на путях сценария и выдаёт $P_5$, $P_{50}$, $P_{95}$, ES95 и $\delta$ |
-| Расширения | Новый тип актива — плагин: `python -m mst.plugin new`, проверка контракта, демо-расчёт |
+| Расширения | Новый тип актива, макромодель или сателлит — плагин: `python -m mst.plugin new --kind position\|satellite\|macro`, проверка контракта, демо-расчёт |
 | Скиллы DSH | Сценарий из корпуса, отчёт, драйверы; раздел системного промпта из `workspace.json` |
 
 MCP-инструменты: `jobs`, `series`, `corpus`, `scenario`, `run`, `portfolio`, `model`.
@@ -59,13 +59,15 @@ Desktop, Cursor и любому другому MCP-клиенту — [docs/mcp.
 2. `series(action="update")` — загрузить все макроряды. Для FRED нужен ключ в переменной
    окружения `FRED_API_KEY`.
 3. `jobs(action="status", id=...)` и `jobs(action="log", id=...)` — ждать конца задачи.
-4. `model(kind="macro", action="estimate", as_of="2026-10-29")` — оценить макромодель на
-   данных, известных к этой дате. Получится версия с хешем в имени.
+4. `model(kind="macro", action="estimate", as_of="2026-10-29")` — оценить макромодель
+   (`bvar.sv`, она одна установлена; `model_id` назовёт другую) на данных, известных к этой
+   дате. Получится версия с хешем в имени.
 5. `series(action="update", quantity="share_price")` — найти объекты величины и загрузить их
    ряды; так же для `bond_spread`, `overdue_share`, `housing_price_primary`,
    `housing_price_secondary`.
-6. `model(kind="satellites", action="estimate", version=<хеш макроверсии>)` — оценить
-   сателлиты на панели этой макроверсии.
+6. `model(kind="satellites", action="estimate", version=<хеш макроверсии>)` — собрать
+   бандл сателлитов этой макроверсии: каждая величина оценивается назначенной ей моделью
+   (по умолчанию `hier.gibbs`; `assignment` назовёт другую).
 7. `model(kind="satellites", action="describe", version=<хеш>)` — какие драйверы прошли
    проверку вне выборки и почему остальные отклонены.
 8. `corpus(action="search", query=..., as_of=...)` — фрагменты корпуса, известные на дату;
@@ -74,9 +76,12 @@ Desktop, Cursor и любому другому MCP-клиенту — [docs/mcp.
    `scenario(action="validate", id=...)` — назвать всё, что мешает его посчитать.
 10. `portfolio(action="save", id=..., spec={...})` — сохранить портфель;
     `portfolio(action="check", id=..., scenario=...)` — проверить его против сценария.
-11. `run(action="start", scenario=..., portfolio=..., draws=..., seed=...)` — запустить
-    прогон; `run(action="result", id=...)` — прочитать $P_5$/$P_{50}$/$P_{95}$, $\delta$ и
-    покрытие.
+11. `run(action="start", scenario=..., portfolio=..., draws=..., seed=..., targets=...)` —
+    запустить прогон; `run(action="result", id=...)` — прочитать условный прогноз целевых
+    показателей ($P_5$/$P_{50}$/$P_{95}$ по месяцам) и отчёт портфеля с $\delta$ и
+    покрытием.
+12. `model(kind="macro", action="backtest", as_of=...)` — проверка на эпизодах: CRPS,
+    калибровка и допуск моделей на исторических событиях (`mst.metrics`).
 
 ## Документация
 
