@@ -2,9 +2,10 @@
 
 The Gibbs sampler over the object tree, the out-of-sample check and the driver simulation are
 here; the platform knows this package only through its ``plugin`` declaration and the model
-SDK. Another satellite model is another package: it serves the quantities it declares, the
-platform refuses a quantity claimed by two models, and a version records which model
-estimated which quantity.
+SDK. Another satellite model is another package: it serves the quantities it declares, several
+models may declare one quantity, and an ambiguous assignment is refused until an explicit
+``--model`` names the one that estimates it; a version records which model estimated which
+quantity.
 """
 
 from .model import QUANTITIES, HierModel, HierSatellites

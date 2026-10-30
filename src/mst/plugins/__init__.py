@@ -79,7 +79,10 @@ def load_package(path) -> Plugin:
     """The ``plugin`` declaration of a package outside ``mst.plugins``.
 
     The package is read afresh on every call, so a plugin being developed is checked as it
-    stands, not as it was the last time.
+    stands, not as it was the last time. It is imported under the synthetic name
+    ``mst_plugin_<folder>``, so its own imports must be relative (``from .model import ...``):
+    an absolute ``import <folder>.model`` only works for a package installed as a distribution
+    (entry point) or living in the ``mst.plugins`` namespace.
     """
     path = Path(path).resolve()
     init = path / "__init__.py"
@@ -304,6 +307,10 @@ def _macro_problems(plugin: Plugin, model) -> list[str]:
     problems: list[str] = []
     model_id = getattr(model, "model_id", None)
     where = f"macro model {model_id!r}"
+    if not isinstance(model, MacroModel):
+        return [
+            f"{plugin.plugin_id}: {where} is a {type(model).__name__}, not a MacroModel"
+        ]
     if not isinstance(model_id, str) or not DOTTED_ID.match(model_id):
         problems.append(
             f"{plugin.plugin_id}: {where} must be a dotted lower_snake_case identifier"
@@ -333,6 +340,10 @@ def _satellite_problems(plugin: Plugin, model) -> list[str]:
     problems: list[str] = []
     model_id = getattr(model, "model_id", None)
     where = f"satellite model {model_id!r}"
+    if not isinstance(model, SatelliteModel):
+        return [
+            f"{plugin.plugin_id}: {where} is a {type(model).__name__}, not a SatelliteModel"
+        ]
     if not isinstance(model_id, str) or not DOTTED_ID.match(model_id):
         problems.append(
             f"{plugin.plugin_id}: {where} must be a dotted lower_snake_case identifier"
@@ -510,8 +521,11 @@ def build(plugins: Iterable[Plugin]) -> Registry:
     return registry
 
 
-def _from_namespace(package: str, problems: list[str]) -> list[Plugin]:
-    """Every plugin package under ``package``, in the alphabetical order of its name."""
+def _from_namespace(package: str, problems: list[str]) -> list[tuple[Plugin, str]]:
+    """Every plugin package under ``package``, in the alphabetical order of its name.
+
+    Each plugin comes with the source that declared it, so a duplicate id names both places.
+    """
     root = importlib.import_module(package)
     names = [
         f"{package}.{info.name}"
@@ -536,11 +550,11 @@ def _from_namespace(package: str, problems: list[str]) -> list[Plugin]:
                     f"{name} declares plugin_id {declared.plugin_id!r}, expected {expected!r}"
                 )
                 continue
-        found.append(declared)
+        found.append((declared, name))
     return found
 
 
-def _from_entry_points(problems: list[str]) -> list[Plugin]:
+def _from_entry_points(problems: list[str]) -> list[tuple[Plugin, str]]:
     """The plugins of the installed distributions, by the entry point of this group."""
     try:
         points = list(importlib.metadata.entry_points(group=ENTRY_POINTS))
@@ -563,16 +577,19 @@ def _from_entry_points(problems: list[str]) -> list[Plugin]:
                 f"entry point {point.name!r} declares plugin_id {declared.plugin_id!r}"
             )
             continue
-        found.append(declared)
+        found.append((declared, f"entry point {point.name!r}"))
     return found
 
 
-def _from_paths(problems: list[str]) -> list[Plugin]:
+def _from_paths(problems: list[str]) -> list[tuple[Plugin, str]]:
     """The plugin packages of the directories of ``MST_PLUGINS_PATH``."""
     roots = [part for part in os.environ.get(PATH_ENV, "").split(os.pathsep) if part]
     found = []
     for root in roots:
-        for folder in sorted(Path(root).iterdir()) if Path(root).is_dir() else []:
+        if not Path(root).is_dir():
+            problems.append(f"{PATH_ENV}: {root} is not a directory")
+            continue
+        for folder in sorted(Path(root).iterdir()):
             if not (folder / "__init__.py").is_file():
                 continue
             try:
@@ -585,31 +602,33 @@ def _from_paths(problems: list[str]) -> list[Plugin]:
                     f"{folder} declares plugin_id {declared.plugin_id!r}, expected {folder.name!r}"
                 )
                 continue
-            found.append(declared)
+            found.append((declared, f"{PATH_ENV} {folder}"))
     return found
 
 
 def discover(package: str = PACKAGE) -> list[Plugin]:
     """Every plugin of the platform: the namespace, the entry points and the extra paths.
 
-    A plugin id declared by two of them is a problem, not a preference.
+    A plugin id declared by two of them is a problem, not a preference; the message names both
+    sources.
     """
     problems: list[str] = []
-    found = _from_namespace(package, problems)
+    found: list[tuple[Plugin, str]] = _from_namespace(package, problems)
     if package == PACKAGE:
         found += _from_entry_points(problems)
         found += _from_paths(problems)
         seen: dict[str, str] = {}
-        for declared in found:
+        for declared, source in found:
             where = seen.get(declared.plugin_id)
-            if where is not None:
+            if where is None:
+                seen[declared.plugin_id] = source
+            else:
                 problems.append(
-                    f"plugin {declared.plugin_id!r} is declared twice: {where} and again later"
+                    f"plugin {declared.plugin_id!r} is declared twice: {where} and {source}"
                 )
-            seen[declared.plugin_id] = declared.plugin_id
     if problems:
         raise PluginError(problems)
-    return found
+    return [declared for declared, _ in found]
 
 
 _LOCK = RLock()

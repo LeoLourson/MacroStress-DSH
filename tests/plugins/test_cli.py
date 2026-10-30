@@ -142,6 +142,165 @@ def test_a_fresh_macro_package_passes_check_and_meets_constraints(tmp_path):
     assert np.allclose(simulation.paths[:, 2, 1], 18.0, atol=1e-9)
 
 
+def test_a_scaffolded_macro_model_starts_from_the_last_known_value(tmp_path):
+    """The last panel month need not know every variable: no ``NaN`` may enter the paths."""
+    import numpy as np
+
+    target = plugin.new("walk", kind="macro", dest=tmp_path)
+    model = next(iter(plugin.load(target).macro))
+    panel = np.array(
+        [
+            [1.0, 10.0, 100.0],
+            [2.0, 11.0, np.nan],
+            [3.0, np.nan, np.nan],
+        ]
+    )
+    loaded = model.load(
+        {
+            "as_of": "2026-10-01",
+            "ids": ["gl.brent", "ru.key_rate", "ru.usdrub"],
+            "months": ["2026-08-01", "2026-09-01", "2026-10-01"],
+        },
+        {
+            "panel_y": panel,
+            "drift": np.zeros(3),
+            "chol": np.eye(3),
+        },
+    )
+    assert np.array_equal(loaded.last, np.array([3.0, 11.0, 100.0]))
+
+    from mst.model_sdk import ScenarioPlan
+
+    simulation = model.simulate(loaded, ScenarioPlan(horizon=2), draws=3, seed=1)
+    assert simulation.paths.shape == (3, 3, 3)
+    assert np.all(np.isfinite(simulation.paths))
+
+
+def test_a_scaffolded_macro_model_names_a_variable_without_observations(tmp_path):
+    import numpy as np
+
+    target = plugin.new("walk", kind="macro", dest=tmp_path)
+    model = next(iter(plugin.load(target).macro))
+    panel = np.array([[1.0, np.nan], [np.nan, np.nan]])
+    with pytest.raises(ValueError, match="no observation of b"):
+        model.load(
+            {"as_of": "2026-10-01", "ids": ["a", "b"], "months": ["2026-09-01", "2026-10-01"]},
+            {"panel_y": panel, "drift": np.zeros(2), "chol": np.eye(2)},
+        )
+
+
+def test_a_scaffolded_satellite_model_starts_from_the_object_above(tmp_path):
+    """A served object without its own history starts from the nearest one that has it."""
+    import numpy as np
+
+    from mst.drivers.registry import load_registry
+    from mst.model_sdk import SatellitePart
+
+    target = plugin.new("arlink", kind="satellite", quantity="bond_spread", dest=tmp_path)
+    model = next(iter(plugin.load(target).satellites))
+    quantity = load_registry().quantity("bond_spread")
+    width = 2 + len(quantity.regressors)
+    part = SatellitePart(
+        meta={
+            "quantity": quantity.model_dump(mode="json", by_alias=True),
+            "months": ["2026-08-01", "2026-09-01"],
+            "nodes": ["top", "child"],
+            "parent": [-1, 0],
+            "classes": ["group", "group"],
+            "driver": [None, "bond_spread:child"],
+            "rows": [2, 0],
+            "checks": {
+                "1": {
+                    "satellite": None,
+                    "baseline": None,
+                    "forecasts": 0,
+                    "served": True,
+                    "reason": "",
+                },
+            },
+        },
+        arrays={
+            "coef": np.zeros((2, width)),
+            "sigma": np.zeros(2),
+            "d": np.array([[1000.0, np.nan], [2000.0, np.nan]]),
+            "approximate": np.zeros((2, 2), dtype=bool),
+            "x": np.zeros((2, width - 2)),
+        },
+    )
+    loaded = model.load({"bond_spread": part})
+    simulation = model.simulate(
+        loaded,
+        _satellite_macro(quantity.regressors, horizon=2),
+        ["bond_spread:child"],
+        [],
+        correlation=None,
+        seed=1,
+        stream=0,
+    )
+    assert np.allclose(simulation.paths[:, 0, 0], 2000.0)
+    assert np.all(np.isfinite(simulation.paths))
+
+
+def test_a_scaffolded_satellite_model_names_a_driver_without_any_history(tmp_path):
+    import numpy as np
+
+    from mst.drivers.registry import load_registry
+    from mst.model_sdk import SatellitePart
+
+    target = plugin.new("arlink", kind="satellite", quantity="bond_spread", dest=tmp_path)
+    model = next(iter(plugin.load(target).satellites))
+    quantity = load_registry().quantity("bond_spread")
+    width = 2 + len(quantity.regressors)
+    part = SatellitePart(
+        meta={
+            "quantity": quantity.model_dump(mode="json", by_alias=True),
+            "months": ["2026-08-01", "2026-09-01"],
+            "nodes": ["top", "child"],
+            "parent": [-1, 0],
+            "classes": ["group", "group"],
+            "driver": [None, "bond_spread:child"],
+            "rows": [0, 0],
+            "checks": {},
+        },
+        arrays={
+            "coef": np.zeros((2, width)),
+            "sigma": np.zeros(2),
+            "d": np.full((2, 2), np.nan),
+            "approximate": np.zeros((2, 2), dtype=bool),
+            "x": np.zeros((2, width - 2)),
+        },
+    )
+    loaded = model.load({"bond_spread": part})
+    with pytest.raises(ValueError, match="no history of its own"):
+        model.simulate(
+            loaded,
+            _satellite_macro(quantity.regressors, horizon=1),
+            ["bond_spread:child"],
+            [],
+            correlation=None,
+            seed=1,
+            stream=0,
+        )
+
+
+def _satellite_macro(ids, *, horizon: int):
+    """A macro simulation of zeros with the current and the next ``horizon`` months."""
+    from datetime import date
+
+    import numpy as np
+
+    from mst.macro.panel import shift
+    from mst.model_sdk import MacroSimulation
+
+    months = [shift(date(2026, 9, 1), k) for k in range(horizon + 1)]
+    return MacroSimulation(
+        ids=list(ids),
+        months=months,
+        paths=np.zeros((2, horizon + 1, len(ids))),
+        history=np.zeros((2, 1, len(ids))),
+    )
+
+
 def _walk_model():
     from datetime import date
 

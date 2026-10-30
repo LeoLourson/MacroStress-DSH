@@ -36,9 +36,10 @@ MACRO_ARRAYS_REQUIRED = ("panel_y", "panel_approximate")
 #: What a satellite bundle must record: the macro version, the calculation date, the driver
 #: registry, one part per quantity and the order of the correlation matrix.
 BUNDLE_META_REQUIRED = ("macro", "as_of", "registry", "quantities", "correlated")
-#: What every quantity part of a bundle must record: the model that estimated it, its months,
-#: the node tree and the check of every driver.
-PART_META_REQUIRED = ("model", "months", "nodes", "driver", "checks")
+#: What every quantity part of a bundle must record: the model that estimated it (the platform
+#: writes the id of the model that returned the part), its months, the node tree, the fitted-row
+#: count of every node and the check of every driver.
+PART_META_REQUIRED = ("model", "months", "nodes", "driver", "checks", "rows")
 
 
 @dataclass(frozen=True)
@@ -196,7 +197,8 @@ class SatelliteEstimateContext:
     """What a satellite model estimates on: the history of the objects and the macro panel.
 
     ``macro`` is the hash of the macro version whose panel this is; ``quantities`` are the
-    quantities the platform assigned to this model, a subset of the model's declaration. The
+    quantities the platform assigned to this model — the ones it declares, plus any quantity an
+    explicit ``quantity=model_id`` assignment hands to it, even one it does not declare. The
     driver registry carries the quantities, the object tree and the drivers with their series;
     ``mst.drivers.history`` builds the standard inputs of a quantity from it and the panel.
     """
@@ -214,10 +216,13 @@ class SatelliteEstimateContext:
 class SatellitePart:
     """One quantity of a satellite estimate: the metadata and arrays of its part of a version.
 
-    ``meta`` must hold ``months``, ``nodes``, ``driver`` and ``checks`` — the months of the
-    panel part, the object tree, the driver id of every node and the ``Check`` of every driver
-    with one. A model that stores the drivers' own history conventionally names its array
-    ``<quantity>.d``; the platform then marks the paths that leave the range of that history.
+    ``meta`` must hold ``months``, ``nodes``, ``driver``, ``rows`` and ``checks`` — the months of
+    the panel part, the object tree, the driver id of every node, the number of months every node
+    was fitted on and the ``Check`` of every driver with one. The platform adds ``model`` — the id
+    of the model that returned the part; a part that names another model is refused. A model that
+    stores the drivers' own history conventionally names its array ``d`` inside the part (the
+    platform saves it as ``<quantity>.d``); the platform then marks the paths that leave the range
+    of that history.
     """
 
     meta: dict
@@ -286,10 +291,16 @@ class MacroModel(ABC):
 class SatelliteModel(ABC):
     """A model of the levels above 0: turns them into the quantities of the objects it serves.
 
-    ``quantities`` are driver quantities of the core registry; a quantity is served by one
-    satellite model at a time, and the platform refuses to start when two models claim it. The
-    model of one version is loaded once for all its quantities: ``load`` receives the parts of
-    every quantity assigned to it.
+    ``quantities`` are driver quantities of the core registry; several satellite models may
+    declare one quantity — a plugin under development next to the installed one — and the
+    platform refuses an *ambiguous assignment*, not the declaration itself: ``--model`` (an
+    explicit ``quantity=model_id``) names the model that estimates it. The model of one version
+    is loaded once for all its quantities: ``load`` receives the parts of every quantity
+    assigned to it.
+
+    This release supports ``L = 1``: ``simulate`` receives the level-0 ``MacroSimulation`` only,
+    so a model of a level above 1 has to build its own inputs for the levels in between rather
+    than read them from an SDK structure.
     """
 
     model_id: str

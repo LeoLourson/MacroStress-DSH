@@ -29,7 +29,8 @@ from mst.plugins.hier.simulate import simulate as simulate_hier
 from mst.plugins.hier.spec import Spec, load_spec
 
 #: The quantities of the shipped registry this model serves by default; the platform may
-#: assign it any other quantity, and a quantity claimed by two models is a start-up error.
+#: assign it any other quantity, and a quantity several models declare needs an explicit
+#: ``--model`` to name the one that estimates it.
 QUANTITIES = (
     "share_price",
     "bond_spread",

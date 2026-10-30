@@ -5,29 +5,38 @@
 ```mermaid
 flowchart LR
     src["MOEX, ЦБ, Росстат, FRED"] --> data["mst.data: ряды"]
-    data --> macro["mst.macro: макромодель"]
-    data --> drivers["mst.drivers: каталоги и сателлиты"]
+    data --> macro["mst.macro: панель, реестр переменных, версии"]
+    data --> drivers["mst.drivers: каталоги, история величин, бандлы"]
     macro --> drivers
     corpus["mst.corpus: корпус"] --> scenario["mst.scenario: сценарий и его пути"]
     scenario --> macro
+    model_sdk["mst.model_sdk: контракты моделей"] --> plugins["mst.plugins: реестр плагинов"]
+    plugins --> models["mst.models: оценка и версии моделей"]
+    macro --> models
+    drivers --> models
+    models --> metrics["mst.metrics: качество версий"]
+    corpus --> metrics
+    plugins --> engine["mst.engine: расчёт позиций"]
     scenario --> run["mst.runs: прогон"]
     drivers --> run
     macro --> run
+    engine --> run
     run --> portfolio["mst.portfolio: портфель и отчёт"]
-    engine["mst.engine: расчёт позиций"] --> run
-    plugins["mst.plugins: модели позиций"] --> engine
 ```
 
 | Пакет | Что делает | Где описан |
 |---|---|---|
 | `mst.data` | Загружает месячные ряды и хранит каждую версию значения с датой публикации | [src/mst/data](../src/mst/data/README.md) |
-| `mst.macro` | Оценивает BVAR, идентифицирует шоки, строит условный прогноз и жёсткость сценария, проверяет модель на эпизодах | [src/mst/macro](../src/mst/macro/README.md) |
-| `mst.drivers` | Находит объекты величин, загружает их ряды, оценивает и проверяет сателлиты, строит пути драйверов | [src/mst/drivers](../src/mst/drivers/README.md) |
+| `mst.macro` | Хранит реестр макропеременных, собирает панель на дату и хранит версии макромодели; сама модель — плагин | [src/mst/macro](../src/mst/macro/README.md) |
+| `mst.drivers` | Находит объекты величин, загружает их ряды, готовит историю величины на панели, собирает бандл сателлитной версии и строит пути драйверов | [src/mst/drivers](../src/mst/drivers/README.md) |
 | `mst.corpus` | Хранит манифест корпуса, скачивает оригиналы, переводит их в Markdown, пишет карточки эпизодов, режет корпус на фрагменты и ищет по ним | [src/mst/corpus](../src/mst/corpus/README.md) |
 | `mst.scenario` | Хранит сценарий $(N, C, D, O)$, проверяет его и строит пути: условный прогноз с ограничениями и пути драйверов на тех же розыгрышах | [src/mst/scenario](../src/mst/scenario/README.md) |
 | `mst.plugin_sdk` | Поверхность модели позиции: что она объявляет, читает из путей и возвращает; `plugin_sdk.testing` — конформанс-проверка и демо-расчёт | [src/mst/plugin_sdk](../src/mst/plugin_sdk/README.md) |
+| `mst.model_sdk` | Контракты макро- и сателлитных моделей: план сценария, макросимуляция, части версии, контексты оценки и общая условная механика | [src/mst/model_sdk](../src/mst/model_sdk/README.md) |
 | `mst.engine` | Каталог моделей, подготовка входов, расчёт позиции и проверка того, что модель вернула; ветвления по типу актива нет | [src/mst/engine](../src/mst/engine/README.md) |
-| `mst.plugins` | Пакеты типов активов: обнаружение `mst.plugins.<id>`, реестр объявлений и модели позиций | [src/mst/plugins](../src/mst/plugins/README.md) |
+| `mst.plugins` | Пакеты моделей трёх видов: обнаружение `mst.plugins.<id>`, entry points и `MST_PLUGINS_PATH`, один реестр объявлений; ссылочные модели — BVAR и иерархический сателлит | [src/mst/plugins](../src/mst/plugins/README.md) |
+| `mst.models` | Жизненный цикл версий моделей: оценка макромодели и бандла сателлитов, публикация, список, описание и каталог плагинов | [src/mst/models](../src/mst/models/README.md) |
+| `mst.metrics` | Качество версий на исторических эпизодах: ячейки $(e, t, q)$, CRPS, эталоны, допуск | [src/mst/metrics](../src/mst/metrics/README.md) |
 | `mst.portfolio` | Портфель, его проверка против версий, стоимость позиций и отчёт прогона | [src/mst/portfolio](../src/mst/portfolio/README.md) |
 | `mst.mcp`, `mst.jobs`, `mst.runs`, `mst.store` | MCP-сервер, задачи, прогон и каталог workspace | [src/mst](../src/mst/README.md) |
 | `dsh/` | Плагин DSH: запуск сервера, скиллы, раздел промпта | [dsh](../dsh/README.md) |

@@ -1,6 +1,7 @@
 """mst.model_sdk.conditional: drawing shocks under linear constraints."""
 
 import numpy as np
+import pytest
 from scipy import stats
 
 from mst.model_sdk import (
@@ -24,6 +25,36 @@ def test_a_loading_at_rounding_level_counts_as_none():
     z_all = np.array([[1e-13, 0.0, 1.0], [0.0, 1.0, 0.5]])
     assert dependent_rows(z_driving, z_all) == [0]
     assert dependent_rows(np.array([[1.0, 2.0], [2.0, 4.0]]), np.eye(2) * 3) == [1]
+
+
+def test_a_repeated_row_is_redundant_not_infeasible():
+    # Two copies of one constraint are consistent: they are drawn from the intersection of
+    # their ranges, not refused as linearly dependent rows.
+    z = np.array([[1.0, 0.0], [1.0, 0.0]])
+    every = np.array([[1.0, 0.0, 1.0], [1.0, 0.0, 1.0]])
+    assert dependent_rows(z, every) == []
+    rng = np.random.default_rng(7)
+    low, high = np.array([-10.0, -1.0]), np.array([10.0, 1.0])
+    draws = np.array(
+        [draw_driving(z, low, high, rng, sweeps=5, every=every) for _ in range(50)]
+    )
+    assert np.all(np.abs(draws @ z[1].T) <= 1.0 + 1e-9)
+
+
+def test_equal_driving_loadings_alone_are_not_a_repeated_constraint():
+    # The driving slice of two different constraints may coincide; the full rows do not, so
+    # this is still a dependent row the sampler cannot enforce, not a redundant copy.
+    driving = np.array([[1.0, 0.0], [1.0, 0.0]])
+    every = np.array([[1.0, 0.0, 1.0], [1.0, 0.0, 2.0]])
+    assert dependent_rows(driving, every) == [1]
+
+
+def test_two_copies_of_one_row_with_disjoint_ranges_are_infeasible():
+    z = np.array([[1.0, 0.0], [1.0, 0.0]])
+    low, high = np.array([1.0, 2.0]), np.array([1.0, 2.0])
+    with pytest.raises(InfeasibleScenario, match="constraints 2") as caught:
+        draw_driving(z, low, high, np.random.default_rng(0), sweeps=2)
+    assert caught.value.constraints == [1]
 
 
 def test_truncated_normal_far_in_the_tail_stays_in_its_interval():

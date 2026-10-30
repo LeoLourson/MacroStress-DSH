@@ -6,7 +6,9 @@ way. With ``Z = W Phi_D`` the image ``v = Z eps_D`` is normal; its exact rows ar
 interval rows are drawn from the box-truncated normal by the Gibbs sampler of Geweke (1991),
 and ``eps_D`` given ``v`` is ``eta + Z' (Z Z')^{-1} (v - Z eta)`` with standard normal ``eta``
 (Antolin-Diaz, Petrella and Rubio-Ramirez, 2021, Journal of Monetary Economics 117). The
-scenario is infeasible when the rows of ``Z`` are linearly dependent.
+scenario is infeasible when a row of ``Z`` is a combination of the earlier ones or no driving
+shock moves it; a row that merely repeats an earlier one is redundant — its range is
+intersected with the range of the copy and the row is dropped.
 """
 
 import numpy as np
@@ -27,7 +29,8 @@ class InfeasibleScenario(ValueError):
         super().__init__(
             "the driving shocks cannot meet constraints "
             + ", ".join(str(c + 1) for c in constraints)
-            + " (numbered from 1): each repeats earlier ones or no driving shock moves it"
+            + " (numbered from 1): each is a combination of earlier ones, repeats one with a "
+            "disjoint range, or no driving shock moves it"
         )
 
 
@@ -37,10 +40,17 @@ def dependent_rows(driving: np.ndarray, every: np.ndarray) -> list[int]:
     Row ``c`` of ``driving`` is dependent when its distance to the span of the earlier
     independent rows is negligible next to row ``c`` of ``every`` (the loadings of all shocks):
     a loading at rounding level is no loading.
+
+    A row that repeats an earlier one is not reported: two copies of one constraint are
+    consistent, and ``draw_driving`` intersects their ranges and draws from the intersection,
+    refusing only a pair whose ranges do not meet. Only a full row of ``every`` repeats another:
+    equal loadings on the driving shocks alone are not a repeated constraint.
     """
 
     kept, dependent = [], []
     for c, row in enumerate(driving):
+        if any(np.array_equal(every[k], every[c]) for k in kept):
+            continue
         if kept:
             basis = driving[kept].T
             residual = row - basis @ np.linalg.lstsq(basis, row, rcond=None)[0]
@@ -82,8 +92,17 @@ def box_gibbs(mean, cov, low, high, rng, sweeps: int) -> np.ndarray:
     return x
 
 
-def draw_driving(z, low, high, rng, sweeps: int = SWEEPS) -> np.ndarray:
-    """``eps ~ N(0, I)`` given ``low <= z eps <= high``; ``z`` has independent rows."""
+def draw_driving(z, low, high, rng, sweeps: int = SWEEPS, *, every=None) -> np.ndarray:
+    """``eps ~ N(0, I)`` given ``low <= z eps <= high``; ``z`` has independent rows.
+
+    A row that repeats an earlier one is redundant, not a contradiction: its range is intersected
+    with the range of the copy and the row is dropped. A pair of copies with no common value is
+    a genuine contradiction and raises ``InfeasibleScenario`` naming the later row. ``every`` —
+    the loadings of all shocks, of which ``z`` is the driving slice — tells a repeated constraint
+    from two constraints whose driving loadings happen to coincide; with it, only a row repeated
+    in full counts as redundant.
+    """
+    z, low, high = _merge_redundant(z, low, high, every)
     gram = z @ z.T
     exact = low == high
     image = np.where(exact, low, 0.0)
@@ -98,3 +117,34 @@ def draw_driving(z, low, high, rng, sweeps: int = SWEEPS) -> np.ndarray:
         image[free] = box_gibbs(mean, cov, low[free], high[free], rng, sweeps)
     eta = rng.standard_normal(z.shape[1])
     return eta + z.T @ np.linalg.solve(gram, image - z @ eta)
+
+
+def _merge_redundant(z, low, high, every=None):
+    """Drop rows that repeat an earlier one, intersecting their ranges.
+
+    Returns the reduced ``(z, low, high)``; raises ``InfeasibleScenario`` when two copies of a
+    row demand disjoint ranges. ``every``, when given, is the full loading matrix: a row counts
+    as a copy only if its full row repeats one, not just its driving slice.
+    """
+    low = np.array(low, dtype=float).copy()
+    high = np.array(high, dtype=float).copy()
+    kept: list[int] = []
+    for c, row in enumerate(z):
+        same = next(
+            (
+                k
+                for k in kept
+                if np.array_equal(z[k], row)
+                and (every is None or np.array_equal(every[k], every[c]))
+            ),
+            None,
+        )
+        if same is None:
+            kept.append(c)
+            continue
+        overlap = (max(low[same], low[c]), min(high[same], high[c]))
+        if overlap[0] > overlap[1]:
+            raise InfeasibleScenario([c])
+        low[same], high[same] = overlap
+    index = np.array(kept, dtype=int)
+    return z[index], low[index], high[index]

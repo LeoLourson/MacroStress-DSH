@@ -55,7 +55,10 @@ def estimate_part(context: SatelliteEstimateContext, quantity: str) -> Satellite
             residual = y - z @ coef[node]
             sigma[node] = float(np.sqrt(residual @ residual / max(len(y) - 1, 1)))
         else:
-            coef[node], sigma[node] = above, sigma[hist.parent[node]] if hist.parent[node] >= 0 else 0.0
+            if hist.parent[node] >= 0:
+                coef[node], sigma[node] = above, sigma[hist.parent[node]]
+            else:
+                coef[node], sigma[node] = above, 0.0
         driver = hist.driver[node]
         if driver is None:
             continue
@@ -68,7 +71,11 @@ def estimate_part(context: SatelliteEstimateContext, quantity: str) -> Satellite
                 "reason": "",
             }
         else:
-            served = bool(hist.parent[node] >= 0 and checks.get(str(hist.parent[node]), {}).get("served"))
+            above_served = (
+                hist.parent[node] >= 0
+                and checks.get(str(hist.parent[node]), {}).get("served")
+            )
+            served = bool(above_served)
             checks[str(node)] = {
                 "satellite": None,
                 "baseline": None,
@@ -111,6 +118,21 @@ def residuals_of(part: SatellitePart) -> dict[str, np.ndarray]:
                 column[t] = d[t, node] - coef[node] @ z
         out[driver] = column
     return out
+
+
+def _source(d: np.ndarray, parent: list[int], node: int) -> tuple[int, int] | None:
+    """The nearest node (itself or an object above it) with history, and its last row.
+
+    An object without a series of its own takes the level of the nearest object above it that
+    has one, exactly as it took its coefficients in ``estimate``.
+    """
+    above = node
+    while above >= 0:
+        known = np.flatnonzero(np.isfinite(d[:, above]))
+        if len(known):
+            return above, int(known[-1])
+        above = parent[above]
+    return None
 
 
 class {{class}}Model:
@@ -160,11 +182,17 @@ class {{class}}(SatelliteModel):
             declared = Quantity.model_validate(part.meta["quantity"])
             node = part.meta["driver"].index(driver)
             coef, sigma = part.arrays["coef"][node], part.arrays["sigma"][node]
-            d, x = part.arrays["d"], part.arrays["x"]
+            d = part.arrays["d"]
             # The inputs of the horizon months come from the macro paths, repetition by
             # repetition; the panel months before them from the history the part carries.
             future = x_from_paths(declared, macro.ids, macro.paths)
-            start = d[np.flatnonzero(np.isfinite(d[:, node]))[-1], node]
+            source = _source(d, part.meta["parent"], node)
+            if source is None:
+                raise ValueError(
+                    f"{driver} has no history of its own and no object above it with history"
+                )
+            above, row = source
+            start = d[row, above]
             paths[:, 0, k] = start
             value = np.full(draws, start)
             for t in range(1, horizon + 1):

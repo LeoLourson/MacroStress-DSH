@@ -11,8 +11,9 @@ know how they are obtained. A driver is named by quantity and object, or by quan
 position's codes in order of preference (``{"inn": ..., "okved": ...}``); the platform takes the
 first code for which the driver registry has a served object covering it, the deepest such
 object. A driver the run cannot serve is missing: the position is not calculated, and its
-result names the driver (rule 4). The flags of a driver (parameters taken from the level above,
-an approximate data version, an expert overlay) reach the result through ``flags`` (rule 5).
+result names the driver (rule 4). The flags of a driver reach the result through ``flags``
+(rule 5): ``parameters_from_above``, ``approximate_data``, ``impact`` (an expert impact on the
+driver, recorded as ``overlay`` in historical runs) and ``outside_training_range``.
 """
 
 from dataclasses import dataclass, field
@@ -43,7 +44,8 @@ class Paths(Protocol):
         """(R, H + 1) values of a driver ``<quantity>:<object>`` in its unit."""
 
     def flags(self, driver: str) -> frozenset[str]:
-        """The flags of a driver: ``parameters_from_above``, ``approximate_data``, ``overlay``."""
+        """The flags of a driver: ``parameters_from_above``, ``approximate_data``, ``impact``
+        (``overlay`` in historical runs) and ``outside_training_range``."""
 
 
 def relative(path: np.ndarray) -> np.ndarray:

@@ -16,7 +16,6 @@ from mst.macro.panel import Panel, build_panel
 from mst.macro.registry import load_registry as load_variables
 from mst.model_sdk.conditional import InfeasibleScenario, dependent_rows, draw_driving
 from mst.model_sdk.contracts import (
-    LinearConstraint,
     MacroEstimate,
     MacroEstimateContext,
     MacroModel,
@@ -46,6 +45,33 @@ def _changes(y: np.ndarray) -> np.ndarray:
     return np.array(rows)
 
 
+def _drift(changes: np.ndarray) -> np.ndarray:
+    """The average change of every variable; zero where no change is known at all."""
+    drift = np.zeros(changes.shape[1])
+    for column in range(changes.shape[1]):
+        known = changes[:, column][np.isfinite(changes[:, column])]
+        if len(known):
+            drift[column] = known.mean()
+    return drift
+
+
+def _last_known(y: np.ndarray) -> tuple[np.ndarray, list[int]]:
+    """The last finite value of every column, and the columns that have no observation.
+
+    The last month of the panel does not have to know every variable: a variable is started
+    from its last observed value, not from ``NaN``.
+    """
+    last = np.full(y.shape[1], np.nan)
+    unknown = []
+    for column in range(y.shape[1]):
+        known = np.flatnonzero(np.isfinite(y[:, column]))
+        if len(known):
+            last[column] = y[known[-1], column]
+        else:
+            unknown.append(column)
+    return last, unknown
+
+
 class {{class}}Model:
     """The loaded model of a version: the last month, the drift and the Cholesky factor."""
 
@@ -72,9 +98,13 @@ class {{class}}(MacroModel):
 
     def estimate(self, context: MacroEstimateContext) -> MacroEstimate:
         panel = _panel(context)
+        _, unknown = _last_known(panel.y)
+        if unknown:
+            raise ValueError(
+                "no observation of " + ", ".join(panel.ids[column] for column in unknown)
+            )
         changes = _changes(panel.y)
-        # A variable without a single known change keeps a zero drift and a unit scale.
-        drift = np.nan_to_num(np.nanmean(changes, axis=0))
+        drift = _drift(changes)
         filled = np.where(np.isnan(changes), 0.0, changes)
         covariance = np.cov(filled, rowvar=False, ddof=1) if len(filled) > 2 else np.eye(len(drift))
         covariance = np.atleast_2d(covariance) + np.eye(len(drift)) * 1e-8
@@ -100,10 +130,16 @@ class {{class}}(MacroModel):
     def load(self, meta: dict, arrays: dict) -> {{class}}Model:
         panel = arrays["panel_y"]
         last_row = np.flatnonzero(np.isfinite(panel).any(axis=1))[-1]
+        last, unknown = _last_known(panel)
+        if unknown:
+            raise ValueError(
+                "no observation of "
+                + ", ".join(meta["ids"][column] for column in unknown)
+            )
         return {{class}}Model(
             ids=list(meta["ids"]),
             last_month=date.fromisoformat(meta["months"][last_row]),
-            last=panel[last_row],
+            last=last,
             drift=arrays["drift"],
             chol=arrays["chol"],
         )
@@ -136,7 +172,9 @@ class {{class}}(MacroModel):
                 offset += np.einsum(
                     "csj,sj->c", z[:, :, ~driving], eps[:, ~driving]
                 )
-                drawn = draw_driving(z_driving, low - offset, high - offset, rng)
+                drawn = draw_driving(
+                    z_driving, low - offset, high - offset, rng, every=z_all
+                )
                 eps[:, driving] = drawn.reshape(horizon, driving.sum())
             steps = eps @ model.chol.T + model.drift
             paths[r] = np.vstack([model.last, model.last + np.cumsum(steps, axis=0)])
@@ -164,7 +202,11 @@ def _offset(constraints, model) -> np.ndarray:
     return np.array(
         [
             sum(
-                term.weight * (model.last[index[term.variable]] + term.month * model.drift[index[term.variable]])
+                term.weight
+                * (
+                    model.last[index[term.variable]]
+                    + term.month * model.drift[index[term.variable]]
+                )
                 for term in constraint.terms
             )
             for constraint in constraints

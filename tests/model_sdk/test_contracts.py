@@ -111,4 +111,4 @@ def test_the_version_contracts_name_the_required_keys():
     assert MACRO_META_REQUIRED == ("model", "as_of", "ids", "months", "shocks")
     assert MACRO_ARRAYS_REQUIRED == ("panel_y", "panel_approximate")
     assert BUNDLE_META_REQUIRED == ("macro", "as_of", "registry", "quantities", "correlated")
-    assert PART_META_REQUIRED == ("model", "months", "nodes", "driver", "checks")
+    assert PART_META_REQUIRED == ("model", "months", "nodes", "driver", "checks", "rows")

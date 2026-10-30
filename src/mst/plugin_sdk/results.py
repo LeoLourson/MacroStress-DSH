@@ -115,8 +115,9 @@ def envelope(
     """A completed result of ``model`` for the prepared position under ``context``.
 
     The flags of the resolved drivers travel with the result, so the platform, not the model,
-    guarantees that a disclosure (parameters from the level above, approximate data, an overlay)
-    reaches the result.
+    guarantees that a disclosure reaches the result: ``parameters_from_above``,
+    ``approximate_data``, ``impact`` (an expert impact on the driver, recorded as ``overlay``
+    in historical runs) and ``outside_training_range``.
     """
     disclosures = [
         f"{flag}:{driver}"

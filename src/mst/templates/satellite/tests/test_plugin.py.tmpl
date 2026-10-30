@@ -26,6 +26,7 @@ def test_the_model_simulates_its_drivers():
     class _Part:
         meta = {
             "driver": ["{{quantity}}:demo"],
+            "parent": [-1],
             "quantity": {
                 "id": "{{quantity}}",
                 "label": "{{quantity}}",

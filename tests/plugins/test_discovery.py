@@ -187,6 +187,28 @@ def test_a_macro_model_names_known_variables_only():
         plugins.build([fakes.model_plugin(macro=(FarAway(),))])
 
 
+def test_a_satellite_model_in_the_macro_slot_is_refused():
+    problems = plugins.declaration_problems(
+        fakes.model_plugin(macro=(fakes.DemoSatelliteModel(),), satellites=())
+    )
+    assert any("not a MacroModel" in problem for problem in problems)
+    with pytest.raises(plugins.PluginError, match="not a MacroModel"):
+        plugins.build(
+            [fakes.model_plugin(macro=(fakes.DemoSatelliteModel(),), satellites=())]
+        )
+
+
+def test_a_macro_model_in_the_satellite_slot_is_refused():
+    problems = plugins.declaration_problems(
+        fakes.model_plugin(macro=(), satellites=(fakes.DemoMacroModel(),))
+    )
+    assert any("not a SatelliteModel" in problem for problem in problems)
+    with pytest.raises(plugins.PluginError, match="not a SatelliteModel"):
+        plugins.build(
+            [fakes.model_plugin(macro=(), satellites=(fakes.DemoMacroModel(),))]
+        )
+
+
 def test_one_quantity_is_served_by_one_satellite_model(monkeypatch):
     class Other(fakes.DemoSatelliteModel):
         model_id = "gmodel.other.v1"
@@ -279,6 +301,30 @@ def test_plugins_of_the_extra_paths_are_discovered(tmp_path, monkeypatch):
             plugins.discover()
     finally:
         monkeypatch.delenv(plugins.PATH_ENV, raising=False)
+
+
+def test_a_duplicate_plugin_id_names_both_sources(tmp_path, monkeypatch):
+    (tmp_path / "equity").mkdir()
+    (tmp_path / "equity" / "__init__.py").write_text(
+        "from mst.plugin_sdk import Plugin\n"
+        "plugin = Plugin(plugin_id='equity', version='0.1.0', label='Not equity')\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setenv(plugins.PATH_ENV, str(tmp_path))
+    with pytest.raises(plugins.PluginError) as caught:
+        plugins.discover()
+    message = str(caught.value)
+    assert "plugin 'equity' is declared twice" in message
+    assert "mst.plugins.equity" in message
+    assert f"{plugins.PATH_ENV} {tmp_path / 'equity'}" in message
+
+
+def test_a_missing_plugins_path_root_is_named(tmp_path, monkeypatch):
+    missing = tmp_path / "nope"
+    monkeypatch.setenv(plugins.PATH_ENV, str(missing))
+    with pytest.raises(plugins.PluginError, match="is not a directory") as caught:
+        plugins.discover()
+    assert f"{plugins.PATH_ENV}: {missing}" in str(caught.value)
 
 
 def test_load_package_reads_a_package_outside_the_namespace(tmp_path):
