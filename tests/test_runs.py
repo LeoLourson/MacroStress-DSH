@@ -86,7 +86,8 @@ def test_a_run_writes_meta_paths_results_and_changes(workspace):
     for name in meta["drivers"]:
         row = forecast["drivers"][name]
         assert len(row["p05"]) == len(row["p50"]) == len(row["p95"]) == meta["horizon"]
-        assert all(low <= mid <= high for low, mid, high in zip(row["p05"], row["p50"], row["p95"], strict=False))
+        bands = list(zip(row["p05"], row["p50"], row["p95"], strict=True))
+        assert all(low <= mid <= high for low, mid, high in bands)
 
 
 def test_named_targets_are_the_forecast_of_the_run(workspace):
