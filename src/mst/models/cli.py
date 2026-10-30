@@ -3,6 +3,7 @@
 ::
 
   python -m mst.models estimate-macro [MODEL_ID] --as-of DATE --store DIR --models DIR
+  python -m mst.models estimate-satellites --macro SHA256 --store DIR --models DIR --drivers FILE
   python -m mst.models backtest [MODEL_ID] --as-of DATE --store DIR --models DIR --corpus FILE
   python -m mst.models list --models DIR
   python -m mst.models describe --version SHA256 --models DIR
@@ -10,9 +11,13 @@
 
 ``estimate-macro`` estimates the named macro model (or the only one installed) on the panel
 known on ``--as-of`` and writes the version to ``<models>/macro/<sha256>/``; it prints the
-hash. ``backtest`` runs the episode check of the model that implements one. ``list`` and
-``describe`` read the versions of the workspace; ``catalog`` lists the installed model
-plugins with the quantities their satellites serve.
+hash. ``estimate-satellites`` assembles the satellite bundle of a macro version: every
+quantity with drivers is estimated by the satellite model assigned to it — the one that
+declares it, or ``--model QUANTITY=MODEL_ID`` — and the parts and the residual correlation
+become one version; it prints the hash and the check of every driver. ``backtest`` runs the
+episode check of the model that implements one. ``list`` and ``describe`` read the versions of
+the workspace; ``catalog`` lists the installed model plugins with the quantities their
+satellites serve.
 """
 
 import argparse
@@ -20,7 +25,7 @@ import sys
 from datetime import date
 from pathlib import Path
 
-from . import catalog, estimate_macro, selected
+from . import catalog, estimate_macro, estimate_satellites, selected
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -40,6 +45,20 @@ def main(argv: list[str] | None = None) -> int:
         run.add_argument("--details", type=Path, help="write every month's quantiles here")
     backtest = commands.choices["backtest"]
     backtest.add_argument("--corpus", type=Path, required=True)
+    bundle = commands.add_parser(
+        "estimate-satellites", help="assemble the satellite bundle of a macro version"
+    )
+    bundle.add_argument("--macro", required=True, help="the macro model version")
+    bundle.add_argument("--store", type=Path, required=True)
+    bundle.add_argument("--models", type=Path, required=True)
+    bundle.add_argument("--drivers", type=Path, required=True)
+    bundle.add_argument(
+        "--model",
+        action="append",
+        default=[],
+        metavar="QUANTITY=MODEL_ID",
+        help="assign a quantity to a satellite model; repeatable",
+    )
 
     listed = commands.add_parser("list", help="the model versions of the workspace")
     listed.add_argument("--models", type=Path, required=True)
@@ -56,6 +75,36 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "estimate-macro":
         print(estimate_macro(args.model_id, store=args.store, models=args.models, as_of=args.as_of))
         return 0
+    if args.command == "estimate-satellites":
+        overrides = {}
+        for item in args.model:
+            quantity, equals, model_id = item.partition("=")
+            if not equals or not quantity or not model_id:
+                raise SystemExit(f"--model expects QUANTITY=MODEL_ID, got {item!r}")
+            overrides[quantity] = model_id
+        name, table = estimate_satellites(
+            args.macro,
+            store=args.store,
+            models=args.models,
+            drivers=args.drivers,
+            overrides=overrides,
+        )
+        print(f"version {name}")
+        print(
+            "| driver | months | RMSE satellite | RMSE without macro | forecasts | served |"
+        )
+        print("|---|---|---|---|---|---|")
+        for row in table["rows"]:
+            served = "yes" if row["served"] else f"no: {row['reason']}"
+            print(
+                f"| {row['driver']} | {row['months']} | {_number(row['satellite'])} "
+                f"| {_number(row['baseline'])} | {row['forecasts']} | {served} |"
+            )
+        for quantity in table["unserved"]:
+            print(f"{quantity}: no satellite model serves it, not estimated")
+        served = sum(1 for row in table["rows"] if row["served"])
+        print(f"\nserved {served} of {len(table['rows'])}")
+        return 0
     if args.command == "backtest":
         model = selected(args.model_id)
         runner = getattr(model, "backtest", None)
@@ -71,10 +120,14 @@ def main(argv: list[str] | None = None) -> int:
             details=args.details,
         )
     if args.command == "list":
+        from mst.drivers import bundle as satellite_bundle
         from mst.macro import version as macro_version
 
         for row in macro_version.catalogue(args.models):
-            print(row["version"], row["model"], row["as_of"])
+            print(f"macro {row['version']} {row['model']} {row['as_of']}")
+        for row in satellite_bundle.catalogue(args.models):
+            models = "+".join(row["models"])
+            print(f"satellites {row['version']} {models} {row['as_of']}")
         return 0
     if args.command == "describe":
         import json
@@ -87,6 +140,10 @@ def main(argv: list[str] | None = None) -> int:
 
     print(json.dumps(catalog(), ensure_ascii=False, indent=1))
     return 0
+
+
+def _number(value: float | None) -> str:
+    return "-" if value is None else f"{value:.3g}"
 
 
 if __name__ == "__main__":

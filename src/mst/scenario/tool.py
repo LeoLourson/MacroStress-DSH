@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Any
 
 from .. import store
-from ..drivers import version as satellite_version
+from ..drivers import bundle as satellite_bundle
 from ..macro import version as macro_version
 from .build import validate as check
 from .spec import Spec
@@ -63,8 +63,9 @@ def validate(root: Path, id: str, models: Path, corpus: Path | None = None) -> d
     from mst import plugins
 
     spec = load(root, id)
-    macro = macro_version.load(models, spec.macro, plugins.registry().macro)
-    satellites = satellite_version.load(models, spec.satellites)
+    installed = plugins.registry()
+    macro = macro_version.load(models, spec.macro, installed.macro)
+    satellites = satellite_bundle.load(models, spec.satellites, installed.satellites)
     report = check(
         spec, macro, satellites, as_of=macro.as_of, corpus=corpus
     )

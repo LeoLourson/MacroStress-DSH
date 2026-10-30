@@ -79,13 +79,6 @@ class Quantity(Contract):
         """The names of the elements of ``x_t``: regressors, then features."""
         return self.regressors + [feature.id for feature in self.features]
 
-    @property
-    def columns(self) -> list[str]:
-        """The names of the elements of ``z_t``: constant, own lag, ``x_{t-l}`` for each lag."""
-        return ["const", "own_lag"] + [
-            f"{name}@{lag}" for lag in range(self.lags + 1) for name in self.inputs
-        ]
-
 
 class Registry(Contract):
     quantities: list[Quantity] = Field(min_length=1)

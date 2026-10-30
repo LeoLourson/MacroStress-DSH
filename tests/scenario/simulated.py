@@ -7,17 +7,19 @@ from pathlib import Path
 import numpy as np
 
 from mst.data.store import SeriesStore
-from mst.drivers import version as satellite_version
-from mst.drivers.spec import Sampler
-from mst.drivers.spec import load_spec as load_drivers_spec
+from mst.drivers import bundle as satellite_bundle
 from mst.macro import version as macro_version
 from mst.macro.panel import Panel, months_between, shift
 from mst.macro.version import MacroVersion
+from mst.model_sdk.contracts import SatelliteEstimateContext
 from mst.plugins.bvar import MODEL
 from mst.plugins.bvar.estimate import Posterior, estimate
 from mst.plugins.bvar.identify import identify
 from mst.plugins.bvar.model import parts
 from mst.plugins.bvar.signs import Shock
+from mst.plugins.hier.model import HierModel
+from mst.plugins.hier.spec import Sampler
+from mst.plugins.hier.spec import load_spec as load_drivers_spec
 
 from ..bvar import simulated as macro
 from ..drivers import simulated as drivers
@@ -50,7 +52,7 @@ class Versions:
     model: Posterior
     loaded: MacroVersion
     """The macro version loaded back, as a run receives it."""
-    satellite: satellite_version.Satellites
+    satellite: satellite_bundle.SatelliteBundle
     data: Panel
     store: SeriesStore
 
@@ -66,16 +68,31 @@ def build(models: Path, series: Path) -> Versions:
     satellite_spec = load_drivers_spec().model_copy(
         update={"sampler": Sampler(draws=300, burn=100, seed=7)}
     )
-    satellite = satellite_version.build(
-        drivers.registry(), satellite_spec, data, data_store, AS_OF, name
+    satellite_model = HierModel(spec=satellite_spec)
+    registry = drivers.registry()
+    estimate_sat = satellite_model.estimate(
+        SatelliteEstimateContext(
+            store=data_store,
+            registry=registry,
+            panel=data,
+            as_of=AS_OF,
+            macro=name,
+            quantities=("price",),
+        )
     )
+    meta, arrays = satellite_bundle.assemble(
+        registry, name, AS_OF, {satellite_model.model_id: estimate_sat}
+    )
+    satellite_name = satellite_bundle.save(meta, arrays, models)
     return Versions(
         models=models,
         macro=name,
-        satellites=satellite_version.save(satellite, models),
+        satellites=satellite_name,
         model=model,
         loaded=macro_version.load(models, name, {"bvar.sv": MODEL}),
-        satellite=satellite,
+        satellite=satellite_bundle.load(
+            models, satellite_name, {satellite_model.model_id: satellite_model}
+        ),
         data=data,
         store=data_store,
     )

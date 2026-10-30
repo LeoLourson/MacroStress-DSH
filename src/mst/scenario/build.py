@@ -19,14 +19,14 @@ from pathlib import Path
 import numpy as np
 
 from ..corpus.index import sources_missing
+from ..drivers.bundle import SatelliteBundle
 from ..drivers.registry import from_model
-from ..drivers.simulate import DriverPaths
-from ..drivers.simulate import simulate as simulate_drivers
-from ..drivers.version import Satellites
 from ..macro.registry import load_registry
 from ..macro.version import MacroVersion
 from ..model_sdk.conditional import InfeasibleScenario
 from ..model_sdk.contracts import (
+    AdditiveImpact,
+    DriverPaths,
     LinearConstraint,
     LinearTerm,
     ScenarioPlan,
@@ -74,7 +74,7 @@ def plan_of(spec: Spec) -> ScenarioPlan:
 def build(
     spec: Spec,
     macro: MacroVersion,
-    satellites: Satellites,
+    satellites: SatelliteBundle,
     *,
     draws: int,
     seed: int,
@@ -94,8 +94,19 @@ def build(
         ],
         axis=-1,
     )
-    drivers = simulate_drivers(
-        satellites, simulation, _drivers(satellites, spec), spec.overlays, seed=seed
+    drivers = satellites.simulate(
+        simulation,
+        _drivers(satellites, spec),
+        [
+            AdditiveImpact(
+                target=overlay.driver,
+                start=overlay.start,
+                end=overlay.end,
+                delta=overlay.delta,
+            )
+            for overlay in spec.overlays
+        ],
+        seed=seed,
     )
     return Paths(
         months=simulation.months,
@@ -115,7 +126,7 @@ def build(
 def validate(
     spec: Spec,
     macro: MacroVersion,
-    satellites: Satellites,
+    satellites: SatelliteBundle,
     *,
     as_of: date,
     corpus: Path | None = None,
@@ -150,7 +161,7 @@ def validate(
     return {"ok": not problems, "problems": problems}
 
 
-def _drivers(satellites: Satellites, spec: Spec) -> list[str]:
+def _drivers(satellites: SatelliteBundle, spec: Spec) -> list[str]:
     """The drivers the run simulates: everything the satellites serve, in a stable order."""
     served = sorted(satellites.served())
     problems = _overlay_problems(satellites, spec)
@@ -159,7 +170,7 @@ def _drivers(satellites: Satellites, spec: Spec) -> list[str]:
     return served
 
 
-def _overlay_problems(satellites: Satellites, spec: Spec) -> list[str]:
+def _overlay_problems(satellites: SatelliteBundle, spec: Spec) -> list[str]:
     """Overlays on a driver the satellite version does not simulate, with the reason."""
     served = set(satellites.served())
     problems = []
@@ -178,24 +189,24 @@ def _overlay_problems(satellites: Satellites, spec: Spec) -> list[str]:
     return problems
 
 
-def _version_problems(macro: MacroVersion, satellites: Satellites) -> list[str]:
+def _version_problems(macro: MacroVersion, satellites: SatelliteBundle) -> list[str]:
     """The satellites of another macro version are not the ones these paths were drawn on."""
-    last = next(iter(satellites.fits.values()), None)
-    if last is None or last.history.months[-1] == macro.months[-1]:
+    last = satellites.part_months_end()
+    if last is None or last == macro.months[-1]:
         return []
     return [
-        f"the satellites are estimated up to {last.history.months[-1]:%Y-%m}, "
+        f"the satellites are estimated up to {last:%Y-%m}, "
         f"the macro version ends at {macro.months[-1]:%Y-%m}"
     ]
 
 
-def _own_units(satellites: Satellites, paths: DriverPaths) -> DriverPaths:
+def _own_units(satellites: SatelliteBundle, paths: DriverPaths) -> DriverPaths:
     """The driver paths back in each driver's own unit, as the positions read them."""
     if not paths.ids:
         return DriverPaths(ids=[], paths=np.empty(paths.paths.shape[:2] + (0,)), flags={})
     transformed = [
         from_model(
-            satellites.registry.quantity(satellites.node(driver)[0]).transform,
+            satellites.registry.quantity(satellites.quantity_of(driver)).transform,
             paths.paths[..., k],
         )
         for k, driver in enumerate(paths.ids)

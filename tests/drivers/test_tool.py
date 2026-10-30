@@ -6,9 +6,11 @@ from datetime import date
 from fastmcp import Client
 
 from mst import jobs, store
-from mst.drivers.spec import Sampler, Spec
-from mst.drivers.version import build, save
+from mst.drivers import bundle as satellite_bundle
 from mst.mcp import build as build_server
+from mst.model_sdk.contracts import SatelliteEstimateContext
+from mst.plugins.hier.model import HierModel
+from mst.plugins.hier.spec import Sampler, Spec
 
 from . import simulated
 
@@ -36,29 +38,46 @@ def small_spec() -> Spec:
 
 
 def saved_version(tmp_path):
-    """A tiny satellite version under ``<tmp_path>/models``."""
+    """A tiny satellite bundle under ``<tmp_path>/models``."""
     panel = simulated.panel(240)
     series = simulated.store(tmp_path / "data", panel)
-    sat = build(simulated.registry(), small_spec(), panel, series, AS_OF, "macro-version")
-    return save(sat, tmp_path / "models"), sat
+    registry = simulated.registry()
+    model = HierModel(spec=small_spec())
+    estimate = model.estimate(
+        SatelliteEstimateContext(
+            store=series,
+            registry=registry,
+            panel=panel,
+            as_of=AS_OF,
+            macro="macro-version",
+            quantities=("price",),
+        )
+    )
+    meta, arrays = satellite_bundle.assemble(
+        registry, "macro-version", AS_OF, {model.model_id: estimate}
+    )
+    name = satellite_bundle.save(meta, arrays, tmp_path / "models")
+    return name, satellite_bundle.load(tmp_path / "models", name, {model.model_id: model})
 
 
 def test_a_saved_satellite_version_is_listed_and_described(tmp_path):
     ws = store.Workspace(tmp_path)
-    name, sat = saved_version(tmp_path)
+    name, bundle = saved_version(tmp_path)
 
     listed = call(ws, "model", {"kind": "satellites", "action": "list"}).data["versions"]
     assert [row["version"] for row in listed] == [name]
     assert listed[0]["macro"] == "macro-version"
-    assert listed[0]["checked"] == sum(len(item) for item in sat.checks.values())
+    assert listed[0]["models"] == ["hier.gibbs"]
+    assert listed[0]["checked"] == sum(len(item) for item in bundle.checks.values())
 
     described = call(
         ws, "model", {"kind": "satellites", "action": "describe", "version": name}
     ).data
     assert described["macro"] == "macro-version"
-    assert described["served"] == sat.served()
+    assert described["models"] == {"price": "hier.gibbs"}
+    assert described["served"] == bundle.served()
     assert {item["driver"] for item in described["rejected"]} == (
-        {d for d in sat.fits["price"].history.driver if d} - set(sat.served())
+        {d for d in bundle.parts["price"]["driver"] if d} - set(bundle.served())
     )
 
 
@@ -68,9 +87,29 @@ def test_estimate_becomes_a_task_on_the_models_resource(tmp_path):
         ws, "model", {"kind": "satellites", "action": "estimate", "version": "macro-sha"}
     ).data
     try:
-        assert answer["argv"][:3] == ["-m", "mst.drivers", "estimate"]
+        assert answer["argv"][:3] == ["-m", "mst.models", "estimate-satellites"]
         assert answer["argv"][answer["argv"].index("--macro") + 1] == "macro-sha"
         assert jobs.status(ws, answer["job"])["resource"] == "models"
+    finally:
+        jobs.cancel(ws, answer["job"])
+
+
+def test_an_assignment_names_the_model_of_a_quantity(tmp_path):
+    ws = store.Workspace(tmp_path)
+    answer = call(
+        ws,
+        "model",
+        {
+            "kind": "satellites",
+            "action": "estimate",
+            "version": "macro-sha",
+            "assignment": {"share_price": "other.v1"},
+        },
+    ).data
+    try:
+        argv = answer["argv"]
+        assert argv[:3] == ["-m", "mst.models", "estimate-satellites"]
+        assert argv[argv.index("--model") + 1] == "share_price=other.v1"
     finally:
         jobs.cancel(ws, answer["job"])
 

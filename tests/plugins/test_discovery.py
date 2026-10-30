@@ -25,9 +25,9 @@ def forget(*names: str) -> None:
             del sys.modules[name]
 
 
-def test_the_installed_packages_are_the_position_models_and_the_bvar():
+def test_the_installed_packages_are_the_position_models_and_the_models():
     registry = plugins.registry()
-    assert sorted(registry.plugins) == ["bond", "bvar", "credit", "equity", "housing"]
+    assert sorted(registry.plugins) == ["bond", "bvar", "credit", "equity", "hier", "housing"]
     assert sorted(registry.models) == [
         "bond.paths.v1",
         "credit.paths.v1",
@@ -37,6 +37,8 @@ def test_the_installed_packages_are_the_position_models_and_the_bvar():
     assert registry.owner["equity.paths.v1"] == "equity"
     assert sorted(registry.macro) == ["bvar.sv"]
     assert registry.macro_owner["bvar.sv"] == "bvar"
+    assert sorted(registry.satellites) == ["hier.gibbs"]
+    assert registry.quantity_model["share_price"] == "hier.gibbs"
 
 
 def test_the_catalog_answers_by_id_and_by_type():

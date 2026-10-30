@@ -26,7 +26,7 @@ from pydantic import Field, model_validator
 
 from . import store
 from .contracts import Contract, Currency, Identifier, Seed
-from .drivers import version as satellite_version
+from .drivers import bundle as satellite_bundle
 from .engine import run as calculate_run
 from .macro import version as macro_version
 from .plugin_sdk import FixedPaths, Position
@@ -113,7 +113,7 @@ def execute(ws: store.Workspace, run_id: str) -> dict:
         spec = scenario_tool.load(ws.scenarios, request.scenario)
         installed = plugins.registry()
         macro = macro_version.load(ws.models, spec.macro, installed.macro)
-        satellites = satellite_version.load(ws.models, spec.satellites)
+        satellites = satellite_bundle.load(ws.models, spec.satellites, installed.satellites)
         if satellites.macro != spec.macro:
             raise ValueError(
                 f"the satellites {spec.satellites} were estimated on the macro version "

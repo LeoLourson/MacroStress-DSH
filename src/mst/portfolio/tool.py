@@ -15,7 +15,7 @@ from typing import Any
 from pydantic import ValidationError
 
 from .. import store
-from ..drivers import version as satellite_version
+from ..drivers import bundle as satellite_bundle
 from ..engine.model_catalog import Catalog
 from ..engine.model_catalog import catalog as default_catalog
 from ..macro import registry as macro_registry
@@ -94,8 +94,9 @@ def check(
 
     portfolio = load(ws.portfolios, id)
     spec = scenario_tool.load(ws.scenarios, scenario)
-    macro = macro_version.load(ws.models, spec.macro, plugins.registry().macro)
-    satellites = satellite_version.load(ws.models, spec.satellites)
+    installed = plugins.registry()
+    macro = macro_version.load(ws.models, spec.macro, installed.macro)
+    satellites = satellite_bundle.load(ws.models, spec.satellites, installed.satellites)
     as_of = macro.as_of
     problems = []
     if satellites.macro != spec.macro:

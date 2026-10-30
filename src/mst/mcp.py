@@ -12,7 +12,7 @@ from . import models, runs, store
 from .corpus import tool as corpus_tool
 from .data import sources
 from .data.store import SeriesStore
-from .drivers import version as satellite_version
+from .drivers import bundle as satellite_bundle
 from .macro import version as macro_version
 from .portfolio import tool as portfolio_tool
 from .scenario import tool as scenario_tool
@@ -233,14 +233,17 @@ def build(ws: store.Workspace) -> FastMCP:
         as_of: str | None = None,
         only: list[str] | None = None,
         model_id: str | None = None,
+        assignment: dict[str, str] | None = None,
     ) -> dict:
         """Model versions and plugins. kind: macro, satellites, catalog.
 
         Actions for ``macro``: list, describe, estimate, backtest; for ``satellites``: list,
         describe, estimate; for ``catalog``: list, the installed model plugins.
         ``model_id`` names the macro model to estimate or backtest — the only one installed
-        when omitted. ``version`` is the version hash ``describe`` reads and the macro version
-        the satellites of an ``estimate`` are built on; ``list`` takes no version.
+        when omitted; ``assignment`` maps a quantity to the satellite model that estimates
+        it in an ``estimate`` of the satellites, overriding the model that declares it.
+        ``version`` is the version hash ``describe`` reads and the macro version the
+        satellites of an ``estimate`` are built on; ``list`` takes no version.
         """
         if kind == "catalog":
             if action != "list":
@@ -248,11 +251,12 @@ def build(ws: store.Workspace) -> FastMCP:
             return models.catalog()
         if kind == "satellites":
             if action == "list":
-                return {"versions": satellite_version.catalogue(ws.models)}
+                return {"versions": satellite_bundle.catalogue(ws.models)}
             if action == "describe":
-                return satellite_version.describe(ws.models, _need(version, "version"))
+                return satellite_bundle.describe(ws.models, _need(version, "version"))
             if action == "estimate":
-                return _start(ws, "models", _satellites_argv(ws, _need(version, "version")))
+                argv = _satellites_argv(ws, _need(version, "version"), assignment)
+                return _start(ws, "models", argv)
             raise ValueError(
                 f"model: unknown action {action!r} for satellites, try list, describe, estimate"
             )
@@ -350,12 +354,14 @@ def _need(value: Any, name: str) -> Any:
     return value
 
 
-def _satellites_argv(ws: store.Workspace, macro: str) -> list[str]:
-    """The command line of ``python -m mst.drivers estimate`` for this workspace."""
-    return [
+def _satellites_argv(
+    ws: store.Workspace, macro: str, assignment: dict[str, str] | None = None
+) -> list[str]:
+    """The command line of ``python -m mst.models estimate-satellites`` for this workspace."""
+    argv = [
         "-m",
-        "mst.drivers",
-        "estimate",
+        "mst.models",
+        "estimate-satellites",
         "--macro",
         macro,
         "--store",
@@ -365,6 +371,9 @@ def _satellites_argv(ws: store.Workspace, macro: str) -> list[str]:
         "--drivers",
         str(ws.drivers / "catalog.json"),
     ]
+    for quantity, model_id in sorted((assignment or {}).items()):
+        argv += ["--model", f"{quantity}={model_id}"]
+    return argv
 
 
 def _update_drivers(ws: store.Workspace, quantity: str) -> dict:

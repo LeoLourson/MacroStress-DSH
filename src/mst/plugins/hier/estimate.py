@@ -27,96 +27,19 @@ posterior mean over the months two drivers both observe.
 """
 
 from dataclasses import dataclass
-from datetime import date
 
 import numpy as np
 from scipy.linalg import cho_solve_banded, cholesky_banded, solve_banded
 from scipy.special import ndtr, ndtri
 
-from mst.data.store import SeriesStore
-from mst.macro.panel import Panel
+from mst.drivers.history import History
 
-from .registry import Quantity, Registry, to_model
 from .spec import Spec
 
 SHAPE = 3.0
 """The shape of the inverse gamma prior of each diagonal element of ``Psi_c``."""
 COMMON = 12
 """Months two drivers must share for their residual correlation to be estimated."""
-
-
-@dataclass(frozen=True)
-class History:
-    """One quantity on the month grid of the macro panel."""
-
-    quantity: Quantity
-    months: list[date]
-    nodes: list[str]
-    """Objects with a driver of the quantity and every object above them, parents first."""
-    parent: np.ndarray
-    """(N,) the index of each node's parent, -1 at the top."""
-    classes: list[str]
-    driver: list[str | None]
-    """The driver id of each node; None for a node that only links drivers below it."""
-    d: np.ndarray
-    """(T, N) the driver in the model scale; NaN where unknown and at nodes without a series."""
-    approximate: np.ndarray
-    """(T, N) True where the value's publication date is estimated."""
-    x: np.ndarray
-    """(T, m) the elements of x_t; NaN where a macro variable is unknown."""
-
-
-def inputs(quantity: Quantity, panel: Panel) -> np.ndarray:
-    """``x_t`` on the panel months: the regressors, then the features."""
-    index = {id_: i for i, id_ in enumerate(panel.ids)}
-    missing = [v for v in quantity.regressors + [f.variable for f in quantity.features]
-               if v not in index]  # fmt: skip
-    if missing:
-        raise ValueError(f"{quantity.id} needs {', '.join(missing)}, which the panel lacks")
-    columns = [panel.y[:, index[v]] for v in quantity.regressors]
-    columns += [np.maximum(0.0, panel.y[:, index[f.variable]] - f.above) for f in quantity.features]
-    return np.column_stack(columns)
-
-
-def history(
-    registry: Registry, quantity: str, panel: Panel, store: SeriesStore, as_of: date
-) -> History:
-    q = registry.quantity(quantity)
-    drivers = {d.object: d for d in registry.drivers if d.quantity == quantity}
-    if not drivers:
-        raise ValueError(f"no driver of {quantity} is registered")
-    nodes = set(drivers)
-    for object_ in drivers:
-        nodes.update(registry.ancestors(object_))
-    order = [o.id for o in registry.objects if o.id in nodes]
-    order.sort(key=lambda id_: len(registry.ancestors(id_)))
-    position = {id_: i for i, id_ in enumerate(order)}
-    month = {m: t for t, m in enumerate(panel.months)}
-    d = np.full((len(panel.months), len(order)), np.nan)
-    approximate = np.zeros(d.shape, dtype=bool)
-    for object_, driver in drivers.items():
-        if driver.series is None:
-            continue
-        rows = [row for row in store.as_of(driver.series, as_of) if row.month in month]
-        if not rows:
-            raise ValueError(f"{driver.id}: series {driver.series} has no value known on {as_of}")
-        i = position[object_]
-        for row in rows:
-            d[month[row.month], i] = to_model(q.transform, row.value)
-            approximate[month[row.month], i] = row.approximate
-    return History(
-        quantity=q,
-        months=list(panel.months),
-        nodes=order,
-        parent=np.array(
-            [position.get(registry.object(id_).parent, -1) for id_ in order], dtype=int
-        ),
-        classes=[registry.object(id_).class_ for id_ in order],
-        driver=[drivers[id_].id if id_ in drivers else None for id_ in order],
-        d=d,
-        approximate=approximate,
-        x=inputs(q, panel),
-    )
 
 
 def lagged(x: np.ndarray, lags: int, t: int) -> np.ndarray:
@@ -252,7 +175,14 @@ class Fit:
     """(N,) observations each node was estimated on; 0 at nodes without data."""
 
 
-def _scales(paths: dict[int, Path], columns: list[str]):
+def columns(quantity) -> list[str]:
+    """The names of the elements of ``z_t``: constant, own lag, ``x_{t-l}`` for each lag."""
+    return ["const", "own_lag"] + [
+        f"{name}@{lag}" for lag in range(quantity.lags + 1) for name in quantity.inputs
+    ]
+
+
+def _scales(paths: dict[int, Path], names: list[str]):
     """Pooled centres and within-object spreads of the columns of ``z`` and of ``d``."""
     rows = {i: item.rows() for i, item in paths.items()}
     stacked = np.vstack([z for z, _ in rows.values()])
@@ -261,7 +191,7 @@ def _scales(paths: dict[int, Path], columns: list[str]):
     within = [z - z.mean(axis=0) for z, _ in rows.values()]
     spread = np.sqrt(np.vstack(within).var(axis=0))
     spread[0] = 1.0
-    flat = [columns[j] for j in range(1, len(columns)) if not spread[j] > 0]
+    flat = [names[j] for j in range(1, len(names)) if not spread[j] > 0]
     if flat:
         raise ValueError(f"columns {', '.join(flat)} do not vary within objects")
     level = np.concatenate([y - y.mean() for _, y in rows.values()])
@@ -270,8 +200,8 @@ def _scales(paths: dict[int, Path], columns: list[str]):
 
 def fit(hist: History, spec: Spec, *, until: int | None = None, seed: int | None = None) -> Fit:
     """Posterior draws of the satellite parameters of one quantity, months ``<= until``."""
-    columns = hist.quantity.columns
-    k, n = len(columns), len(hist.nodes)
+    columns_ = columns(hist.quantity)
+    k, n = len(columns_), len(hist.nodes)
     paths = {}
     for i in range(n):
         item = path_of(hist, i, until)
@@ -279,7 +209,7 @@ def fit(hist: History, spec: Spec, *, until: int | None = None, seed: int | None
             paths[i] = item
     if not paths:
         raise ValueError(f"no driver of {hist.quantity.id} has more than {k} usable months")
-    centre, spread, level = _scales(paths, columns)
+    centre, spread, level = _scales(paths, columns_)
     prior = np.full(k, (spec.spread * level) ** 2)
     prior[0] = (spec.constant_spread * level) ** 2
     b0 = (SHAPE - 1) * prior
@@ -389,23 +319,3 @@ def residuals(fit_: Fit, node: int) -> np.ndarray:
         if np.isfinite(d[t]) and np.all(np.isfinite(z)):
             out[t] = d[t] - gamma @ z
     return out
-
-
-def correlation(series: list[np.ndarray]) -> np.ndarray:
-    """The residual correlation of drivers, pairwise over common months, made positive definite.
-
-    A pair with fewer than ``COMMON`` common months gets zero. The pairwise matrix is moved to
-    the nearest positive definite one by clipping its eigenvalues, then rescaled to a unit
-    diagonal.
-    """
-    k = len(series)
-    corr = np.eye(k)
-    for a in range(k):
-        for b in range(a + 1, k):
-            both = np.isfinite(series[a]) & np.isfinite(series[b])
-            if both.sum() >= COMMON:
-                corr[a, b] = corr[b, a] = np.corrcoef(series[a][both], series[b][both])[0, 1]
-    values, vectors = np.linalg.eigh(corr)
-    fixed = vectors @ np.diag(np.maximum(values, 1e-6)) @ vectors.T
-    scale = np.sqrt(np.diag(fixed))
-    return fixed / np.outer(scale, scale)

@@ -1,4 +1,5 @@
-import json
+"""The hierarchical satellite: estimation, check, version and driver paths."""
+
 from dataclasses import replace
 from datetime import date
 
@@ -6,17 +7,18 @@ import numpy as np
 import pytest
 
 from mst.data.store import Observation, SeriesStore
-from mst.drivers.check import check
-from mst.drivers.estimate import correlation, fit, history, path_of
-from mst.drivers.registry import Registry, from_model, load_registry, to_model
-from mst.drivers.simulate import OVERLAY, PARAMETERS_FROM_ABOVE, NotServed, simulate
-from mst.drivers.spec import load_spec
-from mst.drivers.version import build, load, save
-from mst.macro.registry import load_registry as load_macro_registry
+from mst.drivers import bundle as satellite_bundle
+from mst.drivers.history import correlation, history
+from mst.drivers.registry import Registry
+from mst.model_sdk import AdditiveImpact
 from mst.model_sdk.contracts import MacroSimulation as Simulation
-from mst.scenario.contracts import Overlay
-
-from . import simulated
+from mst.plugins.hier import MODEL
+from mst.plugins.hier.check import check
+from mst.plugins.hier.estimate import fit, path_of
+from mst.plugins.hier.simulate import IMPACT, PARAMETERS_FROM_ABOVE, NotServed
+from mst.plugins.hier.simulate import simulate as simulate_hier
+from mst.plugins.hier.spec import load_spec
+from tests.drivers import simulated
 
 AS_OF = date(2030, 1, 1)
 
@@ -26,60 +28,6 @@ def data(tmp_path_factory):
     panel = simulated.panel(240)
     store = simulated.store(tmp_path_factory.mktemp("series"), panel)
     return simulated.registry(), panel, store
-
-
-def test_the_registry_declares_a_catalog_per_quantity_and_known_macro_variables():
-    registry = load_registry(catalog=None)
-    registry.check(load_macro_registry())
-    assert all(q.catalog is not None for q in registry.quantities)
-
-
-def test_a_catalog_file_adds_objects_and_drivers_and_positions_match_by_code(tmp_path):
-    objects = [
-        {"id": "economy", "class": "activity_0", "label": "ВСЕГО", "codes": {"okved": ["4"]}},
-        {"id": "construction", "class": "activity_1", "label": "строительство",
-         "parent": "economy", "codes": {"okved": ["41", "42"]}},
-        {"id": "building", "class": "activity_2", "label": "здания", "parent": "construction",
-         "codes": {"okved": ["41"]}},
-    ]  # fmt: skip
-    catalog = tmp_path / "catalog.json"
-    catalog.write_text(
-        json.dumps({"quantities": {"overdue_share": {"objects": objects,
-                    "drivers": ["economy", "construction", "building"]}}}),  # fmt: skip
-        encoding="utf-8",
-    )
-    registry = load_registry(catalog=catalog)
-    assert registry.match("overdue_share", "okved", "41.20") == "overdue_share:building"
-    assert registry.match("overdue_share", "okved", "42.11") == "overdue_share:construction"
-    assert registry.match("overdue_share", "okved", "47.11") == "overdue_share:economy"
-    assert registry.match("overdue_share", "okved", "41.20", among={"overdue_share:economy"}) == (
-        "overdue_share:economy"
-    )
-    assert registry.match("overdue_share", "okved", "01.11") is None
-    assert next(d for d in registry.drivers if d.object == "building").series == (
-        "drv.overdue_share.building"
-    )
-
-
-@pytest.mark.parametrize(
-    "change, message",
-    [
-        (lambda o: o[1].update(parent="nowhere"), "unknown parent"),
-        (lambda o: o[0].update(parent="alpha"), "cycle"),
-    ],
-)
-def test_the_registry_refuses_broken_trees(change, message):
-    raw = simulated.registry().model_dump(by_alias=True)
-    change(raw["objects"])
-    with pytest.raises(ValueError, match=message):
-        Registry.model_validate(raw)
-
-
-def test_transforms_invert():
-    for transform, value in (("identity", -3.0), ("log100", 7.5), ("logit", 0.07)):
-        assert from_model(transform, to_model(transform, value)) == pytest.approx(value)
-    with pytest.raises(ValueError):
-        to_model("logit", 1.0)
 
 
 def test_the_posterior_covers_the_true_coefficients_of_every_object(data):
@@ -129,21 +77,70 @@ def test_the_residual_correlation_is_a_correlation_matrix():
 
 
 @pytest.fixture(scope="module")
-def satellites(data):
+def version(data, tmp_path_factory):
+    """The estimate of the plugin on the synthetic data, assembled and saved as a bundle."""
     registry, panel, store = data
-    return build(registry, load_spec(), panel, store, AS_OF, "macro-version")
+    estimate = MODEL.estimate(
+        _context(registry, panel, store, quantities=("price",), macro="macro-version")
+    )
+    meta, arrays = satellite_bundle.assemble(
+        registry, "macro-version", AS_OF, {MODEL.model_id: estimate}
+    )
+    root = tmp_path_factory.mktemp("models")
+    name = satellite_bundle.save(meta, arrays, root)
+    return satellite_bundle.load(root, name, {MODEL.model_id: MODEL})
 
 
-def test_a_version_loads_as_saved_and_refuses_a_change(satellites, tmp_path):
-    name = save(satellites, tmp_path)
-    assert save(satellites, tmp_path) == name
-    again = load(tmp_path, name)
-    assert again.served() == satellites.served()
-    assert np.array_equal(again.fits["price"].gamma, satellites.fits["price"].gamma)
-    meta = tmp_path / "satellites" / name / "meta.json"
-    meta.write_text(meta.read_text(encoding="utf-8").replace("macro-version", "x"), "utf-8")
+def _context(registry, panel, store, *, quantities, macro):
+    from mst.model_sdk.contracts import SatelliteEstimateContext
+
+    return SatelliteEstimateContext(
+        store=store,
+        registry=registry,
+        panel=panel,
+        as_of=AS_OF,
+        macro=macro,
+        quantities=quantities,
+    )
+
+
+def test_a_version_loads_as_saved_and_refuses_a_change(version, data, tmp_path):
+    registry, panel, store = data
+    assert version.quantity_model == {"price": MODEL.model_id}
+    assert set(version.served()) == {
+        "price:sector", "price:alpha", "price:beta", "price:gamma", "price:delta",
+    }  # fmt: skip
+    again = version.models[MODEL.model_id]
+    assert set(again.fits) == {"price"}
+
+    estimate = MODEL.estimate(
+        _context(registry, panel, store, quantities=("price",), macro="macro-version")
+    )
+    meta, arrays = satellite_bundle.assemble(
+        registry, "macro-version", AS_OF, {MODEL.model_id: estimate}
+    )
+    name = satellite_bundle.save(meta, arrays, tmp_path)
+    assert satellite_bundle.save(meta, arrays, tmp_path) == name
+    stored = tmp_path / "satellites" / name / "meta.json"
+    stored.write_text(stored.read_text(encoding="utf-8").replace("macro-version", "x"), "utf-8")
     with pytest.raises(ValueError, match="does not match"):
-        load(tmp_path, name)
+        satellite_bundle.load(tmp_path, name, {MODEL.model_id: MODEL})
+
+
+def test_a_version_of_an_uninstalled_model_is_refused(version, tmp_path):
+    meta = {
+        "macro": version.macro,
+        "as_of": version.as_of.isoformat(),
+        "registry": version.registry.model_dump(mode="json", by_alias=True),
+        "quantities": {
+            quantity: {**part, "model": "gone.v1"}
+            for quantity, part in version.parts.items()
+        },
+        "correlated": list(version.correlated),
+    }
+    name = satellite_bundle.save(meta, dict(version.arrays), tmp_path)
+    with pytest.raises(KeyError, match="which is not installed"):
+        satellite_bundle.load(tmp_path, name, {})
 
 
 def macro_paths(panel, x_future, draws=3):
@@ -157,60 +154,84 @@ def macro_paths(panel, x_future, draws=3):
     return Simulation(ids=panel.ids, months=months, paths=paths, history=history)
 
 
-def test_driver_paths_follow_the_satellite_and_carry_overlays(satellites, data):
-    _, panel, _ = data
-    fixed = replace(satellites.fits["price"])
-    gamma = np.tile(simulated.COMPANIES["alpha"], fixed.gamma.shape[:2] + (1,))
-    fixed = replace(fixed, gamma=gamma, sigma=np.zeros_like(fixed.sigma))
-    sat = replace(satellites, fits={"price": fixed})
-    macro = macro_paths(panel, np.array([1.0, 2.0, 3.0]))
-    overlay = Overlay(driver="price:alpha", start=2, end=3, delta=10.0, reason="r", sources=["s"])
-    result = simulate(sat, macro, ["price:alpha", "price:delta"], [overlay], seed=7)
+def _with_fit(version, fit_):
+    """The version's model with the fit of ``price`` replaced."""
+    model = version.models[MODEL.model_id]
+    return replace(model, fits={"price": fit_})
 
-    hist = sat.fits["price"].history
+
+def test_driver_paths_follow_the_satellite_and_carry_impacts(version, data):
+    _, panel, _ = data
+    fit_ = version.models[MODEL.model_id].fits["price"]
+    gamma = np.tile(simulated.COMPANIES["alpha"], fit_.gamma.shape[:2] + (1,))
+    fixed = replace(fit_, gamma=gamma, sigma=np.zeros_like(fit_.sigma))
+    model = _with_fit(version, fixed)
+    macro = macro_paths(panel, np.array([1.0, 2.0, 3.0]))
+    impact = AdditiveImpact(target="price:alpha", start=2, end=3, delta=10.0)
+    result = simulate_hier(
+        model,
+        macro,
+        ["price:alpha", "price:delta"],
+        [impact],
+        correlation=(version.correlated, version.correlation),
+        seed=7,
+        stream=0,
+    )
+
+    hist = fit_.history
     d, x = hist.d[-1, hist.nodes.index("alpha")], [panel.y[-1, 0], 1.0, 2.0, 3.0]
     expected = [d]
     for t in range(1, 4):
         expected.append(simulated.COMPANIES["alpha"] @ [1.0, expected[-1], x[t], x[t - 1]])
     expected = np.array(expected) + [0, 0, 10, 10]
     assert result.paths[:, :, 0] == pytest.approx(np.tile(expected, (3, 1)))
-    assert result.flags["price:alpha"] == {OVERLAY}
+    assert result.flags["price:alpha"] == {IMPACT}
     assert result.flags["price:delta"] == {PARAMETERS_FROM_ABOVE}
     sector = hist.d[-1, hist.nodes.index("sector")]
     assert result.paths[:, 0, 1] == pytest.approx(sector)
 
 
-def test_a_driver_the_check_rejected_or_too_old_is_not_served(satellites, data):
+def test_a_driver_the_check_rejected_or_too_old_is_not_served(version, data):
     _, panel, _ = data
     macro = macro_paths(panel, np.array([1.0]))
-    quantity, node = satellites.node("price:alpha")
-    rejected = dict(satellites.checks[quantity])
+    model = version.models[MODEL.model_id]
+    quantity, node = "price", model.fits["price"].history.driver.index("price:alpha")
+    rejected = dict(model.checks[quantity])
     rejected[node] = replace(rejected[node], served=False, reason="not more accurate")
-    sat = replace(satellites, checks={quantity: rejected})
     with pytest.raises(NotServed, match="not more accurate"):
-        simulate(sat, macro, ["price:alpha"], seed=1)
+        simulate_hier(
+            replace(model, checks={quantity: rejected}), macro, ["price:alpha"], [],
+            seed=1, stream=0,
+        )
 
-    fit_ = satellites.fits["price"]
+    fit_ = model.fits["price"]
     x = fit_.history.x.copy()
     x[-5] = np.nan
     d = fit_.history.d.copy()
     d[-6:, node] = np.nan
     unknown = replace(fit_, history=replace(fit_.history, d=d, x=x))
     with pytest.raises(NotServed, match="x is unknown"):
-        simulate(replace(satellites, fits={"price": unknown}), macro, ["price:alpha"], seed=1)
+        simulate_hier(
+            replace(model, fits={"price": unknown}), macro, ["price:alpha"], [],
+            seed=1, stream=0,
+        )
 
 
-def test_a_driver_that_lags_the_panel_is_simulated_up_to_t0(satellites, data):
+def test_a_driver_that_lags_the_panel_is_simulated_up_to_t0(version, data):
     _, panel, _ = data
-    fit_ = satellites.fits["price"]
-    quantity, node = satellites.node("price:alpha")
+    model = version.models[MODEL.model_id]
+    fit_ = model.fits["price"]
+    node = fit_.history.driver.index("price:alpha")
     gamma = np.tile(simulated.COMPANIES["alpha"], fit_.gamma.shape[:2] + (1,))
     d = fit_.history.d.copy()
     d[-5:, node] = np.nan
     lagging = replace(fit_, gamma=gamma, sigma=np.zeros_like(fit_.sigma),
                       history=replace(fit_.history, d=d))  # fmt: skip
     macro = macro_paths(panel, np.array([1.0]))
-    result = simulate(replace(satellites, fits={"price": lagging}), macro, ["price:alpha"], seed=1)
+    result = simulate_hier(
+        replace(model, fits={"price": lagging}), macro, ["price:alpha"], [],
+        correlation=(version.correlated, version.correlation), seed=1, stream=0,
+    )
     x, value = panel.y[:, 0], fit_.history.d[-6, node]
     for t in range(len(x) - 5, len(x)):
         value = simulated.COMPANIES["alpha"] @ [1.0, value, x[t], x[t - 1]]
@@ -278,17 +299,16 @@ def test_a_path_ends_at_the_last_month_the_panel_knows(tmp_path):
     assert fit(hist, load_spec()).rows[node] == len(item.path)
 
 
-def test_driver_paths_repeat_bit_for_bit(satellites, data):
+def test_driver_paths_repeat_bit_for_bit(version, data):
     _, panel, _ = data
     macro = macro_paths(panel, np.array([1.0, 0.5]))
-    first = simulate(satellites, macro, ["price:alpha", "price:beta"], seed=11)
-    again = simulate(satellites, macro, ["price:alpha", "price:beta"], seed=11)
+    model = version.models[MODEL.model_id]
+    first = simulate_hier(
+        model, macro, ["price:alpha", "price:beta"], [],
+        correlation=(version.correlated, version.correlation), seed=11, stream=0,
+    )
+    again = simulate_hier(
+        model, macro, ["price:alpha", "price:beta"], [],
+        correlation=(version.correlated, version.correlation), seed=11, stream=0,
+    )
     assert np.array_equal(first.paths, again.paths)
-
-
-def test_an_unknown_quantity_or_object_is_a_key_error():
-    registry = load_registry()
-    with pytest.raises(KeyError):
-        registry.quantity("no_such_quantity")
-    with pytest.raises(KeyError):
-        registry.object("no_such_object")

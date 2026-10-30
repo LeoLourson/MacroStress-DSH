@@ -10,23 +10,14 @@ root mean squared error. A driver without history of its own is served when the 
 driver above it with history is.
 """
 
-from dataclasses import dataclass
 
 import numpy as np
 
-from .estimate import History, fit, regressors
+from mst.drivers.history import History
+from mst.model_sdk import Check
+
+from .estimate import fit, regressors
 from .spec import Spec
-
-
-@dataclass(frozen=True)
-class Check:
-    satellite: float | None
-    """Root mean squared error of the satellite; None when no month could be forecast."""
-    baseline: float | None
-    """The same for the model without macro variables."""
-    forecasts: int
-    served: bool
-    reason: str
 
 
 def _rmse(errors: list[float]) -> float | None:

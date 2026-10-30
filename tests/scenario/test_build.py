@@ -8,9 +8,9 @@ import pytest
 
 from mst.corpus.index import Chunk
 from mst.corpus.index import write as write_index
-from mst.drivers.simulate import OVERLAY
 from mst.macro.registry import load_registry
 from mst.model_sdk import InfeasibleScenario
+from mst.plugins.hier.simulate import IMPACT
 from mst.scenario.build import build, validate
 from mst.scenario.contracts import Overlay
 from mst.scenario.spec import Spec
@@ -107,7 +107,10 @@ def test_driver_paths_are_in_the_drivers_own_units_and_carry_overlays(versions):
     k = with_overlay.drivers.ids.index("price:alpha")
     difference = with_overlay.drivers.paths[:, :, k] - plain.drivers.paths[:, :, k]
     assert np.allclose(difference[:, 2:4], 10.0) and np.allclose(difference[:, [0, 4, 5, 6]], 0)
-    assert with_overlay.drivers.flags["price:alpha"] == {OVERLAY}
+    assert IMPACT in with_overlay.drivers.flags["price:alpha"]
+    assert with_overlay.drivers.flags["price:alpha"] <= {
+        IMPACT, "outside_training_range"
+    }  # fmt: skip
 
 
 def test_an_overlay_on_a_driver_the_satellites_do_not_know_is_refused(versions):

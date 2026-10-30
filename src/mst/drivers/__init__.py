@@ -1,1 +1,1 @@
-"""The drivers of the macro variables: registry, catalogs, satellites and their paths."""
+"""The drivers of the macro variables: registry, catalogs, history and the version bundle."""
