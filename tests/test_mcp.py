@@ -63,6 +63,31 @@ def test_jobs_status_log_and_cancel_go_through_the_tool(tmp_path):
     assert cancelled["running"] is False
 
 
+def test_the_run_tool_keeps_an_explicit_empty_targets_list(workspace):
+    # An explicit empty list is not "all drivers": RunRequest refuses it, and the tool must
+    # pass it through instead of dropping the argument.
+    positions = [
+        {"id": "sber", "type": "common_stock", "notional": 1.0, "codes": {"secid": "SBER"}}
+    ]
+    try:
+        call(
+            workspace,
+            "run",
+            {
+                "action": "start",
+                "scenario": "oil",
+                "draws": 3,
+                "seed": 5,
+                "positions": positions,
+                "targets": [],
+            },
+        )
+    except Exception as error:
+        assert "targets name the drivers of the forecast" in str(error)
+    else:
+        raise AssertionError("an explicit empty targets list must not mean all drivers")
+
+
 def test_jobs_without_an_id_is_refused(tmp_path):
     ws = store.Workspace(tmp_path)
     try:

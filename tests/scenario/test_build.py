@@ -76,6 +76,20 @@ def test_exact_constraints_hold_in_every_path_to_machine_precision(versions):
     assert paths.severity is not None and paths.severity.distance > 0
 
 
+def test_an_impact_on_a_constrained_variable_meets_the_constraint(versions):
+    # The impact is added after the model has drawn the paths, so the constraint C must hold on
+    # the shifted trajectory F(omega, O) = G_0 + o_0: the target is met by the final path.
+    registry = load_registry()
+    target = float(versions.data.y[-1, 0] + 5.0)
+    impact = Impact(target="gl.brent", start=2, end=2, delta=2.0, reason="r", sources=["s"])
+    spec = scenario(versions, constraints=[fixed("gl.brent", 2, target)], impacts=[impact])
+    report = validate(spec, versions.loaded, versions.satellite, as_of=versions.data.months[-1])
+    assert report == {"ok": True, "problems": []}
+    paths = paths_of(versions, spec)
+    moved = registry.variable("gl.brent").to_model(paths.macro[:, 2, 0])
+    assert np.allclose(moved, target, atol=1e-9, rtol=0)
+
+
 def test_a_change_constraint_holds_across_months(versions):
     spec = scenario(versions, constraints=[change("ru.key_rate", 3, 1, 2.0)])
     paths = paths_of(versions, spec)
@@ -116,9 +130,7 @@ def test_driver_paths_are_in_the_drivers_own_units_and_carry_impacts(versions):
 def test_an_impact_on_a_macro_variable_reaches_the_drivers(versions):
     # A rise of the oil price in the model scale moves the drivers that read it — the
     # impact enters level 0 before the satellites see the paths.
-    impact = Impact(
-        target="gl.brent", start=1, end=3, delta=2.0, reason="шок", sources=["S1#1/1"]
-    )
+    impact = Impact(target="gl.brent", start=1, end=3, delta=2.0, reason="шок", sources=["S1#1/1"])
     plain = paths_of(versions, scenario(versions))
     with_impact = paths_of(versions, scenario(versions, impacts=[impact]))
     macro_k = with_impact.ids.index("gl.brent")
@@ -132,21 +144,17 @@ def test_an_impact_on_a_macro_variable_reaches_the_drivers(versions):
         for k, driver in enumerate(with_impact.drivers.ids)
         if not np.allclose(with_impact.drivers.paths[:, :, k], plain.drivers.paths[:, :, k])
     }
-    assert changed, "an impact on the key rate must move the drivers that read it"
+    assert changed, "an impact on the oil price must move the drivers that read it"
 
 
 def test_an_impact_on_a_driver_the_satellites_do_not_know_is_refused(versions):
-    impact = Impact(
-        target="price:nowhere", start=1, end=2, delta=1.0, reason="r", sources=["s"]
-    )
+    impact = Impact(target="price:nowhere", start=1, end=2, delta=1.0, reason="r", sources=["s"])
     with pytest.raises(ValueError, match="knows no such driver"):
         paths_of(versions, scenario(versions, impacts=[impact]))
 
 
 def test_an_impact_on_a_variable_the_macro_version_lacks_is_refused(versions):
-    impact = Impact(
-        target="ru.nowhere", start=1, end=2, delta=1.0, reason="r", sources=["s"]
-    )
+    impact = Impact(target="ru.nowhere", start=1, end=2, delta=1.0, reason="r", sources=["s"])
     report = validate(
         scenario(versions, impacts=[impact]),
         versions.loaded,
@@ -155,9 +163,12 @@ def test_an_impact_on_a_variable_the_macro_version_lacks_is_refused(versions):
     )
     assert report["ok"] is False
     assert "the macro version has no such variable" in "; ".join(report["problems"])
+    # build names the same variable instead of failing on a raw list index.
+    with pytest.raises(ValueError, match="the macro version has no such variable"):
+        paths_of(versions, scenario(versions, impacts=[impact]))
 
 
-def test_an_overlay_on_a_rejected_driver_names_the_reason(versions):
+def test_an_impact_on_a_rejected_driver_names_the_reason(versions):
     quantity, node = versions.satellite.node("price:alpha")
     rejected = dict(versions.satellite.checks[quantity])
     rejected[node] = replace(rejected[node], served=False, reason="not more accurate")
@@ -254,5 +265,18 @@ def test_validate_checks_that_the_cited_fragments_are_visible_on_the_day(version
     )["ok"]
     report = validate(
         spec, versions.loaded, versions.satellite, as_of=date(2020, 1, 1), corpus=tmp_path
+    )
+    assert report["ok"] is False and "S1/2020#1/1" in report["problems"][0]
+
+    # The fragments an impact cites are checked the same way as the scenario's own sources.
+    impact = Impact(
+        target="price:alpha", start=1, end=2, delta=1.0, reason="r", sources=["S1/2020#1/1"]
+    )
+    report = validate(
+        scenario(versions, impacts=[impact]),
+        versions.loaded,
+        versions.satellite,
+        as_of=date(2020, 1, 1),
+        corpus=tmp_path,
     )
     assert report["ok"] is False and "S1/2020#1/1" in report["problems"][0]

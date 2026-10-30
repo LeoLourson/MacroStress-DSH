@@ -66,9 +66,20 @@ class RunRequest(Contract):
         ids = [position.id for position in self.positions or []]
         if len(set(ids)) != len(ids):
             raise ValueError("two positions share one id")
-        if self.targets is not None and not self.targets:
-            raise ValueError("targets name the drivers of the forecast, or stay empty")
+        if self.targets is not None:
+            if not self.targets:
+                raise ValueError("targets name the drivers of the forecast, or be omitted")
+            _named_once(self.targets)
         return self
+
+
+def _named_once(targets: list[str]) -> None:
+    """Refuse a target named twice: the rows of the forecast are keyed by the driver."""
+    seen = set()
+    for target in targets:
+        if target in seen:
+            raise ValueError(f"target {target} is named twice")
+        seen.add(target)
 
 
 def new_id(now: datetime | None = None) -> str:
@@ -132,9 +143,7 @@ def execute(ws: store.Workspace, run_id: str) -> dict:
             portfolio_tool.load(ws.portfolios, request.portfolio) if request.portfolio else None
         )
         positions = portfolio.positions if portfolio is not None else request.positions
-        base_currency = (
-            portfolio.base_currency if portfolio is not None else request.base_currency
-        )
+        base_currency = portfolio.base_currency if portfolio is not None else request.base_currency
         batch = calculate_run(
             positions,
             readable(paths),
@@ -198,6 +207,7 @@ def forecast(paths, targets: list[str] | None = None) -> dict:
     """
     drivers = list(paths.drivers.ids)
     chosen = list(targets) if targets is not None else drivers
+    _named_once(chosen)
     missing = [driver for driver in chosen if driver not in drivers]
     if missing:
         raise ValueError(
@@ -211,7 +221,6 @@ def forecast(paths, targets: list[str] | None = None) -> dict:
         column = paths.drivers.paths[:, 1:, k]
         low, mid, high = np.percentile(column, [5, 50, 95], axis=0)
         rows[driver] = {
-            "unit_months": months[1:],
             "p05": [round(float(x), 6) for x in low],
             "p50": [round(float(x), 6) for x in mid],
             "p95": [round(float(x), 6) for x in high],
@@ -285,8 +294,7 @@ def _write(
         directory / "results.json",
         {
             "positions": [
-                result.model_dump(mode="json", exclude={"value_change"})
-                for result in batch.results
+                result.model_dump(mode="json", exclude={"value_change"}) for result in batch.results
             ]
         },
     )

@@ -130,9 +130,7 @@ def build(ws: store.Workspace) -> FastMCP:
         if action == "save":
             return scenario_tool.save(ws.scenarios, _need(id, "id"), _need(spec, "spec"))
         if action == "validate":
-            return scenario_tool.validate(
-                ws.scenarios, _need(id, "id"), ws.models, _indexed(ws)
-            )
+            return scenario_tool.validate(ws.scenarios, _need(id, "id"), ws.models, _indexed(ws))
         raise ValueError(f"scenario: unknown action {action!r}, try list, get, save, validate")
 
     @server.tool
@@ -151,8 +149,10 @@ def build(ws: store.Workspace) -> FastMCP:
 
         ``start`` draws the scenario's paths and calculates a portfolio's positions — or the
         ``positions`` given in the call — on them, as a job on the ``runs`` resource; ``status``
-        reports that job and what the run has written, ``result`` the per-position results and
-        the report of a portfolio run, ``list`` every run of the workspace. ``base_currency`` is
+        reports that job and what the run has written, ``result`` the per-position results, the
+        conditional forecast of the ``targets`` (``forecast.json``: P5/P50/P95 of every target
+        driver by month, in its own unit; every driver when ``targets`` is omitted) and the
+        report of a portfolio run, ``list`` every run of the workspace. ``base_currency`` is
         the base of ``positions``; a portfolio brings its own.
         """
         if action == "start":
@@ -168,7 +168,7 @@ def build(ws: store.Workspace) -> FastMCP:
             else:
                 request["positions"] = _need(positions, "positions")
                 request["base_currency"] = base_currency
-            if targets:
+            if targets is not None:
                 request["targets"] = targets
             run_id = runs.new_id()
             runs.begin(ws, run_id, request)

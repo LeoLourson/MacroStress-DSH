@@ -78,6 +78,32 @@ def test_list_shows_every_scenario_and_names_a_broken_one(tmp_path, versions):
     assert [item["id"] for item in listed["broken"]] == ["broken"]
 
 
+def test_an_old_scenario_with_overlays_loads_as_impacts(tmp_path, versions):
+    ws = store.Workspace(tmp_path)
+    ws.scenarios.mkdir(parents=True)
+    old = {
+        "narrative": "нефть дорожает",
+        "horizon": 6,
+        "macro": versions.macro,
+        "satellites": versions.satellites,
+        "overlays": [
+            {
+                "driver": "price:alpha",
+                "start": 1,
+                "end": 2,
+                "delta": -3.0,
+                "reason": "перебой",
+                "sources": ["S1#1/1"],
+            }
+        ],
+    }
+    (ws.scenarios / "old.json").write_text(json.dumps(old), encoding="utf-8")
+    listed = call(ws, "scenario", {"action": "list"}).data
+    assert [item["id"] for item in listed["scenarios"]] == ["old"] and not listed["broken"]
+    stored = call(ws, "scenario", {"action": "get", "id": "old"}).data["spec"]
+    assert stored["impacts"][0]["target"] == "price:alpha" and "overlays" not in stored
+
+
 def test_validate_accepts_a_scenario_the_versions_can_compute(tmp_path, versions):
     ws = store.Workspace(tmp_path)
     install(ws, versions)

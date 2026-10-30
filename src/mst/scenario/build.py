@@ -7,13 +7,18 @@ own unit, and drives the satellites of the same macro version over exactly those
 the impacts on the drivers. The macro month ``t = 0`` is the last month of the version's
 panel, so a run is a function of the scenario, the two model versions and the seed alone.
 
+A level-0 impact is added after the macro model has drawn the paths, while the scheme puts the
+constraints on ``F(omega, O)``; so the plan the model solves has its bounds shifted by the
+impact of every term, and the constraint holds on the paths the run finally reports
+(``plan_with_impacts``).
+
 Severity ``delta`` of the scenario comes from the unconditional forecast of the same model:
-the distance of the constrained paths from what the model expects without them. A scenario
-without constraints has no severity, and a macro model that does not measure it leaves the
-severity empty.
+the distance of the constrained paths from what the model expects without them, measured on
+``C`` alone, without the level-0 impacts. A scenario without constraints has no severity, and
+a macro model that does not measure it leaves the severity empty.
 """
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import date
 from pathlib import Path
 
@@ -74,6 +79,37 @@ def plan_of(spec: Spec) -> ScenarioPlan:
     )
 
 
+def plan_with_impacts(spec: Spec) -> ScenarioPlan:
+    """The plan the macro model solves: ``C`` moved by the level-0 impacts of ``spec``.
+
+    An impact ``o_0`` is added to the paths after ``G_0`` has drawn them, so the model must
+    meet ``low <= w'y <= high`` on the unshifted path with the impact taken out:
+    ``low - w'o_0 <= w'y <= high - w'o_0`` for every term on an impacted variable and month.
+    The run then adds ``o_0`` to the paths and ``C`` holds on ``F(omega, O)``.
+    """
+    plan = plan_of(spec)
+    of_macro = [impact for impact in spec.impacts if not impact.on_driver]
+    if not of_macro:
+        return plan
+    shifted = []
+    for constraint in plan.constraints:
+        shift = _impact_shift(constraint, of_macro)
+        shifted.append(
+            replace(constraint, low=constraint.low - shift, high=constraint.high - shift)
+        )
+    return replace(plan, constraints=tuple(shifted))
+
+
+def _impact_shift(constraint: LinearConstraint, impacts: list[Impact]) -> float:
+    """``w'o_0``: what the level-0 impacts add to the left side of one constraint."""
+    return sum(
+        term.weight * impact.delta
+        for impact in impacts
+        for term in constraint.terms
+        if term.variable == impact.target and impact.start <= term.month <= impact.end
+    )
+
+
 def build(
     spec: Spec,
     macro: MacroVersion,
@@ -85,10 +121,14 @@ def build(
     """The paths of ``spec`` from its macro version and the satellites of that version.
 
     Raises ``InfeasibleScenario`` when the driving shocks cannot meet the constraints, and
-    ``ValueError`` naming an overlay on a driver the satellites do not serve.
+    ``ValueError`` naming an impact on a macro variable the version lacks or on a driver the
+    satellites do not serve.
     """
+    problems = _impact_problems(spec, macro, satellites)
+    if problems:
+        raise ValueError("; ".join(problems))
     plan = plan_of(spec)
-    simulation = macro.plugin.simulate(macro.model, plan, draws=draws, seed=seed)
+    simulation = macro.plugin.simulate(macro.model, plan_with_impacts(spec), draws=draws, seed=seed)
     simulation = _with_macro_impacts(simulation, spec.impacts)
     registry = load_registry()
     own = np.stack(
@@ -136,8 +176,8 @@ def validate(
     """Every problem that keeps the scenario from being computed, each one named.
 
     ``as_of`` is the calculation day of the macro version: a corpus fragment cited by the
-    scenario must be published by then. ``corpus`` is the corpus root; without it the sources
-    are not checked.
+    scenario or by one of its impacts must be published by then. ``corpus`` is the corpus root;
+    without it the sources are not checked.
     """
     problems = []
     try:
@@ -153,11 +193,14 @@ def validate(
     problems += _version_problems(macro, satellites)
     if spec.constraints:
         try:
-            macro.plugin.simulate(macro.model, plan_of(spec), draws=1, seed=0)
+            macro.plugin.simulate(macro.model, plan_with_impacts(spec), draws=1, seed=0)
         except (InfeasibleScenario, ValueError) as error:
             problems.append(str(error))
-    if corpus is not None and spec.sources:
-        missing = sources_missing(corpus / "index", list(spec.sources), as_of)
+    if corpus is not None:
+        cited = list(spec.sources) + [
+            source for impact in spec.impacts for source in impact.sources
+        ]
+        missing = sources_missing(corpus / "index", cited, as_of)
         if missing:
             problems.append(f"no corpus fragment {', '.join(missing)} visible on {as_of}")
     return {"ok": not problems, "problems": problems}
@@ -197,9 +240,7 @@ def _impact_problems(spec: Spec, macro: MacroVersion, satellites: SatelliteBundl
     return problems
 
 
-def _with_macro_impacts(
-    simulation: MacroSimulation, impacts: list[Impact]
-) -> MacroSimulation:
+def _with_macro_impacts(simulation: MacroSimulation, impacts: list[Impact]) -> MacroSimulation:
     """The macro paths with the scenario's impacts on the macro variables added.
 
     The impact is in the model scale of its variable; the satellites below see the shifted
@@ -242,6 +283,4 @@ def _own_units(satellites: SatelliteBundle, paths: DriverPaths) -> DriverPaths:
         )
         for k, driver in enumerate(paths.ids)
     ]
-    return DriverPaths(
-        ids=list(paths.ids), paths=np.stack(transformed, axis=-1), flags=paths.flags
-    )
+    return DriverPaths(ids=list(paths.ids), paths=np.stack(transformed, axis=-1), flags=paths.flags)

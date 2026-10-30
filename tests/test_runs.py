@@ -2,6 +2,8 @@
 
 import asyncio
 import time
+from datetime import date
+from types import SimpleNamespace
 
 import numpy as np
 import pytest
@@ -85,9 +87,12 @@ def test_a_run_writes_meta_paths_results_and_changes(workspace):
     assert forecast["months"] == meta["months"][1:]
     for name in meta["drivers"]:
         row = forecast["drivers"][name]
-        assert len(row["p05"]) == len(row["p50"]) == len(row["p95"]) == meta["horizon"]
-        bands = list(zip(row["p05"], row["p50"], row["p95"], strict=True))
-        assert all(low <= mid <= high for low, mid, high in bands)
+        column = driver(meta, drivers, name)[:, 1:]
+        low, mid, high = np.percentile(column, [5, 50, 95], axis=0)
+        assert row["p05"] == [round(float(x), 6) for x in low]
+        assert row["p50"] == [round(float(x), 6) for x in mid]
+        assert row["p95"] == [round(float(x), 6) for x in high]
+        assert "unit_months" not in row  # the horizon is the top-level months
 
 
 def test_named_targets_are_the_forecast_of_the_run(workspace):
@@ -103,6 +108,25 @@ def test_a_target_the_paths_do_not_carry_is_refused(workspace):
     request = dict(REQUEST, targets=["share_price:nowhere"])
     with pytest.raises(ValueError, match="the paths carry no drivers"):
         start(workspace, request)
+
+
+def test_a_request_refuses_duplicate_targets(workspace):
+    request = dict(REQUEST, targets=["share_price:sber", "share_price:sber"])
+    with pytest.raises(ValueError, match="share_price:sber is named twice"):
+        runs.begin(workspace, runs.new_id(), request)
+
+
+def test_the_forecast_refuses_duplicate_targets():
+    paths = SimpleNamespace(
+        drivers=SimpleNamespace(
+            ids=["share_price:sber"],
+            paths=np.zeros((2, 3, 1)),
+            flags={"share_price:sber": frozenset()},
+        ),
+        months=[date(2020, 1, 1), date(2020, 2, 1), date(2020, 3, 1)],
+    )
+    with pytest.raises(ValueError, match="share_price:sber is named twice"):
+        runs.forecast(paths, ["share_price:sber", "share_price:sber"])
 
 
 def test_every_position_is_the_formula_of_its_model(workspace):
@@ -130,9 +154,10 @@ def test_the_same_request_gives_the_same_numbers(workspace):
     # The meta differs by id and times; the paths, the changes and the metrics do not.
     assert np.array_equal(first_drivers, second_drivers)
     assert np.array_equal(first, second)
-    assert runs.result(workspace, first_id)["positions"] == runs.result(
-        workspace, second_id
-    )["positions"]
+    assert (
+        runs.result(workspace, first_id)["positions"]
+        == runs.result(workspace, second_id)["positions"]
+    )
     other_id, _ = start(workspace, REQUEST | {"seed": 12})
     _, _, _, other = arrays(workspace, other_id)
     assert not np.array_equal(first, other)
@@ -225,6 +250,26 @@ def test_the_run_tool_starts_a_job_and_reports_its_result(workspace):
     assert len(stored["positions"]) == len(POSITIONS)
     listed = call(workspace, "run", {"action": "list"}).data["runs"]
     assert [item["id"] for item in listed] == [started["run"]]
+
+
+def test_the_run_tool_forecasts_the_targets_it_is_given(workspace):
+    started = call(
+        workspace,
+        "run",
+        {
+            "action": "start",
+            "scenario": "oil",
+            "draws": 3,
+            "seed": 5,
+            "positions": POSITIONS,
+            "targets": ["share_price:sber"],
+        },
+    ).data
+    wait(workspace, started["job"])
+    stored = call(workspace, "run", {"action": "result", "id": started["run"]}).data
+    assert stored["run"]["targets"] == ["share_price:sber"]
+    assert stored["forecast"]["targets"] == ["share_price:sber"]
+    assert list(stored["forecast"]["drivers"]) == ["share_price:sber"]
 
 
 def test_the_run_tool_names_the_argument_it_lacks(workspace):
