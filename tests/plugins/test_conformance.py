@@ -17,7 +17,7 @@ def test_each_installed_plugin_conforms(plugin_id):
 
 def test_a_plugin_without_a_model_is_rejected():
     findings = check_plugin(fakes.plugin(models=()))
-    assert any("no calculation model" in str(finding) for finding in findings)
+    assert any("no model is declared" in str(finding) for finding in findings)
 
 
 def test_a_plugin_without_a_demo_is_rejected():

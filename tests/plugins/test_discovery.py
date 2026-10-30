@@ -147,3 +147,130 @@ def test_the_default_catalog_is_built_only_when_asked(monkeypatch):
     with pytest.raises(KeyError, match="unknown model"):
         catalog.model("gold.paths.v1")
     assert calls == [1]
+
+
+def test_a_model_plugin_without_position_models_is_registered_by_kind():
+    registry = plugins.build([fakes.model_plugin()])
+    assert list(registry.plugins) == ["gmodel"]
+    assert registry.models == {}
+    assert sorted(registry.macro) == ["gmodel.macro.v1"]
+    assert sorted(registry.satellites) == ["gmodel.sat.v1"]
+    assert registry.quantity_model == {"share_price": "gmodel.sat.v1"}
+    assert registry.macro_owner["gmodel.macro.v1"] == "gmodel"
+    assert registry.satellite_owner["gmodel.sat.v1"] == "gmodel"
+
+
+def test_a_model_plugin_needs_the_model_sdk_range():
+    with pytest.raises(plugins.PluginError, match="model SDK range in model_sdk"):
+        plugins.build([fakes.model_plugin(model_sdk="")])
+    with pytest.raises(plugins.PluginError, match="requires model SDK"):
+        plugins.build([fakes.model_plugin(model_sdk=">=9.0,<10.0")])
+
+
+def test_a_satellite_model_serves_known_quantities_only():
+    class FarAway(fakes.DemoSatelliteModel):
+        quantities = ("unobtainium",)
+
+    with pytest.raises(plugins.PluginError, match="names unknown quantities: unobtainium"):
+        plugins.build([fakes.model_plugin(satellites=(FarAway(),))])
+
+
+def test_a_macro_model_names_known_variables_only():
+    class FarAway(fakes.DemoMacroModel):
+        variables = ("gl.unobtainium",)
+
+    with pytest.raises(plugins.PluginError, match="unknown macro variables: gl.unobtainium"):
+        plugins.build([fakes.model_plugin(macro=(FarAway(),))])
+
+
+def test_one_quantity_is_served_by_one_satellite_model():
+    class Other(fakes.DemoSatelliteModel):
+        model_id = "gmodel.other.v1"
+
+    with pytest.raises(plugins.PluginError, match="quantity 'share_price' is served by"):
+        plugins.build([fakes.model_plugin(satellites=(fakes.DemoSatelliteModel(), Other()))])
+
+
+def test_a_plugin_without_any_model_is_rejected():
+    with pytest.raises(plugins.PluginError, match="no model is declared"):
+        plugins.build(
+            [fakes.model_plugin(models=(), demo=(), macro=(), satellites=())]
+        )
+
+
+def test_a_plugin_with_a_position_model_and_no_demo_is_rejected():
+    with pytest.raises(plugins.PluginError, match="must ship a demo case"):
+        plugins.build([fakes.plugin(demo=())])
+
+
+class _Point:
+    """An entry point stand-in: a name and what its load returns."""
+
+    def __init__(self, name: str, declared):
+        self.name, self._declared = name, declared
+
+    def load(self):
+        return self._declared
+
+
+def test_entry_point_plugins_are_discovered(monkeypatch):
+    monkeypatch.setattr(
+        plugins.importlib.metadata,
+        "entry_points",
+        lambda **kwargs: [_Point("gmodel", fakes.model_plugin())]
+        if kwargs == {"group": plugins.ENTRY_POINTS}
+        else [],
+    )
+    found = plugins.discover()
+    ids = [plugin.plugin_id for plugin in found]
+    assert "gmodel" in ids
+    assert ids.count("gmodel") == 1
+    assert {"bond", "credit", "equity", "housing"} <= set(ids)
+
+
+def test_an_entry_point_that_names_another_plugin_is_rejected(monkeypatch):
+    monkeypatch.setattr(
+        plugins.importlib.metadata,
+        "entry_points",
+        lambda **kwargs: [_Point("other", fakes.model_plugin())],
+    )
+    with pytest.raises(plugins.PluginError, match="declares plugin_id 'gmodel'"):
+        plugins.discover()
+
+
+def test_plugins_of_the_extra_paths_are_discovered(tmp_path, monkeypatch):
+    (tmp_path / "gmodel").mkdir()
+    (tmp_path / "gmodel" / "__init__.py").write_text(
+        "from mst.plugin_sdk import Plugin\n"
+        "plugin = Plugin(plugin_id='gmodel', version='0.1.0', label='Gmodel', "
+        "model_sdk='>=1.0,<2.0')\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setenv(plugins.PATH_ENV, str(tmp_path))
+    try:
+        found = plugins.discover()
+        ids = [plugin.plugin_id for plugin in found]
+        assert "gmodel" in ids and ids.count("gmodel") == 1
+        # A plugin of the paths that repeats a namespace plugin id is a problem.
+        (tmp_path / "equity").mkdir()
+        (tmp_path / "equity" / "__init__.py").write_text(
+            "from mst.plugin_sdk import Plugin\n"
+            "plugin = Plugin(plugin_id='equity', version='0.1.0', label='Not equity')\n",
+            encoding="utf-8",
+        )
+        with pytest.raises(plugins.PluginError, match="declared twice"):
+            plugins.discover()
+    finally:
+        monkeypatch.delenv(plugins.PATH_ENV, raising=False)
+
+
+def test_load_package_reads_a_package_outside_the_namespace(tmp_path):
+    (tmp_path / "gmodel").mkdir()
+    (tmp_path / "gmodel" / "__init__.py").write_text(
+        "from mst.plugin_sdk import Plugin\n"
+        "plugin = Plugin(plugin_id='gmodel', version='0.1.0', label='Gmodel')\n",
+        encoding="utf-8",
+    )
+    assert plugins.load_package(tmp_path / "gmodel").plugin_id == "gmodel"
+    with pytest.raises(plugins.PluginLoadError, match="is not a Python package"):
+        plugins.load_package(tmp_path / "nowhere")

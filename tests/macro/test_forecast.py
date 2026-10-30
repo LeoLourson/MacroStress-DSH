@@ -7,14 +7,7 @@ import pytest
 from scipy import stats
 
 from mst.macro.estimate import estimate
-from mst.macro.forecast import (
-    InfeasibleScenario,
-    dependent_rows,
-    draw_driving,
-    severity,
-    simulate,
-    truncated_normal,
-)
+from mst.macro.forecast import InfeasibleScenario, severity, simulate
 from mst.macro.identify import identify
 from mst.macro.registry import Shock
 from mst.scenario.contracts import Scenario
@@ -97,14 +90,6 @@ def test_a_russian_shock_cannot_move_a_global_variable(model):
     assert caught.value.constraints == [1]
 
 
-def test_a_loading_at_rounding_level_counts_as_none():
-    # Driving shocks move the first row by 1e-13 where all shocks move it by about 1.
-    z_driving = np.array([[1e-13, 0.0], [0.0, 1.0]])
-    z_all = np.array([[1e-13, 0.0, 1.0], [0.0, 1.0, 0.5]])
-    assert dependent_rows(z_driving, z_all) == [0]
-    assert dependent_rows(np.array([[1.0, 2.0], [2.0, 4.0]]), np.eye(2) * 3) == [1]
-
-
 def test_one_shock_cannot_fix_two_variables_in_its_impact_month(model):
     chosen = scenario([value("ru.b", 1, 1.0), value("ru.c", 1, 1.0)], shocks=["ru.t"], horizon=1)
     with pytest.raises(InfeasibleScenario):
@@ -114,34 +99,6 @@ def test_one_shock_cannot_fix_two_variables_in_its_impact_month(model):
 def test_unknown_names_are_refused(model):
     with pytest.raises(ValueError, match="unknown shock ru.nope"):
         simulate(model, scenario([value("ru.b", 1, 1.0)], shocks=["ru.nope"]), draws=1, seed=0)
-
-
-def test_truncated_normal_far_in_the_tail_stays_in_its_interval():
-    rng = np.random.default_rng(0)
-    draws = [truncated_normal(40.0, 41.0, rng) for _ in range(200)]
-    assert all(40.0 <= d <= 41.0 for d in draws) and np.mean(draws) < 40.1
-
-
-def test_truncated_normal_over_a_wide_interval_is_finite():
-    rng = np.random.default_rng(0)
-    draws = [truncated_normal(-1e3, 0.5, rng) for _ in range(2000)]
-    assert np.all(np.isfinite(draws)) and max(draws) <= 0.5
-    assert stats.kstest(draws, stats.truncnorm(-1e3, 0.5).cdf).pvalue > 0.01
-
-
-def test_gibbs_matches_rejection_sampling_on_two_variables():
-    z = np.array([[1.0, 0.5, 0.0], [0.8, 0.6, 0.2]])
-    low, high = np.array([0.5, -0.4]), np.array([1.5, 0.6])
-    rng = np.random.default_rng(1)
-    gibbs = np.array([draw_driving(z, low, high, rng, sweeps=20) for _ in range(4000)])
-    raw = rng.standard_normal((400000, 3))
-    image = raw @ z.T
-    inside = raw[np.all((image >= low) & (image <= high), axis=1)][:4000]
-    assert len(inside) == 4000
-    for k in range(3):
-        assert stats.ks_2samp(gibbs[:, k], inside[:, k]).pvalue > 0.01
-    for found, truth in ((gibbs @ z.T, inside @ z.T), (gibbs, inside)):
-        assert np.allclose(np.corrcoef(found.T), np.corrcoef(truth.T), atol=0.05)
 
 
 def test_severity_matches_the_analytic_value_for_a_gaussian_model(model):

@@ -4,6 +4,7 @@ from datetime import date
 
 import numpy as np
 
+from mst.model_sdk import DriverPaths, MacroModel, SatelliteModel
 from mst.plugin_sdk import (
     CalculationContext,
     CalculationModel,
@@ -75,6 +76,60 @@ def plugin(**changes) -> Plugin:
         "description": "",
         "models": (DemoModel(),),
         "demo": (CASE,),
+    }
+    values.update(changes)
+    return Plugin(**values)
+
+
+class DemoMacroModel(MacroModel):
+    """A macro model that only answers what its declaration is asked for."""
+
+    model_id = "gmodel.macro.v1"
+    version = "0.1.0"
+    label = "Gmodel macro"
+    variables = ("gl.brent",)
+
+    def estimate(self, context):
+        raise NotImplementedError
+
+    def load(self, meta, arrays):
+        raise NotImplementedError
+
+    def simulate(self, model, plan, *, draws, seed):
+        raise NotImplementedError
+
+
+class DemoSatelliteModel(SatelliteModel):
+    """A satellite model serving one quantity of the shipped registry."""
+
+    model_id = "gmodel.sat.v1"
+    version = "0.1.0"
+    label = "Gmodel satellite"
+    quantities = ("share_price",)
+
+    def estimate(self, context):
+        raise NotImplementedError
+
+    def load(self, parts):
+        raise NotImplementedError
+
+    def simulate(self, model, macro, drivers, impacts, *, correlation=None, seed, stream):
+        return DriverPaths(ids=list(drivers), paths=np.empty((0, 0, len(drivers))), flags={})
+
+
+def model_plugin(**changes) -> Plugin:
+    """A plugin of macro and satellite models only, with the named fields replaced."""
+    values = {
+        "plugin_id": "gmodel",
+        "version": "0.1.0",
+        "sdk": "",
+        "label": "Gmodel",
+        "description": "",
+        "models": (),
+        "demo": (),
+        "macro": (DemoMacroModel(),),
+        "satellites": (DemoSatelliteModel(),),
+        "model_sdk": ">=1.0,<2.0",
     }
     values.update(changes)
     return Plugin(**values)

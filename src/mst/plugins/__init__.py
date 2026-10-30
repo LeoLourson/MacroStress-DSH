@@ -1,29 +1,47 @@
 """Discovery and validation of plugins, and the models everything else reads.
 
 At start-up every package under ``mst.plugins`` is imported and its ``plugin = Plugin(...)``
-declaration checked. The checks are all-or-nothing: the process does not start with a partial
-set of plugins, and the error lists every problem with the plugin that caused it.
+declaration checked, together with the plugins of the installed distributions (the entry points
+of the ``mst.plugins`` group) and the packages of the directories named in ``MST_PLUGINS_PATH``
+— a model developed outside the platform is connected by any of the three, without touching
+this package. The checks are all-or-nothing: the process does not start with a partial set of
+plugins, and the error lists every problem with the plugin that caused it.
 
-Nothing outside ``mst.plugins`` branches on an instrument type: the engine asks this registry
-for the model of a position. A new asset type is a package here, not an edit of the core.
+A plugin may carry position models, macro models and satellite models. Nothing outside this
+package branches on an instrument type or a driver quantity: the engine asks the registry for
+the model of a position, the run asks it for the macro model of a version and the satellite
+model of a quantity. A new asset type or a new satellite of a quantity is a package, not an
+edit of the core, and a quantity claimed by two satellite models is an error, not a choice.
 """
 
 import importlib
+import importlib.metadata
+import importlib.util
+import os
 import pkgutil
 import re
+import sys
 from collections.abc import Iterable
 from dataclasses import dataclass, field
+from pathlib import Path
 from threading import RLock
 
+from ..model_sdk.contracts import MacroModel, SatelliteModel
+from ..model_sdk.version import MODEL_SDK_VERSION, model_compatible
 from ..plugin_sdk.model import CalculationModel, RunOptions
 from ..plugin_sdk.plugin import DemoCase, Plugin
 from ..plugin_sdk.version import SDK_VERSION, compatible, parse
 
 PACKAGE = "mst.plugins"
+#: The entry-point group of the plugins an installed distribution declares.
+ENTRY_POINTS = "mst.plugins"
+#: The environment variable with the directories plugin packages live in, ``os.pathsep``-separated.
+PATH_ENV = "MST_PLUGINS_PATH"
 
 PLUGIN_ID = re.compile(r"^[a-z][a-z0-9_]*$")
 DOTTED_ID = re.compile(r"^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)+$")
 INSTRUMENT_TYPE = re.compile(r"^[a-z][a-z0-9_]*$")
+QUANTITY_ID = re.compile(r"^[a-z][a-z0-9_]*$")
 
 
 class PluginError(RuntimeError):
@@ -34,13 +52,59 @@ class PluginError(RuntimeError):
         super().__init__("Plugins cannot be loaded:\n- " + "\n- ".join(problems))
 
 
+class PluginLoadError(RuntimeError):
+    """A plugin package outside ``mst.plugins`` cannot be read; the message names it."""
+
+
 @dataclass
 class Registry:
-    """The installed plugins, their models by id and which plugin owns each model."""
+    """The installed plugins and their models by kind: positions, macro, satellites."""
 
     plugins: dict[str, Plugin] = field(default_factory=dict)
     models: dict[str, CalculationModel] = field(default_factory=dict)
     owner: dict[str, str] = field(default_factory=dict)
+    macro: dict[str, MacroModel] = field(default_factory=dict)
+    """The macro models ``G_0`` by model id."""
+    macro_owner: dict[str, str] = field(default_factory=dict)
+    satellites: dict[str, SatelliteModel] = field(default_factory=dict)
+    """The satellite models ``G_l`` by model id."""
+    satellite_owner: dict[str, str] = field(default_factory=dict)
+    quantity_model: dict[str, str] = field(default_factory=dict)
+    """The satellite model id every driver quantity is assigned to."""
+
+
+def load_package(path) -> Plugin:
+    """The ``plugin`` declaration of a package outside ``mst.plugins``.
+
+    The package is read afresh on every call, so a plugin being developed is checked as it
+    stands, not as it was the last time.
+    """
+    path = Path(path).resolve()
+    init = path / "__init__.py"
+    if not init.is_file():
+        raise PluginLoadError(f"{path} is not a Python package: no __init__.py")
+    name = f"mst_plugin_{path.name}"
+    spec = importlib.util.spec_from_file_location(
+        name, init, submodule_search_locations=[str(path)]
+    )
+    if spec is None or spec.loader is None:
+        raise PluginLoadError(f"{path} is not a Python package")
+    module = importlib.util.module_from_spec(spec)
+    # A package edited between two checks must be read afresh: relative imports would
+    # otherwise take the model and the declaration of the previous check from sys.modules.
+    for key in [key for key in sys.modules if key == name or key.startswith(name + ".")]:
+        del sys.modules[key]
+    sys.modules[name] = module
+    try:
+        spec.loader.exec_module(module)
+    except Exception as error:  # noqa: BLE001 - a broken package must name itself
+        raise PluginLoadError(
+            f"{path} cannot be imported: {type(error).__name__}: {error}"
+        ) from None
+    declared = getattr(module, "plugin", None)
+    if not isinstance(declared, Plugin):
+        raise PluginLoadError(f"{path} exports no `plugin = Plugin(...)` declaration")
+    return declared
 
 
 def _full_version(value) -> bool:
@@ -73,30 +137,52 @@ def _declaration_problems(plugin: Plugin) -> list[str]:
         fail(f"plugin id {plugin.plugin_id!r} must be lower_snake_case")
     if not _full_version(plugin.version):
         fail(f"version {plugin.version!r} is not x.y.z")
-    if not isinstance(plugin.sdk, str):
-        fail("sdk must be a version range string")
-    else:
-        try:
-            if not compatible(plugin.sdk):
-                fail(f"requires SDK {plugin.sdk}, platform has {SDK_VERSION}")
-        except ValueError as error:
-            fail(f"sdk range {plugin.sdk!r}: {error}")
     if not isinstance(plugin.label, str) or not plugin.label.strip():
         fail("the label is empty")
+    if not isinstance(plugin.macro, tuple | list):
+        fail(f"macro must be a tuple of models, got {type(plugin.macro).__name__}")
+        macro = ()
+    else:
+        macro = plugin.macro
+    if not isinstance(plugin.satellites, tuple | list):
+        fail(f"satellites must be a tuple of models, got {type(plugin.satellites).__name__}")
+        satellites = ()
+    else:
+        satellites = plugin.satellites
     if not isinstance(plugin.models, tuple | list):
         fail(f"models must be a tuple of models, got {type(plugin.models).__name__}")
         models = ()
     else:
         models = plugin.models
-    if not models:
-        fail("no calculation model is declared")
+    if not models and not macro and not satellites:
+        fail("no model is declared: positions, macro or satellites")
+    if models:
+        if not isinstance(plugin.sdk, str) or not plugin.sdk:
+            fail("position models need the position SDK range in sdk")
+        else:
+            try:
+                if not compatible(plugin.sdk):
+                    fail(f"requires SDK {plugin.sdk}, platform has {SDK_VERSION}")
+            except ValueError as error:
+                fail(f"sdk range {plugin.sdk!r}: {error}")
+    if macro or satellites:
+        if not isinstance(plugin.model_sdk, str) or not plugin.model_sdk:
+            fail("macro and satellite models need the model SDK range in model_sdk")
+        else:
+            try:
+                if not model_compatible(plugin.model_sdk):
+                    fail(
+                        f"requires model SDK {plugin.model_sdk}, platform has {MODEL_SDK_VERSION}"
+                    )
+            except ValueError as error:
+                fail(f"model_sdk range {plugin.model_sdk!r}: {error}")
     if not isinstance(plugin.demo, tuple | list):
         fail(f"demo must be a tuple of cases, got {type(plugin.demo).__name__}")
         cases = ()
     else:
         cases = plugin.demo
-    if not cases:
-        fail("an asset plugin must ship a demo case")
+    if models and not cases:
+        fail("a plugin with position models must ship a demo case")
 
     model_ids = [
         model.model_id for model in models if isinstance(getattr(model, "model_id", None), str)
@@ -110,6 +196,20 @@ def _declaration_problems(plugin: Plugin) -> list[str]:
         except Exception as error:  # noqa: BLE001 - a malformed model is a finding
             problems.append(
                 f"{plugin.plugin_id}: model declaration: {type(error).__name__}: {error}"
+            )
+    for model in macro:
+        try:
+            problems += _macro_problems(plugin, model)
+        except Exception as error:  # noqa: BLE001 - a malformed model is a finding
+            problems.append(
+                f"{plugin.plugin_id}: macro model declaration: {type(error).__name__}: {error}"
+            )
+    for model in satellites:
+        try:
+            problems += _satellite_problems(plugin, model)
+        except Exception as error:  # noqa: BLE001 - a malformed model is a finding
+            problems.append(
+                f"{plugin.plugin_id}: satellite model declaration: {type(error).__name__}: {error}"
             )
 
     names = [case.name for case in cases if isinstance(getattr(case, "name", None), str)]
@@ -130,7 +230,7 @@ def _declaration_problems(plugin: Plugin) -> list[str]:
 
 
 def _model_problems(plugin: Plugin, model) -> list[str]:
-    """One model's declaration against the plugin that owns it."""
+    """One position model's declaration against the plugin that owns it."""
     problems: list[str] = []
     model_id = getattr(model, "model_id", None)
     where = f"model {model_id!r}"
@@ -195,6 +295,82 @@ def _model_problems(plugin: Plugin, model) -> list[str]:
                 f"{type(error).__name__}: {error}"
             )
     return problems
+
+
+def _macro_problems(plugin: Plugin, model) -> list[str]:
+    """One macro model's declaration: its id, version and the variables it names."""
+    problems: list[str] = []
+    model_id = getattr(model, "model_id", None)
+    where = f"macro model {model_id!r}"
+    if not isinstance(model_id, str) or not DOTTED_ID.match(model_id):
+        problems.append(
+            f"{plugin.plugin_id}: {where} must be a dotted lower_snake_case identifier"
+        )
+    elif not plugin.namespaced(model_id):
+        problems.append(f"{plugin.plugin_id}: {where} must start with {plugin.plugin_id + '.'!r}")
+    if not _full_version(getattr(model, "version", None)):
+        problems.append(
+            f"{plugin.plugin_id}: {where} version {getattr(model, 'version', None)!r} is not x.y.z"
+        )
+    if not str(getattr(model, "label", "")).strip():
+        problems.append(f"{plugin.plugin_id}: {where} has an empty label")
+    variables = getattr(model, "variables", ())
+    if not isinstance(variables, tuple | list):
+        problems.append(f"{plugin.plugin_id}: {where} variables must be a tuple")
+        variables = ()
+    unknown = _unknown_macro_variables(variables)
+    if unknown:
+        problems.append(
+            f"{plugin.plugin_id}: {where} names unknown macro variables: {', '.join(unknown)}"
+        )
+    return problems
+
+
+def _satellite_problems(plugin: Plugin, model) -> list[str]:
+    """One satellite model's declaration: its id, version and the quantities it serves."""
+    problems: list[str] = []
+    model_id = getattr(model, "model_id", None)
+    where = f"satellite model {model_id!r}"
+    if not isinstance(model_id, str) or not DOTTED_ID.match(model_id):
+        problems.append(
+            f"{plugin.plugin_id}: {where} must be a dotted lower_snake_case identifier"
+        )
+    elif not plugin.namespaced(model_id):
+        problems.append(f"{plugin.plugin_id}: {where} must start with {plugin.plugin_id + '.'!r}")
+    if not _full_version(getattr(model, "version", None)):
+        problems.append(
+            f"{plugin.plugin_id}: {where} version {getattr(model, 'version', None)!r} is not x.y.z"
+        )
+    if not str(getattr(model, "label", "")).strip():
+        problems.append(f"{plugin.plugin_id}: {where} has an empty label")
+    quantities = getattr(model, "quantities", ())
+    if not isinstance(quantities, tuple | list):
+        problems.append(f"{plugin.plugin_id}: {where} quantities must be a tuple")
+        quantities = ()
+    if not quantities:
+        problems.append(f"{plugin.plugin_id}: {where} serves no quantity")
+    unknown = _unknown_quantities(quantities)
+    if unknown:
+        problems.append(
+            f"{plugin.plugin_id}: {where} names unknown quantities: {', '.join(unknown)}"
+        )
+    return problems
+
+
+def _unknown_macro_variables(variables) -> list[str]:
+    """The named variables the macro registry does not hold."""
+    from ..macro.registry import load_registry
+
+    known = {variable.id for variable in load_registry().variables}
+    return [name for name in variables if name not in known]
+
+
+def _unknown_quantities(quantities) -> list[str]:
+    """The named quantities the driver registry does not hold."""
+    from ..drivers.registry import load_registry
+
+    known = {quantity.id for quantity in load_registry().quantities}
+    return [name for name in quantities if name not in known]
 
 
 def _demo_problems(plugin: Plugin, case: DemoCase) -> list[str]:
@@ -281,6 +457,45 @@ def build(plugins: Iterable[Plugin]) -> Registry:
                 continue
             registry.models[model_id] = model
             registry.owner[model_id] = plugin_id
+        macro = plugin.macro if isinstance(getattr(plugin, "macro", None), tuple | list) else ()
+        for model in macro:
+            model_id = getattr(model, "model_id", None)
+            if not isinstance(model_id, str):
+                continue
+            if model_id in registry.macro:
+                owner = registry.macro_owner[model_id]
+                problems.append(f"macro model {model_id!r} is declared by {owner} and {plugin_id}")
+                continue
+            registry.macro[model_id] = model
+            registry.macro_owner[model_id] = plugin_id
+        satellites = (
+            plugin.satellites
+            if isinstance(getattr(plugin, "satellites", None), tuple | list)
+            else ()
+        )
+        for model in satellites:
+            model_id = getattr(model, "model_id", None)
+            if not isinstance(model_id, str):
+                continue
+            if model_id in registry.satellites:
+                owner = registry.satellite_owner[model_id]
+                problems.append(
+                    f"satellite model {model_id!r} is declared by {owner} and {plugin_id}"
+                )
+                continue
+            registry.satellites[model_id] = model
+            registry.satellite_owner[model_id] = plugin_id
+            for quantity in getattr(model, "quantities", ()) or ():
+                if not isinstance(quantity, str):
+                    continue
+                if quantity in registry.quantity_model:
+                    other = registry.quantity_model[quantity]
+                    problems.append(
+                        f"quantity {quantity!r} is served by satellite models "
+                        f"{other} and {model_id}"
+                    )
+                    continue
+                registry.quantity_model[quantity] = model_id
     served: dict[str, list[str]] = {}
     for model_id, model in registry.models.items():
         types = getattr(model, "instrument_types", ())
@@ -300,7 +515,7 @@ def build(plugins: Iterable[Plugin]) -> Registry:
     return registry
 
 
-def discover(package: str = PACKAGE) -> list[Plugin]:
+def _from_namespace(package: str, problems: list[str]) -> list[Plugin]:
     """Every plugin package under ``package``, in the alphabetical order of its name."""
     root = importlib.import_module(package)
     names = [
@@ -308,7 +523,7 @@ def discover(package: str = PACKAGE) -> list[Plugin]:
         for info in sorted(pkgutil.iter_modules(root.__path__), key=lambda item: item.name)
         if not info.name.startswith("_")
     ]
-    plugins, problems = [], []
+    found = []
     for name in names:
         try:
             module = importlib.import_module(name)
@@ -326,10 +541,80 @@ def discover(package: str = PACKAGE) -> list[Plugin]:
                     f"{name} declares plugin_id {declared.plugin_id!r}, expected {expected!r}"
                 )
                 continue
-        plugins.append(declared)
+        found.append(declared)
+    return found
+
+
+def _from_entry_points(problems: list[str]) -> list[Plugin]:
+    """The plugins of the installed distributions, by the entry point of this group."""
+    try:
+        points = list(importlib.metadata.entry_points(group=ENTRY_POINTS))
+    except Exception:  # noqa: BLE001 - no distribution metadata at all is no plugins
+        return []
+    found = []
+    for point in sorted(points, key=lambda item: item.name):
+        try:
+            declared = point.load()
+        except Exception as error:  # noqa: BLE001 - a broken entry point must name itself
+            problems.append(
+                f"entry point {point.name!r} cannot be loaded: {type(error).__name__}: {error}"
+            )
+            continue
+        if not isinstance(declared, Plugin):
+            problems.append(f"entry point {point.name!r} exports no Plugin declaration")
+            continue
+        if declared.plugin_id != point.name:
+            problems.append(
+                f"entry point {point.name!r} declares plugin_id {declared.plugin_id!r}"
+            )
+            continue
+        found.append(declared)
+    return found
+
+
+def _from_paths(problems: list[str]) -> list[Plugin]:
+    """The plugin packages of the directories of ``MST_PLUGINS_PATH``."""
+    roots = [part for part in os.environ.get(PATH_ENV, "").split(os.pathsep) if part]
+    found = []
+    for root in roots:
+        for folder in sorted(Path(root).iterdir()) if Path(root).is_dir() else []:
+            if not (folder / "__init__.py").is_file():
+                continue
+            try:
+                declared = load_package(folder)
+            except PluginLoadError as error:
+                problems.append(str(error))
+                continue
+            if declared.plugin_id != folder.name:
+                problems.append(
+                    f"{folder} declares plugin_id {declared.plugin_id!r}, expected {folder.name!r}"
+                )
+                continue
+            found.append(declared)
+    return found
+
+
+def discover(package: str = PACKAGE) -> list[Plugin]:
+    """Every plugin of the platform: the namespace, the entry points and the extra paths.
+
+    A plugin id declared by two of them is a problem, not a preference.
+    """
+    problems: list[str] = []
+    found = _from_namespace(package, problems)
+    if package == PACKAGE:
+        found += _from_entry_points(problems)
+        found += _from_paths(problems)
+        seen: dict[str, str] = {}
+        for declared in found:
+            where = seen.get(declared.plugin_id)
+            if where is not None:
+                problems.append(
+                    f"plugin {declared.plugin_id!r} is declared twice: {where} and again later"
+                )
+            seen[declared.plugin_id] = declared.plugin_id
     if problems:
         raise PluginError(problems)
-    return plugins
+    return found
 
 
 _LOCK = RLock()
@@ -343,3 +628,10 @@ def registry() -> Registry:
         if _CURRENT is None:
             _CURRENT = build(discover())
         return _CURRENT
+
+
+def reset() -> None:
+    """Forget the process registry; the next ``registry()`` discovers the plugins afresh."""
+    global _CURRENT
+    with _LOCK:
+        _CURRENT = None

@@ -17,7 +17,6 @@ on any finding. ``demo-run`` calculates the demo cases and prints P5/P50/P95 per
 """
 
 import argparse
-import importlib.util
 import json
 import keyword
 import re
@@ -103,32 +102,10 @@ def new(plugin_id: str, *, type_id: str | None = None, label: str | None = None,
 
 def load(path) -> Plugin:
     """The ``plugin`` of a package outside ``mst.plugins`` (a plugin being developed)."""
-    path = Path(path).resolve()
-    init = path / "__init__.py"
-    if not init.is_file():
-        raise SystemExit(f"{path} is not a Python package: no __init__.py")
-    name = f"mst_plugin_{path.name}"
-    spec = importlib.util.spec_from_file_location(
-        name, init, submodule_search_locations=[str(path)]
-    )
-    if spec is None or spec.loader is None:
-        raise SystemExit(f"{path} is not a Python package")
-    module = importlib.util.module_from_spec(spec)
-    # A package edited between two checks must be read afresh: relative imports would
-    # otherwise take the model and the declaration of the previous check from sys.modules.
-    for key in [key for key in sys.modules if key == name or key.startswith(name + ".")]:
-        del sys.modules[key]
-    sys.modules[name] = module
     try:
-        spec.loader.exec_module(module)
-    except SystemExit:
-        raise
-    except Exception as error:  # noqa: BLE001 - a broken package must name itself
-        raise SystemExit(f"{path} cannot be imported: {type(error).__name__}: {error}") from None
-    declared = getattr(module, "plugin", None)
-    if not isinstance(declared, Plugin):
-        raise SystemExit(f"{path} exports no `plugin = Plugin(...)` declaration")
-    return declared
+        return plugins.load_package(path)
+    except plugins.PluginLoadError as error:
+        raise SystemExit(str(error)) from None
 
 
 def _installed() -> list[Plugin]:

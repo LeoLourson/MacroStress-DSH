@@ -16,53 +16,39 @@ rows of ``Z`` are linearly dependent.
 """
 
 from dataclasses import dataclass
-from datetime import date
 
 import numpy as np
-from scipy.special import log_ndtr, ndtr, ndtri_exp
+from scipy.special import ndtr
 
+from mst.model_sdk.conditional import (
+    SWEEPS,
+    InfeasibleScenario,
+    box_gibbs,
+    dependent_rows,
+    draw_driving,
+    truncated_normal,
+)
+from mst.model_sdk.contracts import MacroSimulation, Severity
 from mst.scenario.contracts import Scenario
 
 from .estimate import Posterior
 from .panel import shift
 from .var import iterate, responses
 
-SWEEPS = 50
-"""Gibbs sweeps per repetition for interval constraints, started inside the box."""
-RANK_TOLERANCE = 1e-9
-"""A constraint row is dependent when the driving shocks move it, beyond what the earlier rows
-already fix, by less than this share of what all shocks move it."""
+Simulation = MacroSimulation
+"""The simulation of the BVAR, in the platform's shared shape."""
 
-
-class InfeasibleScenario(ValueError):
-    def __init__(self, constraints: list[int]):
-        self.constraints = constraints
-        super().__init__(
-            "the driving shocks cannot meet constraints "
-            + ", ".join(str(c + 1) for c in constraints)
-            + " (numbered from 1): each repeats earlier ones or no driving shock moves it"
-        )
-
-
-@dataclass(frozen=True)
-class Simulation:
-    ids: list[str]
-    months: list[date]
-    """Months t = 0 .. H; t = 0 is the last month of history."""
-    paths: np.ndarray
-    """(R, H + 1, n) in the model scale y = g(X)."""
-    history: np.ndarray | None = None
-    """(R, p, n) months t = 1 - p .. 0 of each repetition, drawn where unknown."""
-
-
-@dataclass(frozen=True)
-class Severity:
-    probabilities: np.ndarray
-    """pi_c: the unconditional probability that ``w_c' y`` ends at or below its midpoint."""
-    distance: float
-    """delta: the Mahalanobis distance of the midpoints from the unconditional forecast."""
-    exceeded: float
-    """The share of unconditional paths farther away than ``delta``."""
+__all__ = [
+    "InfeasibleScenario",
+    "Simulation",
+    "Severity",
+    "box_gibbs",
+    "dependent_rows",
+    "draw_driving",
+    "severity",
+    "simulate",
+    "truncated_normal",
+]
 
 
 @dataclass(frozen=True)
@@ -156,74 +142,6 @@ def _loadings(plan: _Plan, rep: _Repetition) -> np.ndarray:
 
 def _level(plan: _Plan, mean: np.ndarray) -> np.ndarray:
     return np.array([sum(w * mean[t - 1, i] for i, t, w in row) for row in plan.terms])
-
-
-def dependent_rows(driving: np.ndarray, every: np.ndarray) -> list[int]:
-    """Constraints the driving shocks cannot move on their own.
-
-    Row ``c`` of ``driving`` is dependent when its distance to the span of the earlier
-    independent rows is negligible next to row ``c`` of ``every`` (the loadings of all shocks):
-    a loading at rounding level is no loading.
-    """
-    kept, dependent = [], []
-    for c, row in enumerate(driving):
-        if kept:
-            basis = driving[kept].T
-            residual = row - basis @ np.linalg.lstsq(basis, row, rcond=None)[0]
-        else:
-            residual = row
-        if np.linalg.norm(residual) <= RANK_TOLERANCE * np.linalg.norm(every[c]):
-            dependent.append(c)
-        else:
-            kept.append(c)
-    return dependent
-
-
-def truncated_normal(low: float, high: float, rng) -> float:
-    """A standard normal draw restricted to ``[low, high]``, accurate far in the tails."""
-    if low > 0:
-        return -truncated_normal(-high, -low, rng)
-    log_low, log_high = log_ndtr(low), log_ndtr(high)
-    # log(Phi(low) + u (Phi(high) - Phi(low))), written so that nothing overflows.
-    share = rng.random()
-    value = ndtri_exp(log_high + np.log(share + (1 - share) * np.exp(log_low - log_high)))
-    return float(np.clip(value, low, high))
-
-
-def box_gibbs(mean, cov, low, high, rng, sweeps: int) -> np.ndarray:
-    """A draw of ``N(mean, cov)`` restricted to the box ``[low, high]`` (Geweke, 1991)."""
-    precision = np.linalg.inv(cov)
-    x = np.clip(mean, low, high)
-    for _ in range(sweeps):
-        for i in range(len(x)):
-            spread = 1 / np.sqrt(precision[i, i])
-            centre = (
-                mean[i]
-                - (precision[i] @ (x - mean) - precision[i, i] * (x[i] - mean[i]))
-                / (precision[i, i])
-            )
-            x[i] = centre + spread * truncated_normal(
-                (low[i] - centre) / spread, (high[i] - centre) / spread, rng
-            )
-    return x
-
-
-def draw_driving(z, low, high, rng, sweeps: int = SWEEPS) -> np.ndarray:
-    """``eps ~ N(0, I)`` given ``low <= z eps <= high``; ``z`` has independent rows."""
-    gram = z @ z.T
-    exact = low == high
-    image = np.where(exact, low, 0.0)
-    free = ~exact
-    if free.any():
-        if exact.any():
-            gain = np.linalg.solve(gram[np.ix_(exact, exact)], gram[np.ix_(exact, free)]).T
-            mean = gain @ low[exact]
-            cov = gram[np.ix_(free, free)] - gain @ gram[np.ix_(exact, free)]
-        else:
-            mean, cov = np.zeros(free.sum()), gram
-        image[free] = box_gibbs(mean, cov, low[free], high[free], rng, sweeps)
-    eta = rng.standard_normal(z.shape[1])
-    return eta + z.T @ np.linalg.solve(gram, image - z @ eta)
 
 
 def simulate(
