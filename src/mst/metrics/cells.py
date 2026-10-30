@@ -2,19 +2,29 @@
 
 A cell is one thing the forecast is judged on: an episode ``e``, a month ``t`` of its horizon
 and a quantity ``q`` of any level — a macro variable or a driver. The cell holds the fact
-``y`` and the ``R`` draws of the forecast; every score below is computed from them.
+``y``, the ``R`` draws of the forecast and the numbers its scores need: the random walk with
+drift on the same cell (``baseline``), the naive forecast of a target (``naive``), the
+unconstrained run of the model (``base``), the typical movement ``sigma_q(t)`` and the range of
+the quantity's history, the last two as known at the episode's calculation date. Admission also
+reads the admissible domain of the quantity.
 
 CRPS is the integral of the squared distance between the forecast distribution and the fact;
 the sample estimator over the draws is ``E|X - y| - E|X - X'| / 2``, which penalises both bias
 and needless width. To compare quantities measured in different units, CRPS is divided by
 ``sigma_q(t)`` — the typical movement of the quantity over ``t`` months, the median absolute
-change over the history (section 5 of the scheme). Calibration reads the probability
-integral transform ``u = F(y)``: with a calibrated forecast the fact falls below p5, between
-p5 and p50, between p50 and p95 and above p95 in shares 0.05 / 0.45 / 0.45 / 0.05. Sharpness
-is the median width of the ``[p5, p95]`` band, meaningful only once calibration passes.
+change over the history (section 5 of the scheme). Calibration reads the probability integral
+transform ``u = F(y)``. The implementation uses the mid-PIT ``(below + tied / 2) / R``: for
+continuous draws that is ``F(y)``, but a forecast with an atom at the fact is not uniform, so
+the bucket shares 0.05 / 0.45 / 0.45 / 0.05 are the target for a continuous forecast only.
+Sharpness is the median width of the ``[p5, p95]`` band, meaningful only once calibration
+passes; coverage is reported for reference only, because it grows with width.
+
+The scores are per quantity. The equal-weight aggregate across quantities, the paired decision
+rule of section 5 and the tail statistics (Acerbi-Székely ``Z``, ES) are not in this module;
+the report names them as missing.
 """
 
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 
 import numpy as np
@@ -46,6 +56,14 @@ class Cell:
     """(R,) the random walk with drift on the same cell, scored alongside."""
     naive: np.ndarray | None = None
     """(R,) the naive forecast (a year earlier with the trend), for target quantities."""
+    base: np.ndarray | None = None
+    """(R,) the unconstrained run of the model, the second comparison of the scheme."""
+    sigma: float = float("nan")
+    """``sigma_q(t)`` from the history known at the episode's calculation date."""
+    history_range: float = float("nan")
+    """The range of the quantity's history known at the same date; the width rule reads it."""
+    domain: tuple[float, float] | None = None
+    """The admissible range in the model scale; None when unbounded."""
 
 
 def crps(draws: np.ndarray, fact: float) -> float:
@@ -67,7 +85,7 @@ def crps(draws: np.ndarray, fact: float) -> float:
 
 
 def pit(draws: np.ndarray, fact: float) -> float:
-    """``F(y)`` of the sample distribution: the share of draws below the fact, ties halved."""
+    """The mid-PIT of the sample distribution: the share below the fact, ties halved."""
     x = np.asarray(draws, dtype=float)
     if not len(x):
         return float("nan")
@@ -79,6 +97,12 @@ def pit(draws: np.ndarray, fact: float) -> float:
 def quantiles(draws: np.ndarray) -> np.ndarray:
     """``[p5, p50, p95]`` of the sample distribution."""
     return np.percentile(np.asarray(draws, dtype=float), BUCKETS, axis=0)
+
+
+def finite_draws(draws: np.ndarray) -> np.ndarray:
+    """The finite draws of a cell; a non-finite draw says nothing about the forecast."""
+    x = np.asarray(draws, dtype=float)
+    return x[np.isfinite(x)]
 
 
 def typical_movement(history: np.ndarray, months: int) -> float:
@@ -94,6 +118,13 @@ def typical_movement(history: np.ndarray, months: int) -> float:
     return float(np.median(changes)) if len(changes) else float("nan")
 
 
+def history_range(history: np.ndarray) -> float:
+    """The range of the finite values of a history; NaN without a finite value."""
+    y = np.asarray(history, dtype=float)
+    known = y[np.isfinite(y)]
+    return float(known.max() - known.min()) if len(known) else float("nan")
+
+
 def sigma_of_month(cells: list[Cell], history: np.ndarray) -> dict[int, float]:
     """``sigma_q(t)`` for every month the cells name, from the history in the model scale."""
     return {
@@ -102,74 +133,77 @@ def sigma_of_month(cells: list[Cell], history: np.ndarray) -> dict[int, float]:
     }
 
 
-def score_cells(cells: list[Cell], sigma: Mapping[int, float]) -> dict:
+def score_cells(cells: list[Cell]) -> dict:
     """The scores of the cells of one quantity: CRPS, calibration and sharpness.
 
     A constrained cell is counted but never scored: the scenario fixes it exactly, so it says
-    nothing about the forecast. A cell's ``baseline`` and ``naive`` draws, when present, are
-    scored on the same cell alongside the forecast.
+    nothing about the forecast. A cell's ``baseline``, ``naive`` and ``base`` draws, when
+    present, are scored on the same cell alongside the forecast; ``difference`` is the model's
+    normalised CRPS less the random walk's, the paired quantity the decision reads. A cell
+    whose draws are entirely non-finite is counted in ``dropped`` and left out.
     """
     scored = [cell for cell in cells if not cell.constrained and np.isfinite(cell.fact)]
     constrained = [cell for cell in cells if cell.constrained]
     if not scored:
-        return {
-            "cells": len(cells),
-            "constrained": len(constrained),
-            "scored": 0,
-            "crps": None,
-            "baseline_crps": None,
-            "normalized_crps": None,
-            "calibration": None,
-            "sharpness": None,
-            "months": [],
-        }
+        return _empty_scores(len(cells), len(constrained))
     rows = []
     buckets = [0, 0, 0, 0]
+    dropped = 0
     for cell in scored:
-        band = quantiles(cell.draws)
-        u = pit(cell.draws, cell.fact)
-        place = int(np.searchsorted(BUCKET_EDGES, u, side="right"))
-        buckets[place] += 1
-        movement = sigma.get(cell.month, float("nan"))
+        draws = finite_draws(cell.draws)
+        if not len(draws):
+            dropped += 1
+            continue
+        band = quantiles(draws)
+        u = pit(draws, cell.fact)
+        buckets[int(np.searchsorted(BUCKET_EDGES, u, side="right"))] += 1
+        movement = cell.sigma
+        known_scale = bool(np.isfinite(movement) and movement > 0)
+        value = crps(draws, cell.fact)
         row = {
             "episode": cell.episode,
             "month": cell.month,
-            "crps": crps(cell.draws, cell.fact),
-            "normalized": (
-                crps(cell.draws, cell.fact) / movement
-                if np.isfinite(movement) and movement > 0
-                else None
-            ),
+            "crps": value,
+            "normalized": value / movement if known_scale else None,
             "p05": float(band[0]),
             "p50": float(band[1]),
             "p95": float(band[2]),
             "pit": u,
+            "coverage": bool(band[0] <= cell.fact <= band[2]),
             "width": float(band[2] - band[0]),
         }
-        if cell.baseline is not None:
-            row["baseline_crps"] = crps(cell.baseline, cell.fact)
-            row["baseline_normalized"] = (
-                row["baseline_crps"] / movement
-                if np.isfinite(movement) and movement > 0
-                else None
-            )
-        if cell.naive is not None:
-            row["naive_crps"] = crps(cell.naive, cell.fact)
-            row["naive_normalized"] = (
-                row["naive_crps"] / movement
-                if np.isfinite(movement) and movement > 0
-                else None
-            )
+        for name, column in (
+            ("baseline", cell.baseline),
+            ("base", cell.base),
+            ("naive", cell.naive),
+        ):
+            if column is None:
+                continue
+            known = finite_draws(column)
+            if not len(known):
+                continue
+            score = crps(known, cell.fact)
+            row[f"{name}_crps"] = score
+            row[f"{name}_normalized"] = score / movement if known_scale else None
+        baseline = row.get("baseline_normalized")
+        if baseline is not None and row["normalized"] is not None:
+            row["difference"] = row["normalized"] - baseline
         rows.append(row)
     count = len(rows)
+    if not count:
+        return _empty_scores(len(cells), len(constrained), dropped=dropped)
     normalized = [row["normalized"] for row in rows if row["normalized"] is not None]
-    baseline = [row["baseline_crps"] for row in rows if "baseline_crps" in row]
+    baseline = [row["baseline_crps"] for row in rows if row.get("baseline_crps") is not None]
     baseline_normalized = [
         row["baseline_normalized"]
         for row in rows
         if row.get("baseline_normalized") is not None
     ]
-    naive = [row["naive_crps"] for row in rows if "naive_crps" in row]
+    base = [row["base_crps"] for row in rows if row.get("base_crps") is not None]
+    base_normalized = [
+        row["base_normalized"] for row in rows if row.get("base_normalized") is not None
+    ]
+    naive = [row["naive_crps"] for row in rows if row.get("naive_crps") is not None]
     naive_normalized = [
         row["naive_normalized"] for row in rows if row.get("naive_normalized") is not None
     ]
@@ -177,14 +211,19 @@ def score_cells(cells: list[Cell], sigma: Mapping[int, float]) -> dict:
         "cells": len(cells),
         "constrained": len(constrained),
         "scored": count,
+        "dropped": dropped,
+        "normalized_cells": len(normalized),
         "crps": float(np.mean([row["crps"] for row in rows])),
+        "base_crps": float(np.mean(base)) if base else None,
         "baseline_crps": float(np.mean(baseline)) if baseline else None,
         "normalized_crps": float(np.mean(normalized)) if normalized else None,
+        "base_normalized_crps": float(np.mean(base_normalized)) if base_normalized else None,
         "baseline_normalized_crps": float(np.mean(baseline_normalized))
         if baseline_normalized
         else None,
         "naive_crps": float(np.mean(naive)) if naive else None,
         "naive_normalized_crps": float(np.mean(naive_normalized)) if naive_normalized else None,
+        "coverage": float(np.mean([row["coverage"] for row in rows])),
         "calibration": {
             "shares": [share / count for share in buckets],
             "expected": list(BUCKET_SHARES),
@@ -194,18 +233,57 @@ def score_cells(cells: list[Cell], sigma: Mapping[int, float]) -> dict:
     }
 
 
-def bootstrap(
-    values: list[tuple[str, float]], repetitions: int = 1000, seed: int = 0
-) -> tuple[float, float]:
-    """The 95% interval of the mean of ``values``, resampling the episodes with replacement.
+def _empty_scores(cells: int, constrained: int, *, dropped: int = 0) -> dict:
+    return {
+        "cells": cells,
+        "constrained": constrained,
+        "scored": 0,
+        "dropped": dropped,
+        "normalized_cells": 0,
+        "crps": None,
+        "base_crps": None,
+        "baseline_crps": None,
+        "normalized_crps": None,
+        "base_normalized_crps": None,
+        "baseline_normalized_crps": None,
+        "naive_crps": None,
+        "naive_normalized_crps": None,
+        "coverage": None,
+        "calibration": None,
+        "sharpness": None,
+        "months": [],
+    }
 
-    ``values`` maps an episode to its mean score; the cells of one episode are dependent, so
-    the resampling unit is the episode, not the cell.
+
+def bootstrap(
+    samples: Mapping[str, Sequence[float]], repetitions: int = 1000, seed: int = 0
+) -> tuple[float, float]:
+    """The 95% interval of the mean over cells, resampling the episodes with replacement.
+
+    ``samples`` maps an episode to the per-cell values it contributes. The resampled statistic
+    is the same cell-weighted mean the report shows, not the mean of the episode means: the
+    cells of one episode are dependent, so the episodes are the resampling unit, while the
+    weights stay those of the report.
     """
-    if not values:
+    groups = []
+    for values in samples.values():
+        known = np.asarray(values, dtype=float)
+        known = known[np.isfinite(known)]
+        if len(known):
+            groups.append(known)
+    if not groups:
         return float("nan"), float("nan")
-    means = np.array([value for _, value in values], dtype=float)
+    totals = np.array([group.sum() for group in groups])
+    sizes = np.array([len(group) for group in groups], dtype=float)
     rng = np.random.default_rng(seed)
-    drawn = rng.choice(means, size=(repetitions, len(means)), replace=True).mean(axis=1)
-    low, high = np.percentile(drawn, [2.5, 97.5])
+    drawn = rng.integers(0, len(groups), size=(repetitions, len(groups)))
+    counts = np.stack(
+        [
+            (drawn == column).sum(axis=1).astype(float)
+            for column in range(len(groups))
+        ],
+        axis=1,
+    )
+    means = (counts * totals).sum(axis=1) / (counts * sizes).sum(axis=1)
+    low, high = np.percentile(means, [2.5, 97.5])
     return float(low), float(high)

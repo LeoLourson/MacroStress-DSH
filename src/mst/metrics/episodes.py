@@ -52,11 +52,13 @@ class Episodes(Contract):
     """The window ends this many months after the start month, as in the episode cards."""
     exclusions: list[Exclusion] = []
     episodes: list[EpisodeCheck] = Field(min_length=1)
+    path: Path | None = Field(default=None, exclude=True)
+    """The file the plan was loaded from, for the report's hash; not a TOML key."""
 
 
 def load_episodes(path: Path = EPISODES_PATH) -> Episodes:
     with path.open("rb") as file:
-        return Episodes.model_validate(tomllib.load(file))
+        return Episodes.model_validate({**tomllib.load(file), "path": path})
 
 
 def calculation_date(start: date) -> date:

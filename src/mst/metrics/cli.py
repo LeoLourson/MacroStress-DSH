@@ -8,10 +8,15 @@
 ``backtest`` estimates the macro model (the named one, or the only one installed) on the day
 before every episode of ``episodes.toml`` starts, builds the scenario from what actually
 happened, scores the conditional forecast against the fact — CRPS normalised by the typical
-movement, calibration, sharpness, the admission rules — and compares it with the base run and
-the random walk with drift. With ``--satellites`` the served drivers are scored too, on the
-bundle estimated on each episode's macro version. It exits with 1 when an episode could not
-be checked or the admission failed. Nothing is fetched.
+movement known at that episode's calculation date, calibration, sharpness, coverage, the
+admission rules pooled per rule — and reports it next to the random walk with drift, the
+unconditional base run and, for targets, the naive forecast of a year earlier. Every score comes
+with the 95 % episode-bootstrap interval; the paired model-less-random-walk difference has its
+own interval, for a later decision rule. The equal-weight aggregate across quantities, the
+four-step 2-SE decision rule and the tail statistics are not implemented and the report says so.
+With ``--satellites`` the served drivers are scored too, on the bundle estimated on each
+episode's macro version. It exits with 1 when an episode could not be checked or an admission
+rule failed. Nothing is fetched.
 """
 
 import argparse
