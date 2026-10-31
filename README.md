@@ -81,9 +81,9 @@ Once a client is connected, it sees seven tools. Long operations start jobs: a t
     target indicators ($P_5$/$P_{50}$/$P_{95}$ by month) and the portfolio report with
     $\delta$, the platform distance $\operatorname{dist}(P_s,P)$ and coverage.
 12. `model(kind="macro", action="backtest", as_of=...)` — the episode check: CRPS,
-    calibration, admission and the equal-weight aggregate of section 5 on historical events
-    (`mst.metrics`); the command line adds the four-step decision, the usefulness of the
-    scenario, the wild intervals and the portfolio tail.
+    calibration, admission and the equal-weight aggregate by level and horizon on historical
+    events (`mst.metrics`); the command line adds the two-standard-error decision, the scenario
+    usefulness, the wild intervals and the portfolio tail.
 
 ## Documentation
 
