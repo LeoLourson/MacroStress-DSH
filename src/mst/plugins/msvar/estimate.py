@@ -291,12 +291,13 @@ def impute(
     intercept = const[states]  # (count, n)
     root = np.stack(a)[states]  # (count, n, n) A_{s_t}
     variance = np.exp(np.stack(logvar)[states])  # (count, n) exp(h_{s_t})
-    precisions = np.einsum("tij,tj,tkj->tik", root, 1 / variance, root)
+    precisions = np.einsum("tji,tj,tjk->tik", root, 1 / variance, root)
     # K: every equation month's y_t - sum A_{l,s_t} y_{t-l}, as one sparse matrix.
     blocks = np.concatenate(
         [np.broadcast_to(np.eye(n)[None, None], (count, 1, n, n)), -month_lags], axis=1
     )
     rows = np.repeat(np.arange(count) * n, (p + 1) * n * n).reshape(count, p + 1, n, n)
+    rows = rows + np.arange(n)[None, None, :, None]
     columns = np.arange(count)[:, None, None, None] + p - np.arange(p + 1)[None, :, None, None]
     columns = (columns * n + np.arange(n)[None, None, None, :]).repeat(n, axis=2)
     equation = sparse.coo_matrix(
