@@ -81,6 +81,10 @@ from .episodes import EPISODES_PATH, Episodes, calculation_date, load_episodes
 INTERVAL_REPETITIONS = 1000
 """The repetitions of the episode bootstrap behind every reported interval."""
 
+WILD_PRIMARY_BELOW = 8
+"""Fewer episodes than this: the ordinary cluster bootstrap understates the interval, so the
+wild interval is read as the primary one (section 5)."""
+
 MISSING = ()
 """What section 5 still asks for and the report cannot compute; empty for phases 1-3."""
 
@@ -1091,6 +1095,7 @@ def _aggregate_interval(
             },
             "counters": level["counters"],
         }
+        entry["primary"] = "wild" if len(entry["episodes"]) < WILD_PRIMARY_BELOW else "pair"
         for column, null in (
             ("model", None),
             ("diff_vs_baseline", 0.0),
@@ -1333,6 +1338,11 @@ def _decision_block(
         {
             "target_level": target_level,
             "half": "validation" if validation & chosen else "all episodes",
+            "primary": (
+                "wild"
+                if len({row["episode"] for row in paired_rows}) < WILD_PRIMARY_BELOW
+                else "pair"
+            ),
             "cells": len(paired_rows),
             "cells_not_compared": len(not_compared),
             "not_compared": not_compared[:10],
@@ -1676,6 +1686,11 @@ def _print_aggregate(report: dict) -> None:
             )
             if difference.get("wild_disagrees") is not None:
                 text += f", disagreements {'yes' if difference['wild_disagrees'] else 'no'}"
+        if sampling.get("primary") == "wild":
+            text += (
+                f"\nFewer than {WILD_PRIMARY_BELOW} episodes: the ordinary bootstrap "
+                "understates the interval, so the wild one is read as primary."
+            )
         print(text + ".")
     monte_carlo = aggregate["intervals"].get("monte_carlo")
     if monte_carlo is not None:
@@ -1766,6 +1781,10 @@ def _print_decision(report: dict) -> None:
         f"wild {_interval_text(verdict.get('wild_interval'))}; "
         f"wild disagrees {verdict.get('wild_disagrees')}"
     )
+    if verdict.get("primary") == "wild":
+        print(
+            f"- fewer than {WILD_PRIMARY_BELOW} episodes: the wild interval is read as primary"
+        )
     shares = ", ".join(
         f"{rule} {_number(share)}" for rule, share in verdict.get("admission_shares", {}).items()
     )

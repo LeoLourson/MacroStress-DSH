@@ -276,6 +276,9 @@ def test_the_report_holds_the_aggregate_the_usefulness_and_the_halves(
     sampling = aggregate["intervals"]["sampling"]["all"]
     assert sampling["model"]["pair"] is not None
     assert sampling["model"]["wild"] is not None
+    # Two episodes: the ordinary bootstrap understates the interval, the wild one is primary.
+    assert sampling["primary"] == "wild"
+    assert "the wild one is read as primary" in out
     assert report["halves"]["all"]["episodes"] == ["R1", "R2"]
     assert report["halves"]["tuning"]["episodes"] == ["R1"]
     assert report["halves"]["validation"]["episodes"] == ["R2"]
@@ -324,6 +327,7 @@ def test_the_decision_section_prints_the_steps(capsys):
             "wild_disagrees": False,
             "admission_shares": {DOMAIN: 0.0, WIDTH: 0.01},
             "admission_grown": [],
+            "primary": "wild",
             "verdict": "accepted",
             "step": 2,
             "note": "better by more than two SE",
@@ -335,6 +339,7 @@ def test_the_decision_section_prints_the_steps(capsys):
     assert "## Decision (two standard errors)" in out
     assert "**accepted** (step 2)" in out
     assert "12 paired cells, 1 not compared" in out
+    assert "fewer than 8 episodes: the wild interval is read as primary" in out
     assert "a single episode reads as zero" in out
 
 
@@ -787,6 +792,7 @@ def test_the_decision_compares_two_reports_on_the_same_cells(workspace, tmp_path
     assert verdict["half"] == "validation"
     assert verdict["cells"] > 0
     assert verdict["cells_not_compared"] == 0
+    assert verdict["primary"] == "wild"
     assert verdict["wild_interval"] is not None
     assert decide_on(against) == verdict
 
