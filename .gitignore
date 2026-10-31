@@ -13,7 +13,9 @@ build/
 .idea/
 .vscode/
 .code-review-graph/
+.reviews/
 experiments/
+docs/local/
 # The workspace is data, not code: a run reproduces it from the repository and the sources.
 workspace/
 # The thesis concept stays local; it is not part of the published repository.
