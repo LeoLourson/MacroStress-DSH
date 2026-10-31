@@ -16,10 +16,12 @@ from mst.metrics.cells import (
     crps,
     finite_draws,
     history_range,
+    movement_pairs,
     pit,
     quantiles,
     score_cells,
     sigma_of_month,
+    sigma_with_fallback,
     typical_movement,
 )
 
@@ -213,6 +215,108 @@ def test_constraint_probabilities_are_not_applicable_to_a_point():
     )
     # A continuous draw meets a point with probability zero: the share is None, not 0.0.
     assert constraint_probabilities(paths, ["x"], [exact]) == {0: None}
+
+
+def test_random_walk_gappy_history_uses_only_true_distance_pairs():
+    # The gap must not join distant observations: only grid pairs at true distance three
+    # count, both ends known — [7, 6, 6, 7, 10], drift 2.4 a month. The compressed series of
+    # the old code read the changes [15, 15, 19] and a drift of 5.44.
+    history = np.array([10.0, 12.0, 14.0, 17.0, np.nan, 20.0, 23.0, 25.0, 27.0, 33.0])
+    draws = random_walk(history, 6, draws=50_000, seed=0, months=3)
+    chg = np.array([7.0, 6.0, 6.0, 7.0, 10.0])
+    drift, noise = chg.mean() / 3, chg.std(ddof=0) / np.sqrt(3)
+    # A group of three horizon months carries one 3-month change: after j months the mean is
+    # last + j monthly shares of the change; month 3 holds one whole change, month 6 two.
+    assert np.allclose(draws.mean(axis=0), 33 + np.arange(1, 7) * drift / 3, atol=0.05)
+    assert draws.mean(axis=0)[2] == pytest.approx(33 + drift, abs=0.05)
+    assert draws.std(axis=0)[2] == pytest.approx(noise, abs=0.05)
+    assert draws.std(axis=0)[5] == pytest.approx(noise * np.sqrt(2), abs=0.05)
+
+
+def test_random_walk_gappy_history_with_two_pairs_is_nan():
+    # Only (16-10) and (20-14) sit on the 3-grid with both ends known: two pairs are fewer
+    # than three, so the walk is NaN. The compressed series of the old code had seven known
+    # points and would have walked.
+    history = np.array([10.0, 12.0, 14.0, 16.0, np.nan, 20.0, np.nan, 24.0, np.nan, 30.0])
+    draws = random_walk(history, 2, draws=1, seed=0, months=3)
+    assert draws.shape == (1, 2)
+    assert np.all(np.isnan(draws))
+
+
+def test_movement_pairs_count_only_the_pairs_with_two_known_ends():
+    history = np.array([0.0, np.nan, 3.0, 6.0, np.nan, 15.0])
+    assert movement_pairs(history, 1) == 1
+    assert movement_pairs(history, 2) == 2
+    assert movement_pairs(history, 3) == 2
+    assert movement_pairs(history, 6) == 0
+
+
+def test_sigma_with_fallback_borrows_the_nearest_valid_month():
+    # A six-point history: sigma(3) = median of [6, 9, 12] = 9, sigma(4) = 12, sigma(5) = 15;
+    # months 6 and 7 are past the history and borrow the largest valid month below, 5.
+    history = np.array([0.0, 1.0, 3.0, 6.0, 10.0, 15.0])
+    fallback = sigma_with_fallback(history, [3, 4, 5, 6, 7])
+    assert fallback[3] == (9.0, "t", 3)
+    assert fallback[4] == (12.0, "t", 2)
+    assert fallback[5] == (15.0, "t", 1)
+    assert fallback[6] == (15.0, "t*", 1)
+    assert fallback[7] == (15.0, "t*", 1)
+
+
+def test_sigma_with_fallback_takes_the_nearest_month_above_when_below_is_empty():
+    # Adjacent changes are mostly zeros (sigma(1) = NaN), while the pairs of months two and
+    # three apart move (sigma(2) = 0.5, sigma(3) = 1): month 1 borrows the smallest valid
+    # month above, month 4 — which does not move over four months — the largest below.
+    history = np.array([5.0, 5.0, 5.0, 6.0, 5.0, 5.0, 5.0, 6.0])
+    fallback = sigma_with_fallback(history, [1, 2, 4])
+    assert fallback[1] == (0.5, "t+", 6)
+    assert fallback[2] == (0.5, "t", 6)
+    assert fallback[4] == (0.5, "t*", 6)
+
+
+def test_sigma_with_fallback_pools_the_peers_for_the_last_resort():
+    # The own history is too short for month 6 and no neighbour month helps, so the median
+    # of the peers' valid sigma(6) stands in; without a valid peer the source is "none".
+    history = np.array([0.0, 1.0, 3.0, 6.0, 10.0, 15.0])
+    peers = {
+        "r1": np.array([0.0, 2.0, 4.0, 6.0]),  # four points: no sigma(6)
+        "r2": np.array([5.0, 7.0, 8.0]),  # three points: no sigma(6)
+        "r3": np.array([0.0, 1.0, 5.0, 3.0, 9.0, 2.0, 4.0]),  # sigma(6) = 4.0
+    }
+    fallback = sigma_with_fallback(history, [6], peers=peers)
+    assert fallback[6] == (4.0, "pooled", 1)
+    peers["r1"] = np.array([0.0, 2.0, 4.0, 6.0, 1.0, 3.0, 5.0, 2.0])  # sigma(6) = 2.5
+    fallback = sigma_with_fallback(history, [6], peers=peers)
+    assert fallback[6] == (3.25, "pooled", 2)  # the median of [2.5, 4.0]
+    none = sigma_with_fallback(history, [6], peers={"r2": peers["r2"]})[6]
+    assert np.isnan(none[0]) and none[1] == "none" and none[2] == 0
+    none = sigma_with_fallback(history, [6], peers={})[6]
+    assert np.isnan(none[0]) and none[1] == "none" and none[2] == 0
+    none = sigma_with_fallback(history, [6])[6]
+    assert np.isnan(none[0]) and none[1] == "none" and none[2] == 0
+
+
+def test_sigma_with_fallback_zero_sigma_falls_back_to_the_peers():
+    # A constant history does not move: the median absolute change is zero, which is no
+    # scale — typical_movement is NaN and the fallback goes to the peers.
+    constant = np.full(8, 5.0)
+    assert np.isnan(typical_movement(constant, 3))
+    peers = {"r1": np.arange(10.0)}  # sigma(3) = 3
+    fallback = sigma_with_fallback(constant, [3], peers=peers)
+    assert fallback[3] == (3.0, "pooled", 1)
+    none = sigma_with_fallback(constant, [3], peers=None)[3]
+    assert np.isnan(none[0]) and none[1] == "none" and none[2] == 0
+
+
+def test_sigma_with_fallback_and_the_walk_are_deterministic():
+    history = np.array([0.0, 1.0, 3.0, 6.0, 10.0, 15.0])
+    peers = {"r1": np.arange(9.0), "r2": np.arange(12.0)}
+    months = [2, 5, 8]
+    assert sigma_with_fallback(history, months, peers=peers) == sigma_with_fallback(
+        history, months, peers=peers
+    )
+    walk = random_walk(history, 4, draws=8, seed=5, months=2)
+    assert np.array_equal(walk, random_walk(history, 4, draws=8, seed=5, months=2))
 
 
 def test_random_walk_carries_the_last_value_with_the_trend():

@@ -25,6 +25,7 @@ from .contracts import (
     PART_META_REQUIRED,
     AdditiveImpact,
     Check,
+    Dist,
     DriverPaths,
     LinearConstraint,
     LinearTerm,
@@ -39,6 +40,7 @@ from .contracts import (
     ScenarioPlan,
     Severity,
 )
+from .testing import Finding, check_shocks
 from .version import MODEL_SDK_VERSION, model_compatible
 
 __all__ = [
@@ -49,7 +51,9 @@ __all__ = [
     "PART_META_REQUIRED",
     "AdditiveImpact",
     "Check",
+    "Dist",
     "DriverPaths",
+    "Finding",
     "InfeasibleScenario",
     "LinearConstraint",
     "LinearTerm",
@@ -66,6 +70,7 @@ __all__ = [
     "ScenarioPlan",
     "Severity",
     "box_gibbs",
+    "check_shocks",
     "dependent_rows",
     "draw_driving",
     "model_compatible",

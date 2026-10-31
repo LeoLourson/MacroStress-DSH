@@ -1,5 +1,6 @@
 """mst.model_sdk.contracts: the neutral structures the model plugins speak."""
 
+import inspect
 from datetime import date
 
 import numpy as np
@@ -9,6 +10,7 @@ from mst.model_sdk import (
     BUNDLE_META_REQUIRED,
     MACRO_ARRAYS_REQUIRED,
     MACRO_META_REQUIRED,
+    MODEL_SDK_VERSION,
     PART_META_REQUIRED,
     AdditiveImpact,
     DriverPaths,
@@ -18,6 +20,7 @@ from mst.model_sdk import (
     MacroSimulation,
     SatelliteModel,
     ScenarioPlan,
+    model_compatible,
 )
 
 
@@ -112,3 +115,19 @@ def test_the_version_contracts_name_the_required_keys():
     assert MACRO_ARRAYS_REQUIRED == ("panel_y", "panel_approximate")
     assert BUNDLE_META_REQUIRED == ("macro", "as_of", "registry", "quantities", "correlated")
     assert PART_META_REQUIRED == ("model", "months", "nodes", "driver", "checks", "rows")
+
+
+def test_the_shocks_argument_is_an_optional_keyword_of_a_satellite_simulate():
+    # Model SDK 1.1.0 adds it; the platform passes it only for a bundle of two or more models,
+    # so a model written before the release keeps working on a single-model bundle.
+    parameter = inspect.signature(SatelliteModel.simulate).parameters["shocks"]
+    assert parameter.kind is inspect.Parameter.KEYWORD_ONLY
+    assert parameter.default is None
+
+
+def test_the_satellite_models_of_the_1_0_range_still_fit_the_1_1_sdk():
+    assert MODEL_SDK_VERSION == "1.1.0"
+    assert model_compatible(">=1.0,<2.0")
+    assert model_compatible(">=1.1,<2.0")
+    assert not model_compatible(">=1.0,<1.1")
+    assert not model_compatible(">=2.0")

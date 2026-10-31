@@ -17,7 +17,7 @@ from mst.plugins.hier.check import check
 from mst.plugins.hier.estimate import fit, path_of
 from mst.plugins.hier.simulate import IMPACT, PARAMETERS_FROM_ABOVE, NotServed
 from mst.plugins.hier.simulate import simulate as simulate_hier
-from mst.plugins.hier.spec import load_spec
+from mst.plugins.hier.spec import Sampler, Spec, load_spec
 from tests.drivers import simulated
 
 AS_OF = date(2030, 1, 1)
@@ -312,3 +312,110 @@ def test_driver_paths_repeat_bit_for_bit(version, data):
         correlation=(version.correlated, version.correlation), seed=11, stream=0,
     )
     assert np.array_equal(first.paths, again.paths)
+
+
+def test_the_platform_shocks_replace_the_models_correlated_noise(version, data):
+    _, panel, _ = data
+    macro = macro_paths(panel, np.array([1.0, 0.5]))
+    model = version.models[MODEL.model_id]
+    draws, steps = macro.paths.shape[0], 2
+    shocks = np.random.default_rng(12).standard_normal((draws, steps + 3, 2))
+    drivers = ["price:alpha", "price:beta"]
+
+    given = simulate_hier(
+        model, macro, drivers, [],
+        correlation=(version.correlated, version.correlation),
+        shocks=shocks, seed=11, stream=0,
+    )
+    # The platform gives more rows than this model needs: only the first ones are read.
+    trimmed = simulate_hier(
+        model, macro, drivers, [],
+        correlation=(version.correlated, version.correlation),
+        shocks=shocks[:, :steps], seed=11, stream=0,
+    )
+    own = simulate_hier(
+        model, macro, drivers, [],
+        correlation=(version.correlated, version.correlation), seed=11, stream=0,
+    )
+    assert np.array_equal(given.paths, trimmed.paths)
+    assert not np.array_equal(given.paths, own.paths)
+
+    with pytest.raises(ValueError, match="steps of shocks"):
+        simulate_hier(
+            model, macro, drivers, [],
+            correlation=(version.correlated, version.correlation),
+            shocks=shocks[:, : steps - 1], seed=11, stream=0,
+        )
+
+
+def test_the_hier_model_uses_the_platform_shocks(version, data):
+    from mst.model_sdk.testing import check_shocks
+
+    _, panel, _ = data
+    model = version.models[MODEL.model_id]
+    findings = check_shocks(
+        MODEL,
+        model,
+        macro_paths(panel, np.array([1.0, 0.5])),
+        ["price:alpha", "price:beta"],
+        correlated=["price:alpha", "price:beta"],
+        history=len(model.fits["price"].history.months),
+        seed=11,
+        stream=0,
+    )
+    assert [str(finding) for finding in findings] == []
+
+
+def small_spec() -> Spec:
+    """A quick sampler: the bounds do not need a converged posterior."""
+    return Spec(
+        spread=0.1,
+        constant_spread=10.0,
+        rho_max=0.99,
+        holdout=24,
+        reach=12,
+        sampler=Sampler(draws=10, burn=5, seed=7),
+    )
+
+
+def test_the_training_bounds_cover_the_observations_of_the_nodes_window(tmp_path):
+    panel = simulated.panel(120, seed=4)
+    store = simulated.store(tmp_path, panel, seed=2)
+    # A month before the node's window (its own lag is unknown there) holds an extreme value:
+    # it is data, but the model was not trained on it, so it must not widen the trained range.
+    rows = store.read("drv.price.alpha")
+    rows[0] = replace(rows[0], value=rows[0].value + 500.0)
+    store.write("drv.price.alpha", rows)
+    registry = simulated.registry()
+    hist = history(registry, "price", panel, store, AS_OF)
+    node = hist.driver.index("price:alpha")
+    item = path_of(hist, node)
+    result = fit(hist, small_spec())
+
+    assert item.first == 1 and 0 not in item.observed
+    assert result.rows[node] == len(item.observed)
+    assert result.train_low[node] == item.values.min()
+    assert result.train_high[node] == item.values.max()
+    assert result.train_high[node] < hist.d[0, node]
+
+    # A node without a series of its own takes the bounds of the nearest object above it with
+    # data, exactly the source the simulation takes its level from.
+    delta, sector = hist.driver.index("price:delta"), hist.driver.index("price:sector")
+    assert result.rows[delta] == 0
+    assert result.train_low[delta] == result.train_low[sector]
+    assert result.train_high[delta] == result.train_high[sector]
+
+
+def test_rows_published_after_the_calculation_move_no_bound(tmp_path):
+    panel = simulated.panel(120, seed=4)
+    store = simulated.store(tmp_path, panel, seed=2)
+    registry = simulated.registry()
+    before = fit(history(registry, "price", panel, store, AS_OF), small_spec())
+
+    rows = store.read("drv.price.alpha")
+    later = replace(rows[-1], value=9999.0, published=date(2031, 1, 1))
+    store.write("drv.price.alpha", rows + [later])
+    again = fit(history(registry, "price", panel, store, AS_OF), small_spec())
+
+    assert np.array_equal(before.train_low, again.train_low, equal_nan=True)
+    assert np.array_equal(before.train_high, again.train_high, equal_nan=True)

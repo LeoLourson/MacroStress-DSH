@@ -23,7 +23,10 @@ before its regressors is still estimated up to the last complete month. The chai
 distribution, which keeps the tridiagonal precision well conditioned however long the path is.
 ``Psi_c`` is diagonal, a special case of the full covariance of section 6.2. The residual
 correlation ``Sigma_e`` across drivers is estimated after the sampler, from the residuals at the
-posterior mean over the months two drivers both observe.
+posterior mean over the months two drivers both observe. The fit also records the lowest and
+highest observed value of every node inside the window it was estimated on, so the platform
+checks simulated paths against what the node was trained on rather than against its whole
+history column.
 """
 
 from dataclasses import dataclass
@@ -173,6 +176,16 @@ class Fit:
     """(S, N) residual standard deviation; NaN at nodes without data."""
     rows: np.ndarray
     """(N,) observations each node was estimated on; 0 at nodes without data."""
+    train_low: np.ndarray | None = None
+    """(N,) the lowest observed value of every node inside its estimation window.
+
+    A node without a series of its own takes the bounds of the nearest object above it with
+    data, as it takes the residual spread of that object when simulated; NaN when no object
+    above it was estimated on data. ``None`` marks a fit loaded from a version that recorded no
+    bounds (written before 0.3), which the platform then reads from the whole history column.
+    """
+    train_high: np.ndarray | None = None
+    """(N,) the highest observed value of every node inside its estimation window."""
 
 
 def columns(quantity) -> list[str]:
@@ -196,6 +209,34 @@ def _scales(paths: dict[int, Path], names: list[str]):
         raise ValueError(f"columns {', '.join(flat)} do not vary within objects")
     level = np.concatenate([y - y.mean() for _, y in rows.values()])
     return centre, spread, float(level.std())
+
+
+def training_bounds(
+    hist: History, rows: np.ndarray, paths: dict[int, Path]
+) -> tuple[np.ndarray, np.ndarray]:
+    """The lowest and highest observed value of every node inside its estimation window.
+
+    The window of a node is the one ``path_of`` chose: months whose ``x`` the panel knows, from
+    the first observation to the last complete month. Months the sampler drew are not data, so
+    they do not widen the range a simulated path is checked against, and a value an observation
+    falls back to (a quarter's average) is not taken either. A node without a series of its own
+    has no window; it takes the bounds of the nearest object above it with data, exactly the
+    source ``simulate._nearest`` uses for its starting level and residual spread.
+    """
+    low = np.full(len(rows), np.nan)
+    high = np.full(len(rows), np.nan)
+    for i, item in paths.items():
+        if len(item.values):
+            low[i], high[i] = float(item.values.min()), float(item.values.max())
+    for i in range(len(rows)):
+        if rows[i] > 0:
+            continue
+        above = hist.parent[i]
+        while above >= 0 and rows[above] == 0:
+            above = hist.parent[above]
+        if above >= 0:
+            low[i], high[i] = low[above], high[above]
+    return low, high
 
 
 def fit(hist: History, spec: Spec, *, until: int | None = None, seed: int | None = None) -> Fit:
@@ -280,7 +321,15 @@ def fit(hist: History, spec: Spec, *, until: int | None = None, seed: int | None
     original = kept_gamma / spread
     original[..., 0] = kept_gamma[..., 0] - (kept_gamma[..., 1:] * centre[1:] / spread[1:]).sum(-1)
     rows = np.array([len(paths[i].observed) if i in paths else 0 for i in range(n)])
-    return Fit(history=hist, gamma=original, sigma=kept_sigma, rows=rows)
+    train_low, train_high = training_bounds(hist, rows, paths)
+    return Fit(
+        history=hist,
+        gamma=original,
+        sigma=kept_sigma,
+        rows=rows,
+        train_low=train_low,
+        train_high=train_high,
+    )
 
 
 def _normal(precision: np.ndarray, shift: np.ndarray, rng) -> np.ndarray:

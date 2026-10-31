@@ -43,6 +43,7 @@ __all__ = [
     "Simulation",
     "Severity",
     "box_gibbs",
+    "constraint_moments",
     "dependent_rows",
     "draw_driving",
     "severity",
@@ -144,6 +145,40 @@ def _level(plan: _Plan, mean: np.ndarray) -> np.ndarray:
     return np.array([sum(w * mean[t - 1, i] for i, t, w in row) for row in plan.terms])
 
 
+def constraint_moments(model: Posterior, scenario: Scenario, *, draws: int, seed: int):
+    """The mean and covariance of the constraint functionals under every parameter draw.
+
+    Given a repetition ``W y`` is normal with mean ``W mu`` and covariance ``W Phi Phi' W'``;
+    the returns are ``(R, m)`` and ``(R, m, m)`` in the order of the scenario's constraints —
+    the exact per-draw moments the severity (``delta``, ``pi_c``) and the platform's distance
+    (``mst.model_sdk.dist``) both consume. Raises ``ValueError`` when the scenario has no
+    constraints or names a variable or shock the model lacks.
+    """
+    means, covs, _ = _moments(model, scenario, draws, seed)
+    return means, covs
+
+
+def _moments(model: Posterior, scenario: Scenario, draws: int, seed: int):
+    """The per-draw moments and the repetitions' generators, in the order of the constraints.
+
+    The generators are returned half-consumed — ``_repetition`` has drawn from each one —
+    because ``severity`` continues every repetition's stream to place one ``W y`` on it;
+    everything downstream of the moments stays on the same stream this way.
+    """
+    plan = _plan(model, scenario)
+    if not plan.terms:
+        raise ValueError("a scenario without constraints has no moments to measure")
+    means, covs, rngs = [], [], []
+    for r in range(draws):
+        rng = np.random.default_rng([seed, r])
+        rep = _repetition(model, plan.horizon, rng)
+        z = _loadings(plan, rep).reshape(len(plan.terms), -1)
+        means.append(_level(plan, rep.mean))
+        covs.append(z @ z.T)
+        rngs.append(rng)
+    return np.array(means), np.array(covs), rngs
+
+
 def simulate(
     model: Posterior, scenario: Scenario, *, draws: int, seed: int, sweeps: int = SWEEPS
 ) -> Simulation:
@@ -191,24 +226,20 @@ def simulate(
 def severity(model: Posterior, scenario: Scenario, *, draws: int, seed: int) -> Severity:
     """Section 4.4 over ``draws`` unconditional repetitions.
 
-    Given a repetition ``W y`` is normal with mean ``W mu`` and covariance ``W Phi Phi' W'``,
-    so ``pi_c`` averages normal probabilities and the mean and covariance of ``W y`` are the
-    exact moments of that mixture; ``exceeded`` draws one ``W y`` per repetition.
+    The per-draw moments come from ``constraint_moments``; given a repetition ``W y`` is
+    normal, so ``pi_c`` averages normal probabilities and the mean and covariance of ``W y``
+    are the exact moments of that mixture, including the spread between the draws;
+    ``exceeded`` draws one ``W y`` per repetition.
     """
     plan = _plan(model, scenario)
     if not plan.terms:
         raise ValueError("a scenario without constraints has no severity")
+    means, covs, rngs = _moments(model, scenario, draws, seed)
     midpoint = (plan.low + plan.high) / 2
-    means, covs, probabilities = [], [], []
-    rngs = [np.random.default_rng([seed, r]) for r in range(draws)]
-    for rng in rngs:
-        rep = _repetition(model, plan.horizon, rng)
-        z = _loadings(plan, rep).reshape(len(plan.terms), -1)
-        mean, cov = _level(plan, rep.mean), z @ z.T
-        means.append(mean)
-        covs.append(cov)
+    probabilities = []
+    for mean, cov in zip(means, covs, strict=True):
         probabilities.append(ndtr((midpoint - mean) / np.sqrt(np.diag(cov))))
-    means, covs = np.array(means), np.array(covs)
+    probabilities = np.array(probabilities)
     centre = means.mean(axis=0)
     spread = covs.mean(axis=0) + np.cov(means.T, bias=True).reshape(covs.shape[1:])
     precision = np.linalg.inv(spread)

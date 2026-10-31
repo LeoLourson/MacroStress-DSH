@@ -1,6 +1,6 @@
 """The satellite bundle: one version, one model per quantity, loaded back and simulated."""
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import date
 
 import numpy as np
@@ -47,6 +47,7 @@ class FakeSatellite(SatelliteModel):
     label: str = ""
     quantities: tuple = ()
     calls: list = field(default_factory=list)
+    shocks_seen: list = field(default_factory=list)
 
     def estimate(self, context):
         parts, residuals = {}, {}
@@ -84,11 +85,21 @@ class FakeSatellite(SatelliteModel):
         return {quantity: part.meta["letter"] for quantity, part in parts.items()}
 
     def simulate(
-        self, model, macro, drivers, impacts, *, correlation=None, seed: int, stream: int
+        self,
+        model,
+        macro,
+        drivers,
+        impacts,
+        *,
+        correlation=None,
+        shocks=None,
+        seed: int,
+        stream: int,
     ) -> DriverPaths:
         self.calls.append(
             (tuple(drivers), stream, tuple(sorted(item.target for item in impacts)))
         )
+        self.shocks_seen.append(shocks)
         paths = np.stack(
             [
                 np.full(macro.paths.shape[:2], float(ord(model[driver.split(":")[0]]) + stream))
@@ -239,12 +250,19 @@ def test_simulate_dispatches_each_quantity_to_its_own_model(tmp_path):
     # pre-plugin simulator numbered them.
     assert one.calls == [(("price:sector",), 1, ())]
     assert two.calls == [(("spread:sector",), 2, ("spread:sector",))]
+    # A bundle of two models gets the platform's joint shocks, one column per model here.
+    rows = 2 + len(simulated.panel(24).months) - 1
+    assert one.shocks_seen[0].shape == (3, rows, 1)
+    assert two.shocks_seen[0].shape == (3, rows, 1)
     assert found.ids == ["spread:sector", "price:sector"]
     assert found.paths[0, 0, 0] == ord("b") + 2
     assert found.paths[0, 0, 1] == ord("a") + 1
     assert np.all(found.paths[:, 1:3, 0] == ord("b") + 2 + 5)
-    # The fake's paths sit far outside its all-zero history, so the range flag is set too.
-    assert found.flags["spread:sector"] == frozenset({"impact", "outside_training_range"})
+    # The fake's paths sit far outside its all-zero history, so the range flag is set too; the
+    # fake records no training bounds, so the fallback to the whole column is marked legacy.
+    assert found.flags["spread:sector"] == frozenset(
+        {"impact", "outside_training_range", "legacy_training_range"}
+    )
 
 
 def test_a_driver_the_check_rejected_is_not_simulated(tmp_path):
@@ -341,6 +359,252 @@ def test_the_assignment_picks_the_model_of_every_quantity():
 
     with pytest.raises(ValueError, match="no installed satellite model"):
         models_pkg.assignment(["share_price"], {"share_price": "gone.v1"})
+
+
+class TrainingSatellite(FakeSatellite):
+    """A satellite with a narrow recorded training window over a wide history column.
+
+    The column runs from -500 to 500, while the node is recorded as trained on ``low .. high``:
+    the platform must check paths against the recorded window, not against the whole column.
+    ``record=False`` writes the part as a version from before the bounds were recorded.
+    """
+
+    def __init__(self, *, low=1.0, high=2.0, value=100.0, record=True):
+        super().__init__("range.a", quantities=("price",))
+        self.low, self.high, self.value, self.record = low, high, value, record
+
+    def estimate(self, context):
+        estimate = super().estimate(context)
+        part = estimate.parts["price"]
+        months = len(context.panel.months)
+        part.arrays["d"] = np.concatenate(
+            [[-500.0], np.full(months - 2, 50.0), [500.0]]
+        )[:, None]
+        if self.record:
+            part.meta["train_low"] = [self.low]
+            part.meta["train_high"] = [self.high]
+        return estimate
+
+    def simulate(self, model, macro, drivers, impacts, *, correlation=None, seed, stream):
+        paths = np.full(
+            (macro.paths.shape[0], macro.paths.shape[1], len(drivers)), self.value
+        )
+        return DriverPaths(
+            ids=list(drivers),
+            paths=paths,
+            flags={driver: frozenset() for driver in drivers},
+        )
+
+
+def _range_flags(tmp_path, model) -> frozenset[str]:
+    """The flags of the only driver of a bundle whose model simulates a constant path."""
+    registry = registry_of("price")
+    bundle = _bundle_of(tmp_path, [model], registry)
+    found = bundle.simulate(macro_simulation(months=4), ["price:sector"], seed=5)
+    return found.flags["price:sector"]
+
+
+def test_a_path_above_the_recorded_window_is_flagged(tmp_path):
+    # Above the window the node was estimated on, still inside the whole history column.
+    found = _range_flags(tmp_path, TrainingSatellite(value=100.0))
+    assert found == frozenset({"outside_training_range"})
+
+
+def test_a_path_above_the_whole_column_is_flagged_too(tmp_path):
+    found = _range_flags(tmp_path, TrainingSatellite(value=1000.0))
+    assert found == frozenset({"outside_training_range"})
+
+
+def test_a_path_inside_the_recorded_window_is_not_flagged(tmp_path):
+    found = _range_flags(tmp_path, TrainingSatellite(value=1.5))
+    assert found == frozenset()
+
+
+def test_a_part_without_bounds_reads_the_whole_column_and_is_marked_legacy(tmp_path):
+    # 100 is below the column max of 500, so a legacy part sees no exit — but it must say that
+    # the range it used was the whole column, not the window the node was estimated on.
+    found = _range_flags(tmp_path, TrainingSatellite(value=100.0, record=False))
+    assert found == frozenset({"legacy_training_range"})
+
+
+def test_a_legacy_part_above_the_whole_column_is_flagged_and_marked(tmp_path):
+    found = _range_flags(tmp_path, TrainingSatellite(value=1000.0, record=False))
+    assert found == frozenset({"outside_training_range", "legacy_training_range"})
+
+
+def two_model_registry() -> Registry:
+    """Two quantities of one tree: ``qa`` has two objects, ``qb`` one."""
+    return Registry.model_validate(
+        {
+            "quantities": [
+                {
+                    "id": quantity,
+                    "label": quantity,
+                    "unit": "ед.",
+                    "transform": "identity",
+                    "regressors": ["gl.brent"],
+                    "lags": 1,
+                }
+                for quantity in ("qa", "qb")
+            ],
+            "objects": [
+                {"id": "top", "class": "sector", "label": "Верх"},
+                {"id": "x", "class": "sector", "label": "X", "parent": "top"},
+                {"id": "y", "class": "sector", "label": "Y", "parent": "top"},
+            ],
+            "drivers": [
+                {"quantity": "qa", "object": "x"},
+                {"quantity": "qa", "object": "y"},
+                {"quantity": "qb", "object": "top"},
+            ],
+        }
+    )
+
+
+def correlated_residuals(months: int, matrix: np.ndarray, seed: int = 3) -> list[np.ndarray]:
+    """``months``-long residual series whose sample correlation is exactly ``matrix``."""
+    rng = np.random.default_rng(seed)
+    centred = rng.standard_normal((months, matrix.shape[0]))
+    centred -= centred.mean(axis=0)
+    basis, _ = np.linalg.qr(centred)
+    values = basis * np.sqrt(months) @ np.linalg.cholesky(matrix).T
+    return [values[:, k] for k in range(matrix.shape[1])]
+
+
+class ShockSatellite(SatelliteModel):
+    """A satellite whose paths are the platform's shocks, month by month.
+
+    Without shocks it draws its own noise from the model stream; ``received`` records what the
+    platform passed (``None`` when it passed nothing), so a test can tell the two paths apart.
+    """
+
+    version = "0.1.0"
+    label = ""
+
+    def __init__(self, model_id, quantities, drivers, residuals):
+        self.model_id = model_id
+        self.quantities = quantities
+        self.drivers = drivers
+        self.residuals = residuals
+        self.received = []
+
+    def estimate(self, context):
+        parts = {}
+        for quantity in context.quantities:
+            declared = next(q for q in context.registry.quantities if q.id == quantity)
+            own = [driver for driver in self.drivers if driver.split(":")[0] == quantity]
+            months = len(context.panel.months)
+            parts[quantity] = SatellitePart(
+                meta={
+                    "quantity": declared.model_dump(mode="json", by_alias=True),
+                    "months": [m.isoformat() for m in context.panel.months],
+                    "nodes": [driver.split(":", 1)[1] for driver in own],
+                    "parent": [-1] * len(own),
+                    "classes": ["sector"] * len(own),
+                    "driver": own,
+                    "rows": [months] * len(own),
+                    "checks": {
+                        str(node): {
+                            "satellite": 1.0,
+                            "baseline": 2.0,
+                            "forecasts": 3,
+                            "served": True,
+                            "reason": "",
+                        }
+                        for node in range(len(own))
+                    },
+                },
+                arrays={"d": np.zeros((months, len(own)))},
+            )
+        return SatelliteEstimate(parts=parts, residuals=dict(self.residuals))
+
+    def load(self, parts):
+        return {quantity: part.meta["driver"] for quantity, part in parts.items()}
+
+    def simulate(
+        self, model, macro, drivers, impacts, *, correlation=None, shocks=None, seed, stream
+    ) -> DriverPaths:
+        self.received.append(shocks)
+        draws, horizon = macro.paths.shape[0], macro.paths.shape[1] - 1
+        paths = np.zeros((draws, horizon + 1, len(drivers)))
+        if shocks is not None:
+            paths[:, 1:, :] = shocks[:, :horizon, :]
+        else:
+            rng = np.random.default_rng([seed, stream])
+            paths[:, 1:, :] = rng.standard_normal((draws, horizon, len(drivers)))
+        return DriverPaths(
+            ids=list(drivers),
+            paths=paths,
+            flags={driver: frozenset() for driver in drivers},
+        )
+
+
+def test_the_platform_draws_the_cross_model_shocks_once(tmp_path):
+    # Three drivers of two models with a known correlation matrix: the platform must draw the
+    # joint shocks from the full matrix and hand every model its own slice.
+    matrix = np.array(
+        [
+            [1.0, 0.6, 0.3],
+            [0.6, 1.0, 0.2],
+            [0.3, 0.2, 1.0],
+        ]
+    )
+    residuals = dict(zip(["qa:x", "qa:y", "qb:top"], correlated_residuals(24, matrix), strict=True))
+    one = ShockSatellite("one.a", ("qa",), ("qa:x", "qa:y"), residuals)
+    two = ShockSatellite("two.b", ("qb",), ("qb:top",), residuals)
+    registry = two_model_registry()
+    bundle = _bundle_of(tmp_path, [one, two], registry)
+    assert bundle.correlated == ["qa:x", "qa:y", "qb:top"]
+    assert np.allclose(bundle.correlation, matrix)
+
+    found = bundle.simulate(
+        macro_simulation(months=6, draws=10_000),
+        ["qa:x", "qa:y", "qb:top"],
+        seed=7,
+    )
+
+    # The platform gives each model the number of rows the longest part needs and only the
+    # columns of that model's own correlated drivers.
+    rows = 6 + 24 - 1
+    assert one.received[0].shape == (10_000, rows, 2)
+    assert two.received[0].shape == (10_000, rows, 1)
+
+    observed = np.corrcoef([found.paths[:, 1:, k].ravel() for k in range(3)])
+    # The measured correlation reaches the joint paths, within and across the models; a model
+    # that drew its own residuals would leave the cross-model entries at zero.
+    assert np.allclose(observed, matrix, atol=0.05)
+    assert observed[0, 1] == pytest.approx(0.6, abs=0.05)
+    assert observed[0, 2] == pytest.approx(0.3, abs=0.05)
+    assert observed[1, 2] == pytest.approx(0.2, abs=0.05)
+
+
+def test_a_one_model_bundle_keeps_the_old_path_without_shocks(tmp_path):
+    residuals = dict(zip(["qa:x"], correlated_residuals(24, np.eye(1)), strict=True))
+    model = ShockSatellite("one.a", ("qa",), ("qa:x",), residuals)
+    bundle = _bundle_of(tmp_path, [model], two_model_registry())
+    macro = macro_simulation(months=4, draws=5)
+
+    found = bundle.simulate(macro, ["qa:x"], seed=7)
+
+    # The single-model path passes no shocks argument at all, so a model written before model
+    # SDK 1.1 keeps working; on the same seed the model reproduces its own paths bit for bit.
+    assert model.received == [None]
+    direct = model.simulate(
+        bundle.models[model.model_id], macro, ["qa:x"], [], seed=7, stream=1
+    )
+    assert np.array_equal(found.paths, direct.paths)
+
+
+def test_a_correlation_matrix_that_is_not_positive_definite_is_refused(tmp_path):
+    residuals = dict(zip(["qa:x", "qb:top"], correlated_residuals(24, np.eye(2)), strict=True))
+    one = ShockSatellite("one.a", ("qa",), ("qa:x",), residuals)
+    two = ShockSatellite("two.b", ("qb",), ("qb:top",), residuals)
+    bundle = _bundle_of(tmp_path, [one, two], two_model_registry())
+    # assemble clips the eigenvalues, so a matrix edited outside it can still be indefinite;
+    # the platform must name the problem instead of failing inside the Cholesky.
+    broken = replace(bundle, correlation=np.full((2, 2), 0.9))
+    with pytest.raises(ValueError, match="not positive definite"):
+        broken.simulate(macro_simulation(), ["qa:x", "qb:top"], seed=1)
 
 
 def test_a_quantity_no_model_serves_is_recorded_not_estimated():

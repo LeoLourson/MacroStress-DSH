@@ -5,6 +5,9 @@ adapts them to the model SDK. ``estimate`` prepares the history of every assigne
 (``mst.drivers.history``), fits and checks it and returns the part of the version. A part
 carries the quantity's own declaration, so ``load`` rebuilds the fits without any registry at
 hand; the residual correlation is measured by the platform from the residuals returned here.
+The part also records the lowest and highest value every node was observed at inside its own
+estimation window (``train_low``, ``train_high``), so the platform checks simulated paths
+against the range the node was trained on rather than against the whole history column.
 """
 
 from dataclasses import dataclass, field
@@ -86,6 +89,8 @@ class HierModel(SatelliteModel):
                     "classes": hist.classes,
                     "driver": hist.driver,
                     "rows": fit_.rows.tolist(),
+                    "train_low": _bounds_list(fit_.train_low),
+                    "train_high": _bounds_list(fit_.train_high),
                     "checks": {
                         str(node): _check_dict(item) for node, item in checks.items()
                     },
@@ -127,6 +132,8 @@ class HierModel(SatelliteModel):
                 gamma=part.arrays["gamma"],
                 sigma=part.arrays["sigma"],
                 rows=np.array(part.meta["rows"], dtype=int),
+                train_low=_bounds(part.meta.get("train_low")),
+                train_high=_bounds(part.meta.get("train_high")),
             )
             checks[quantity] = {
                 int(node): Check(**row) for node, row in part.meta["checks"].items()
@@ -141,12 +148,34 @@ class HierModel(SatelliteModel):
         impacts: list[AdditiveImpact],
         *,
         correlation=None,
+        shocks: np.ndarray | None = None,
         seed: int,
         stream: int,
     ) -> DriverPaths:
         return simulate_hier(
-            model, macro, drivers, impacts, correlation=correlation, seed=seed, stream=stream
+            model,
+            macro,
+            drivers,
+            impacts,
+            correlation=correlation,
+            shocks=shocks,
+            seed=seed,
+            stream=stream,
         )
+
+
+def _bounds_list(values: np.ndarray | None) -> list[float | None]:
+    """The recorded training bounds of every node, ``None`` where a node has no range."""
+    if values is None:
+        return []
+    return [None if not np.isfinite(value) else float(value) for value in values]
+
+
+def _bounds(recorded: list | None) -> np.ndarray | None:
+    """Bounds read back from a part; ``None`` when the part recorded none (a legacy version)."""
+    if recorded is None:
+        return None
+    return np.array([np.nan if value is None else value for value in recorded], dtype=float)
 
 
 def _check_dict(item) -> dict:

@@ -7,7 +7,9 @@ and the reason of a position that was not calculated, and ``changes.npz`` with t
 of each repetition. The conditional forecast of the target indicators — the quantiles of every
 target driver by month, in its own unit — is written to ``forecast.json``: a run answers both
 the distribution of the indicators and the portfolio on them. A run of a portfolio also writes
-``summary.json`` — its loss at P5, P50 and P95 and the severity ``delta`` of the scenario.
+``summary.json`` — its loss at P5, P50 and P95, the severity ``delta`` of the scenario and the
+platform's ``dist(P_s, P)`` beside it; the run's ``meta.json`` records the definition of
+``dist`` (the plan's assumption) and the way its probability was estimated.
 
 A run is a job: the tool writes the request and starts ``python -m mst.runs <id>``; the job builds
 the paths from the scenario and writes the rest. Repeating a request with the same seed gives the
@@ -299,7 +301,9 @@ def _write(
         },
     )
     summary = (
-        portfolio_report.build(portfolio, batch.results, severity_found=paths.severity)
+        portfolio_report.build(
+            portfolio, batch.results, severity_found=paths.severity, dist_found=paths.dist
+        )
         if portfolio is not None
         else None
     )
@@ -327,6 +331,7 @@ def _write(
             driver: sorted(paths.drivers.flags[driver]) for driver in paths.drivers.ids
         },
         "severity": portfolio_report.severity(paths.severity),
+        "dist": _dist_meta(paths.dist),
         "models": {
             result.position_id: {
                 "model": result.model_id,
@@ -345,6 +350,25 @@ def _write(
 
 def _now() -> str:
     return datetime.now(UTC).isoformat(timespec="seconds")
+
+
+def _dist_meta(found) -> dict | None:
+    """The platform distance with what it assumes and how it was estimated.
+
+    The definition is the plan's assumption 2: under the conditional scheme the scenario
+    differs from ``P`` only in the marginal of the driving shocks, so
+    ``dist(P_s, P) = -log P(C)``. ``way`` says how ``P(C)`` was estimated; an infinite
+    distance is passed as is, with the message naming the failed gate.
+    """
+    if found is None:
+        return None
+    return {
+        "definition": "dist(P_s, P) = -log P(C) on the unconditional run (plan assumption 2)",
+        "probability": float(found.probability),
+        "distance": float(found.distance),
+        "way": found.way,
+        "message": found.message,
+    }
 
 
 def main(argv: list[str] | None = None) -> None:

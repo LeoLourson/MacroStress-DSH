@@ -169,35 +169,52 @@ class {{class}}(SatelliteModel):
         impacts: list[AdditiveImpact],
         *,
         correlation=None,
+        shocks: np.ndarray | None = None,
         seed: int,
         stream: int,
     ) -> DriverPaths:
         draws, horizon = macro.paths.shape[0], macro.paths.shape[1] - 1
         rng = np.random.default_rng([seed, stream])
-        paths = np.empty((draws, horizon + 1, len(drivers)))
-        flags: dict[str, frozenset[str]] = {}
-        for k, driver in enumerate(drivers):
-            quantity = driver.split(":", 1)[0]
-            part = model.parts[quantity]
-            declared = Quantity.model_validate(part.meta["quantity"])
+        plan = []
+        for driver in drivers:
+            part = model.parts[driver.split(":", 1)[0]]
             node = part.meta["driver"].index(driver)
-            coef, sigma = part.arrays["coef"][node], part.arrays["sigma"][node]
-            d = part.arrays["d"]
-            # The inputs of the horizon months come from the macro paths, repetition by
-            # repetition; the panel months before them from the history the part carries.
-            future = x_from_paths(declared, macro.ids, macro.paths)
-            source = _source(d, part.meta["parent"], node)
+            source = _source(part.arrays["d"], part.meta["parent"], node)
             if source is None:
                 raise ValueError(
                     f"{driver} has no history of its own and no object above it with history"
                 )
-            above, row = source
+            plan.append((driver, part, node, source))
+        # The drivers with history of their own are the columns of the platform's shocks, in
+        # the order of this argument; a driver without one keeps its independent noise.
+        own = [driver for driver, _, node, (above, _) in plan if above == node]
+        if shocks is not None and (
+            shocks.shape[0] != draws or shocks.shape[1] < horizon or shocks.shape[2] != len(own)
+        ):
+            raise ValueError(
+                f"the platform passed shocks of shape {shocks.shape}, expected "
+                f"({draws}, at least {horizon}, {len(own)})"
+            )
+        paths = np.empty((draws, horizon + 1, len(drivers)))
+        flags: dict[str, frozenset[str]] = {}
+        for k, (driver, part, node, (above, row)) in enumerate(plan):
+            declared = Quantity.model_validate(part.meta["quantity"])
+            coef, sigma = part.arrays["coef"][node], part.arrays["sigma"][node]
+            d = part.arrays["d"]
+            # The inputs of the horizon months come from the macro paths; the panel months
+            # before them from the history the part carries.
+            future = x_from_paths(declared, macro.ids, macro.paths)
             start = d[row, above]
             paths[:, 0, k] = start
             value = np.full(draws, start)
             for t in range(1, horizon + 1):
                 z = np.column_stack([np.ones(draws), value, future[:, t]])
-                value = z @ coef + sigma * rng.standard_normal(draws)
+                noise = (
+                    rng.standard_normal(draws)
+                    if above != node or shocks is None
+                    else shocks[:, t - 1, own.index(driver)]
+                )
+                value = z @ coef + sigma * noise
                 paths[:, t, k] = value
             flags[driver] = frozenset()
         for impact in impacts:

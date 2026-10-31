@@ -28,6 +28,14 @@ class Severity:
     exceeded: float
 
 
+@dataclass(frozen=True)
+class Dist:
+    probability: float
+    distance: float
+    way: str
+    message: str | None = None
+
+
 def portfolio(*positions):
     return Portfolio.model_validate(
         {"name": "тест", "positions": [Position.model_validate(item) for item in positions]}
@@ -69,6 +77,34 @@ def test_the_severity_is_what_macro_computed():
     }
     plain = build(portfolio(equity()), batch(equity()).results)
     assert plain["severity"] is None
+
+
+def test_the_dist_stands_beside_the_severity():
+    found = Dist(probability=0.07, distance=2.659, way="exact")
+    report = build(portfolio(equity()), batch(equity()).results, dist_found=found)
+    assert report["dist"] == {
+        "probability": 0.07,
+        "distance": 2.659,
+        "way": "exact",
+        "message": None,
+    }
+    assert build(portfolio(equity()), batch(equity()).results)["dist"] is None
+
+
+def test_an_infinite_dist_is_passed_as_is_with_its_message():
+    # P(C) = 0: no unconditional path satisfies the constraints — the gate is failed, and the
+    # report names it instead of passing a bare infinity.
+    found = Dist(
+        probability=0.0,
+        distance=float("inf"),
+        way="mc",
+        message="the unconditional model gives the constraint box no probability; the "
+        "constraint gate pi_c is failed",
+    )
+    report = build(portfolio(equity()), batch(equity()).results, dist_found=found)
+    assert report["dist"]["distance"] == float("inf")
+    assert report["dist"]["probability"] == 0.0
+    assert "gate pi_c is failed" in report["dist"]["message"]
 
 
 def test_an_invalid_position_is_excluded_with_its_reason():

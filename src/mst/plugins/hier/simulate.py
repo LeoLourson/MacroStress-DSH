@@ -3,6 +3,9 @@
 Repetition ``r`` of the macro simulation takes one posterior draw of the satellites and draws
 the residuals of all drivers jointly, with standard deviations of that draw and the correlation
 the platform passes in (measured over every driver of the bundle with history of its own).
+When the platform passes ``shocks`` — a bundle of two or more models draws the joint residuals
+once — those columns are used for the drivers with history instead of the model's own draw,
+while the stream of this model still chooses the posterior draw and the independent noise.
 Each driver starts from its last value known at ``t = 0``; when that value is older, the months
 up to ``t = 0`` are simulated on the observed macro panel and, for its last ``p`` months, on
 the history drawn by the repetition; a month whose ``x`` the panel does not know stops the
@@ -51,6 +54,7 @@ def simulate(
     impacts: list[AdditiveImpact],
     *,
     correlation: tuple[list[str], np.ndarray] | None = None,
+    shocks: np.ndarray | None = None,
     seed: int,
     stream: int,
 ) -> DriverPaths:
@@ -59,7 +63,10 @@ def simulate(
     ``model`` is what ``HierModel.load`` returned: the fits of its quantities and the check of
     every driver. ``correlation`` is the bundle's residual correlation with the driver ids it
     was measured on; the joint noise of this model's drivers with history is drawn from its
-    slice.
+    slice. ``shocks``, when the platform of a multi-model bundle passes it, holds those joint
+    residuals already drawn, ``(R, steps, k)`` in the order of the drivers of this model that
+    have history; the model then uses the first ``steps`` rows instead of drawing them and
+    keeps its stream for the posterior draw and the independent noise.
     """
     if macro.history is None:
         raise ValueError("the macro simulation carries no history months")
@@ -100,12 +107,31 @@ def simulate(
     count = next(iter(model.fits.values())).gamma.shape[0]
     length = next(iter(model.fits.values())).history.d.shape[0]
     steps = horizon + length - 1 - min((item[6] for item in plan), default=length - 1)
+    # The platform of a multi-model bundle draws the joint residuals of this model's drivers
+    # with history once; it passes more rows than this model needs, the first ones are used.
+    given = None
+    if shocks is not None:
+        if shocks.ndim != 3 or shocks.shape[0] != draws or shocks.shape[2] != len(joint):
+            raise ValueError(
+                f"the platform passed shocks of shape {shocks.shape}, this model expects "
+                f"({draws}, steps, {len(joint)}) for {len(joint)} correlated drivers"
+            )
+        if shocks.shape[1] < steps:
+            raise ValueError(
+                f"the platform passed {shocks.shape[1]} steps of shocks, this model needs "
+                f"{steps} to reach the horizon"
+            )
+        given = shocks[:, :steps, :]
 
     paths = np.empty((draws, horizon + 1, len(plan)))
     for r in range(draws):
         rng = np.random.default_rng([seed, stream, r])
         s = int(rng.integers(count))
-        shocks = rng.standard_normal((steps, len(joint))) @ chol.T
+        drawn = None
+        if given is None:
+            drawn = rng.standard_normal((steps, len(joint)))
+            if picked:
+                drawn = drawn @ chol.T
         single = rng.standard_normal((steps, len(plan)))
         for k, (driver, quantity, node, source, own, start, last, _) in enumerate(plan):
             fit_ = model.fits[quantity]
@@ -120,7 +146,11 @@ def simulate(
                     x_from_paths(hist.quantity, macro.ids, macro.paths[r, 1:]),
                 ]
             )
-            noise = shocks[:, joint.index(driver)] if own else single[:, k]
+            if own:
+                column = joint.index(driver)
+                noise = drawn[:, column] if drawn is not None else given[r, :, column]
+            else:
+                noise = single[:, k]
             value, zero = start, len(hist.months) - 1
             for step, u in enumerate(range(last + 1, zero + horizon + 1)):
                 value = gamma @ regressors(lags, x, value, u) + sigma * noise[step]

@@ -16,6 +16,14 @@ Severity ``delta`` of the scenario comes from the unconditional forecast of the 
 the distance of the constrained paths from what the model expects without them, measured on
 ``C`` alone, without the level-0 impacts. A scenario without constraints has no severity, and
 a macro model that does not measure it leaves the severity empty.
+
+The platform's ``dist(P_s, P)`` lives beside it (``mst.model_sdk.dist``): the same unconditional
+forecast, but the probability of the whole constraint box, not the Mahalanobis distance of the
+midpoints. The unconditional plan is empty (``s_0``), so the same ``draws`` and ``seed`` that
+the constraint gate reads draw its paths. The estimate is the Monte-Carlo share of the paths
+that satisfy every constraint at once; when no path does, the exact probability of the
+parameter mixture takes over for a model that measures the per-draw moments of the constraint
+functionals (``constraint_moments``).
 """
 
 from dataclasses import dataclass, replace
@@ -29,9 +37,11 @@ from ..drivers.bundle import SatelliteBundle
 from ..drivers.registry import from_model
 from ..macro.registry import load_registry
 from ..macro.version import MacroVersion
+from ..model_sdk import dist as dist_sdk
 from ..model_sdk.conditional import InfeasibleScenario
 from ..model_sdk.contracts import (
     AdditiveImpact,
+    Dist,
     DriverPaths,
     LinearConstraint,
     LinearTerm,
@@ -56,6 +66,7 @@ class Paths:
     drivers: DriverPaths
     """``(R, H + 1, k)`` in each driver's own unit, with the flags of every path."""
     severity: Severity | None
+    dist: Dist | None
     seed: int
     draws: int
 
@@ -110,6 +121,55 @@ def _impact_shift(constraint: LinearConstraint, impacts: list[Impact]) -> float:
     )
 
 
+def dist_of(
+    spec: Spec, macro: MacroVersion, *, draws: int, seed: int
+) -> Dist | None:
+    """``dist(P_s, P)`` of the scenario: ``-log P(C)`` on the unconditional run ``s_0``.
+
+    The plan is empty, so the paths are the pure model without constraints or impacts — the
+    same ``draws`` and ``seed`` the constraint gate ``pi_c`` reads. The estimate is the
+    Monte-Carlo share of the paths that satisfy every constraint at once; when no drawn path
+    does, the share cannot tell a rare box from an impossible one, and the exact probability
+    of the mixture takes over — per drawn parameter set the constraint functionals are
+    normal (``constraint_moments``), the box probability follows from the gaussian cdf.
+    A model without that ability leaves the Monte-Carlo estimate of zero, an infinite dist.
+    ``None`` — the scenario has no constraints, so it has no dist at all rather than a zero
+    distance.
+    """
+    plan = plan_of(spec)
+    if not plan.constraints:
+        return None
+    base = macro.plugin.simulate(
+        macro.model, ScenarioPlan(horizon=spec.horizon), draws=draws, seed=seed
+    )
+    share = dist_sdk.box_probability_mc(base.paths, base.ids, plan.constraints)
+    if share > 0.0:
+        return _dist(share, "mc")
+    moments = macro.plugin.constraint_moments(macro.model, plan, draws=draws, seed=seed)
+    if moments is not None:
+        means, covs = moments
+        try:
+            return _dist(dist_sdk.box_probability_mixture(means, covs, plan.constraints), "exact")
+        except (ValueError, np.linalg.LinAlgError):
+            pass  # a box the mixture cannot integrate: the Monte-Carlo zero stands
+    return _dist(share, "mc")
+
+
+def _dist(probability: float, way: str) -> Dist:
+    """The ``Dist`` of one estimate; a zero probability is named, not silently passed as 0."""
+    return Dist(
+        probability=probability,
+        distance=dist_sdk.dist_from_probability(probability),
+        way=way,
+        message=(
+            "the unconditional model gives the constraint box no probability; the constraint "
+            "gate pi_c is failed"
+            if probability <= 0.0
+            else None
+        ),
+    )
+
+
 def build(
     spec: Spec,
     macro: MacroVersion,
@@ -160,6 +220,7 @@ def build(
             if spec.constraints
             else None
         ),
+        dist=dist_of(spec, macro, draws=draws, seed=seed),
         seed=seed,
         draws=draws,
     )

@@ -10,8 +10,10 @@ from mst.corpus.index import Chunk
 from mst.corpus.index import write as write_index
 from mst.macro.registry import load_registry
 from mst.model_sdk import InfeasibleScenario
+from mst.model_sdk.contracts import ScenarioPlan
+from mst.model_sdk.dist import box_probability_mc, box_probability_mixture
 from mst.plugins.hier.simulate import IMPACT
-from mst.scenario.build import build, validate
+from mst.scenario.build import build, dist_of, plan_of, validate
 from mst.scenario.contracts import Impact
 from mst.scenario.spec import Spec
 
@@ -34,6 +36,14 @@ def fixed(variable: str, month: int, value: float) -> dict:
         "terms": [{"variable": variable, "month": month, "weight": 1.0}],
         "low": value,
         "high": value,
+    }
+
+
+def interval(variable: str, month: int, low: float, high: float) -> dict:
+    return {
+        "terms": [{"variable": variable, "month": month, "weight": 1.0}],
+        "low": low,
+        "high": high,
     }
 
 
@@ -109,6 +119,88 @@ def test_the_paths_repeat_bit_for_bit_for_the_same_seed(versions):
 def test_a_scenario_without_constraints_has_no_severity(versions):
     paths = paths_of(versions, scenario(versions))
     assert paths.severity is None
+    assert paths.dist is None  # no dist, not a zero distance
+
+
+def test_the_paths_carry_the_platform_dist_of_the_constraints(versions):
+    # The MC share of the base run's paths estimates P(C); the distance is -log P(C) of the
+    # constraint box on the unconditional run, not the Mahalanobis delta of the plugin.
+    spec = scenario(versions, constraints=[interval("gl.brent", 2, 1.0, 3.0)])
+    paths = paths_of(versions, spec)
+    assert paths.dist is not None
+    assert paths.dist.way == "mc"
+    assert paths.dist.message is None
+    assert paths.dist.distance == pytest.approx(-np.log(paths.dist.probability))
+    assert 0.0 < paths.dist.probability < 1.0
+
+
+def test_the_mc_dist_agrees_with_the_exact_mixture(versions):
+    # The share of the base run's paths (the same draws and seed the constraint gate reads)
+    # must agree with the exact probability of the parameter mixture within the MC error.
+    spec = scenario(versions, constraints=[interval("gl.brent", 2, 1.0, 4.0)])
+    constraints = plan_of(spec).constraints
+    base = versions.loaded.plugin.simulate(
+        versions.loaded.model, ScenarioPlan(horizon=spec.horizon), draws=4000, seed=SEED
+    )
+    # The same 4000 drawings: the share of the dist is the share counted here, exactly.
+    found = dist_of(spec, versions.loaded, draws=4000, seed=SEED)
+    mc = box_probability_mc(base.paths, base.ids, constraints)
+    assert found.way == "mc"
+    assert found.probability == mc
+    means, covs = versions.loaded.plugin.constraint_moments(
+        versions.loaded.model, plan_of(spec), draws=100, seed=SEED
+    )
+    exact = box_probability_mixture(means, covs, constraints)
+    assert exact == pytest.approx(mc, abs=0.02)
+
+
+def test_a_zero_share_falls_back_to_the_exact_mixture(versions):
+    # A box three and a half standard deviations out: none of the few drawn paths lands in it,
+    # so the Monte-Carlo share is zero and the exact probability of the mixture takes over;
+    # the distance is large but finite.
+    spec = scenario(versions, constraints=[interval("gl.brent", 2, 9.0, 9.5)])
+    found = dist_of(spec, versions.loaded, draws=DRAWS, seed=SEED)
+    assert found.way == "exact"
+    assert 0.0 < found.probability < 1.0
+    assert np.isfinite(found.distance) and found.distance > 0
+
+
+def test_a_model_without_moments_leaves_the_monte_carlo_zero(versions):
+    # A macro model that does not measure the per-draw moments: a zero share stays a zero
+    # share, and the dist is infinite with the failed gate named.
+    spec = scenario(versions, constraints=[interval("gl.brent", 2, 100.0, 101.0)])
+    stripped = replace(versions.loaded, plugin=NoMoments(versions.loaded.plugin))
+    found = dist_of(spec, stripped, draws=DRAWS, seed=SEED)
+    assert found.way == "mc"
+    assert found.probability == 0.0
+    assert found.distance == float("inf")
+    assert "gate pi_c is failed" in found.message
+
+
+class NoMoments:
+    """A macro plugin that simulates but does not measure the constraint moments."""
+
+    def __init__(self, inner):
+        self._inner = inner
+
+    def simulate(self, model, plan, *, draws, seed):
+        return self._inner.simulate(model, plan, draws=draws, seed=seed)
+
+    def severity(self, model, plan, *, draws, seed):
+        return self._inner.severity(model, plan, draws=draws, seed=seed)
+
+    def constraint_moments(self, model, plan, *, draws, seed):
+        return None
+
+
+def test_a_wide_box_gives_a_dist_near_zero(versions):
+    wide = scenario(versions, constraints=[interval("gl.brent", 2, -50.0, 50.0)])
+    narrow = scenario(versions, constraints=[interval("gl.brent", 2, 1.0, 3.0)])
+    assert dist_of(wide, versions.loaded, draws=40, seed=SEED).probability > 0.99
+    assert dist_of(wide, versions.loaded, draws=40, seed=SEED).distance < 0.1
+    assert dist_of(narrow, versions.loaded, draws=40, seed=SEED).distance > dist_of(
+        wide, versions.loaded, draws=40, seed=SEED
+    ).distance
 
 
 def test_driver_paths_are_in_the_drivers_own_units_and_carry_impacts(versions):
