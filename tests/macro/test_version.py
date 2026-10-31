@@ -154,7 +154,7 @@ def test_estimate_macro_publishes_a_version_from_the_store(tmp_path, monkeypatch
     monkeypatch.setattr(models_pkg, "load_macro_registry", lambda: registry)
 
     name = models_pkg.estimate_macro(
-        None, store=tmp_path / "series", models=tmp_path / "models", as_of=date(2005, 1, 1)
+        "bvar.sv", store=tmp_path / "series", models=tmp_path / "models", as_of=date(2005, 1, 1)
     )
 
     version = load(tmp_path / "models", name, MACRO)

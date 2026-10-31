@@ -1,0 +1,32 @@
+# The estimation specification of the Markov-switching macro model: ``spec.toml``.
+# A model version stores this file as it was.
+
+# T0: the first month of history.
+start = 2012-01-01
+# p: months of the past each variable depends on, in every regime.
+lags = 3
+# lambda: the Minnesota tightness of every regime; smaller pulls the coefficients harder
+# to the prior, which matters in the regime that sees few months.
+tightness = 0.2
+# Variables whose prior returns them to their mean; every other one stays at its last value.
+stationary = ["gl.vix", "ru.spread_aa", "ru.spread_a", "ru.spread_bbb"]
+# Months after the impact month that a sign restriction also covers, within each regime.
+sign_lag = 2
+# Rotations tried per parameter draw and regime before the draw is dropped as unidentified.
+rotation_tries = 20000
+# Dirichlet prior on every row of the transition matrix: `transition_stay` on staying in
+# the regime, `transition_switch` on leaving it for each other regime. The stress episodes
+# of the Russian panel are short, so the prior leans on persistence: a row of raw counts
+# alone can flip the labels in one sweep, while (4, 0.5) keeps them apart — the prior row
+# mean stays near 0.89 on the diagonal for two regimes.
+transition_stay = 4.0
+transition_switch = 0.5
+
+[sampler]
+draws = 1000
+burn = 1000
+thin = 2
+seed = 20261030
+
+# No intervention dummies, unlike the BVAR: the stress regime is the crisis months. A dummy
+# for 2014-11 or 2022-02 would fight the regime for the same variation.

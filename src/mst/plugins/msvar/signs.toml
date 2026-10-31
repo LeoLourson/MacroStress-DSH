@@ -1,0 +1,51 @@
+# The named shocks of the MS-VAR with their sign restrictions, and its regimes.
+# A shock moves the variables of `rises` up and those of `falls` down in the months after
+# it occurs, under the dynamics of whichever regime is active; `identify` keeps the
+# posterior draws whose rotation of every regime admits such a response. The shock ids are
+# the `J` set of every version of this model: a scenario's driving shocks are checked
+# against them, so the five names match the BVAR's and a scenario ports between the models.
+#
+# The regimes are elements of the same set: naming one in the driving shocks of a scenario
+# holds the regime path of the event fixed to it over the horizon. The declaration order is
+# the volatility order — the sampler keeps the regime declared first the least volatile,
+# which is what makes `regime.stress` the stressful one.
+
+[[shocks]]
+id = "ru.monetary"
+label = "денежно-кредитный"
+rises = ["ru.key_rate", "ru.ruonia", "ru.ofz_1y"]
+falls = ["ru.usdrub", "ru.imoex"]
+
+[[shocks]]
+id = "ru.inflation"
+label = "инфляционный"
+rises = ["ru.cpi", "ru.key_rate"]
+falls = ["ru.real_wage"]
+
+[[shocks]]
+id = "ru.fx_risk"
+label = "курсовой и риск-премии"
+rises = ["ru.usdrub", "ru.ofz_10y", "ru.spread_bbb"]
+falls = ["ru.imoex"]
+
+[[shocks]]
+id = "gl.oil"
+label = "нефтяной"
+rises = ["gl.brent"]
+falls = ["ru.usdrub"]
+
+[[shocks]]
+id = "gl.financial"
+label = "глобальный финансовый"
+rises = ["gl.vix"]
+falls = ["gl.ust_10y", "ru.imoex"]
+
+[[regimes]]
+id = "regime.calm"
+label = "спокойный"
+note = "обычный ход событий: умеренная волатильность, устойчивая автокорреляция"
+
+[[regimes]]
+id = "regime.stress"
+label = "стрессовый"
+note = "кризисные эпизоды 2014, 2020 и 2022 годов: высокая волатильность, ослабленная передача"

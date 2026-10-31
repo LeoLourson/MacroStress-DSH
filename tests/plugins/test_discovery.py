@@ -27,7 +27,15 @@ def forget(*names: str) -> None:
 
 def test_the_installed_packages_are_the_position_models_and_the_models():
     registry = plugins.registry()
-    assert sorted(registry.plugins) == ["bond", "bvar", "credit", "equity", "hier", "housing"]
+    assert sorted(registry.plugins) == [
+        "bond",
+        "bvar",
+        "credit",
+        "equity",
+        "hier",
+        "housing",
+        "msvar",
+    ]
     assert sorted(registry.models) == [
         "bond.paths.v1",
         "credit.paths.v1",
@@ -35,7 +43,7 @@ def test_the_installed_packages_are_the_position_models_and_the_models():
         "housing.paths.v1",
     ]
     assert registry.owner["equity.paths.v1"] == "equity"
-    assert sorted(registry.macro) == ["bvar.sv"]
+    assert sorted(registry.macro) == ["bvar.sv", "msvar.markov"]
     assert registry.macro_owner["bvar.sv"] == "bvar"
     assert sorted(registry.satellites) == ["hier.gibbs"]
     assert registry.quantity_model["share_price"] == ["hier.gibbs"]

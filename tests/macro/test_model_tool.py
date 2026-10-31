@@ -54,14 +54,22 @@ def test_a_saved_version_is_listed_and_described(tmp_path):
 
 def test_estimate_and_backtest_become_tasks_on_the_models_resource(tmp_path):
     ws = store.Workspace(tmp_path)
-    answer = call(ws, "model", {"kind": "macro", "action": "estimate", "as_of": "2010-01-01"}).data
+    answer = call(
+        ws,
+        "model",
+        {"kind": "macro", "action": "estimate", "as_of": "2010-01-01", "model_id": "bvar.sv"},
+    ).data
     try:
         assert answer["argv"][:4] == ["-m", "mst.models", "estimate-macro", "bvar.sv"]
         assert jobs.status(ws, answer["job"])["resource"] == "models"
     finally:
         jobs.cancel(ws, answer["job"])
 
-    answer = call(ws, "model", {"kind": "macro", "action": "backtest", "as_of": "2010-01-01"}).data
+    answer = call(
+        ws,
+        "model",
+        {"kind": "macro", "action": "backtest", "as_of": "2010-01-01", "model_id": "bvar.sv"},
+    ).data
     try:
         assert answer["argv"][:4] == ["-m", "mst.metrics", "backtest", "bvar.sv"]
         assert "--corpus" in answer["argv"] and "--drivers" in answer["argv"]
@@ -90,7 +98,7 @@ def test_the_catalog_lists_the_model_plugins(tmp_path):
     assert "bvar" in [row["plugin"] for row in answer["plugins"]]
     bvar = next(row for row in answer["plugins"] if row["plugin"] == "bvar")
     assert [model["model_id"] for model in bvar["macro"]] == ["bvar.sv"]
-    assert answer["macro"] == ["bvar.sv"]
+    assert answer["macro"] == ["bvar.sv", "msvar.markov"]
 
 
 def test_a_loaded_version_comes_from_its_plugin(tmp_path):
