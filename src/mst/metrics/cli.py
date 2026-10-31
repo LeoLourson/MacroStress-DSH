@@ -50,7 +50,8 @@ def main(argv: list[str] | None = None) -> int:
         help="the incumbent report's JSON, same episode plan: the 2-SE decision of section 5",
     )
     check.add_argument(
-        "--portfolio", help="a stored portfolio id: the Acerbi-Székely tail section"
+        "--portfolio",
+        help="a stored portfolio id: the Acerbi-Székely tail section (needs --satellites)",
     )
     check.add_argument(
         "--mc-bootstrap",

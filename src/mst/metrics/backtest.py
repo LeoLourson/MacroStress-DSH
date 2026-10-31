@@ -156,6 +156,10 @@ def run(
     from mst import models as models_pkg
     from mst.corpus import manifest
 
+    if portfolio is not None and not satellites:
+        raise ValueError(
+            "--portfolio needs --satellites: the tail values the positions on the driver paths"
+        )
     plan = load_episodes()
     plugin = models_pkg.selected(macro_id)
     registry = load_registry()

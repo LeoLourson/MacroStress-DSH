@@ -777,8 +777,23 @@ def test_an_unknown_portfolio_is_a_named_error(workspace, tmp_path, monkeypatch)
     )
     monkeypatch.setattr(runner, "load_episodes", lambda path=None: load_episodes(plan))
 
-    with pytest.raises(ValueError, match="no portfolio 'absent'"):
+    # Without the driver paths there is nothing to value the positions on.
+    with pytest.raises(ValueError, match="needs --satellites"):
         run_episodes(workspace, corpus, tmp_path, portfolio="absent")
+
+    catalog = _catalog(tmp_path)
+    grid = months_between(simulated.START, shift(simulated.START, 59))
+    workspace["store"].write(
+        "drv.share_price.sber",
+        [
+            Observation(month, float(5.0 + 0.01 * t), month, False)
+            for t, month in enumerate(grid)
+        ],
+    )
+    with pytest.raises(ValueError, match="no portfolio 'absent'"):
+        run_episodes(
+            workspace, corpus, tmp_path, drivers=catalog, satellites=True, portfolio="absent"
+        )
 
 
 def test_the_decision_compares_two_reports_on_the_same_cells(workspace, tmp_path, monkeypatch):

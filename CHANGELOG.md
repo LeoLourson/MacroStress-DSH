@@ -57,7 +57,9 @@
   параметр `shocks`.
 - **Отчёт.** У `--details` появились блоки `aggregate`, `halves`, `decision`, `tail`,
   `target_level` и `meta["missing"]` (пуст для фаз 1–3); `aggregate["intervals"]` заменил
-  `intervals["sampling_wild"]` — wild-интервалы лежат внутри блока `sampling`.
+  `intervals["sampling_wild"]` — wild-интервалы лежат внутри блока `sampling`. `--portfolio`
+  требует `--satellites`: позиции оцениваются на путях драйверов, без них хвост выпал бы
+  целиком.
 
 ## 0.2.0 — модели как плагины (2026-10-31)
 

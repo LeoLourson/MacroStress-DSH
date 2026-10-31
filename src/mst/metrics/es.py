@@ -386,6 +386,12 @@ def _valued(
     portfolio: Portfolio, row: dict, paths, *, where: str
 ) -> tuple[np.ndarray | None, str | None]:
     """The portfolio's losses on one set of paths of the row, or the reason it has none."""
+    if paths is None:
+        reason = f"{where}: no paths for the episode"
+        missing = tuple(row.get("realized_missing") or ())
+        if missing:
+            reason += f" ({', '.join(str(name) for name in missing[:4])})"
+        return None, reason
     try:
         batch = portfolio_run(
             portfolio,

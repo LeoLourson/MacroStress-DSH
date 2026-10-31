@@ -498,6 +498,22 @@ def test_missing_facts_and_uncalculated_positions_drop_episodes_by_name():
     assert [episode["id"] for episode in found["episodes"]] == ["e0"]
 
 
+def test_an_episode_without_paths_is_dropped_by_name():
+    good = tail_rows(np.random.default_rng(1), episodes=1)[0]
+    row = {
+        **good,
+        "paths": None,
+        "realized": None,
+        "realized_missing": ["no satellite bundle on the episode"],
+    }
+    found = tail_section([row], PORTFOLIO, seed=0)
+    assert found["episodes"] == []
+    assert found["z"] is None
+    assert found["dropped"][0]["id"] == good["id"]
+    assert "no paths for the episode" in found["dropped"][0]["reason"]
+    assert "no satellite bundle" in found["dropped"][0]["reason"]
+
+
 def test_a_section_with_no_judged_episode_is_stated_not_raised():
     good = tail_rows(np.random.default_rng(1), episodes=1)[0]
     unserved = {**good, "served": ["bond_spread:corp"]}
