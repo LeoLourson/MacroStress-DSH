@@ -12,7 +12,7 @@ CRPS is the integral of the squared distance between the forecast distribution a
 the sample estimator over the draws is ``E|X - y| - E|X - X'| / 2``, which penalises both bias
 and needless width. To compare quantities measured in different units, CRPS is divided by
 ``sigma_q(t)`` — the typical movement of the quantity over ``t`` months, the median absolute
-change over the history (section 5 of the scheme). Calibration reads the probability integral
+change over the history. Calibration reads the probability integral
 transform ``u = F(y)``. The implementation uses the mid-PIT ``(below + tied / 2) / R``: for
 continuous draws that is ``F(y)``, but a forecast with an atom at the fact is not uniform, so
 the bucket shares 0.05 / 0.45 / 0.45 / 0.05 are the target for a continuous forecast only.
@@ -20,7 +20,7 @@ Sharpness is the median width of the ``[p5, p95]`` band, meaningful only once ca
 passes; coverage is reported for reference only, because it grows with width.
 
 The scores are per quantity. The equal-weight aggregate across quantities, the paired decision
-rule of section 5 and the tail statistics (Acerbi-Székely ``Z``, ES) are not in this module:
+rule and the tail statistics (Acerbi-Székely ``Z``, ES) are not in this module:
 they live in ``aggregate``, ``decision``, ``es`` and the runner ``backtest``.
 """
 

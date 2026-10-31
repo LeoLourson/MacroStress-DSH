@@ -1,4 +1,4 @@
-"""The four-step decision rule of section 5: accept or reject a candidate version.
+"""The four-step decision rule: accept or reject a candidate version.
 
 The rule compares two versions on the same cells, pairwise. A candidate that failed admission
 is rejected regardless of its scores. A candidate whose CRPS at the target level is better
@@ -23,7 +23,7 @@ def decide(
     candidate_admission_shares: dict[str, float],
     incumbent_admission_shares: dict[str, float] | None,
 ) -> dict:
-    """The four steps of section 5, on the aggregates of the target level.
+    """The four steps of the decision rule, on the aggregates of the target level.
 
     ``*_admission_shares`` maps each admission rule to its share of broken cells; a candidate
     share above the 5 % threshold fails step 1 on its own, and step 2 additionally demands

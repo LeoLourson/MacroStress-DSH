@@ -591,8 +591,8 @@ def test_the_report_meta_records_the_versions_and_the_vintage(workspace, tmp_pat
     assert len(meta["macro_versions"]) == 2
     assert meta["store"] and meta["models"] and meta["backtest_root"]
     assert meta["git_commit"] is None or len(meta["git_commit"]) == 40
-    # Phases 1-3 are implemented: nothing of section 5 is named as missing any more, and the
-    # tail is reported on the portfolio when one is given.
+    # The report names no missing metric any more, and the tail is reported on the portfolio
+    # when one is given.
     assert meta["missing"] == []
 
 
@@ -1018,7 +1018,7 @@ def test_an_unmarked_or_misguided_plan_is_a_validation_error(tmp_path):
             load_episodes(file)
         return broken
 
-    # The half and the source of the scenario are marks of the plan, not optional fields.
+    # The half and the source of the scenario are marks of the episode plan, not optional fields.
     check(text.replace('half = "tuning"\n', ""))
     check(text.replace('source = "manual"\n', "", 1))
     check(text.replace('source = "manual"', 'source = "human"', 1))

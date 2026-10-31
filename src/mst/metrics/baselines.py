@@ -1,4 +1,4 @@
-"""The admission rules of section 5 and the baselines the scores are compared with.
+"""The admission rules and the baselines the scores are compared with.
 
 A version is admitted when fewer than five percent of its cells break each of two rules
 separately — the shares are pooled over every scored cell, not taken per quantity and not

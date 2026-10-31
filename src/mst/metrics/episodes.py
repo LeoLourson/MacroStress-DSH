@@ -23,12 +23,12 @@ from mst.contracts import Contract, Identifier, Seed
 EPISODES_PATH = Path(__file__).with_name("episodes.toml")
 Count = Annotated[int, Field(strict=True, ge=1)]
 Half = Literal["tuning", "validation"]
-"""Which half of the plan an episode belongs to: tuning fits the models, validation checks
-them. The split is fixed before the models are fitted; the final table of section 5 is built
-over all episodes regardless of it."""
+"""Which half of the episode plan an episode belongs to: tuning fits the models, validation checks
+them. The split is fixed before the models are fitted; the final table of the quality metrics
+is built over all episodes regardless of it."""
 Source = Literal["manual", "llm"]
 """Who formalised the episode's scenario: a human, or an LLM reading the corpus. The scenario
-utility of section 5 reports the two apart, because an LLM that has seen the outcomes of past
+utility reports the two apart, because an LLM that has seen the outcomes of past
 episodes is only trusted in calculations forward of the date it was formalised."""
 
 
@@ -72,7 +72,7 @@ class Episodes(Contract):
     @field_validator("episodes")
     @classmethod
     def _both_halves(cls, episodes: list[EpisodeCheck]) -> list[EpisodeCheck]:
-        """Both halves of the plan are non-empty.
+        """Both halves of the episode plan are non-empty.
 
         A plan marked entirely as tuning has no validation half, so fitting could not be told
         from checking; the check is over the plan as a whole, whatever its size.

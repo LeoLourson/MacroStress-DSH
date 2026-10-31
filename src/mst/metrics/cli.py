@@ -13,7 +13,7 @@ movement known at that episode's calculation date, calibration, sharpness, cover
 admission rules pooled per rule — and reports it next to the random walk with drift, the
 unconditional base run and, for targets, the naive forecast of a year earlier. Every score comes
 with the 95 % episode-bootstrap interval, re-checked by the wild cluster bootstrap with Webb
-weights; the equal-weight aggregate of section 5 is reported per level and horizon, with the
+weights; the equal-weight aggregate is reported per level and horizon, with the
 utility of the scenario split by the manual/llm mark, and the tuning/validation halves apart.
 ``--against`` names the incumbent report's JSON for the four-step 2-SE decision;
 ``--portfolio`` names a stored portfolio for the Acerbi-Székely tail section;
@@ -47,7 +47,7 @@ def main(argv: list[str] | None = None) -> int:
     check.add_argument(
         "--against",
         type=Path,
-        help="the incumbent report's JSON, same episode plan: the 2-SE decision of section 5",
+        help="the incumbent report's JSON, same episode plan: the two-standard-error decision",
     )
     check.add_argument(
         "--portfolio",

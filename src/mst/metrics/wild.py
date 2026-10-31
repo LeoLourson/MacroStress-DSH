@@ -1,6 +1,6 @@
 """The wild cluster bootstrap with Webb weights: the check of every few-cluster interval.
 
-Section 5 of the scheme takes the 95 % interval from an episode bootstrap, but with few
+The quality metrics take the 95 % interval from an episode bootstrap, but with few
 episodes the ordinary cluster bootstrap understates the interval: resampling ``n`` clusters
 with replacement cannot break a dominant cluster. The wild cluster bootstrap (Cameron &
 Miller 2015) keeps every cluster in every repetition and instead reweights its centred

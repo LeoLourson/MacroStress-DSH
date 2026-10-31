@@ -1,4 +1,4 @@
-"""The four-step decision rule of section 5."""
+"""The four-step decision rule."""
 
 from mst.metrics.decision import decide
 

@@ -1,4 +1,4 @@
-"""The equal-weight aggregate of section 5: manual checks against a hand-built fixture."""
+"""The equal-weight aggregate: manual checks against a hand-built fixture."""
 
 import numpy as np
 import pytest

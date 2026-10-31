@@ -1,6 +1,6 @@
-"""The equal-weight aggregate of section 5, its utility split and the Monte-Carlo interval.
+"""The equal-weight aggregate, its utility split and the Monte-Carlo interval.
 
-``equal_weight`` pools scored backtest cells the way section 5 prescribes: first the mean
+``equal_weight`` pools scored backtest cells by the equal-weight rule: first the mean
 across episodes inside a quantity at a month, then the mean with equal weights — one per
 quantity, not per cell — across the quantities of a level at that month, then the mean across
 the horizons of the level. The columns are the model, its baseline, base-run and naive
@@ -8,7 +8,7 @@ comparisons and the paired differences against the baseline and the base run; ev
 aggregate carries counters of the rows behind it.
 
 ``utility_by_episode`` splits the paired improvement over the base run by the source of the
-scenario markup, ``manual`` against ``llm`` (section 5): the share of episodes whose mean
+scenario markup, ``manual`` against ``llm``: the share of episodes whose mean
 paired difference is negative, and the mean of those per-episode means.
 
 ``mc_interval`` bootstrap-resamples the draws of the cells — one shared index vector per
@@ -79,8 +79,8 @@ def equal_weight(rows: Sequence[Mapping[str, object]], *, target_level: str) -> 
     paired differences ``diff_vs_baseline`` and ``diff_vs_base`` are formed here as
     ``normalized`` minus the comparison when both parts exist.
 
-    The pooling follows section 5: the mean across episodes inside a quantity at a month
-    (step 1), the mean with equal weights — one per quantity, not per cell — across the
+    The pooling follows the equal-weight rule: first the mean across episodes inside a quantity
+    at a month (step 1), the mean with equal weights — one per quantity, not per cell — across the
     quantities of the level that have a value at that month (step 2), the mean across the
     months of the level (step 3). A column with no value anywhere in a group is ``None``.
 
@@ -138,7 +138,7 @@ def utility_by_episode(
 ) -> dict:
     """The usefulness of the scenario by the source of its markup: ``manual`` against ``llm``.
 
-    Section 5: the scenario is useful when the paired CRPS difference against the base run is
+    The scenario is useful when the paired CRPS difference against the base run is
     negative; a markup by an LLM is trusted only in out-of-sample calculations, so the split
     is reported separately. Every episode in ``rows`` needs a source in ``sources`` — a
     ``ValueError`` names the missing ids — and a source outside ``manual``/``llm`` is also a

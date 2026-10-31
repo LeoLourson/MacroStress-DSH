@@ -17,11 +17,11 @@ calculation date, the baselines alongside, the calibration buckets, the sharpnes
 (for reference only), the per-rule admission counts pooled over all cells, the intervals of the
 scores and of the paired model-less-random-walk difference, and the share of the base run's
 paths that satisfy each informative constraint — a scenario resting on a rare tail is marked as
-such. The equal-weight aggregate of section 5 — inside a quantity over the episodes, then with
+such. The equal-weight aggregate — inside a quantity over the episodes, then with
 equal weights over the quantities, separately per level and horizon — is computed on the same
 cell rows and reported with its own block, together with the four-step 2-SE decision against
 ``--against`` and the utility of the scenario: the share of episodes whose conditional forecast
-beats the base run, split by the manual/llm mark of the plan. The wild cluster bootstrap with
+beats the base run, split by the manual/llm mark. The wild cluster bootstrap with
 Webb weights re-checks the paired intervals. Monte-Carlo error is separated from sampling
 error with ``--mc-bootstrap``. Episodes are split into tuning and validation halves by the
 plan's marks; the halves are reported apart and the final tables stay over all episodes. The
@@ -29,9 +29,9 @@ driver whose simulated path leaves the range of its own training history carries
 unverified tail; a version that records no training range is checked against its whole column
 and marked as a legacy part. ``--portfolio`` adds the Acerbi-Székely section: the portfolio's
 predictive losses on the episodes' conditional paths, its realized loss on the facts of the
-window, ``Z``, the episode and wild intervals and the 1 % trimming. The verdict of section 5 is
+window, ``Z``, the episode and wild intervals and the 1 % trimming. The accept/reject verdict is
 spoken only in the ``decision`` block behind ``--against``: the per-quantity tables stay
-descriptive, and ``meta["missing"]`` names nothing of phases 1-3.
+descriptive, and ``meta["missing"]`` names no metric the report cannot compute.
 """
 
 import hashlib
@@ -83,10 +83,10 @@ INTERVAL_REPETITIONS = 1000
 
 WILD_PRIMARY_BELOW = 8
 """Fewer episodes than this: the ordinary cluster bootstrap understates the interval, so the
-wild interval is read as the primary one (section 5)."""
+wild interval is read as the primary one."""
 
 MISSING = ()
-"""What section 5 still asks for and the report cannot compute; empty for phases 1-3."""
+"""What the report cannot compute; empty when every metric is computed."""
 
 
 @dataclass
@@ -140,14 +140,14 @@ def run(
     mc_bootstrap: bool = False,
     target_level: str = "macro",
 ) -> int:
-    """The backtest of every episode of the plan; prints Markdown tables, returns an exit code.
+    """The backtest of every episode the plan names; prints Markdown tables, returns an exit code.
 
     ``as_of`` is the date the facts are read on — the realized paths as they are known today;
     each episode's models are estimated on the day before it starts, whatever ``as_of`` is.
     With ``satellites`` the served drivers are scored too: their bundle is estimated on each
     episode's macro version, which takes as long as the estimation itself. ``against`` names
-    the JSON report of the incumbent version, checked on the same episode plan — the 2-SE
-    decision of section 5 compares the two on the same cells. ``portfolio`` names a stored
+    the JSON report of the incumbent version, checked on the same episode plan — the
+    two-standard-error decision compares the two on the same cells. ``portfolio`` names a stored
     portfolio for the Acerbi-Székely tail section; ``mc_bootstrap`` adds the Monte-Carlo
     interval of the equal-weight aggregate, separated from the episode-sampling intervals;
     ``target_level`` is the level whose aggregate the decision compares — the macro level by
@@ -882,7 +882,8 @@ def _endpoint(transform: str, value: float) -> float:
 def _admission(cells: list[Cell]) -> dict:
     """The pooled admission of a version: one share per rule over every scored cell.
 
-    Section 5 admits a version when fewer than five percent of cells break *each* condition.
+    The admission rule admits a version when fewer than five percent of cells break *each*
+    condition.
     The shares are computed over all scored cells of all quantities — not per quantity and not
     as the union of the rules — so a version that breaks one rule on six percent of the cells
     fails, while eight percent of cells breaking different rules four percent each passes.
@@ -1025,7 +1026,7 @@ def _halves_block(
 ) -> dict:
     """The aggregate, admission and constraint gate of each half, and of all episodes.
 
-    Section 5 fits the models on the tuning half and checks them on the validation one, while
+    The backtest fits the models on the tuning half and checks them on the validation one, while
     the final table is built over all episodes; the block keeps the three side by side so a
     reader sees whether the halves agree. The ``all`` entry repeats the top-level tables.
     """
@@ -1208,7 +1209,7 @@ def _decision_block(
     plan: Episodes,
     target_level: str = "macro",
 ) -> dict:
-    """The 2-SE verdict of section 5: the candidate report against the incumbent's JSON.
+    """The two-standard-error verdict: the candidate report against the incumbent's JSON.
 
     The incumbent report is read and checked against the same episode plan: a cell the two
     reports do not share is an error naming the missing cells, not a silent comparison on the
@@ -1374,9 +1375,9 @@ def _tail_section(
     """The Acerbi-Székely section: the portfolio tail backtest over the episodes.
 
     The conditional forecast of every episode valued through the engine gives the predictive
-    loss distribution; the realized loss comes from the facts at both ends of the window
-    (assumption 8 of the plan). The ``Z`` of section 5 is computed over the episodes that have
-    both; an episode without the facts of its window, with a position the engine could not
+    loss distribution; the realized loss comes from the portfolio value on the facts at both
+    ends of the window. The ``Z`` of the Acerbi-Székely tail is computed over the episodes that
+    have both; an episode without the facts of its window, with a position the engine could not
     calculate, or without a satellite bundle is dropped with a named counter. The verdict of
     admission does not read ``Z``: the section is reported, not gated.
     """
@@ -1551,7 +1552,7 @@ def _git_commit() -> str | None:
 
 
 def _print(report: dict) -> None:
-    """The report as Markdown tables and the list of what section 5 still asks for."""
+    """The report as Markdown tables and the list of metrics it cannot compute."""
     print("## Episodes\n")
     print("| episode | as of | horizon | constrained | driving | min constraint probability |")
     print("|---|---|---|---|---|---|")
@@ -1645,12 +1646,12 @@ def _print(report: dict) -> None:
         print(f"- macro {model['model_id']} {model['version']} at {meta['backtest_root']}")
     for model in meta["satellite_models"]:
         print(f"- satellites {model['model_id']} {model['version']}")
-    print("\nMissing section 5 items:\n")
+    print("\nMetrics the report cannot compute:\n")
     if meta["missing"]:
         for item in meta["missing"]:
             print(f"- {item}")
     else:
-        print("- none: phases 1-3 of the plan are implemented")
+        print("- none: the report computes every metric")
 
 
 def _print_aggregate(report: dict) -> None:

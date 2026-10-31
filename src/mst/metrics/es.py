@@ -1,4 +1,4 @@
-"""The Acerbi-Székely Z of section 5: an ES backtest of the portfolio's losses.
+"""The Acerbi-Székely Z: an ES backtest of the portfolio's losses.
 
 For every episode ``e`` the backtest holds the realized portfolio loss ``l_e``, the predictive
 ``VaR_e`` — the P95 of the losses over the run's repetitions — and the predictive ``ES_e``, the
@@ -8,7 +8,7 @@ mean loss in that tail (``mst.plugin_sdk.expected_shortfall``). The statistic is
 
 and its expectation is zero when the realized losses follow the predictive tails, so ``Z > 0``
 reads the tails as understated. The comparison is strict: a loss exactly at ``VaR_e`` contributes
-nothing. ``Z`` is reported in the tail section only — the admission verdict of section 5 does not
+nothing. ``Z`` is reported in the tail section only — the admission verdict does not
 read it. Beside it the report shows the trimmed ``Z``: ``VaR_e`` and ``ES_e`` recomputed with the
 heaviest repetitions of the predictive law dropped (``trim_terms``). An episode without a realized
 loss or without a positive predictive ES is dropped by the caller and counted by name; here a
@@ -18,8 +18,9 @@ The predictive losses are the engine's values of the portfolio's positions on th
 conditional paths: the macro variables and the drivers come back in their own units
 (``conditional_paths``), and the loss of a repetition is minus the sum of the positions'
 ``value_change`` in the portfolio's base currency (``portfolio_losses``). The realized loss is the
-same valuation on the facts of the window (``realized_paths``, assumption 8 of the plan): the value
-the calculation date knows at ``t = 0`` and the facts known on the check date at ``t = H``. An
+same valuation on the facts of the window (``realized_paths``): the portfolio value on the facts
+the calculation date knows at ``t = 0`` against the portfolio value on the facts known on the
+check date at ``t = H``. An
 episode whose facts are missing at either end of the window, whose realized loss is not finite, or
 whose positions the engine could not calculate is dropped by name, never silently.
 """
