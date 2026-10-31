@@ -229,6 +229,27 @@ def test_a_run_without_a_single_episode_reports_it_instead_of_raising(
     assert "No episode could be judged" in capsys.readouterr().out
 
 
+def test_the_monte_carlo_option_moves_no_other_field(workspace, tmp_path, monkeypatch):
+    corpus = manifest(tmp_path, [("R1", date(2023, 6, 1)), ("R2", date(2024, 3, 1))])
+    plan = plan_file(
+        tmp_path, [("R1", "gl.brent", "fake.demand"), ("R2", "ru.key_rate", "fake.rate")]
+    )
+    monkeypatch.setattr(runner, "load_episodes", lambda path=None: load_episodes(plan))
+
+    _, plain = run_episodes(workspace, corpus, tmp_path, name="plain.json")
+    _, monte_carlo = run_episodes(
+        workspace, corpus, tmp_path, name="mc.json", mc_bootstrap=True
+    )
+
+    # The Monte-Carlo error is reported beside the sampling error, never in place of it.
+    for key in ("episodes", "quantities", "admission", "constraint_gate", "halves"):
+        assert plain[key] == monte_carlo[key]
+    assert "monte_carlo" not in plain["aggregate"]["intervals"]
+    interval = monte_carlo["aggregate"]["intervals"]["monte_carlo"]
+    assert interval["note"].startswith("bootstrap over the draws")
+    assert interval["interval"] is not None
+
+
 def test_the_details_file_holds_the_full_report(workspace, tmp_path, monkeypatch):
     corpus = manifest(tmp_path, [("R1", date(2023, 6, 1)), ("R2", date(2024, 3, 1))])
     plan = plan_file(
