@@ -3,7 +3,8 @@
 ::
 
   python -m mst.metrics backtest [MODEL_ID] --as-of DATE --store DIR --models DIR --corpus FILE
-      [--drivers FILE] [--satellites] [--only ID ...] [--details FILE]
+      [--drivers FILE] [--satellites] [--only ID ...] [--details FILE] [--against REPORT.json]
+      [--portfolio ID] [--mc-bootstrap]
 
 ``backtest`` estimates the macro model (the named one, or the only one installed) on the day
 before every episode of ``episodes.toml`` starts, builds the scenario from what actually
@@ -11,12 +12,15 @@ happened, scores the conditional forecast against the fact — CRPS normalised b
 movement known at that episode's calculation date, calibration, sharpness, coverage, the
 admission rules pooled per rule — and reports it next to the random walk with drift, the
 unconditional base run and, for targets, the naive forecast of a year earlier. Every score comes
-with the 95 % episode-bootstrap interval; the paired model-less-random-walk difference has its
-own interval, for a later decision rule. The equal-weight aggregate across quantities, the
-four-step 2-SE decision rule and the tail statistics are not implemented and the report says so.
-With ``--satellites`` the served drivers are scored too, on the bundle estimated on each
-episode's macro version. It exits with 1 when an episode could not be checked or an admission
-rule failed. Nothing is fetched.
+with the 95 % episode-bootstrap interval, re-checked by the wild cluster bootstrap with Webb
+weights; the equal-weight aggregate is reported per level and horizon, with the
+utility of the scenario split by the manual/llm mark, and the tuning/validation halves apart.
+``--against`` names the incumbent report's JSON for the four-step 2-SE decision;
+``--portfolio`` names a stored portfolio for the Acerbi-Székely tail section;
+``--mc-bootstrap`` adds the Monte-Carlo interval of the aggregate, separated from the
+episode-sampling intervals. With ``--satellites`` the served drivers are scored too, on the
+bundle estimated on each episode's macro version. It exits with 1 when an episode could not be
+checked or an admission rule failed. Nothing is fetched.
 """
 
 import argparse
@@ -40,6 +44,25 @@ def main(argv: list[str] | None = None) -> int:
     check.add_argument("--satellites", action="store_true", help="score the drivers too")
     check.add_argument("--only", nargs="+", default=[], help="episode ids; all by default")
     check.add_argument("--details", type=Path, help="write the full report as JSON here")
+    check.add_argument(
+        "--against",
+        type=Path,
+        help="the incumbent report's JSON, same episode plan: the two-standard-error decision",
+    )
+    check.add_argument(
+        "--portfolio",
+        help="a stored portfolio id: the Acerbi-Székely tail section (needs --satellites)",
+    )
+    check.add_argument(
+        "--mc-bootstrap",
+        action="store_true",
+        help="bootstrap the draws for the Monte-Carlo interval of the aggregate",
+    )
+    check.add_argument(
+        "--target-level",
+        default="macro",
+        help="the level whose aggregate the decision and the utility read (macro by default)",
+    )
     args = parser.parse_args(argv)
 
     if hasattr(sys.stdout, "reconfigure"):
@@ -55,6 +78,10 @@ def main(argv: list[str] | None = None) -> int:
         satellites=args.satellites,
         only=args.only,
         details=args.details,
+        against=args.against,
+        portfolio=args.portfolio,
+        mc_bootstrap=args.mc_bootstrap,
+        target_level=args.target_level,
     )
 
 

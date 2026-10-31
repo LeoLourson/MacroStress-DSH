@@ -79,9 +79,11 @@ Once a client is connected, it sees seven tools. Long operations start jobs: a t
 11. `run(action="start", scenario=..., portfolio=..., draws=..., seed=..., targets=...)` —
     start a run; `run(action="result", id=...)` — read the conditional forecast of the
     target indicators ($P_5$/$P_{50}$/$P_{95}$ by month) and the portfolio report with
-    $\delta$ and coverage.
+    $\delta$, the platform distance $\operatorname{dist}(P_s,P)$ and coverage.
 12. `model(kind="macro", action="backtest", as_of=...)` — the episode check: CRPS,
-    calibration and admission of the models on historical events (`mst.metrics`).
+    calibration, admission and the equal-weight aggregate by level and horizon on historical
+    events (`mst.metrics`); the command line adds the two-standard-error decision, the scenario
+    usefulness, the wild intervals and the portfolio tail.
 
 ## Documentation
 

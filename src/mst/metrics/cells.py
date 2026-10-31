@@ -12,7 +12,7 @@ CRPS is the integral of the squared distance between the forecast distribution a
 the sample estimator over the draws is ``E|X - y| - E|X - X'| / 2``, which penalises both bias
 and needless width. To compare quantities measured in different units, CRPS is divided by
 ``sigma_q(t)`` — the typical movement of the quantity over ``t`` months, the median absolute
-change over the history (section 5 of the scheme). Calibration reads the probability integral
+change over the history. Calibration reads the probability integral
 transform ``u = F(y)``. The implementation uses the mid-PIT ``(below + tied / 2) / R``: for
 continuous draws that is ``F(y)``, but a forecast with an atom at the fact is not uniform, so
 the bucket shares 0.05 / 0.45 / 0.45 / 0.05 are the target for a continuous forecast only.
@@ -20,8 +20,8 @@ Sharpness is the median width of the ``[p5, p95]`` band, meaningful only once ca
 passes; coverage is reported for reference only, because it grows with width.
 
 The scores are per quantity. The equal-weight aggregate across quantities, the paired decision
-rule of section 5 and the tail statistics (Acerbi-Székely ``Z``, ES) are not in this module;
-the report names them as missing.
+rule and the tail statistics (Acerbi-Székely ``Z``, ES) are not in this module:
+they live in ``aggregate``, ``decision``, ``es`` and the runner ``backtest``.
 """
 
 from collections.abc import Mapping, Sequence
@@ -60,6 +60,11 @@ class Cell:
     """(R,) the unconstrained run of the model, the second comparison of the scheme."""
     sigma: float = float("nan")
     """``sigma_q(t)`` from the history known at the episode's calculation date."""
+    sigma_source: str = "none"
+    """Where ``sigma`` came from: ``t`` its own month, ``t*``/``t+`` a neighbour, ``pooled``
+    the peers of the level, ``none`` no scale at all (``mst.metrics.cells.sigma_with_fallback``)."""
+    sigma_pairs: int = 0
+    """How many finite pairs the value of ``sigma`` rests on."""
     history_range: float = float("nan")
     """The range of the quantity's history known at the same date; the width rule reads it."""
     domain: tuple[float, float] | None = None
@@ -109,13 +114,84 @@ def typical_movement(history: np.ndarray, months: int) -> float:
     """``sigma_q(t)``: the median absolute change of the history over ``months`` months.
 
     ``history`` is the quantity in the model scale, one value a month, NaN where unknown.
+    A zero median — a history that does not move over ``months`` months — is no scale either:
+    the normalisation it feeds would be degenerate, so it is NaN as well.
     """
     y = np.asarray(history, dtype=float)
     if len(y) <= months:
         return float("nan")
     changes = np.abs(y[months:] - y[:-months])
     changes = changes[np.isfinite(changes)]
-    return float(np.median(changes)) if len(changes) else float("nan")
+    if not len(changes):
+        return float("nan")
+    sigma = float(np.median(changes))
+    return sigma if sigma > 0 else float("nan")
+
+
+def movement_pairs(history: np.ndarray, months: int) -> int:
+    """How many finite pairs the absolute change over ``months`` months rests on."""
+    y = np.asarray(history, dtype=float)
+    if len(y) <= months:
+        return 0
+    return int(np.isfinite(y[months:] - y[:-months]).sum())
+
+
+def sigma_with_fallback(
+    history: np.ndarray,
+    months_list: Sequence[int],
+    *,
+    peers: dict[str, np.ndarray] | None = None,
+) -> dict[int, tuple[float, str, int]]:
+    """``sigma_q(t)`` for every month, with a fallback when the history gives no scale.
+
+    A month whose own ``sigma_q(t)`` is valid — finite and positive — is the source ``"t"``.
+    Otherwise the scale is borrowed from the nearest month of ``months_list`` that has one:
+    the largest ``t*`` below (``"t*"``), then the smallest ``t+`` above (``"t+"``), then the
+    median of the peers' ``sigma_r(t)`` over the valid peer scales — the histories of the
+    same level's quantities (``"pooled"``) — and otherwise ``(NaN, "none", 0)``.
+
+    The third element counts the pairs behind the value: the pairs of the month it came from
+    for ``"t"``, ``"t*"`` and ``"t+"``, the number of peer scales for ``"pooled"``, and zero
+    when no scale was found. A scale resting on one pair is reported with it rather than
+    silently trusted.
+    """
+    months = sorted({int(t) for t in months_list})
+    own = {t: typical_movement(history, t) for t in months}
+    pairs = {t: movement_pairs(history, t) for t in months}
+    valid = {t: s for t, s in own.items() if np.isfinite(s) and s > 0}
+    result: dict[int, tuple[float, str, int]] = {}
+    for t in months:
+        if t in valid:
+            result[t] = (valid[t], "t", pairs[t])
+            continue
+        below = [u for u in valid if u < t]
+        if below:
+            best = max(below)
+            result[t] = (valid[best], "t*", pairs[best])
+            continue
+        above = [u for u in valid if u > t]
+        if above:
+            best = min(above)
+            result[t] = (valid[best], "t+", pairs[best])
+            continue
+        pooled, scales = _pooled_sigma(peers, t)
+        if np.isfinite(pooled) and pooled > 0:
+            result[t] = (pooled, "pooled", scales)
+        else:
+            result[t] = (float("nan"), "none", 0)
+    return result
+
+
+def _pooled_sigma(peers: dict[str, np.ndarray] | None, months: int) -> tuple[float, int]:
+    """The median of the peers' valid ``sigma_r(months)`` and how many scales it used."""
+    if not peers:
+        return float("nan"), 0
+    scales = []
+    for other in peers.values():
+        sigma = typical_movement(other, months)
+        if np.isfinite(sigma) and sigma > 0:
+            scales.append(sigma)
+    return (float(np.median(scales)) if scales else float("nan")), len(scales)
 
 
 def history_range(history: np.ndarray) -> float:
@@ -165,6 +241,8 @@ def score_cells(cells: list[Cell]) -> dict:
             "month": cell.month,
             "crps": value,
             "normalized": value / movement if known_scale else None,
+            "sigma_source": cell.sigma_source,
+            "sigma_pairs": cell.sigma_pairs,
             "p05": float(band[0]),
             "p50": float(band[1]),
             "p95": float(band[2]),

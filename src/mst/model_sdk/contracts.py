@@ -117,6 +117,28 @@ class Severity:
 
 
 @dataclass(frozen=True)
+class Dist:
+    """The platform measure of scenario implausibility: ``dist(P_s, P) = -log P(C)``.
+
+    Section 4 of the scheme measures the implausibility of a scenario by the distance
+    ``dist(P_s, P)``; under the conditional scheme the platform's assumption puts it at
+    ``-log P(C)``, where ``P(C)`` is the joint probability that the *unconditional* run of
+    the model satisfies every constraint at once. Measured on ``C`` without the impacts,
+    like the plugin's ``Severity``.
+    """
+
+    probability: float
+    """P(C): the joint probability of all constraints on the unconditional run."""
+    distance: float
+    """``-log P(C)``; infinite when the probability is zero."""
+    way: str
+    """How ``P(C)`` was estimated: ``mc`` — the share of the base run's paths, ``exact`` —
+    the gaussian box probability of the parameter mixture."""
+    message: str | None = None
+    """Set when the probability is zero: no unconditional path satisfies every constraint."""
+
+
+@dataclass(frozen=True)
 class DriverPaths:
     """The paths of drivers on a macro simulation, in the model scale of each quantity."""
 
@@ -221,8 +243,11 @@ class SatellitePart:
     was fitted on and the ``Check`` of every driver with one. The platform adds ``model`` — the id
     of the model that returned the part; a part that names another model is refused. A model that
     stores the drivers' own history conventionally names its array ``d`` inside the part (the
-    platform saves it as ``<quantity>.d``); the platform then marks the paths that leave the range
-    of that history.
+    platform saves it as ``<quantity>.d``). It may also record the bounds a node was trained on
+    as ``train_low`` and ``train_high`` (a list per node, ``None`` where a node has no range);
+    the platform then marks the paths that leave those bounds, and reads a part without them —
+    a version written before the bounds were recorded — from the whole history column, marking
+    the driver ``legacy_training_range``.
     """
 
     meta: dict
@@ -277,6 +302,19 @@ class MacroModel(ABC):
         """How improbable the plan is under the model; ``None`` when the model does not say."""
         return None
 
+    def constraint_moments(
+        self, model, plan: ScenarioPlan, *, draws: int, seed: int
+    ) -> tuple[np.ndarray, np.ndarray] | None:
+        """The mean and covariance of the constraint functionals under each parameter draw.
+
+        ``means`` is ``(R, m)`` and ``covs`` is ``(R, m, m)`` in the order of
+        ``plan.constraints``: per drawn parameter set the constraint functionals ``W y`` are
+        normal, so the platform turns the mixture into the exact probability of the
+        constraint box (``mst.model_sdk.dist``). ``None`` — the default — says the model
+        does not measure them, and the platform estimates ``P(C)`` by Monte Carlo alone.
+        """
+        return None
+
     def describe(self) -> dict:
         return {
             "model_id": self.model_id,
@@ -325,15 +363,26 @@ class SatelliteModel(ABC):
         impacts: list[AdditiveImpact],
         *,
         correlation: tuple[list[str], np.ndarray] | None = None,
+        shocks: np.ndarray | None = None,
         seed: int,
         stream: int,
     ) -> DriverPaths:
         """The paths of ``drivers`` on ``macro``, with the impacts of the scenario added.
 
         ``correlation`` is the bundle's residual correlation: the driver ids it is measured on
-        and their matrix; a model draws the joint noise of its own drivers from it. ``stream``
-        separates the random streams of the models of one bundle, so the bundle is reproducible
-        however many models it holds.
+        and their matrix. ``shocks`` is passed only for a bundle of two or more models, and
+        ``None`` is equivalent to its absence: the platform then does not pass the argument at
+        all, and a model written before model SDK 1.1 keeps working as it did. When given, it
+        holds the standardized residuals the platform drew for this model's correlated drivers —
+        ``(R, steps, k)`` columns in the order of ``drivers``, counting only the drivers with a
+        history of their own; a driver without one stays on the model's own independent noise.
+        The model must use these columns as the residuals of those drivers and read the first
+        rows it needs, not all ``steps``: a bundle of two or more models draws the joint shocks
+        of all its drivers once, so the measured cross-model correlation reaches the joint
+        paths. Without them the model draws its own correlated residuals from ``correlation``,
+        as it always did. ``stream`` separates the random streams of the models of one bundle —
+        the posterior draw and the independent noise come from it, while the platform's shocks
+        come from its own stream.
         """
 
     def describe(self) -> dict:

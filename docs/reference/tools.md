@@ -89,7 +89,7 @@
 | `macro` | `list` | — | Версии макромоделей, новые первыми |
 | `macro` | `describe` | `version` | Метаданные версии: модель, дата, переменные, шоки и доля розыгрышей, прошедших знаковые ограничения |
 | `macro` | `estimate` | `as_of`, `model_id` (единственная — можно опустить) | Задача на `models`: `python -m mst.models estimate-macro` |
-| `macro` | `backtest` | `as_of`, `model_id`, `only` | Задача на `models`: `python -m mst.metrics backtest` — ячейки, CRPS, калибровка, допуск |
+| `macro` | `backtest` | `as_of`, `model_id`, `only` | Задача на `models`: `python -m mst.metrics backtest` — ячейки, CRPS, калибровка, допуск, агрегат по уровням и горизонтам и половины настройки и проверки |
 | `satellites` | `list` | — | Версии сателлитов (бандлы) |
 | `satellites` | `describe` | `version` | Обслуживаемые драйверы и отклонённые с причиной |
 | `satellites` | `estimate` | `version` — хеш макроверсии, `assignment` (величина → модель) | Задача на `models`: `python -m mst.models estimate-satellites` собирает бандл — своя модель на каждую величину |
@@ -110,7 +110,8 @@ python -m mst.data update [SERIES ...] --workspace DIR
 python -m mst.models estimate-macro bvar.sv --as-of 2026-10-29 --store DIR --models DIR
 python -m mst.models estimate-satellites --macro SHA256 --store DIR --models DIR --drivers FILE [--model QUANTITY=MODEL_ID]
 python -m mst.metrics backtest bvar.sv --as-of 2026-10-29 --store DIR --models DIR --corpus FILE [--satellites --drivers FILE]
-    [--signs FILE ...] [--only ID ...] [--details FILE]
+    [--only ID ...] [--details FILE] [--against REPORT.json] [--target-level LEVEL]
+    [--portfolio ID] [--mc-bootstrap]
 
 # драйверы
 python -m mst.drivers update [QUANTITY ...] --store DIR --drivers FILE
@@ -122,7 +123,7 @@ python -m mst.mcp --workspace DIR
 python -m mst.corpus index --corpus DIR
 python -m mst.corpus search QUERY --as-of DAY --corpus DIR
 
-# прогон
+# расчёт
 python -m mst.runs <id> --workspace DIR
 ```
 
@@ -130,12 +131,17 @@ python -m mst.runs <id> --workspace DIR
 `<workspace>/drivers/catalog.json`, `--corpus` — `<workspace>/corpus/manifest.json` (у
 `mst.corpus` — корень `<workspace>/corpus`).
 
-`backtest` печатает таблицы эпизодов и величин: нормированный CRPS условного прогноза
-рядом со случайным блужданием и наивным прогнозом, калибровку по $p_5/p_{50}/p_{95}$,
-резкость и допуск (полоса в допустимой области и не шире размаха истории, вероятность
-ограничения в базовом расчёте выше 1 %); полный отчёт — в `--details`. Версии эпизодов
-кэшируются в `<models>/backtest/` по состоянию данных;
-каждый файл `--signs` — альтернативная таблица знаков в формате `[[shocks]]` реестра, и
-она проверяется рядом с основной. Модели эпизодов пишутся в `<models>/backtest/`, а не в
-`<models>/macro/`; код выхода 1 — какой-то эпизод не проверен (нет в манифесте, короткая
-история, недопустимый сценарий).
+`backtest` печатает таблицы эпизодов, допуска, агрегата «уровень × горизонт», полезности
+сценария, половин и таблицу величин: нормированный CRPS условного прогноза рядом со случайным
+блужданием, базовым расчётом и наивным прогнозом, калибровку по $p_5/p_{50}/p_{95}$, резкость и
+допуск (полоса в допустимой области и не шире размаха истории, вероятность ограничения в
+базовом расчёте выше 1 %). С `--against` печатается вердикт по двум стандартным ошибкам на одних
+и тех же ячейках и половине проверки; с `--portfolio` (требует `--satellites`) — секция хвоста
+Acerbi–Székely ($Z$, интервалы, усечение 1 %, выпавшие эпизоды); с `--mc-bootstrap` — интервал
+ошибки Монте-Карло отдельно от выборки по эпизодам; `--target-level` выбирает уровень, по
+которому сравниваются версии (по умолчанию `macro`). Полный отчёт — в `--details`. Версии
+эпизодов кэшируются в `<models>/backtest/` по состоянию данных, бандлы сателлитов — по
+дайджесту всех своих входов; старые указатели `satellites-<имя макро-версии>` не
+переиспользуются. Модели эпизодов пишутся в `<models>/backtest/`, а не в `<models>/macro/`;
+код выхода 1 — какой-то эпизод не проверен (нет в манифесте, короткая история, недопустимый
+сценарий) или нарушено условие допуска.

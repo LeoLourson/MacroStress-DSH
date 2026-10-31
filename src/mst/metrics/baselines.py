@@ -1,4 +1,4 @@
-"""The admission rules of section 5 and the baselines the scores are compared with.
+"""The admission rules and the baselines the scores are compared with.
 
 A version is admitted when fewer than five percent of its cells break each of two rules
 separately — the shares are pooled over every scored cell, not taken per quantity and not
@@ -68,14 +68,17 @@ def random_walk(
     """A random walk with drift: the last value plus the trend and the noise of the changes.
 
     ``history`` is the quantity in the model scale, one value a month; the drift and the noise
-    come from its monthly changes. ``months`` is the step of the walk.
+    come from the changes between months exactly ``months`` apart on the calendar grid, so a
+    gap does not join distant observations — a pair counts only when both of its ends are
+    known, and fewer than three pairs leave the walk NaN. ``months`` is the step of the walk.
     """
     y = np.asarray(history, dtype=float)
-    known = y[np.isfinite(y)]
-    if len(known) < 3:
+    changes = y[months:] - y[:-months]
+    changes = changes[np.isfinite(changes)]
+    if len(changes) < 3:
         return np.full((draws, horizon), np.nan)
-    changes = known[months:] - known[:-months]
     drift, noise = float(np.mean(changes)) / months, float(np.std(changes)) / np.sqrt(months)
+    known = y[np.isfinite(y)]
     rng = np.random.default_rng(seed)
     steps = rng.normal(drift, noise, size=(draws, horizon))
     if months > 1:

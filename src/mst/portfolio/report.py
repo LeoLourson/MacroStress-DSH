@@ -6,6 +6,11 @@ position that was not calculated does not quietly disappear: it is excluded with
 the report states the share of the value the numbers cover. ``delta`` is the distance of the
 scenario's paths from the unconditional forecast (``mst.macro.forecast.Severity``); a scenario
 without constraints has no severity, and the report says so instead of inventing a zero.
+
+Beside the severity stands the platform's ``dist(P_s, P) = -log P(C)`` (``mst.model_sdk.dist``):
+the same unconditional forecast, but the probability of the whole constraint box. A zero
+probability is an infinite distance, passed as is and named: no unconditional path satisfies
+every constraint at once, which also fails the constraint gate.
 """
 
 from typing import Literal
@@ -32,11 +37,28 @@ def severity(found) -> dict | None:
     }
 
 
+def dist(found) -> dict | None:
+    """The platform distance of the scenario as the report states it, or None without any.
+
+    An infinite distance — no unconditional path satisfies every constraint — is passed as
+    is, with the message the estimate attached and the way ``P(C)`` was estimated.
+    """
+    if found is None:
+        return None
+    return {
+        "probability": float(found.probability),
+        "distance": float(found.distance),
+        "way": found.way,
+        "message": found.message,
+    }
+
+
 def build(
     portfolio,
     results,
     *,
     severity_found=None,
+    dist_found=None,
     coverage_limit: float = DEFAULT_COVERAGE_LIMIT,
 ) -> dict:
     """The report of ``results`` against the portfolio that produced them."""
@@ -92,6 +114,7 @@ def build(
         "flags": flags,
         "loss": _loss(losses),
         "severity": severity(severity_found),
+        "dist": dist(dist_found),
         "coverage": {
             "share": share,
             "limit": coverage_limit,

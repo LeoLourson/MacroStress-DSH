@@ -1,10 +1,14 @@
 """The conformance check every plugin passes: declarations and the demo calculation."""
 
 from dataclasses import replace
+from datetime import date
 
+import numpy as np
 import pytest
 
 from mst import plugins
+from mst.model_sdk import DriverPaths, MacroSimulation, SatelliteModel
+from mst.model_sdk.testing import check_shocks
 from mst.plugin_sdk import DataRequirements, DriverRequirement
 from mst.plugin_sdk.testing import check_plugin
 from tests.plugins import fakes
@@ -91,3 +95,90 @@ def test_a_demo_needs_a_position_its_model_serves():
     case = replace(fakes.CASE, position=fakes.CASE.position.model_copy(update={"type": "silver"}))
     findings = check_plugin(fakes.plugin(demo=(case,)))
     assert any("silver" in str(finding) for finding in findings)
+
+
+DRIVER = "share_price:sber"
+
+
+def simulated_macro(draws: int = 3, horizon: int = 2) -> MacroSimulation:
+    months = [date(2026, 1 + k, 1) for k in range(horizon + 1)]
+    return MacroSimulation(ids=["gl.brent"], months=months, paths=np.zeros((draws, horizon + 1, 1)))
+
+
+class ShocklessSatellite(SatelliteModel):
+    """A satellite that draws its own residuals whatever the platform passes."""
+
+    model_id = "shockless.sat.v1"
+    version = "0.1.0"
+    label = "Shockless"
+    quantities = ("share_price",)
+
+    def estimate(self, context): ...
+
+    def load(self, parts): ...
+
+    def simulate(
+        self, model, macro, drivers, impacts, *, correlation=None, shocks=None, seed, stream
+    ) -> DriverPaths:
+        return DriverPaths(
+            ids=list(drivers),
+            paths=np.zeros((macro.paths.shape[0], macro.paths.shape[1], len(drivers))),
+            flags={driver: frozenset() for driver in drivers},
+        )
+
+
+class UsingSatellite(ShocklessSatellite):
+    """A satellite that uses the platform's shocks column by column."""
+
+    model_id = "using.sat.v1"
+    label = "Using"
+
+    def simulate(
+        self, model, macro, drivers, impacts, *, correlation=None, shocks=None, seed, stream
+    ) -> DriverPaths:
+        horizon = macro.paths.shape[1] - 1
+        paths = np.zeros((macro.paths.shape[0], horizon + 1, len(drivers)))
+        if shocks is not None:
+            paths[:, 1:, :] = shocks[:, :horizon, :]
+        return DriverPaths(
+            ids=list(drivers), paths=paths, flags={driver: frozenset() for driver in drivers}
+        )
+
+
+class OldSignature(ShocklessSatellite):
+    """A satellite written before model SDK 1.1: no ``shocks`` parameter at all."""
+
+    model_id = "old.sat.v1"
+    label = "Old"
+
+    def simulate(self, model, macro, drivers, impacts, *, correlation=None, seed, stream):
+        return DriverPaths(
+            ids=list(drivers),
+            paths=np.zeros((macro.paths.shape[0], macro.paths.shape[1], len(drivers))),
+            flags={driver: frozenset() for driver in drivers},
+        )
+
+
+def _shock_findings(model: SatelliteModel):
+    return check_shocks(
+        model,
+        None,
+        simulated_macro(),
+        [DRIVER],
+        correlated=[DRIVER],
+        history=4,
+    )
+
+
+def test_a_satellite_that_uses_the_platform_shocks_conforms():
+    assert _shock_findings(UsingSatellite()) == []
+
+
+def test_a_satellite_that_ignores_the_platform_shocks_is_a_finding():
+    findings = _shock_findings(ShocklessSatellite())
+    assert len(findings) == 1 and "ignored the platform shocks" in str(findings[0])
+
+
+def test_a_satellite_written_before_the_shocks_argument_is_a_finding():
+    findings = _shock_findings(OldSignature())
+    assert len(findings) == 1 and "did not accept the platform shocks" in str(findings[0])
