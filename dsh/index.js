@@ -3,13 +3,13 @@
  * that describe how to work with it, and the system prompt section that tells every
  * agent which model versions a run would use.
  *
- * `cordis.patch.yml` names the workspace once, as the YAML anchor `&workspace`, and
- * passes it both to the server and to this plugin's config, so the section and the
- * tools describe the same directory. Without a config the plugin falls back to
- * `<repository>/workspace`.
+ * The server and this plugin find the same workspace: `MACROSTRESS_WORKSPACE`, else
+ * `~/.macrostress/workspace`, so the section and the tools describe one directory. A profile
+ * that keeps it elsewhere overrides both entries in its own patch.
  */
 
 import { readdirSync, readFileSync, statSync } from 'node:fs';
+import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -17,7 +17,11 @@ export const name = 'dsh-macrostress';
 export const inject = ['skills', 'systemPrompt'];
 
 const here = dirname(fileURLToPath(import.meta.url));
-const defaultWorkspace = join(here, '..', 'workspace');
+
+/** The workspace without a config: the rule `mst.mcp` follows too. */
+export function defaultWorkspace(env = process.env, home = homedir()) {
+  return env.MACROSTRESS_WORKSPACE || join(home, '.macrostress', 'workspace');
+}
 
 /** Split one SKILL.md into its frontmatter fields and its body. */
 function parseSkill(text) {
@@ -101,7 +105,7 @@ function snapshotText(workspace, cache) {
 }
 
 export function apply(ctx, config = {}) {
-  const workspace = config.workspace ?? defaultWorkspace;
+  const workspace = config.workspace ?? defaultWorkspace();
   const cache = { stamp: '', text: '' };
 
   // The registry owns the effect when `register` is called on its own context, so

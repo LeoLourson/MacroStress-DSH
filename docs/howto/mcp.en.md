@@ -28,7 +28,7 @@ The server speaks over stdio and prints nothing until a client connects. The wor
 
 ## Client configuration
 
-The client starts the command itself. Pass the absolute path to the workspace and put the FRED key in `env`, so the server hands it to the download jobs.
+The client starts the command itself. Without `--workspace` the server takes `MACROSTRESS_WORKSPACE`, else `~/.macrostress/workspace`. Pass the absolute path to the workspace and put the FRED key in `env`, so the server hands it to the download jobs.
 
 ### Claude Desktop
 

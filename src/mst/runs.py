@@ -569,6 +569,7 @@ def _dist_meta(found) -> dict | None:
         "standard_error": float(found.standard_error),
         "causes": list(found.causes),
         "tolerances": list(found.tolerances),
+        "by_level": {str(level): float(price) for level, price in sorted(found.by_level.items())},
         "message": found.message,
     }
 

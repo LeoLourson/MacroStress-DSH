@@ -8,15 +8,15 @@
 | Файл | Что делает |
 |---|---|
 | `package.json` | Манифест пакета; `dsh.bundle.patch` указывает DSH на `cordis.patch.yml` |
-| `cordis.patch.yml` | Патч дерева профиля: вставляет `@deepseek-ai/dsh-mcp-client` с сервером `python -m mst.mcp --workspace ...` и сам плагин. Пути в нём абсолютные, на другой машине их нужно заменить |
+| `cordis.patch.yml` | Патч дерева профиля: вставляет `@deepseek-ai/dsh-mcp-client` с сервером `uvx macrostress` и сам плагин. Путей машины в нём нет |
 | `index.js` | Плагин: при включении регистрирует скиллы из `skills/*.md` и раздел промпта `macrostress` из пяти строк по `workspace.json`; при выключении снимает скиллы |
 | `locale/` | Название и описание плагина на русском и английском |
 | `skills/` | Три скилла агента: `scenario-from-corpus`, `run-report`, `drivers` |
 | `test/smoke.mjs` | Проверка без DSH: фейковый контекст, скиллы, пять строк по временному `workspace.json`, запасной однострочный вариант, перечитывание файла и снятие скиллов |
 
-Путь workspace написан в патче один раз, в якоре `&workspace`: его получают и сервер
-(`--workspace` в `args`), и `index.js` (параметр `workspace` конфига). Без конфига плагин берёт
-`<репозиторий>/workspace`.
+Каталог данных сервер и `index.js` находят по одному правилу: `MACROSTRESS_WORKSPACE`, иначе
+`~/.macrostress/workspace`. Настройки одной машины пишутся в патче профиля, см.
+[../docs/howto/install.md](../docs/howto/install.md).
 
 Проверка плагина без запуска DSH:
 

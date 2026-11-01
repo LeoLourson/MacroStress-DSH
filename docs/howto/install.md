@@ -25,36 +25,49 @@ uv run macrostress --workspace workspace
 Сервер говорит по stdio и ждёт клиента, поэтому после запуска ничего не печатает; выход —
 Ctrl+C. При запуске он создаёт `workspace/` и пишет туда `workspace.json`.
 
-## 2. Пути в `dsh/cordis.patch.yml`
+## 2. Где лежат данные
 
-В патче два абсолютных пути: интерпретатор из `.venv` этого репозитория и каталог данных.
+В `dsh/cordis.patch.yml` нет путей: `uvx` запускает пакет с PyPI, а сервер и плагин находят один
+каталог данных по одному правилу: переменная окружения `MACROSTRESS_WORKSPACE`, иначе
+`~/.macrostress/workspace`. Для обычной установки ничего настраивать не нужно.
+
+Всё, что относится к одной машине, пишется в патче профиля
+`~/.dsh/profiles/<имя>/cordis.patch.yml`: он применяется после бандла и заменяет `config` записи
+целиком. Так подключают свой каталог данных или разработческий checkout:
 
 ```yaml
-command: 'C:\Users\LeoLeon\Documents\MacroStress\macrostress-dsh\.venv\Scripts\python.exe'
-args:
-  - ...
-  - '--workspace'
-  - &workspace 'C:\Users\LeoLeon\Documents\MacroStress\macrostress-dsh\workspace'
-...
+- id: mcp-macrostress
+  config:
+    serverName: macrostress
+    transport: stdio
+    command: '<путь к репозитории>/.venv/Scripts/python.exe'
+    args: ['-u', '-m', 'mst.mcp', '--workspace', '<каталог данных>']
+    env:
+      PYTHONUTF8: '1'
+    failOnStartupError: false
 - id: dsh-macrostress
   config:
-    workspace: *workspace
+    workspace: '<каталог данных>'
 ```
-
-На другой машине замените оба пути на свои. Каталог данных можно держать где угодно; в
-патче он написан один раз, в якоре `&workspace`, и оттуда его получают и сервер, и плагин
-(`dsh/index.js`), поэтому промпт и инструменты всегда описывают один каталог.
 
 ## 3. Ключ FRED
 
-Глобальные ряды (`gl.brent`, `gl.fed_rate`, `gl.ust_10y`, `gl.vix`) загружаются из FRED, и
-для них нужен бесплатный ключ в переменной окружения `FRED_API_KEY`. Остальные источники
-работают без ключа. Задачи загрузки наследуют окружение сервера, поэтому ключ задаётся в
-системных переменных Windows или в поле `env` записи `mcp-macrostress` патча.
+Глобальные ряды (`gl.brent`, `gl.fed_rate`, `gl.ust_10y`, `gl.vix`) загружаются из FRED, и для
+них нужен бесплатный ключ `FRED_API_KEY`. Остальные источники работают без ключа. DSH убирает из
+окружения дочерних процессов имена, похожие на секреты, поэтому системная переменная до сервера
+не дойдёт: ключ задаётся в поле `env` записи `mcp-macrostress` патча профиля, как в примере выше.
+В репозиторий ключ не попадает. Задачи загрузки наследуют окружение сервера.
 
 ## 4. Подключение к профилю DSH
 
-Профиль DSH — каталог `~/.dsh/profiles/<имя>/`. Плагин подключается к нему тремя шагами.
+Профиль DSH — каталог `~/.dsh/profiles/<имя>/`. Плагин ставится из репозитория одной командой:
+
+```powershell
+dsh plugin add "github:LeoLourson/MacroStress-DSH#path:/dsh"
+```
+
+Менеджеру плагинов нужен `pnpm`. Без него, или чтобы менять плагин на месте, он подключается
+вручную из клона репозитория.
 
 1. Ссылка на папку `dsh/` из каталога плагинов DSH (в Windows — junction):
 

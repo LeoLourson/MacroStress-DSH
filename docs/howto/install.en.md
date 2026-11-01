@@ -20,31 +20,40 @@ uv run macrostress --workspace workspace
 
 The server speaks over stdio and waits for a client, so it prints nothing after the start; Ctrl+C exits. On start it creates `workspace/` and writes `workspace.json` there.
 
-## 2. Paths in `dsh/cordis.patch.yml`
+## 2. Where the data live
 
-The patch holds two absolute paths: the interpreter from this repository's `.venv` and the data directory.
+`dsh/cordis.patch.yml` holds no paths: `uvx` runs the package from PyPI, and the server and the plugin find one data directory by one rule: the environment variable `MACROSTRESS_WORKSPACE`, else `~/.macrostress/workspace`. An ordinary installation needs no configuration.
+
+Everything that belongs to one machine goes in the profile patch `~/.dsh/profiles/<name>/cordis.patch.yml`: it applies after the bundle and replaces the `config` of an entry whole. This is how to connect your own data directory or a development checkout:
 
 ```yaml
-command: 'C:\Users\LeoLeon\Documents\MacroStress\macrostress-dsh\.venv\Scripts\python.exe'
-args:
-  - ...
-  - '--workspace'
-  - &workspace 'C:\Users\LeoLeon\Documents\MacroStress\macrostress-dsh\workspace'
-...
+- id: mcp-macrostress
+  config:
+    serverName: macrostress
+    transport: stdio
+    command: '<path to the repository>/.venv/Scripts/python.exe'
+    args: ['-u', '-m', 'mst.mcp', '--workspace', '<data directory>']
+    env:
+      PYTHONUTF8: '1'
+    failOnStartupError: false
 - id: dsh-macrostress
   config:
-    workspace: *workspace
+    workspace: '<data directory>'
 ```
-
-On another machine replace both paths with your own. The data directory can live anywhere. The patch writes it once, in the anchor `&workspace`, and both the server and the plugin (`dsh/index.js`) take it from there, so the prompt and the tools always describe one directory.
 
 ## 3. FRED key
 
-The global series (`gl.brent`, `gl.fed_rate`, `gl.ust_10y`, `gl.vix`) come from FRED and need a free key in the environment variable `FRED_API_KEY`. The other sources work without a key. Download jobs inherit the server's environment, so set the key in the Windows system variables or in the `env` field of the `mcp-macrostress` entry of the patch.
+The global series (`gl.brent`, `gl.fed_rate`, `gl.ust_10y`, `gl.vix`) come from FRED and need a free key `FRED_API_KEY`. The other sources work without a key. DSH removes secret-like names from the environment of child processes, so a system variable does not reach the server: set the key in the `env` field of the `mcp-macrostress` entry of the profile patch, as in the example above. The key stays out of the repository. Download jobs inherit the server's environment.
 
 ## 4. Connecting to a DSH profile
 
-A DSH profile is the directory `~/.dsh/profiles/<name>/`. The plugin connects to it in these steps.
+A DSH profile is the directory `~/.dsh/profiles/<name>/`. The plugin installs from the repository with one command:
+
+```powershell
+dsh plugin add "github:LeoLourson/MacroStress-DSH#path:/dsh"
+```
+
+The plugin manager needs `pnpm`. Without it, or to edit the plugin in place, connect it by hand from a clone of the repository.
 
 1. A link to the folder `dsh/` from the DSH plugin directory (a junction on Windows):
 

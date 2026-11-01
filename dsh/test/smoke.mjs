@@ -13,7 +13,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { apply } from '../index.js';
+import { apply, defaultWorkspace } from '../index.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 
@@ -72,6 +72,12 @@ const state = {
   runs: 3,
   jobs: 4,
 };
+
+// The default workspace follows the rule of mst.mcp, and the patch names no machine.
+assert.equal(defaultWorkspace({ MACROSTRESS_WORKSPACE: 'D:\\data' }, 'H'), 'D:\\data');
+assert.equal(defaultWorkspace({}, 'H'), join('H', '.macrostress', 'workspace'));
+const patch = readFileSync(join(here, '..', 'cordis.patch.yml'), 'utf8');
+assert.doesNotMatch(patch, /[A-Za-z]:[\\/]|\/home\/|\/Users\//, 'an absolute path in the patch');
 
 const workspace = mkdtempSync(join(tmpdir(), 'dsh-macrostress-'));
 try {

@@ -1,6 +1,7 @@
 """The MCP server: a tool parses its arguments and calls one function of the core."""
 
 import argparse
+import os
 from datetime import date
 from pathlib import Path
 from typing import Any
@@ -489,10 +490,16 @@ def _start(ws: store.Workspace, resource: str, argv: list[str]) -> dict:
     return {"job": tasks.start(ws, resource, argv), "argv": argv}
 
 
+def default_workspace() -> Path:
+    """The workspace without ``--workspace``: the rule ``dsh/index.js`` follows too."""
+    named = os.environ.get("MACROSTRESS_WORKSPACE")
+    return Path(named) if named else Path.home() / ".macrostress" / "workspace"
+
+
 def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(prog="mst.mcp")
-    parser.add_argument("--workspace", required=True, type=Path)
-    ws = store.Workspace(parser.parse_args(argv).workspace)
+    parser.add_argument("--workspace", type=Path, default=None)
+    ws = store.Workspace(parser.parse_args(argv).workspace or default_workspace())
     ws.root.mkdir(parents=True, exist_ok=True)
     store.write_state(ws)
     build(ws).run()

@@ -4,8 +4,10 @@
 
 All notable changes to this project are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project uses [semantic versioning](https://semver.org/).
 
-## [Unreleased]
+## 1.0.1: the plugin installs on any machine (2026-11-01)
 
+- **The DSH plugin without machine paths.** `dsh/cordis.patch.yml` starts `uvx macrostress`, and the server and the plugin find the data directory by one rule: `MACROSTRESS_WORKSPACE`, else `~/.macrostress/workspace`; settings of one machine go in the profile patch. `--workspace` of `mst.mcp` became optional. `dsh/package.json` is public and its version equals the package version; tests guard this and the absence of absolute paths.
+- **`dist.by_level` in the report.** The portfolio report and the run meta show the decomposition of the scenario price by level.
 - **Documentation in English.** Each document has a translation `*.en.md` beside it (`docs/`, the READMEs of packages, corpus, DSH plugin and tests, this file); `tests/test_docs_translation.py` guards the pairs and links. The skills `dsh/skills/*.md` stay in Russian: they are agent instructions, not documentation.
 - **Skills and Russian documents brought to 1.0.0.** `run-report` read a field `severity` absent from the report; it now describes the field `dist`. Stale descriptions of $\delta$, driving shocks and $L=1$ are replaced.
 

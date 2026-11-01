@@ -1,11 +1,12 @@
 """mst.portfolio.report: the loss of the portfolio at P5/P50/P95 and the price of a scenario."""
 
-from dataclasses import dataclass, replace
+from dataclasses import replace
 
 import numpy as np
 import pytest
 
 from mst.engine import run
+from mst.model_sdk.contracts import Dist
 from mst.plugin_sdk import Position
 from mst.portfolio.report import build
 from mst.portfolio.spec import Portfolio
@@ -19,16 +20,6 @@ SERVED = {
     "overdue_share:mining",
     "housing_price_primary:belgorod",
 }
-
-
-@dataclass(frozen=True)
-class Dist:
-    distance: float
-    log_probability: float
-    standard_error: float
-    causes: tuple[str, ...] = ()
-    tolerances: tuple[float, ...] = ()
-    message: str | None = None
 
 
 def portfolio(*positions):
@@ -69,6 +60,7 @@ def test_the_price_of_the_scenario_stands_beside_the_loss():
         standard_error=0.2,
         causes=("ru.monetary",),
         tolerances=(0.4,),
+        by_level={0: 2.0, 2: 0.659},
     )
     report = build(portfolio(equity()), batch(equity()).results, dist_found=found)
     assert report["dist"] == {
@@ -77,6 +69,7 @@ def test_the_price_of_the_scenario_stands_beside_the_loss():
         "standard_error": 0.2,
         "causes": ["ru.monetary"],
         "tolerances": [0.4],
+        "by_level": {"0": 2.0, "2": 0.659},
         "message": None,
     }
     assert build(portfolio(equity()), batch(equity()).results)["dist"] is None
