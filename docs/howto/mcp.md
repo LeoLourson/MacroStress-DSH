@@ -6,7 +6,7 @@ Protocol: Claude Desktop, Claude Code, Cursor или плагин DeepSeek Harne
 [../concept/formalization.md](../concept/formalization.md).
 
 Серверу принадлежит один каталог на диске — workspace. Ряды, версии моделей, индекс корпуса,
-сценарии, портфели и прогоны лежат там обычными файлами, поэтому прогон воспроизводится из
+сценарии, портфели и расчёты лежат там обычными файлами, поэтому расчёт воспроизводится из
 workspace и источников.
 
 ## Требования
@@ -131,7 +131,7 @@ escape-последовательность.
 - `workspace/series/` — по одному CSV на ряд; каждое значение — с датой публикации.
 - `workspace/models/` — версии моделей, названные хешем.
 - `workspace/corpus/` — тексты в Markdown, карточки эпизодов, индекс.
-- `workspace/scenarios/`, `workspace/portfolios/`, `workspace/runs/` — файлы и результаты прогона.
+- `workspace/scenarios/`, `workspace/portfolios/`, `workspace/runs/` — файлы и результаты расчёта.
 - `workspace/workspace.json` — снимок, который читает раздел промпта.
 
 ## Типовые ошибки

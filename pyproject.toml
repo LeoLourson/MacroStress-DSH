@@ -50,7 +50,7 @@ dependencies = [
 
 [project.urls]
 Homepage = "https://github.com/LeoLourson/MacroStress-DSH"
-Documentation = "https://github.com/LeoLourson/MacroStress-DSH/blob/main/docs/README.md"
+Documentation = "https://github.com/LeoLourson/MacroStress-DSH/blob/main/docs/README.en.md"
 Repository = "https://github.com/LeoLourson/MacroStress-DSH"
 Issues = "https://github.com/LeoLourson/MacroStress-DSH/issues"
 Changelog = "https://github.com/LeoLourson/MacroStress-DSH/blob/main/CHANGELOG.md"

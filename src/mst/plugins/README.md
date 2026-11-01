@@ -18,6 +18,7 @@
 | [`bvar`](bvar/plugin.py) | макро | `bvar.sv` | уровень 0: 23 переменные, 5 именованных шоков |
 | [`msvar`](msvar/plugin.py) | макро | `msvar.markov` | уровень 0: те же 23 переменные, 5 именованных шоков и 2 режимных элемента |
 | [`hier`](hier/plugin.py) | сателлитная | `hier.gibbs` | все величины реестра драйверов по умолчанию |
+| [`reflevel2`](reflevel2/plugin.py) | сателлитная | `reflevel2.regression` | эталон второго уровня; величин основного реестра не обслуживает, назначается явно |
 
 ```powershell
 python -m mst.plugin new <id> [--kind position|satellite|macro] [--quantity Q] [--label TEXT] [--dest DIR]

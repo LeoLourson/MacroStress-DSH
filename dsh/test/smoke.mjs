@@ -57,7 +57,7 @@ function counts(state) {
   return (
     `${state.portfolios} ${plural(state.portfolios, 'портфель', 'портфеля', 'портфелей')} · ` +
     `${state.scenarios} ${plural(state.scenarios, 'сценарий', 'сценария', 'сценариев')} · ` +
-    `${state.runs} ${plural(state.runs, 'прогон', 'прогона', 'прогонов')} · ` +
+    `${state.runs} ${plural(state.runs, 'расчёт', 'расчёта', 'расчётов')} · ` +
     `задач в работе: ${state.jobs ?? 0}`
   );
 }

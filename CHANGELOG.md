@@ -1,5 +1,17 @@
 # Changelog
 
+[English](CHANGELOG.en.md)
+
+## [Unreleased]
+
+- **Документация на английском.** Рядом с каждым документом лежит перевод `*.en.md`
+  (`docs/`, README пакетов, корпуса, плагина DSH и тестов, этот файл);
+  `tests/test_docs_translation.py` сторожит пары и ссылки. Скиллы `dsh/skills/*.md`
+  остаются на русском: это инструкции агента, а не документация.
+- **Скиллы и русские документы приведены к 1.0.0.** `run-report` читал поле `severity`,
+  которого нет в отчёте; теперь описано поле `dist`. Устаревшие описания $\delta$, движущих
+  шоков и $L=1$ заменены.
+
 ## 1.0.0 — канон formalization.md: цена, наложение и уровни (2026-11-01)
 
 Система переходит на канон [docs/concept/formalization.md](docs/concept/formalization.md):
@@ -34,7 +46,7 @@
 - **Контракт сценария.** `causes` (шоки и скрытые координаты `regime_path`/`volatility_path`),
   `regime_event` отдельно от причины, `basis` у каждого элемента $C$ и $O$, `approved_by`,
   `inner`, `Expectation`, `ProbabilityCondition`; `Severity` ($\delta$, $\pi_c$) удалена.
-- **Отчёт и метрики.** Прогон несёт $s_0$ рядом с прогнозом, вклады условий и воздействий на
+- **Отчёт и метрики.** Расчёт несёт $s_0$ рядом с прогнозом, вклады условий и воздействий на
   тех же числах (`contributions`), ES с интервалом и усечением 1 %, порог вероятности и
   допуск на путях, базисы и коммит в `meta.json`. Бэктест: два расчёта на эпизод
   (без причин — для $u$ и CRPS при $R=\theta$, с причинами — для чувствительности),
@@ -192,7 +204,7 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project uses
 [semantic versioning](https://semver.org/).
 
-## [Unreleased]
+## До 0.2.0
 
 - **Схема: правки A1 и A3 из анализа посадки режимного ядра.** Неопределённость
   пополнилась путём дискретных режимов: $\omega=(\zeta,\varepsilon,\eta,\theta)$, где $\zeta$

@@ -29,4 +29,4 @@
 | [scenario/](scenario/README.md) | Контракт сценария, сборка путей, инструмент `scenario` |
 | [engine/](engine/README.md) | Диспетчер, модели позиций, статусы и набор результатов |
 | [plugins/](plugins/README.md) | Обнаружение плагинов, реестр, конформанс и границы ядра |
-| [portfolio/](portfolio/README.md) | Портфель, его проверка, отчёт и прогон портфеля |
+| [portfolio/](portfolio/README.md) | Портфель, его проверка, отчёт и расчёт портфеля |

@@ -8,12 +8,12 @@
 
 MacroStress answers one question: how much does a portfolio lose under a given macroeconomic
 scenario? An analyst or an agent names paths for a few macro variables (say, the policy rate at
-21 % for the next year) and the shocks behind them. A BVAR estimated on history completes
+21 % for the next year) and the shocks behind them. A macro model estimated on history (a BVAR or an MS-VAR) completes
 consistent paths for the other variables, satellite models turn those paths into drivers (equity
 prices, bond spreads, industry overdue shares, housing prices), and every position is repriced
 along the same draws. The output is a loss distribution with $P_5$, $P_{50}$, $P_{95}$, ES95 and
-the scenario severity $\delta$. The method is described in
-[docs/concept/scenario-formalization.md](docs/concept/scenario-formalization.md) (Russian).
+the scenario price $\mathrm{dist}(s)$. The method is described in
+[docs/concept/scenario-formalization.en.md](docs/concept/scenario-formalization.en.md).
 
 The server speaks MCP, so any client can drive it: Claude Desktop, Cursor, Claude Code. A
 DeepSeek Harness plugin in `dsh/` adds three skills and a workspace snapshot for the agent
@@ -25,16 +25,16 @@ scheduler.
 | Part | What it does |
 |---|---|
 | Series | Monthly series from MOEX, the Bank of Russia, Rosstat, and FRED, with the release date of every value |
-| Macro model | A plugin: the shipped BVAR (`bvar.sv`) or any other; the core keeps the variables registry, the panel and the version store |
+| Macro model | A plugin: the shipped BVAR (`bvar.sv`), MS-VAR (`msvar.markov`) or any other; the core keeps the variables registry, the panel and the version store |
 | Drivers | Object catalogs, the satellite bundle — one model per quantity, assigned by declaration or explicitly — out-of-sample checks, driver paths on the macro draws |
 | Scenario | A $(N, C, D, O)$ file with impacts $O$ on any level, validation and paths: the conditional forecast and the drivers on the same draws |
 | Positions | Equity, bond, credit or deposit, housing |
-| Run and report | The conditional forecast of the target indicators and the portfolio along the same paths, with $P_5$, $P_{50}$, $P_{95}$, ES95, and $\delta$ |
+| Run and report | The conditional forecast of the target indicators and the portfolio along the same paths, with $P_5$, $P_{50}$, $P_{95}$, ES95, and the scenario price |
 | Extensions | A new asset type, macro model or satellite is a plugin: `python -m mst.plugin new --kind position\|satellite\|macro`, contract checks, a demo run |
 | DSH plugin | Scenario from the corpus, report, drivers; the prompt section built from `workspace.json` |
 
 MCP tools: `jobs`, `series`, `corpus`, `scenario`, `run`, `portfolio`, `model`. The reference is
-in [docs/reference/tools.md](docs/reference/tools.md) (Russian).
+in [docs/reference/tools.en.md](docs/reference/tools.en.md).
 
 ## Install
 
@@ -48,8 +48,8 @@ uv run macrostress --workspace C:/data/macrostress
 ```
 
 The server speaks over stdio and prints only errors; it waits for a client. Configuration for
-Claude Desktop, Cursor, and any other MCP client is in [docs/howto/mcp.md](docs/howto/mcp.md). The DeepSeek
-Harness plugin is covered in [docs/howto/install.md](docs/howto/install.md).
+Claude Desktop, Cursor, and any other MCP client is in [docs/howto/mcp.en.md](docs/howto/mcp.en.md). The DeepSeek
+Harness plugin is covered in [docs/howto/install.en.md](docs/howto/install.en.md).
 
 ## First session
 
@@ -79,27 +79,28 @@ Once a client is connected, it sees seven tools. Long operations start jobs: a t
 11. `run(action="start", scenario=..., portfolio=..., draws=..., seed=..., targets=...)` —
     start a run; `run(action="result", id=...)` — read the conditional forecast of the
     target indicators ($P_5$/$P_{50}$/$P_{95}$ by month) and the portfolio report with
-    $\delta$, the platform distance $\mathrm{dist}(P_s,P)$ and coverage.
+    the scenario price $\mathrm{dist}(s)$ and coverage.
 12. `model(kind="macro", action="backtest", as_of=...)` — the episode check: CRPS,
-    calibration, admission and the equal-weight aggregate by level and horizon on historical
+    band coverage, admission and the equal-weight aggregate by level and horizon on historical
     events (`mst.metrics`); the command line adds the two-standard-error decision, the scenario
     usefulness, the wild intervals and the portfolio tail.
 
 ## Documentation
 
-The documentation is in Russian.
+Every document exists in English (`*.en.md`) and Russian (`*.md`); the index is
+[docs/README.en.md](docs/README.en.md).
 
-- [docs/concept/formalization.md](docs/concept/formalization.md) — the general scheme: levels, the
-  scenario $(N, D, C, O)$, the conditional forecast, and the quality metrics;
-- [docs/concept/scenario-formalization.md](docs/concept/scenario-formalization.md) — the method and
+- [docs/concept/formalization.en.md](docs/concept/formalization.en.md) — the general scheme: levels, the
+  scenario, the conditional forecast, and the quality metrics;
+- [docs/concept/scenario-formalization.en.md](docs/concept/scenario-formalization.en.md) — the method and
   what the code implements;
-- [docs/concept/architecture.md](docs/concept/architecture.md) — packages, workspace, versions, jobs;
-- [docs/howto/install.md](docs/howto/install.md) — the Python package and the DeepSeek Harness plugin;
-- [docs/howto/mcp.md](docs/howto/mcp.md) — any MCP client and troubleshooting;
-- [docs/howto/first-session.md](docs/howto/first-session.md) — the first session, from series to report;
-- [docs/howto/plugins.md](docs/howto/plugins.md) — a new asset type, macro model or satellite as a plugin;
-- [docs/reference/tools.md](docs/reference/tools.md) — MCP tools and `python -m mst.*` commands;
-- [docs/reference/platform.md](docs/reference/platform.md) — the contracts: position, paths, model, registry.
+- [docs/concept/architecture.en.md](docs/concept/architecture.en.md) — packages, workspace, versions, jobs;
+- [docs/howto/install.en.md](docs/howto/install.en.md) — the Python package and the DeepSeek Harness plugin;
+- [docs/howto/mcp.en.md](docs/howto/mcp.en.md) — any MCP client and troubleshooting;
+- [docs/howto/first-session.en.md](docs/howto/first-session.en.md) — the first session, from series to report;
+- [docs/howto/plugins.en.md](docs/howto/plugins.en.md) — a new asset type, macro model or satellite as a plugin;
+- [docs/reference/tools.en.md](docs/reference/tools.en.md) — MCP tools and `python -m mst.*` commands;
+- [docs/reference/platform.en.md](docs/reference/platform.en.md) — the contracts: position, paths, model, registry.
 
 Every package folder has its own README that names its files.
 

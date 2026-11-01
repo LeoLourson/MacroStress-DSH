@@ -78,7 +78,7 @@ function describe(state) {
     `макромодель ${shortVersion(state.macro)} · сателлиты ${shortVersion(state.satellites)} · корпус ${corpus}`,
     `${state.portfolios} ${plural(state.portfolios, 'портфель', 'портфеля', 'портфелей')} · ` +
       `${state.scenarios} ${plural(state.scenarios, 'сценарий', 'сценария', 'сценариев')} · ` +
-      `${state.runs} ${plural(state.runs, 'прогон', 'прогона', 'прогонов')} · ` +
+      `${state.runs} ${plural(state.runs, 'расчёт', 'расчёта', 'расчётов')} · ` +
       `задач в работе: ${state.jobs ?? 0}`,
     'Начать с jobs(action="state"): он обновляет этот снимок из файла.',
   ].join('\n');
