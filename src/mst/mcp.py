@@ -144,6 +144,7 @@ def build(ws: store.Workspace) -> FastMCP:
         seed: int | None = None,
         base_currency: str = "RUB",
         targets: list[str] | None = None,
+        contributions: bool = False,
     ) -> dict:
         """Runs on the paths of a scenario. Actions: start, status, result, list.
 
@@ -170,6 +171,8 @@ def build(ws: store.Workspace) -> FastMCP:
                 request["base_currency"] = base_currency
             if targets is not None:
                 request["targets"] = targets
+            if contributions:
+                request["contributions"] = True
             run_id = runs.new_id()
             runs.begin(ws, run_id, request)
             try:

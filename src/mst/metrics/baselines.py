@@ -21,6 +21,51 @@ import numpy as np
 
 DOMAIN = "band_outside_domain"
 WIDTH = "band_wider_than_history"
+
+
+def macro_domain() -> tuple[float, float]:
+    """The admissible range of a macro variable in the model scale.
+
+    Nought is the conservative lower boundary for every registered variable: rates, spreads
+    and unemployment are non-negative, and a ``log100`` price, index, volume or rate above one
+    maps above nought. The upper side is unbounded.
+    """
+    return (0.0, float("inf"))
+
+
+def quantity_domain(declared) -> tuple[float, float] | None:
+    """The admissible range of a driver quantity in the model scale; None when unbounded.
+
+    A declared domain is mapped through the transform, its natural endpoints becoming the
+    natural boundaries instead of disabling the check: ``log100`` keeps ``(0, +inf)`` and the
+    ``logit`` maps 0 and 1 to ``-inf`` and ``+inf``. Without a declared domain ``log100`` keeps
+    the positive half-line and the other transforms are unbounded.
+    """
+    declared_domain = declared.domain
+    if declared_domain is not None and len(declared_domain) == 2:
+        low = _endpoint(declared.transform, float(declared_domain[0]))
+        high = _endpoint(declared.transform, float(declared_domain[1]))
+        if low == -float("inf") and high == float("inf"):
+            return None
+        return (low, high)
+    if declared.transform == "log100":
+        return (0.0, float("inf"))
+    return None
+
+
+def _endpoint(transform: str, value: float) -> float:
+    """A domain endpoint in the model scale; the natural infinity where the transform diverges."""
+    if transform == "logit":
+        if value <= 0.0:
+            return -float("inf")
+        if value >= 1.0:
+            return float("inf")
+        return float(np.log(value / (1.0 - value)))
+    if transform == "log100":
+        if value <= 0.0:
+            return 0.0
+        return 100.0 * float(np.log(value))
+    return value
 CONSTRAINT = "constraint_probability_below_one_percent"
 CONSTRAINT_THRESHOLD = 0.01
 """The share of the base run's paths that must satisfy each informative constraint."""

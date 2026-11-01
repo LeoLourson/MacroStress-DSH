@@ -17,6 +17,7 @@ from typing import Literal
 import numpy as np
 
 from ..engine.status import worst
+from ..metrics.es import es_block
 from ..plugin_sdk import expected_shortfall
 
 DEFAULT_COVERAGE_LIMIT = 0.05
@@ -49,6 +50,8 @@ def build(
     results,
     *,
     dist_found=None,
+    seed: int = 0,
+    horizon: str | None = None,
     coverage_limit: float = DEFAULT_COVERAGE_LIMIT,
 ) -> dict:
     """The report of ``results`` against the portfolio that produced them."""
@@ -89,11 +92,7 @@ def build(
         if excluded or position_status == "needs_review"
         else "ok"
     )
-    losses = (
-        -np.sum([np.asarray(result.value_change, dtype=float) for result in included], axis=0)
-        if included
-        else np.zeros(0)
-    )
+    losses = losses_of(results)
     return {
         "portfolio": {
             "name": portfolio.name,
@@ -102,7 +101,8 @@ def build(
         },
         "status": status,
         "flags": flags,
-        "loss": _loss(losses),
+        "loss": _loss(losses, seed=seed, horizon=horizon),
+        "dist": dist(dist_found),
         "dist": dist(dist_found),
         "coverage": {
             "share": share,
@@ -125,9 +125,40 @@ def build(
     }
 
 
-def _loss(losses: np.ndarray) -> dict | None:
-    """P5/P50/P95 of the portfolio's loss and ES95; None when nothing was calculated."""
+def losses_of(results) -> np.ndarray:
+    """The portfolio loss of every repetition: minus the sum of the calculated positions."""
+    included = [result for result in results if result.status != "invalid"]
+    if not included:
+        return np.zeros(0)
+    return -np.sum(
+        [np.asarray(result.value_change, dtype=float) for result in included], axis=0
+    )
+
+
+def loss_block(results, *, seed: int = 0, horizon: str | None = None) -> dict | None:
+    """P5/P50/P95 and the ES block of one run's results — what a contribution reports."""
+    return _loss(losses_of(results), seed=seed, horizon=horizon)
+
+
+def _loss(losses: np.ndarray, *, seed: int = 0, horizon: str | None = None) -> dict | None:
+    """P5/P50/P95 of the portfolio's loss and ES95 with its interval and trimming.
+
+    The expected shortfall carries what the canon asks beside it — a bootstrap interval, the
+    sensitivity to dropping the heaviest one percent of the paths and the horizon it belongs
+    to — through the shared block of ``mst.metrics.es``; the horizon mark names the month the
+    loss is measured at when the caller knows it.
+    """
     if losses.size == 0:
         return None
     p05, p50, p95 = (float(value) for value in np.percentile(losses, [5, 50, 95]))
-    return {"p05": p05, "p50": p50, "p95": p95, "es95": max(expected_shortfall(losses), p95)}
+    tail = es_block(losses, seed=seed)
+    return {
+        "p05": p05,
+        "p50": p50,
+        "p95": p95,
+        "es95": max(tail["es95"], p95),
+        "es95_interval": tail["interval"],
+        "trimmed_es95": tail["trimmed_es95"],
+        "trim": tail["trim"],
+        "horizon_month": horizon,
+    }

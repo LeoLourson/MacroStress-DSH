@@ -64,7 +64,9 @@ from .baselines import (
     WIDTH,
     band_problems,
     constraint_probabilities,
+    macro_domain,
     naive_annual,
+    quantity_domain,
     random_walk,
 )
 from .cells import (
@@ -708,7 +710,7 @@ def _macro_cells(
             continue
         levels[id_] = "macro"
         history = panel.y[:, j]
-        domain = _macro_domain(registry.variable(id_))
+        domain = macro_domain()
         spread = history_range(history)
         walk = random_walk(history, episode.horizon, draws=plan.draws, seed=plan.seed)
         scale = sigma_with_fallback(history, months, peers=peers)
@@ -783,7 +785,7 @@ def _driver_cells(
             f"driver/{quantity}" if declared.level <= 1 else f"driver{declared.level}/{quantity}"
         )
         own = own_of[driver]
-        domain = _model_domain(declared)
+        domain = quantity_domain(declared)
         spread = history_range(own)
         walk = random_walk(own, episode.horizon, draws=plan.draws, seed=plan.seed)
         naive = naive_annual(own, episode.horizon, draws=plan.draws, seed=plan.seed)

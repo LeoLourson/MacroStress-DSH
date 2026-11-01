@@ -57,6 +57,41 @@ DEFINITION = (
 """What the tail section measures, as the report's ``meta`` states it."""
 
 
+#: The stream of the ES bootstrap of a single run, apart from every episode stream.
+RUN_BOOTSTRAP_STREAM = 23
+
+
+def es_block(losses: np.ndarray, *, repetitions: int = 1000, seed: int = 0) -> dict:
+    """The expected shortfall of one run's losses with what the canon asks beside it.
+
+    The canon's section 7 asks an ES to carry an interval, the sensitivity to dropping the
+    heaviest one percent of the paths and the horizon it belongs to; the interval is a
+    bootstrap over the repetitions of the run, and the trimming cuts the heaviest paths
+    before the shortfall is taken again. ``losses`` is one array — the portfolio loss of
+    every repetition — and the horizon mark is the caller's to add.
+    """
+    values = np.asarray(losses, dtype=float)
+    if values.size == 0:
+        raise ValueError("the losses carry no repetition")
+    es = float(expected_shortfall(values))
+    rng = np.random.default_rng([seed, RUN_BOOTSTRAP_STREAM])
+    draws = np.empty(repetitions)
+    for repetition in range(repetitions):
+        picked = values[rng.integers(0, values.size, values.size)]
+        draws[repetition] = expected_shortfall(picked)
+    cut = max(int(np.floor(values.size * 0.01)), 0)
+    trimmed = float(expected_shortfall(np.sort(values)[:-cut])) if cut else es
+    return {
+        "es95": es,
+        "interval": (
+            float(np.percentile(draws, 2.5)),
+            float(np.percentile(draws, 97.5)),
+        ),
+        "trimmed_es95": trimmed,
+        "trim": 0.01,
+    }
+
+
 def value_at_risk(losses: np.ndarray, level: float = 0.95) -> float:
     """The ``level`` quantile of the losses: P95 by default, the episode's predictive ``VaR``."""
     values = np.asarray(losses, dtype=float)

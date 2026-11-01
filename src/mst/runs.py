@@ -56,6 +56,9 @@ class RunRequest(Contract):
     portfolio: Identifier | None = None
     targets: list[Identifier] | None = None
     """The target indicators of the conditional forecast, by driver id; every driver by default."""
+    contributions: bool = False
+    """Whether to compute the contribution of every condition and impact: the same run
+    without the element, on the same random numbers, its loss beside the full one's."""
 
     @model_validator(mode="after")
     def one_source(self):
@@ -141,19 +144,60 @@ def execute(ws: store.Workspace, run_id: str) -> dict:
         paths = scenario_build.build(
             spec, macro, satellites, draws=request.draws, seed=request.seed
         )
+        # The empty scenario on the same seed and streams: what the forecast is compared
+        # against and what the constraint gate reads.
+        empty = scenario_build.build(
+            _without_everything(spec),
+            macro,
+            satellites,
+            draws=request.draws,
+            seed=request.seed,
+        )
         portfolio = (
             portfolio_tool.load(ws.portfolios, request.portfolio) if request.portfolio else None
         )
         positions = portfolio.positions if portfolio is not None else request.positions
         base_currency = portfolio.base_currency if portfolio is not None else request.base_currency
-        batch = calculate_run(
-            positions,
-            readable(paths),
-            drivers=satellites.registry,
-            served=satellites.served(),
-            base_currency=base_currency,
-            as_of=macro.as_of,
-        )
+
+        def valued(found) -> object:
+            return calculate_run(
+                positions,
+                readable(found),
+                drivers=satellites.registry,
+                served=satellites.served(),
+                base_currency=base_currency,
+                as_of=macro.as_of,
+            )
+
+        batch = valued(paths)
+        contributions = None
+        if request.contributions:
+            full = portfolio_report.loss_block(
+                batch.results, seed=request.seed, horizon=paths.months[-1].isoformat()
+            )
+            contributions = []
+            for name, variant in _variants(spec):
+                variant_paths = scenario_build.build(
+                    variant, macro, satellites, draws=request.draws, seed=request.seed
+                )
+                found = portfolio_report.loss_block(
+                    valued(variant_paths).results,
+                    seed=request.seed,
+                    horizon=variant_paths.months[-1].isoformat(),
+                )
+                contributions.append(
+                    {
+                        "element": name,
+                        "loss": found,
+                        "difference": None
+                        if found is None or full is None
+                        else {
+                            key: found[key] - full[key]
+                            for key in ("p05", "p50", "p95", "es95")
+                            if found.get(key) is not None and full.get(key) is not None
+                        },
+                    }
+                )
         written = _write(
             directory,
             run_id,
@@ -166,6 +210,10 @@ def execute(ws: store.Workspace, run_id: str) -> dict:
             base_currency,
             meta["started"],
             forecast(paths, request.targets),
+            s0_forecast=forecast(empty, request.targets),
+            checks=_checks(spec, macro, paths, empty, satellites),
+            contributions=contributions,
+            workspace=ws,
         )
     except BaseException as error:
         store.write_json(
@@ -281,6 +329,11 @@ def _write(
     base_currency: str,
     started: str,
     forecast_rows: dict,
+    *,
+    s0_forecast: dict | None = None,
+    checks: dict | None = None,
+    contributions: list | None = None,
+    workspace: store.Workspace | None = None,
 ) -> dict:
     """The paths, the results of every position, the report and the meta that names them."""
     months = [month.isoformat() for month in paths.months]
@@ -301,13 +354,23 @@ def _write(
         },
     )
     summary = (
-        portfolio_report.build(portfolio, batch.results, dist_found=paths.dist)
+        portfolio_report.build(
+            portfolio,
+            batch.results,
+            dist_found=paths.dist,
+            seed=paths.seed,
+            horizon=paths.months[-1].isoformat(),
+        )
         if portfolio is not None
         else None
     )
     if summary is not None:
         store.write_json(directory / "summary.json", summary)
-    store.write_json(directory / "forecast.json", forecast_rows)
+    store.write_json(
+        directory / "forecast.json", forecast_rows | {"s0": s0_forecast}
+    )
+    if contributions is not None:
+        store.write_json(directory / "contributions.json", {"contributions": contributions})
     written = {
         "id": run_id,
         "scenario": request.scenario,
@@ -329,6 +392,10 @@ def _write(
             driver: sorted(paths.drivers.flags[driver]) for driver in paths.drivers.ids
         },
         "dist": _dist_meta(paths.dist),
+        "basis": _basis(spec),
+        "checks": checks,
+        "git_commit": _git_commit(),
+        "data": {"series": str(workspace.series)} if workspace is not None else None,
         "models": {
             result.position_id: {
                 "model": result.model_id,
@@ -349,17 +416,158 @@ def _now() -> str:
     return datetime.now(UTC).isoformat(timespec="seconds")
 
 
+def _without_everything(spec: Spec) -> Spec:
+    """The empty scenario ``s_0`` of the same versions and horizon: no conditions, no impacts."""
+    return spec.model_copy(
+        update={
+            "constraints": [],
+            "impacts": [],
+            "expectations": [],
+            "probabilities": [],
+            "causes": [],
+            "regime_event": None,
+            "inner": 1,
+        }
+    )
+
+
+def _variants(spec: Spec):
+    """``(name, scenario)`` of every element of the scenario taken out alone."""
+    for kind, field in (
+        ("constraint", "constraints"),
+        ("impact", "impacts"),
+        ("expectation", "expectations"),
+        ("probability", "probabilities"),
+    ):
+        elements = getattr(spec, field)
+        for k in range(len(elements)):
+            without = list(elements)
+            del without[k]
+            yield f"{kind}#{k + 1}", spec.model_copy(update={field: without})
+
+
+def _checks(spec: Spec, macro, paths, empty, satellites) -> dict:
+    """What the run says about its own conditions and paths (the canon, section 7).
+
+    The probability of every interval condition under the base run — a scenario resting on a
+    rare tail is seen as such, and a point condition is not applicable, its probability would
+    measure the tolerance — and the two admission rules on the paths of the scenario, macro
+    variables and drivers alike, because the conditions can widen the fan beyond what the
+    history has ever seen. The shares are over the horizon months: a month whose band leaves
+    the admissible domain or grows wider than the history counts against its variable.
+    """
+    from .drivers.registry import from_model
+    from .macro.registry import load_registry as load_macro_registry
+    from .metrics.baselines import (
+        CONSTRAINT_THRESHOLD,
+        DOMAIN,
+        WIDTH,
+        band_problems,
+        constraint_probabilities,
+        macro_domain,
+        quantity_domain,
+    )
+    from .metrics.cells import history_range
+
+    checks: dict = {}
+    registry = load_macro_registry()
+    plan = scenario_build.plan_of(spec, macro)
+    if plan.constraints:
+        model_scale = _macro_model_scale(registry, empty)
+        checks["constraint_probabilities"] = constraint_probabilities(
+            model_scale, list(empty.ids), plan.constraints
+        )
+        checks["constraint_threshold"] = CONSTRAINT_THRESHOLD
+    fan: dict[str, dict[str, float]] = {}
+    scenario_scale = _macro_model_scale(registry, paths)
+    panel = {id_: macro.panel.y[:, j] for j, id_ in enumerate(macro.panel.ids)}
+    for k, id_ in enumerate(paths.ids):
+        fan[f"macro/{id_}"] = _fan_problems(
+            scenario_scale[:, 1:, k], panel.get(id_), macro_domain()
+        )
+    for k, driver in enumerate(paths.drivers.ids):
+        quantity, node = satellites.node(driver)
+        declared = satellites.registry.quantity(quantity)
+        own = satellites.arrays.get(f"{quantity}.d")
+        column = own[:, node] if own is not None else np.array([])
+        fan[f"driver/{driver}"] = _fan_problems(
+            from_model(declared.transform, paths.drivers.paths[:, 1:, k]),
+            column,
+            quantity_domain(declared),
+        )
+    checks["paths"] = fan
+    return checks
+
+
+def _macro_model_scale(registry, paths) -> np.ndarray:
+    """The macro paths of a run back in the model scale every condition reads."""
+    return np.stack(
+        [
+            registry.variable(id_).to_model(paths.macro[..., k])
+            for k, id_ in enumerate(paths.ids)
+        ],
+        axis=-1,
+    )
+
+
+def _fan_problems(draws, history, domain) -> dict[str, float]:
+    """The shares of the horizon months whose band breaks each admission rule."""
+    from .metrics.baselines import DOMAIN, WIDTH, band_problems
+    from .metrics.cells import history_range
+
+    if draws.size == 0:
+        return {}
+    spread = history_range(history) if history is not None else float("nan")
+    months = draws.shape[1]
+    broken = {rule: 0 for rule in (DOMAIN, WIDTH)}
+    for t in range(months):
+        for rule in band_problems(
+            draws[:, t], float("nan"), domain=domain, history_range=spread
+        ):
+            broken[rule] += 1
+    return {rule: count / months for rule, count in broken.items()}
+
+
+def _basis(spec: Spec) -> list[dict]:
+    """What every condition and impact of the scenario rests on, element by element."""
+    rows = []
+    for kind, elements in (
+        ("constraint", spec.constraints),
+        ("impact", spec.impacts),
+        ("expectation", spec.expectations),
+        ("probability", spec.probabilities),
+    ):
+        for k, element in enumerate(elements):
+            rows.append(
+                {
+                    "element": f"{kind}#{k + 1}",
+                    "basis": element.basis
+                    if not isinstance(element.basis, str)
+                    else [element.basis],
+                }
+            )
+    return rows
+
+
+def _git_commit() -> str | None:
+    """The commit of the checkout, read from ``.git`` without running git; best effort."""
+    from .metrics.backtest import _git_commit as read
+
+    return read()
+
+
 def _dist_meta(found) -> dict | None:
     """The price of the scenario with everything the reader needs to judge it.
 
-    The definition is the canon's: ``dist(s) = KL(P_s || P) = E_P[-log P(S | R)]``. The
+    The definition is the canon's: ``dist(s) = KL(P_s || P) = E_P[-log P(S | R)]``, the sum
+    of the support price and the price of the tilt (docs/concept/formalization.md). The
     standard error reads the spread over the groups; an infinite distance is passed as is,
     with the message naming the contradiction.
     """
     if found is None:
         return None
     return {
-        "definition": "dist(s) = KL(P_s || P) = E_P[-log P(S | R)] (docs/concept/formalization.md)",
+        "definition": "dist(s) = KL(P_s || P) (docs/concept/formalization.md, sections 4-5)",
         "distance": float(found.distance),
         "log_probability": float(found.log_probability),
         "standard_error": float(found.standard_error),
