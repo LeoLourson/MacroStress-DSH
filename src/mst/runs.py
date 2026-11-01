@@ -581,7 +581,7 @@ def _checks(spec: Spec, macro, paths, empty, satellites) -> dict:
     history has ever seen. The shares are over the horizon months: a month whose band leaves
     the admissible domain or grows wider than the history counts against its variable.
     """
-    from .drivers.registry import from_model
+    from .drivers.registry import to_model
     from .macro.registry import load_registry as load_macro_registry
     from .metrics.baselines import (
         CONSTRAINT_THRESHOLD,
@@ -611,8 +611,12 @@ def _checks(spec: Spec, macro, paths, empty, satellites) -> dict:
         declared = satellites.registry.quantity(quantity)
         own = satellites.arrays.get(f"{quantity}.d")
         column = own[:, node] if own is not None else np.array([])
+        # The run's driver paths are in each driver's own unit; the history the band is
+        # compared with — and the domain — are in the model scale, so the paths go through
+        # ``to_model`` before the comparison. ``from_model`` here would exponentiate a
+        # ``log100`` price twice and read every high-priced share as wider than history.
         fan[f"driver/{driver}"] = _fan_problems(
-            from_model(declared.transform, paths.drivers.paths[:, 1:, k]),
+            to_model(declared.transform, paths.drivers.paths[:, 1:, k]),
             column,
             quantity_domain(declared),
         )

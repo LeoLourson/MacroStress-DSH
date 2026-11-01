@@ -457,6 +457,120 @@ def test_the_paths_cut_at_a_month_keep_the_start_flags_and_seed():
         paths.up_to(7)
 
 
+def _macro_version(versions):
+    """The engine fixture's macro version loaded back, as a run receives it."""
+    from mst.macro import version as macro_version
+    from mst.plugins.bvar import MODEL
+
+    return macro_version.load(versions.models, versions.macro, {"bvar.sv": MODEL})
+
+
+def _history_of(versions, driver) -> tuple[float, float]:
+    """``(middle, span)`` of a driver's own history in the model scale."""
+    quantity, node = versions.satellite.node(driver)
+    history = versions.satellite.arrays[f"{quantity}.d"][:, node]
+    finite = history[np.isfinite(history)]
+    return float((finite.max() + finite.min()) / 2), float(finite.max() - finite.min())
+
+
+def _banded_paths(versions, bands: dict[str, tuple[float, float]]) -> SimpleNamespace:
+    """Paths whose driver bands are set in the model scale and carried in own units.
+
+    ``bands`` maps a driver to ``(centre, width)`` of its band in the model scale; the band
+    is the same in every month, so the share of broken months is exactly 0 or 1. The driver
+    paths come back through ``from_model``, as a run's paths hold them in own units — what
+    ``_checks`` receives and must map back before it compares with the history.
+    """
+    from mst.drivers.registry import from_model
+
+    rng = np.random.default_rng(17)
+    inside = rng.uniform(-0.5, 0.5, 40)
+    ids, columns = [], []
+    for driver, (centre, width) in bands.items():
+        quantity, _ = versions.satellite.node(driver)
+        declared = versions.satellite.registry.quantity(quantity)
+        model = centre + width * inside[:, None] * np.ones((1, 13))
+        ids.append(driver)
+        columns.append(np.asarray(from_model(declared.transform, model), dtype=float))
+    return SimpleNamespace(
+        ids=list(versions.data.ids),
+        macro=np.ones((40, 13, len(versions.data.ids))),
+        drivers=SimpleNamespace(
+            ids=ids,
+            paths=np.stack(columns, axis=-1),
+            flags={driver: frozenset() for driver in ids},
+        ),
+    )
+
+
+def _bare_spec(versions):
+    """A scenario without conditions or impacts, so only the paths are checked."""
+    from mst.scenario.spec import Spec
+
+    return Spec.model_validate(
+        {
+            "narrative": "шкала",
+            "horizon": 12,
+            "macro": versions.macro,
+            "satellites": versions.satellites,
+            "approved_by": "И. Иванов",
+        }
+    )
+
+
+def _driver_checks(versions, bands) -> dict:
+    """The ``driver/...`` rows of ``_checks`` on paths with the given bands."""
+    macro = _macro_version(versions)
+    paths = _banded_paths(versions, bands)
+    return runs._checks(_bare_spec(versions), macro, paths, None, versions.satellite)[
+        "paths"
+    ]
+
+
+def test_a_log100_band_narrower_than_the_history_reports_zero_at_a_high_and_low_price(
+    versions,
+):
+    # The width of the band is set in the model scale, where the history lives; the level
+    # of the price — a share at 5239 or at 5 — must not enter the verdict. A band of half
+    # the history range is admitted whatever the price.
+    _, span = _history_of(versions, "share_price:sber")
+    rows = _driver_checks(
+        versions,
+        {
+            "share_price:sber": (100.0 * np.log(5239.0), 0.6 * span),
+            "share_price:gazp": (100.0 * np.log(5.0), 0.6 * span),
+        },
+    )
+    assert rows["driver/share_price:sber"]["band_wider_than_history"] == 0.0
+    assert rows["driver/share_price:gazp"]["band_wider_than_history"] == 0.0
+    assert rows["driver/share_price:sber"]["band_outside_domain"] == 0.0
+
+
+def test_a_log100_band_wider_than_the_history_reports_the_full_share(versions):
+    middle, span = _history_of(versions, "share_price:sber")
+    rows = _driver_checks(
+        versions, {"share_price:sber": (middle + 2.0 * span, 2.5 * span)}
+    )
+    assert rows["driver/share_price:sber"]["band_wider_than_history"] == 1.0
+
+
+def test_a_logit_driver_and_an_identity_driver_are_measured_in_their_own_model_scale(
+    versions,
+):
+    # overdue_share is logit and bond_spread is identity: each band is measured in its own
+    # quantity's model scale, half the history range admitted and two and a half times it
+    # refused, wherever the quantity itself sits.
+    for driver, share_of_history, expected in (
+        ("overdue_share:mining", 0.6, 0.0),
+        ("overdue_share:mining", 2.5, 1.0),
+        ("bond_spread:corp", 0.6, 0.0),
+        ("bond_spread:corp", 2.5, 1.0),
+    ):
+        middle, span = _history_of(versions, driver)
+        rows = _driver_checks(versions, {driver: (middle, share_of_history * span)})
+        assert rows[f"driver/{driver}"]["band_wider_than_history"] == expected, driver
+
+
 def call(ws, name, arguments):
     """One tool call against a server built for ``ws``."""
 
