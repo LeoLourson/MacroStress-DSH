@@ -71,7 +71,6 @@ def test_a_run_writes_meta_paths_results_and_changes(workspace):
     assert meta["status"] == "ok"
     assert meta["scenario"] == "oil" and meta["seed"] == 11 and meta["draws"] == 5
     assert meta["horizon"] == 3 and len(meta["months"]) == 4
-    assert meta["severity"] is None
     assert macro.shape == (5, 4, 3) and drivers.shape == (5, 4, 5)
     assert changes.shape == (5, len(POSITIONS))
     stored = runs.result(workspace, run_id)

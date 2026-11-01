@@ -1,138 +1,88 @@
-"""The platform measure of scenario implausibility: ``dist(P_s, P) = -log P(C)``.
+"""The price of a scenario: ``dist(s) = KL(P_s || P) = E_P[-log P(S | R)]``.
 
-Section 4 of the scheme measures how far a scenario reaches from the unconditional run by the
-distance ``dist(P_s, P)``. Under the conditional scheme the scenario ``P_s`` differs from ``P``
-only in the marginal distribution of the driving shocks, and the conditional forecast ``Q_s``
-is the distribution closest to the original one that satisfies every constraint, so inside the
-support the two densities differ by a constant: this module uses the plan's definition
-``dist(P_s, P) = -log P(C)``, where ``P(C)`` is the joint probability that the *unconditional*
-run of the model satisfies every constraint at once. The Mahalanobis ``delta`` of the plugin
-stays beside it as a model-specific severity; this distance is available to every scenario and
-every macro model.
+Section 4 of the canon (docs/concept/formalization.md) imposes a scenario by conditioning the
+base measure ``P`` on the event ``S`` while the law of ``R`` — the parameters and every
+coordinate the causes do not name — stays as it was. With no moment conditions the imposed
+measure is ``P`` conditioned on ``S``, and its Kullback—Leibler divergence from ``P`` is the
+mean of ``-log P(S | R)`` over the law of ``R``. The older code measured ``-log P(S)``, which
+reads the same only when ``R`` is constant: with named causes the price rises, because
+explaining the event through fewer coordinates costs more (section 5 of the canon).
 
-``P(C)`` is estimated two ways. The Monte-Carlo way counts the share of the base run's paths
-that satisfy every constraint together — the same paths the constraint gate reads, and the
-joint share, not the product of the per-constraint shares: correlated constraints make the
-product wrong, and the tests pin the difference. When no drawn path satisfies everything, the
-share is zero and the exact way takes over: per draw of the parameters the constraint
-functionals are normal, the probability of the box follows from the Gaussian cdf, and the
-mixture average over the draws is the answer — the same structure the BVAR severity uses.
+``P(S | R)`` is not counted on simulated paths: a share of a few thousand paths cannot tell a
+rare box from an impossible one. The macro model hands the law of the constraint functionals
+given ``R`` and the hidden coordinates (``MacroModel.constraint_law``), and the kernel here
+mixes the rows of every group into
+
+.. math::
+
+    \\mathrm{dist} = -\\frac{1}{K} \\sum_g \\log \\Big( \\frac{1}{n_g} \\sum_{i \\in g} e^{\\log w_i} P_i \\Big),
+
+with ``P_i`` the gaussian box probability of row ``i`` by the GHK sampler
+(``mst.model_sdk.conditional``) and ``e^{log w_i}`` the importance weight of the row inside
+its group — a plain draw carries weight one, a forced regime path carries its prior. The
+groups are one draw of ``R`` each, so the spread of ``-log P(S | R)`` over them is the
+standard error of the estimate. A group of probability zero — the box is unreachable at that
+``R``, the case lemma 2 names — makes the distance infinite and sets the message.
+
+``log P(S)`` is reported beside the distance: averaged over the same groups, it separates the
+price of the event itself from the part the parameter uncertainty adds.
 """
 
 import numpy as np
-from scipy.stats import multivariate_normal, norm
+from scipy.special import logsumexp
 
-from .contracts import LinearConstraint
+from .conditional import log_box_probabilities
+from .contracts import ConstraintLaw
 
-
-def constraint_matrix(constraints: tuple[LinearConstraint, ...], ids: list[str]) -> np.ndarray:
-    """``(m, n)`` The weights of every constraint functional over the *variables of one month*.
-
-    A term addresses ``variable`` at ``month``; the caller applies the returned rows to the
-    paths of that month — ``paths[:, month, :ids.index(variable)]`` is not how the map is used,
-    because one constraint may span several variables of the same month only. A constraint with
-    terms at different months cannot be a single row: raise, and let the caller fall back to
-    the Monte-Carlo estimate.
-    """
-    index = {id_: k for k, id_ in enumerate(ids)}
-    rows = []
-    for constraint in constraints:
-        months = {term.month for term in constraint.terms}
-        if len(months) > 1:
-            raise ValueError(
-                "the mixture estimate needs one month per constraint; "
-                "a constraint across months keeps the Monte-Carlo estimate"
-            )
-        row = np.zeros(len(ids))
-        for term in constraint.terms:
-            row[index[term.variable]] += term.weight
-        rows.append(row)
-    return np.asarray(rows, dtype=float)
+GHK_SAMPLES = 64
+"""GHK draws per row of the law; with the 64 latent candidates of a group this averages the
+box probability over 4096 draws before the logarithm is taken."""
+DIST_STREAM = 15
+"""The stream of the GHK draws inside a run's seed, away from the model's own streams."""
 
 
-def satisfied(base_paths: np.ndarray, ids: list[str], constraints) -> np.ndarray:
-    """``(R,)`` Whether every path satisfies every constraint at once.
+class ContradictsModels(ValueError):
+    """Some group of the law gives the event no probability: the scenario cannot be imposed."""
 
-    ``base_paths`` is ``(R, H + 1, n)`` in the model scale. The joint share of this indicator —
-    not the product of the per-constraint shares — is the Monte-Carlo estimate of ``P(C)``:
-    correlated constraints satisfy jointly more or less often than independently.
-    """
-    index = {id_: k for k, id_ in enumerate(ids)}
-    total = np.ones(base_paths.shape[0], dtype=bool)
-    for constraint in constraints:
-        value = np.zeros(base_paths.shape[0])
-        for term in constraint.terms:
-            value += term.weight * base_paths[:, term.month, index[term.variable]]
-        total &= (constraint.low <= value) & (value <= constraint.high)
-    return total
-
-
-def box_probability_mc(base_paths: np.ndarray, ids: list[str], constraints) -> float:
-    """``P(C)`` as the share of the base run's paths that satisfy every constraint.
-
-    A scenario without constraints has no ``dist`` at all rather than a zero distance, so an
-    empty list raises; the caller reports the distance as absent.
-    """
-    if not constraints:
-        raise ValueError("a scenario without constraints has no dist to estimate")
-    return float(np.mean(satisfied(base_paths, ids, constraints)))
-
-
-def box_probability_mixture(
-    means: np.ndarray, covs: np.ndarray, constraints: tuple[LinearConstraint, ...]
-) -> float:
-    """``P(C)`` for a mixture of gaussians over the constraint functionals.
-
-    ``means`` is ``(R, m)`` and ``covs`` is ``(R, m, m)``: the mean and covariance of the ``m``
-    constraint functionals — in the order of ``constraints`` — under each of the ``R`` mixture
-    components. Per component the box probability is the multivariate normal integral from
-    ``low`` to ``high``; the mixture average is the answer. One constraint in one dimension
-    goes through the univariate cdf, which is exact where the multidimensional quadrature only
-    approximates.
-    """
-    if not constraints:
-        raise ValueError("a scenario without constraints has no dist to estimate")
-    means = np.asarray(means, dtype=float)
-    covs = np.asarray(covs, dtype=float)
-    if means.shape != (len(covs), len(constraints)):
-        raise ValueError(
-            f"means must be (R, {len(constraints)}), got {means.shape}; "
-            "the functionals follow the order of the constraints"
+    def __init__(self):
+        super().__init__(
+            "the scenario contradicts the models: at some value of R the event has no "
+            "probability, the case lemma 2 of the canon names"
         )
-    if covs.shape != (len(covs), len(constraints), len(constraints)):
-        raise ValueError(
-            f"covs must be (R, {len(constraints)}, {len(constraints)}), got {covs.shape}"
-        )
-    low = np.array([constraint.low for constraint in constraints])
-    high = np.array([constraint.high for constraint in constraints])
-    probabilities = np.empty(len(covs))
-    for r in range(len(covs)):
-        if len(constraints) == 1:
-            sd = float(np.sqrt(max(covs[r, 0, 0], 0.0)))
-            probabilities[r] = norm.cdf(high[0], loc=means[r, 0], scale=sd) - norm.cdf(
-                low[0], loc=means[r, 0], scale=sd
-            )
+
+
+def price_of_law(
+    law: ConstraintLaw,
+    low,
+    high,
+    *,
+    rng,
+    samples: int = GHK_SAMPLES,
+) -> tuple[float, float, float]:
+    """``(distance, log_probability, standard_error)`` of a scenario's law against its box.
+
+    ``low`` and ``high`` are the bounds of every constraint, in the order of the law's
+    coordinates; they are the bounds the plan carries, impacts included. The distance is
+    infinite and the message is left to the caller when a group has no probability.
+    """
+    low = np.asarray(low, dtype=float)
+    high = np.asarray(high, dtype=float)
+    groups = np.asarray(law.group)
+    count = int(groups.max()) + 1 if len(groups) else 0
+    if count == 0:
+        raise ValueError("a scenario without groups has no price to estimate")
+    log_box = log_box_probabilities(law.means, law.covs, low, high, rng, samples)
+    log_weight = np.asarray(law.log_weight, dtype=float)
+    per_group = np.full(count, -np.inf)
+    for g in range(count):
+        rows = groups == g
+        if not rows.any():
             continue
-        probabilities[r] = multivariate_normal(
-            mean=means[r], cov=covs[r], allow_singular=True
-        ).cdf(high, lower_limit=low)
-    return float(np.mean(probabilities))
-
-
-def dist_from_probability(pc: float) -> float:
-    """``-log P(C)``; a probability of zero — no unconditional path works — is an infinite dist."""
-    if pc <= 0.0:
-        return float("inf")
-    return float(-np.log(pc))
-
-
-def dist_mc(base_paths: np.ndarray, ids: list[str], constraints) -> float:
-    """``dist`` from the Monte-Carlo share of the base run; the way the report labels ``mc``."""
-    return dist_from_probability(box_probability_mc(base_paths, ids, constraints))
-
-
-def dist_mixture(
-    means: np.ndarray, covs: np.ndarray, constraints: tuple[LinearConstraint, ...]
-) -> float:
-    """``dist`` from the exact box probability of the mixture; the report labels it ``exact``."""
-    return dist_from_probability(box_probability_mixture(means, covs, constraints))
+        per_group[g] = logsumexp(log_weight[rows] + log_box[rows]) - np.log(rows.sum())
+    if np.any(np.isneginf(per_group)):
+        return float("inf"), float("-inf"), float("inf")
+    terms = -per_group
+    distance = float(terms.mean())
+    standard_error = float(terms.std(ddof=1) / np.sqrt(count)) if count > 1 else 0.0
+    log_probability = float(logsumexp(per_group) - np.log(count))
+    return distance, log_probability, standard_error

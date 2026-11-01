@@ -127,8 +127,8 @@ def test_check_names_an_infeasible_scenario(workspace, portfolio, versions):
             "macro": versions.macro,
             "satellites": versions.satellites,
             "constraints": [
-                {**fixed, "low": target, "high": target},
-                {**fixed, "low": target + 1.0, "high": target + 1.0},
+                {**fixed, "value": target},
+                {**fixed, "value": target + 1.0},
             ],
         },
     )

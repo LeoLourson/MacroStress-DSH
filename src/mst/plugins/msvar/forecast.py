@@ -1,30 +1,34 @@
-"""Conditional forecast, severity and moments of a scenario under the MS-VAR.
+"""The conditional forecast and the constraint law of a scenario under the MS-VAR.
 
 A repetition takes one identified parameter draw and its regime path over the horizon: the
 path is drawn from the transition matrix out of the last month of history — unless the
 scenario names a regime element among its driving shocks, which fixes the path to that
-regime over the whole horizon, the event asserting the regime the way the scheme's amended
-section 3 puts the regime part of the event beside its shocks. Given the path the model is
-a linear-Gaussian VAR with time-varying coefficients, and the constraints are met with the
-shared machinery of ``mst.model_sdk.conditional`` exactly as the BVAR meets them: the
-loadings of each constraint functional on each month's structural shocks follow the regime
-path, the image of the driving shocks is normal, its exact rows are fixed and its interval
-rows drawn from the box-truncated normal, and the scenario is infeasible when its rows are
-linearly dependent (Antolin-Diaz, Petrella and Rubio-Ramirez, 2021, Journal of Monetary
-Economics 117).
+regime over the whole horizon, the event asserting the regime the way the canon puts the
+regime part of the event beside its shocks. Given the path the model is a linear-Gaussian
+VAR with time-varying coefficients, and the constraints are met with the shared machinery
+of ``mst.model_sdk.conditional`` exactly as the BVAR meets them: the loadings of each
+constraint functional on each month's structural shocks follow the regime path, the image
+of the driving shocks is normal, its exact rows are fixed and its interval rows drawn from
+the box-truncated normal, and the scenario is infeasible when its rows are linearly
+dependent (Antolin-Diaz, Petrella and Rubio-Ramirez, 2021, Journal of Monetary Economics
+117).
 
-The severity and the moments are measured on the unconditional run, where the regime path
-is drawn from the kernel: each repetition carries its own parameter draw and its own
-regime path, so the covariance the severity returns is the mixture's — the mean of the
-covariances plus the covariance of the means, the spread between the regime paths counted
-in. The platform's ``dist`` consumes the per-repetition moments as the components of the
-mixture, one component per (parameter draw, regime path).
+The law of the constraint functionals — what the price of a scenario mixes — depends on
+what the plan's driving shocks leave outside ``R``. With no driving shocks the regime path
+is a hidden coordinate: each parameter draw carries ``LATENT_CANDIDATES`` candidate paths,
+each row of the law holding the gaussian law of ``W y`` under that path, and the group's
+rows mix into ``P(S | theta)``. With driving shocks named the path belongs to ``R`` — the
+repetition draws it and the free shocks, and one row reports the law given both. A regime
+event forces the path instead: one row carries the path's prior weight ``pi_theta(k,..,k)``,
+so the price of fixing the regime is the mean of ``-log pi_theta(k,..,k)`` the canon asks
+for. The streams are separate — ``[seed, r, 0]`` draws the parameters, ``[seed, r, 1]`` the
+regime paths, ``[seed, r, 2]`` the free shocks — so a scenario and its softened variant
+share everything the conditions do not touch.
 """
 
 from dataclasses import dataclass
 
 import numpy as np
-from scipy.special import ndtr
 
 from mst.macro.panel import shift
 from mst.model_sdk.conditional import (
@@ -33,12 +37,17 @@ from mst.model_sdk.conditional import (
     dependent_rows,
     draw_driving,
 )
-from mst.model_sdk.contracts import MacroSimulation, ScenarioPlan, Severity
+from mst.model_sdk.contracts import (
+    LATENT_CANDIDATES,
+    ConstraintLaw,
+    MacroSimulation,
+    ScenarioPlan,
+)
 
 from .estimate import Posterior
 from .var import iterate
 
-__all__ = ["InfeasibleScenario", "constraint_moments", "severity", "simulate"]
+__all__ = ["InfeasibleScenario", "constraint_law", "simulate"]
 
 
 @dataclass(frozen=True)
@@ -114,6 +123,12 @@ def _repetition(model: Posterior, horizon: int, rng, regime: int | None) -> _Rep
     """One repetition: a parameter draw and its regime path, with the month's matrices."""
     draw = int(rng.integers(model.draws))
     path = _regime_path(model, draw, horizon, rng, regime)
+    return _repetition_of(model, draw, path)
+
+
+def _repetition_of(model: Posterior, draw: int, path: np.ndarray) -> _Repetition:
+    """The repetition of a chosen parameter draw and regime path."""
+    horizon = len(path)
     history = model.history[draw]
     lags = model.lags[draw][path]
     intercept = model.const[draw][path]
@@ -130,6 +145,16 @@ def _repetition(model: Posterior, horizon: int, rng, regime: int | None) -> _Rep
         impacts=impacts,
         mean=iterate(history, lags, intercept, np.zeros((horizon, len(model.ids)))),
     )
+
+
+def _path_probability(model: Posterior, draw: int, regime: int, horizon: int) -> float:
+    """``pi_theta(k, .., k)``: the prior probability of the regime path staying in ``regime``."""
+    state = int(model.states[draw, -1])
+    probability = 1.0
+    for _ in range(horizon):
+        probability *= model.transition[draw, state, regime]
+        state = regime
+    return probability
 
 
 def _slabs(rep: _Repetition, needed: set[int]) -> dict[int, np.ndarray]:
@@ -179,39 +204,109 @@ def _level(plan: _Plan, mean: np.ndarray) -> np.ndarray:
     return np.array([sum(w * mean[t - 1, i] for i, t, w in row) for row in plan.terms])
 
 
-def constraint_moments(model: Posterior, plan: ScenarioPlan, *, draws: int, seed: int):
-    """The mean and covariance of the constraint functionals under every repetition.
+def constraint_law(
+    model: Posterior,
+    plan: ScenarioPlan,
+    *,
+    draws: int,
+    seed: int,
+    candidates: int = LATENT_CANDIDATES,
+) -> ConstraintLaw | None:
+    """The law of the constraint functionals given ``R``, one group of rows per draw of it.
 
-    A repetition carries one parameter draw and one regime path of the unconditional run;
-    given both, ``W y`` is normal, so the platform's mixture over the repetitions is the
-    mixture over the regimes. Raises ``ValueError`` when the scenario has no constraints or
-    names a variable or shock the model lacks.
-    """
-    means, covs, _ = _moments(model, plan, draws, seed)
-    return means, covs
-
-
-def _moments(model: Posterior, plan: ScenarioPlan, draws: int, seed: int):
-    """The per-repetition moments and the repetitions' generators, in the order of the
-    constraints.
-
-    The generators are returned half-consumed — ``_repetition`` has drawn the parameter draw
-    and the regime path from each one — because ``severity`` continues every repetition's
-    stream to place one ``W y`` on it; everything downstream of the moments stays on the
-    same stream this way.
+    The streams are separate: ``[seed, r, 0]`` draws the parameter set, ``[seed, r, 1]`` the
+    regime paths, ``[seed, r, 2]`` the free shocks, so two scenarios that differ only in
+    their bounds share the rows. With no driving shocks the regime path is a hidden
+    coordinate and every group carries ``candidates`` of them, each row the gaussian law of
+    ``W y`` under its path. With driving shocks named the path and the free shocks belong to
+    ``R`` and one row reports the law given both. A regime event forces the path and its row
+    carries the prior weight ``pi_theta(k, .., k)``, whatever driving shocks are named: the
+    price of the event is then the mean of ``-log pi_theta(k, .., k)`` the canon asks for.
+    ``None`` when there is nothing to price — no constraints and no regime event.
     """
     chosen = _plan(model, plan)
-    if not chosen.terms:
-        raise ValueError("a scenario without constraints has no moments to measure")
-    means, covs, rngs = [], [], []
+    if not chosen.terms and chosen.regime is None:
+        return None
+    n = len(model.ids)
+    driving = np.zeros(n, dtype=bool)
+    driving[chosen.driving] = True
+    # ``_plan`` fills the driving shocks with the whole J set when the scenario names none,
+    # but the law reads the causes themselves: unnamed means R = theta and the regime path
+    # is a hidden coordinate, named means it belongs to R.
+    named = bool(plan.driving_shocks)
+    means, covs, log_weights, groups = [], [], [], []
     for r in range(draws):
-        rng = np.random.default_rng([seed, r])
-        rep = _repetition(model, chosen.horizon, rng, None)
-        z = _loadings(chosen, rep).reshape(len(chosen.terms), -1)
-        means.append(_level(chosen, rep.mean))
-        covs.append(z @ z.T)
-        rngs.append(rng)
-    return np.array(means), np.array(covs), rngs
+        rng_theta = np.random.default_rng([seed, r, 0])
+        draw = int(rng_theta.integers(model.draws))
+        if chosen.regime is not None:
+            path = np.full(chosen.horizon, chosen.regime, dtype=int)
+            rep = _repetition_of(model, draw, path)
+            eps_free = (
+                np.random.default_rng([seed, r, 2])
+                .standard_normal((chosen.horizon, int((~driving).sum())))
+                .reshape(-1)
+                if driving.any()
+                else None
+            )
+            mean, cov = _law_row(chosen, rep, driving, eps_free)
+            means.append(mean)
+            covs.append(cov)
+            log_weights.append(np.log(_path_probability(model, draw, chosen.regime, chosen.horizon)))
+            groups.append(r)
+            continue
+        rng_path = np.random.default_rng([seed, r, 1])
+        if named:
+            path = _regime_path(model, draw, chosen.horizon, rng_path, None)
+            rep = _repetition_of(model, draw, path)
+            eps_free = (
+                np.random.default_rng([seed, r, 2])
+                .standard_normal((plan.horizon, int((~driving).sum())))
+                .reshape(-1)
+            )
+            mean, cov = _law_row(chosen, rep, driving, eps_free)
+            means.append(mean)
+            covs.append(cov)
+            log_weights.append(0.0)
+            groups.append(r)
+            continue
+        for _ in range(candidates):
+            path = _regime_path(model, draw, chosen.horizon, rng_path, None)
+            rep = _repetition_of(model, draw, path)
+            mean, cov = _law_row(chosen, rep, driving, None)
+            means.append(mean)
+            covs.append(cov)
+            log_weights.append(0.0)
+            groups.append(r)
+    m = len(chosen.terms)
+    return ConstraintLaw(
+        means=np.asarray(means, dtype=float).reshape(len(means), m) if means
+        else np.zeros((0, m)),
+        covs=np.asarray(covs, dtype=float).reshape(len(covs), m, m) if covs
+        else np.zeros((0, m, m)),
+        log_weight=np.asarray(log_weights, dtype=float),
+        group=np.asarray(groups, dtype=int),
+    )
+
+
+def _law_row(chosen: _Plan, rep: _Repetition, driving: np.ndarray, eps_free):
+    """The mean and covariance of ``W y`` under one repetition.
+
+    ``eps_free`` are the drawn non-driving shocks — part of ``R`` when the plan names causes;
+    without them every shock is free and the covariance counts all of it.
+    """
+    m = len(chosen.terms)
+    if m == 0:
+        return np.zeros(0), np.zeros((0, 0))
+    z = _loadings(chosen, rep)
+    z_flat = z.reshape(m, -1)
+    mean = _level(chosen, rep.mean)
+    if not driving.any():
+        return mean, z_flat @ z_flat.T
+    z_free = z[:, :, ~driving].reshape(len(chosen.terms), -1)
+    z_driving = z[:, :, driving].reshape(len(chosen.terms), -1)
+    if eps_free is not None:
+        mean = mean + z_free @ eps_free
+    return mean, z_driving @ z_driving.T
 
 
 def simulate(
@@ -255,43 +350,4 @@ def simulate(
         months=[shift(last, t) for t in range(horizon + 1)],
         paths=paths,
         history=history,
-    )
-
-
-def severity(model: Posterior, plan: ScenarioPlan, *, draws: int, seed: int) -> Severity:
-    """The severity of the plan under the unconditional mixture of the model.
-
-    The per-repetition moments come from ``constraint_moments``; given a repetition ``W y``
-    is normal, so ``pi_c`` averages normal probabilities, and the mean and covariance of
-    ``W y`` are the exact moments of the mixture — the mean of the covariances plus the
-    covariance of the means, which counts the spread between the parameter draws and the
-    regime paths both. ``exceeded`` draws one ``W y`` per repetition.
-    """
-    chosen = _plan(model, plan)
-    if not chosen.terms:
-        raise ValueError("a scenario without constraints has no severity")
-    means, covs, rngs = _moments(model, plan, draws, seed)
-    midpoint = (chosen.low + chosen.high) / 2
-    probabilities = np.array(
-        [
-            ndtr((midpoint - mean) / np.sqrt(np.diag(cov)))
-            for mean, cov in zip(means, covs, strict=True)
-        ]
-    )
-    centre = means.mean(axis=0)
-    spread = covs.mean(axis=0) + np.cov(means.T, bias=True).reshape(covs.shape[1:])
-    precision = np.linalg.inv(spread)
-    gap = midpoint - centre
-    distance = float(np.sqrt(gap @ precision @ gap))
-    samples = (
-        np.array(
-            [rng.multivariate_normal(m, c) for rng, m, c in zip(rngs, means, covs, strict=True)]
-        )
-        - centre
-    )
-    farther = np.einsum("ri,ij,rj->r", samples, precision, samples) >= distance**2
-    return Severity(
-        probabilities=probabilities.mean(axis=0),
-        distance=distance,
-        exceeded=float(farther.mean()),
     )

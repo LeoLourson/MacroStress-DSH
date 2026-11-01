@@ -45,14 +45,14 @@ def constraint_probabilities(
     """The share of ``paths`` that satisfy each constraint, numbered from zero.
 
     ``paths`` is ``(R, H + 1, n)`` in the model scale; a constraint's terms name variables and
-    months of the horizon. A constraint whose ``low`` equals its ``high`` fixes a point, which
-    a continuous draw meets with probability zero: its share is reported as ``None`` (not
-    applicable) instead of a meaningless zero.
+    months of the horizon. A constraint that fixes a point — the platform expanded it to
+    ``value ± tau`` — is not applicable: its share would measure ``tau`` rather than the
+    scenario, so it is reported as ``None`` and left out of the gate.
     """
     index = {id_: k for k, id_ in enumerate(ids)}
     shares: dict[int, float | None] = {}
     for number, constraint in enumerate(constraints):
-        if constraint.low == constraint.high:
+        if getattr(constraint, "point", False):
             shares[number] = None
             continue
         total = np.zeros(paths.shape[0])

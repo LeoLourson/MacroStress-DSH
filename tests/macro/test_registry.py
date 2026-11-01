@@ -62,8 +62,7 @@ def test_check_names_unknown_variables(shipped):
             "constraints": [
                 {
                     "terms": [{"variable": "ru.gdp", "month": 1, "weight": 1.0}],
-                    "low": 0.0,
-                    "high": 0.0,
+                    "value": 0.0,
                 }
             ],
         }
@@ -80,8 +79,7 @@ def test_check_accepts_a_scenario_on_registered_names(shipped):
             "constraints": [
                 {
                     "terms": [{"variable": "ru.key_rate", "month": 3, "weight": 1.0}],
-                    "low": 21.0,
-                    "high": 21.0,
+                    "value": 21.0,
                 }
             ],
         }

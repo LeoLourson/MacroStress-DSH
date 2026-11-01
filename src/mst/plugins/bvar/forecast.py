@@ -1,4 +1,4 @@
-"""Conditional forecast (section 4.3) and severity (section 4.4) of a scenario.
+"""The conditional forecast and the constraint law of a scenario.
 
 A repetition takes one identified parameter draw and draws the future volatilities: ``h_t =
 h_{t-1} + s xi_t`` from the last month of history and ``omega_t ~ InvGamma(nu / 2, nu / 2)``.
@@ -18,7 +18,6 @@ rows of ``Z`` are linearly dependent.
 from dataclasses import dataclass
 
 import numpy as np
-from scipy.special import ndtr
 
 from mst.macro.panel import shift
 from mst.model_sdk.conditional import (
@@ -29,7 +28,11 @@ from mst.model_sdk.conditional import (
     draw_driving,
     truncated_normal,
 )
-from mst.model_sdk.contracts import MacroSimulation, Severity
+from mst.model_sdk.contracts import (
+    LATENT_CANDIDATES,
+    ConstraintLaw,
+    MacroSimulation,
+)
 from mst.scenario.contracts import Scenario
 
 from .estimate import Posterior
@@ -41,12 +44,10 @@ Simulation = MacroSimulation
 __all__ = [
     "InfeasibleScenario",
     "Simulation",
-    "Severity",
     "box_gibbs",
-    "constraint_moments",
+    "constraint_law",
     "dependent_rows",
     "draw_driving",
-    "severity",
     "simulate",
     "truncated_normal",
 ]
@@ -105,8 +106,9 @@ def _future(model: Posterior, horizon: int) -> np.ndarray:
     ).reshape(horizon, len(model.dummies))
 
 
-def _repetition(model: Posterior, horizon: int, rng) -> _Repetition:
-    draw = int(rng.integers(model.draws))
+def _repetition(model: Posterior, horizon: int, rng, draw: int | None = None) -> _Repetition:
+    if draw is None:
+        draw = int(rng.integers(model.draws))
     n = len(model.ids)
     h = model.logvar[draw, -1] + np.cumsum(
         model.volvol[draw] * rng.standard_normal((horizon, n)), axis=0
@@ -145,38 +147,89 @@ def _level(plan: _Plan, mean: np.ndarray) -> np.ndarray:
     return np.array([sum(w * mean[t - 1, i] for i, t, w in row) for row in plan.terms])
 
 
-def constraint_moments(model: Posterior, scenario: Scenario, *, draws: int, seed: int):
-    """The mean and covariance of the constraint functionals under every parameter draw.
+def constraint_law(
+    model: Posterior,
+    scenario: Scenario,
+    *,
+    draws: int,
+    seed: int,
+    candidates: int = LATENT_CANDIDATES,
+) -> ConstraintLaw | None:
+    """The law of the constraint functionals given ``R``, one group of rows per draw of it.
 
-    Given a repetition ``W y`` is normal with mean ``W mu`` and covariance ``W Phi Phi' W'``;
-    the returns are ``(R, m)`` and ``(R, m, m)`` in the order of the scenario's constraints —
-    the exact per-draw moments the severity (``delta``, ``pi_c``) and the platform's distance
-    (``mst.model_sdk.dist``) both consume. Raises ``ValueError`` when the scenario has no
-    constraints or names a variable or shock the model lacks.
-    """
-    means, covs, _ = _moments(model, scenario, draws, seed)
-    return means, covs
-
-
-def _moments(model: Posterior, scenario: Scenario, draws: int, seed: int):
-    """The per-draw moments and the repetitions' generators, in the order of the constraints.
-
-    The generators are returned half-consumed — ``_repetition`` has drawn from each one —
-    because ``severity`` continues every repetition's stream to place one ``W y`` on it;
-    everything downstream of the moments stays on the same stream this way.
+    The streams are separate: ``[seed, r, 0]`` draws the parameter set, ``[seed, r, 1]`` the
+    volatility path, ``[seed, r, 2]`` the free shocks, so two scenarios that differ only in
+    their bounds share the rows. With no driving shocks the volatility path is a hidden
+    coordinate and every group carries ``candidates`` of them, each row the gaussian law of
+    ``W y`` under its path — a tail event then prices the volatility it needs instead of
+    riding the moderate paths a single draw happens to pick. With driving shocks named the
+    volatility path and the free shocks belong to ``R`` and one row reports the law given
+    both. ``None`` when the scenario has no constraints.
     """
     plan = _plan(model, scenario)
     if not plan.terms:
-        raise ValueError("a scenario without constraints has no moments to measure")
-    means, covs, rngs = [], [], []
+        return None
+    n = len(model.ids)
+    driving = np.zeros(n, dtype=bool)
+    driving[plan.driving] = True
+    # ``_plan`` fills the driving shocks with the whole J set when the scenario names none,
+    # but the law reads the causes themselves: unnamed means R = theta and the volatility
+    # path is a hidden coordinate, named means it belongs to R.
+    named = bool(scenario.driving_shocks)
+    means, covs, log_weights, groups = [], [], [], []
     for r in range(draws):
-        rng = np.random.default_rng([seed, r])
-        rep = _repetition(model, plan.horizon, rng)
-        z = _loadings(plan, rep).reshape(len(plan.terms), -1)
-        means.append(_level(plan, rep.mean))
-        covs.append(z @ z.T)
-        rngs.append(rng)
-    return np.array(means), np.array(covs), rngs
+        draw = int(np.random.default_rng([seed, r, 0]).integers(model.draws))
+        if named:
+            rep = _repetition(model, plan.horizon, np.random.default_rng([seed, r, 1]), draw)
+            eps_free = (
+                np.random.default_rng([seed, r, 2])
+                .standard_normal((plan.horizon, int((~driving).sum())))
+                .reshape(-1)
+            )
+            mean, cov = _law_row(plan, rep, driving, eps_free)
+            means.append(mean)
+            covs.append(cov)
+            log_weights.append(0.0)
+            groups.append(r)
+            continue
+        rng_volatility = np.random.default_rng([seed, r, 1])
+        for _ in range(candidates):
+            rep = _repetition(model, plan.horizon, rng_volatility, draw)
+            mean, cov = _law_row(plan, rep, driving, None)
+            means.append(mean)
+            covs.append(cov)
+            log_weights.append(0.0)
+            groups.append(r)
+    m = len(plan.terms)
+    return ConstraintLaw(
+        means=np.asarray(means, dtype=float).reshape(len(means), m) if means
+        else np.zeros((0, m)),
+        covs=np.asarray(covs, dtype=float).reshape(len(covs), m, m) if covs
+        else np.zeros((0, m, m)),
+        log_weight=np.asarray(log_weights, dtype=float),
+        group=np.asarray(groups, dtype=int),
+    )
+
+
+def _law_row(plan: _Plan, rep: _Repetition, driving: np.ndarray, eps_free):
+    """The mean and covariance of ``W y`` under one repetition.
+
+    ``eps_free`` are the drawn non-driving shocks — part of ``R`` when the scenario names
+    causes; without them every shock is free and the covariance counts all of it.
+    """
+    m = len(plan.terms)
+    if m == 0:
+        return np.zeros(0), np.zeros((0, 0))
+    z = _loadings(plan, rep)
+    z_flat = z.reshape(m, -1)
+    mean = _level(plan, rep.mean)
+    if not driving.any():
+        return mean, z_flat @ z_flat.T
+    z_free = z[:, :, ~driving].reshape(len(plan.terms), -1)
+    z_driving = z[:, :, driving].reshape(len(plan.terms), -1)
+    if eps_free is not None:
+        mean = mean + z_free @ eps_free
+    return mean, z_driving @ z_driving.T
 
 
 def simulate(
@@ -220,40 +273,4 @@ def simulate(
         months=[shift(last, t) for t in range(horizon + 1)],
         paths=paths,
         history=history,
-    )
-
-
-def severity(model: Posterior, scenario: Scenario, *, draws: int, seed: int) -> Severity:
-    """Section 4.4 over ``draws`` unconditional repetitions.
-
-    The per-draw moments come from ``constraint_moments``; given a repetition ``W y`` is
-    normal, so ``pi_c`` averages normal probabilities and the mean and covariance of ``W y``
-    are the exact moments of that mixture, including the spread between the draws;
-    ``exceeded`` draws one ``W y`` per repetition.
-    """
-    plan = _plan(model, scenario)
-    if not plan.terms:
-        raise ValueError("a scenario without constraints has no severity")
-    means, covs, rngs = _moments(model, scenario, draws, seed)
-    midpoint = (plan.low + plan.high) / 2
-    probabilities = []
-    for mean, cov in zip(means, covs, strict=True):
-        probabilities.append(ndtr((midpoint - mean) / np.sqrt(np.diag(cov))))
-    probabilities = np.array(probabilities)
-    centre = means.mean(axis=0)
-    spread = covs.mean(axis=0) + np.cov(means.T, bias=True).reshape(covs.shape[1:])
-    precision = np.linalg.inv(spread)
-    gap = midpoint - centre
-    distance = float(np.sqrt(gap @ precision @ gap))
-    samples = (
-        np.array(
-            [rng.multivariate_normal(m, c) for rng, m, c in zip(rngs, means, covs, strict=True)]
-        )
-        - centre
-    )
-    farther = np.einsum("ri,ij,rj->r", samples, precision, samples) >= distance**2
-    return Severity(
-        probabilities=np.mean(probabilities, axis=0),
-        distance=distance,
-        exceeded=float(farther.mean()),
     )

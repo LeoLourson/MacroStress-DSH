@@ -1,4 +1,4 @@
-"""Drawing shocks under linear constraints: the machinery every macro model can reuse.
+"""Drawing shocks under linear constraints and the probability of a constraint box.
 
 A macro model that reduces to ``y = mu + Phi eps`` with standard normal ``eps`` — a VAR with
 any volatility model, a random walk with drift — enforces its scenario constraints the same
@@ -9,16 +9,26 @@ and ``eps_D`` given ``v`` is ``eta + Z' (Z Z')^{-1} (v - Z eta)`` with standard 
 scenario is infeasible when a row of ``Z`` is a combination of the earlier ones or no driving
 shock moves it; a row that merely repeats an earlier one is redundant — its range is
 intersected with the range of the copy and the row is dropped.
+
+The probability of the box itself — what the price of a scenario needs — is estimated by the
+GHK sampler (Geweke 1991, Hajivassiliou and McFadden 1994, Keane 1994) in logarithms: the
+coordinates are visited once in Cholesky order, each standard normal draw comes from its
+truncated conditional through ``ndtri_exp``, and every step adds ``log(Phi(b) - Phi(a))`` of
+that coordinate. In one dimension the sampler is exact whatever ``samples`` is: there is no
+earlier coordinate to condition on. ``scipy.stats.multivariate_normal.cdf``, by contrast,
+returns zero or noise in the far tail the price cares about, and the tests pin the difference.
 """
 
 import numpy as np
-from scipy.special import log_ndtr, ndtri_exp
+from scipy.special import log_ndtr, logsumexp, ndtri_exp
 
 SWEEPS = 50
 """Gibbs sweeps per repetition for interval constraints, started inside the box."""
 RANK_TOLERANCE = 1e-9
 """A constraint row is dependent when the driving shocks move it, beyond what the earlier rows
 already fix, by less than this share of what all shocks move it."""
+DEGENERATE = 1e-14
+"""A coordinate whose variance is this share of the largest one is read as fixed."""
 
 
 class InfeasibleScenario(ValueError):
@@ -148,3 +158,156 @@ def _merge_redundant(z, low, high, every=None):
         low[same], high[same] = overlap
     index = np.array(kept, dtype=int)
     return z[index], low[index], high[index]
+
+
+def log_box_probability(mean, cov, low, high, rng, samples: int) -> float:
+    """``log P(low <= X <= high)`` for ``X ~ N(mean, cov)`` by the GHK sampler.
+
+    One dimension is exact: the sampler's only step has no earlier coordinate to condition on,
+    so any ``samples`` gives ``log(Phi(b) - Phi(a))`` of the standardised interval. A coordinate
+    the covariance does not move is checked against the box directly, and a violation there
+    returns ``-inf``: the box has no probability at all, the case lemma 2 of the canon names.
+    """
+    mean = np.asarray(mean, dtype=float)
+    cov = np.asarray(cov, dtype=float)
+    low = np.asarray(low, dtype=float)
+    high = np.asarray(high, dtype=float)
+    m = len(mean)
+    if m == 0:
+        return 0.0
+    if not np.all(low <= high):
+        return float("-inf")
+    variance = np.diag(cov)
+    scale = float(variance.max()) if m else 0.0
+    fixed = variance <= DEGENERATE * max(scale, np.finfo(float).tiny)
+    if np.any((mean[fixed] < low[fixed]) | (mean[fixed] > high[fixed])):
+        return float("-inf")
+    moving = np.flatnonzero(~fixed)
+    if not len(moving):
+        return 0.0
+    centred_low = low[moving] - mean[moving]
+    centred_high = high[moving] - mean[moving]
+    factor = _cholesky(cov[np.ix_(moving, moving)], scale)
+    log_weights = _ghk_row(factor, centred_low, centred_high, rng, samples)
+    return float(logsumexp(log_weights) - np.log(samples))
+
+
+def log_box_probabilities(
+    means, covs, low, high, rng, samples: int, *, chunk: int = 0
+) -> np.ndarray:
+    """``(N,)`` log box probabilities of a batch of gaussian laws, one GHK pass each.
+
+    ``means`` is ``(N, m)`` and ``covs`` is ``(N, m, m)``; ``low`` and ``high`` are the one
+    box every row is measured against, in the order of the coordinates. Rows are processed in
+    chunks so the ``(rows, samples, m)`` work array stays small; a row that violates its box
+    on a coordinate its covariance does not move is ``-inf`` without a sampler pass.
+    """
+    means = np.asarray(means, dtype=float)
+    covs = np.asarray(covs, dtype=float)
+    low = np.asarray(low, dtype=float)
+    high = np.asarray(high, dtype=float)
+    count, m = means.shape
+    result = np.zeros(count)
+    if m == 0:
+        return result
+    if count == 0:
+        return result
+    if not chunk:
+        chunk = max(1, int(4_000_000 // (max(samples, 1) * m)))
+    for start in range(0, count, chunk):
+        stop = min(start + chunk, count)
+        block = slice(start, stop)
+        rows = stop - start
+        variance = np.diagonal(covs[block], axis1=1, axis2=2)
+        scale = variance.max(axis=1)
+        fixed = variance <= (DEGENERATE * np.maximum(scale, np.finfo(float).tiny))[:, None]
+        inside = (means[block] >= low[None, :]) & (means[block] <= high[None, :])
+        result[block] = np.where(
+            np.any(fixed & ~inside, axis=1), float("-inf"), 0.0
+        )
+        alive = np.flatnonzero(
+            ~np.any(fixed & ~inside, axis=1) & (scale > 0.0)
+        )
+        if not len(alive):
+            continue
+        # Every row keeps its own moving coordinates; the union of them is processed at once,
+        # and a coordinate fixed in one row only is jittered to the scale of that row.
+        moving = np.flatnonzero(np.any(~fixed[alive], axis=0))
+        if not len(moving):
+            continue
+        picked = alive
+        sub_means = means[block][picked][:, moving]
+        sub_covs = covs[block][picked][:, moving][:, :, moving]
+        sub_fixed = fixed[picked][:, moving]
+        centred_low = low[moving][None, :] - sub_means
+        centred_high = high[moving][None, :] - sub_means
+        jitter = np.where(
+            sub_fixed,
+            1e-12 * np.maximum(scale[picked], np.finfo(float).tiny)[:, None],
+            0.0,
+        )
+        factors = _cholesky(
+            sub_covs + jitter[:, :, None] * np.eye(len(moving))[None], 1.0
+        )
+        weights = _ghk_batch(
+            factors, centred_low, centred_high, rng, samples
+        )
+        result[start + picked] = logsumexp(weights, axis=1) - np.log(samples)
+    return result
+
+
+def _cholesky(cov, scale: float):
+    """The Cholesky factor of a covariance, with a relative jitter when it is singular."""
+    try:
+        return np.linalg.cholesky(cov)
+    except np.linalg.LinAlgError:
+        jitter = 1e-12 * max(scale, np.finfo(float).tiny)
+        return np.linalg.cholesky(cov + jitter * np.eye(cov.shape[-1]))
+
+
+def _ghk_row(factor, low, high, rng, samples: int) -> np.ndarray:
+    """``(samples,)`` log weights of one GHK pass over a single law.
+
+    ``factor`` is the lower Cholesky factor of the covariance; ``low`` and ``high`` are the
+    centred bounds the standard normal ``z`` of the factor must meet.
+    """
+    m = factor.shape[0]
+    z = np.zeros((samples, m))
+    log_weights = np.zeros(samples)
+    with np.errstate(divide="ignore"):
+        for i in range(m):
+            partial = z[:, :i] @ factor[i, :i] if i else 0.0
+            a = (low[i] - partial) / factor[i, i]
+            b = (high[i] - partial) / factor[i, i]
+            la, lb = log_ndtr(a), log_ndtr(b)
+            share = rng.random(samples)
+            log_target = np.logaddexp(la + np.log1p(-share), lb + np.log(share))
+            z[:, i] = np.clip(ndtri_exp(log_target), a, b)
+            log_weights = log_weights + lb + np.log1p(-np.exp(np.minimum(la - lb, 0.0)))
+    return log_weights
+
+
+def _ghk_batch(factors, low, high, rng, samples: int) -> np.ndarray:
+    """``(rows, samples)`` log weights of GHK passes over a batch of laws.
+
+    ``factors`` is ``(rows, m, m)`` lower Cholesky factors; ``low`` and ``high`` are the
+    centred bounds ``(rows, m)``. The coordinates are visited in order, every row drawing its
+    own standard normals, so one pass costs ``rows * samples * m^2 / 2`` products.
+    """
+    rows, m = factors.shape[0], factors.shape[1]
+    z = np.zeros((rows, samples, m))
+    log_weights = np.zeros((rows, samples))
+    with np.errstate(divide="ignore"):
+        for i in range(m):
+            if i:
+                partial = np.einsum("rsj,rj->rs", z[:, :, :i], factors[:, i, :i])
+            else:
+                partial = np.zeros((rows, samples))
+            a = (low[:, i][:, None] - partial) / factors[:, i, i][:, None]
+            b = (high[:, i][:, None] - partial) / factors[:, i, i][:, None]
+            la, lb = log_ndtr(a), log_ndtr(b)
+            share = rng.random((rows, samples))
+            log_target = np.logaddexp(la + np.log1p(-share), lb + np.log(share))
+            z[:, :, i] = np.clip(ndtri_exp(log_target), a, b)
+            log_weights += lb + np.log1p(-np.exp(np.minimum(la - lb, 0.0)))
+    return log_weights

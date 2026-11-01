@@ -3,6 +3,7 @@
 import asyncio
 import time
 
+import numpy as np
 import pytest
 from fastmcp import Client
 
@@ -47,7 +48,6 @@ def test_a_portfolio_run_writes_its_report(workspace, portfolio):
     assert report["loss"] is not None
     assert report["loss"]["p05"] <= report["loss"]["p50"] <= report["loss"]["p95"]
     assert report["loss"]["es95"] >= report["loss"]["p95"]
-    assert report["severity"] is None
     assert report["status"] == "ok" and report["coverage"]["share"] == 1.0
     assert report["portfolio"] == {"name": "Демо", "base_currency": "RUB", "positions": 4}
     assert len(report["positions"]) == 4
@@ -64,7 +64,7 @@ def test_two_runs_of_one_portfolio_give_the_same_numbers(workspace, portfolio):
     assert one == two
 
 
-def test_the_report_of_a_constrained_scenario_carries_delta(workspace, portfolio, versions):
+def test_the_report_of_a_constrained_scenario_carries_the_price(workspace, portfolio, versions):
     target = float(versions.data.y[-1, 0] + 1.0)
     scenario_tool.save(
         workspace.scenarios,
@@ -77,17 +77,17 @@ def test_the_report_of_a_constrained_scenario_carries_delta(workspace, portfolio
             "constraints": [
                 {
                     "terms": [{"variable": "gl.brent", "month": 1, "weight": 1.0}],
-                    "low": target,
-                    "high": target,
+                    "value": target,
                 }
             ],
         },
     )
     run_id, _ = start(workspace, REQUEST | {"scenario": "oil-fixed", "portfolio": "demo"})
     report = runs.result(workspace, run_id)["summary"]
-    assert report["severity"]["distance"] > 0
-    assert report["severity"]["exceeded"] > 0
-    assert len(report["severity"]["probabilities"]) == 1
+    assert report["dist"]["distance"] > 0
+    assert np.isfinite(report["dist"]["distance"])
+    assert report["dist"]["standard_error"] >= 0
+    assert report["dist"]["tolerances"]
 
 
 def test_a_portfolio_with_an_unknown_code_is_incomplete_with_its_reason(workspace, positions):

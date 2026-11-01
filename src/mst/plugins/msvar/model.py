@@ -1,12 +1,12 @@
-"""The MS-VAR as a macro model plugin: estimate, load, simulate, severity and moments.
+"""The MS-VAR as a macro model plugin: estimate, load, simulate and the constraint law.
 
 The economics lives in ``estimate``, ``identify`` and ``forecast``; this module is the
 adapter to the model SDK. ``estimate`` builds the panel known on the calculation date,
 draws the posterior, identifies the shocks of the sign table in every regime and returns
 the metadata and arrays of the version. ``load`` rebuilds the posterior of a saved version.
-``simulate``, ``severity`` and ``constraint_moments`` read the platform's neutral
-``ScenarioPlan`` directly: the regime element of the event arrives as a driving-shock name
-the same way a structural shock does, so the plugin never sees the scenario contracts.
+``simulate`` and ``constraint_law`` read the platform's neutral ``ScenarioPlan`` directly:
+the regime element of the event arrives as a driving-shock name the same way a structural
+shock does, so the plugin never sees the scenario contracts.
 """
 
 from datetime import date
@@ -15,17 +15,16 @@ import numpy as np
 
 from mst.macro.panel import build_panel
 from mst.model_sdk.contracts import (
+    ConstraintLaw,
     MacroEstimate,
     MacroEstimateContext,
     MacroModel,
     MacroSimulation,
     ScenarioPlan,
-    Severity,
 )
 
 from .estimate import Posterior, estimate
-from .forecast import constraint_moments as constraint_moments_msvar
-from .forecast import severity as severity_msvar
+from .forecast import constraint_law as constraint_law_msvar
 from .forecast import simulate as simulate_msvar
 from .identify import identify
 from .signs import load_signs
@@ -115,10 +114,7 @@ class MSVarModel(MacroModel):
     def simulate(self, model, plan: ScenarioPlan, *, draws: int, seed: int) -> MacroSimulation:
         return simulate_msvar(model, plan, draws=draws, seed=seed)
 
-    def severity(self, model, plan: ScenarioPlan, *, draws: int, seed: int) -> Severity | None:
-        return severity_msvar(model, plan, draws=draws, seed=seed)
-
-    def constraint_moments(
+    def constraint_law(
         self, model, plan: ScenarioPlan, *, draws: int, seed: int
-    ) -> tuple[np.ndarray, np.ndarray] | None:
-        return constraint_moments_msvar(model, plan, draws=draws, seed=seed)
+    ) -> ConstraintLaw | None:
+        return constraint_law_msvar(model, plan, draws=draws, seed=seed)

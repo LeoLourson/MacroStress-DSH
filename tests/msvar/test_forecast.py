@@ -1,17 +1,16 @@
-"""Conditional paths, the regime element of the event and severity under the MS-VAR."""
+"""Conditional paths, the regime element of the event and the law under the MS-VAR."""
 
 from dataclasses import replace
 
 import numpy as np
 import pytest
-from scipy import stats
 
-from mst.model_sdk.contracts import LinearConstraint, LinearTerm, ScenarioPlan
+from mst.model_sdk.contracts import LATENT_CANDIDATES, LinearConstraint, LinearTerm, ScenarioPlan
+from mst.model_sdk.dist import price_of_law
 from mst.plugins.msvar import estimate, identify
 from mst.plugins.msvar.forecast import (
     InfeasibleScenario,
-    constraint_moments,
-    severity,
+    constraint_law,
     simulate,
 )
 from mst.plugins.msvar.signs import Signs
@@ -194,57 +193,68 @@ def test_the_unconditional_run_mixes_the_regimes(model):
     )  # the mixture is neither regime alone
 
 
-def test_the_moments_count_the_spread_between_regimes(model):
+def test_without_causes_the_law_carries_regime_candidates(model):
+    # The regime path is a hidden coordinate: every parameter draw owns a group of
+    # LATENT_CANDIDATES rows, and the candidate regime paths spread the means of the group.
     half = np.full((2, 2), 0.5)
     pinned = one_draw(model, transition=half, states=np.zeros((1, model.states.shape[1]), int))
-    means, covs = constraint_moments(pinned, plan([value("ru.b", 3, 0.0, 1.0)]), draws=400, seed=0)
-    # Every repetition carries its own regime path, so the means of the two regimes both
-    # appear and the variance of the means is positive.
-    assert means.min() < means.max()
-    assert means.var() > 0
-    assert covs.shape == (400, 1, 1) and (covs > 0).all()
+    found = constraint_law(pinned, plan([value("ru.b", 3, 0.0, 1.0)]), draws=3, seed=0)
+    assert len(found.group) == 3 * LATENT_CANDIDATES
+    assert set(found.group.tolist()) == {0, 1, 2}
+    for g in range(3):
+        rows = found.means[found.group == g]
+        assert rows.min() < rows.max()
 
 
-def test_severity_matches_the_analytic_value_for_a_gaussian_model(model):
-    # One draw, the regime pinned to calm: W y is exactly normal.
-    pinned = one_draw(model, transition=np.eye(2), states=np.zeros((1, model.states.shape[1]), int))
-    lag, const = pinned.lags[0, 0, 0], pinned.const[0, 0]
-    b = pinned.chol[0, 0] * np.exp(pinned.logvar[0, 0] / 2) @ pinned.rotation[0, 0]
-    sigma = b @ b.T
-    y0 = pinned.history[0, -1]
-    mean = [const + lag @ y0, const + lag @ (const + lag @ y0)]
-    cov11, cov22 = sigma, sigma + lag @ sigma @ lag.T
-    cov12 = sigma @ lag.T  # cov(y_1, y_2)
-    w_mean = np.array([mean[0][1], mean[1][2]])
-    w_cov = np.array([[cov11[1, 1], cov12[1, 2]], [cov12[1, 2], cov22[2, 2]]])
-    targets = np.array([w_mean[0] + 2.0, w_mean[1] - 1.0])
-    gap = targets - w_mean
-
-    found = severity(
-        pinned,
-        plan([value("ru.b", 1, targets[0]), value("ru.c", 2, targets[1])]),
-        draws=4000,
-        seed=0,
+def test_with_named_shocks_the_law_has_one_row_per_group(model):
+    half = np.full((2, 2), 0.5)
+    pinned = one_draw(model, transition=half, states=np.zeros((1, model.states.shape[1]), int))
+    found = constraint_law(
+        pinned, plan([value("ru.b", 3, 0.0, 1.0)], shocks=["ru.t"]), draws=5, seed=0
     )
-
-    assert found.distance == pytest.approx(np.sqrt(gap @ np.linalg.solve(w_cov, gap)), rel=1e-9)
-    assert found.probabilities == pytest.approx(stats.norm.cdf(gap / np.sqrt(np.diag(w_cov))))
-    assert found.exceeded == pytest.approx(stats.chi2.sf(found.distance**2, 2), abs=0.03)
-
-
-def test_a_rarer_move_is_more_severe(model):
-    mild = severity(model, plan([value("ru.b", 2, 0.0, 0.0)]), draws=200, seed=0)
-    wild = severity(model, plan([value("ru.b", 2, 50.0, 50.0)]), draws=200, seed=0)
-    assert wild.distance > mild.distance and wild.exceeded <= mild.exceeded
-    assert wild.probabilities[0] > 0.99
+    assert len(found.group) == 5
+    assert set(found.group.tolist()) == set(range(5))
+    assert np.all(found.log_weight == 0.0)
 
 
-def test_severity_counts_the_spread_between_regimes(model):
-    half = np.full((2, 2), 0.5)
-    pinned = one_draw(model, transition=half, states=np.zeros((1, model.states.shape[1]), int))
-    chosen = plan([value("ru.b", 3, 0.0), value("ru.c", 3, 0.0)])
-    found = severity(pinned, chosen, draws=400, seed=0)
-    paths = simulate(pinned, plan(horizon=3), draws=6000, seed=1).paths[:, 3, 1:]
-    gap = -paths.mean(axis=0)
-    empirical = np.sqrt(gap @ np.linalg.solve(np.cov(paths.T), gap))
-    assert found.distance == pytest.approx(empirical, rel=0.05)
+def test_the_regime_event_costs_the_log_of_the_path_prior(model):
+    # A regime event with no conditions on y: every group is one forced regime path whose
+    # row carries the prior weight pi_theta(k, .., k), and the price is the mean of
+    # -log pi_theta(k, .., k) — the canon's price of fixing the regime.
+    pinned = one_draw(model, transition=np.eye(2), states=np.zeros((1, model.states.shape[1]), int))
+    horizon = 4
+    found = constraint_law(
+        pinned, plan(shocks=["regime.stress"], horizon=horizon), draws=1, seed=0
+    )
+    assert found.means.shape == (1, 0) and found.covs.shape == (1, 0, 0)
+    prior = 1.0
+    state = int(pinned.states[0, -1])
+    for _ in range(horizon):
+        prior *= pinned.transition[0, state, 1]
+        state = 1
+    assert found.log_weight[0] == pytest.approx(np.log(prior))
+    distance, log_probability, _ = price_of_law(
+        found, np.zeros(0), np.zeros(0), rng=np.random.default_rng(1)
+    )
+    assert distance == pytest.approx(-np.log(prior))
+    assert log_probability == pytest.approx(np.log(prior))
+
+
+def test_a_regime_event_with_conditions_prices_the_box_at_the_regime(model):
+    # The forced regime row carries the path prior and the box probability under that
+    # regime: P(S | R) = pi_theta(k,..,k) * P(box | theta, k..k).
+    pinned = one_draw(model, transition=np.eye(2), states=np.zeros((1, model.states.shape[1]), int))
+    chosen = plan([value("ru.b", 2, 5.0, 6.0)], shocks=["regime.stress"])
+    found = constraint_law(pinned, chosen, draws=1, seed=0)
+    assert found.means.shape == (1, 1)
+    distance, _, _ = price_of_law(
+        found, np.array([5.0]), np.array([6.0]), rng=np.random.default_rng(2), samples=4000
+    )
+    # The closed form: -log of pi times the exact probability of the box under the one
+    # gaussian row the group carries.
+    from scipy.stats import norm
+
+    box = norm.cdf(6.0, found.means[0, 0], np.sqrt(found.covs[0, 0, 0])) - norm.cdf(
+        5.0, found.means[0, 0], np.sqrt(found.covs[0, 0, 0])
+    )
+    assert distance == pytest.approx(-(found.log_weight[0] + np.log(box)), abs=0.05)

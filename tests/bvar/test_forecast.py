@@ -1,16 +1,16 @@
-"""Conditional paths and severity of a scenario under the BVAR."""
+"""Conditional paths and the constraint law of a scenario under the BVAR."""
 
 from dataclasses import replace
 
 import numpy as np
 import pytest
-from scipy import stats
 
+from mst.model_sdk.contracts import LATENT_CANDIDATES, LinearConstraint, LinearTerm, ScenarioPlan
+from mst.model_sdk.dist import price_of_law
 from mst.plugins.bvar.estimate import estimate
-from mst.plugins.bvar.forecast import InfeasibleScenario, severity, simulate
+from mst.plugins.bvar.forecast import InfeasibleScenario, constraint_law, simulate
 from mst.plugins.bvar.identify import identify
 from mst.plugins.bvar.signs import Shock
-from mst.scenario.contracts import Scenario
 from tests.bvar import simulated as sim
 
 pytestmark = pytest.mark.slow
@@ -31,13 +31,20 @@ def model(request):
 
 
 def scenario(constraints, shocks=(), horizon=6):
-    return Scenario.model_validate(
-        {
-            "narrative": "test",
-            "horizon": horizon,
-            "constraints": constraints,
-            "driving_shocks": list(shocks),
-        }
+    return ScenarioPlan(
+        horizon=horizon,
+        constraints=tuple(
+            LinearConstraint(
+                terms=tuple(
+                    LinearTerm(variable=term["variable"], month=term["month"], weight=term["weight"])
+                    for term in row["terms"]
+                ),
+                low=row["low"],
+                high=row["high"],
+            )
+            for row in constraints
+        ),
+        driving_shocks=tuple(shocks),
     )
 
 
@@ -50,15 +57,24 @@ def value(variable, month, low, high=None):
 
 
 def test_exact_constraints_hold_to_machine_precision_in_every_path(model):
-    change = {
-        "terms": [
-            {"variable": "ru.b", "month": 4, "weight": 1.0},
-            {"variable": "ru.b", "month": 1, "weight": -1.0},
-        ],
-        "low": 2.0,
-        "high": 2.0,
-    }
-    run = simulate(model, scenario([value("gl.a", 3, 9.0), change]), draws=50, seed=1)
+    run = simulate(
+        model,
+        scenario(
+            [
+                value("gl.a", 3, 9.0),
+                {
+                    "terms": [
+                        {"variable": "ru.b", "month": 4, "weight": 1.0},
+                        {"variable": "ru.b", "month": 1, "weight": -1.0},
+                    ],
+                    "low": 2.0,
+                    "high": 2.0,
+                },
+            ]
+        ),
+        draws=50,
+        seed=1,
+    )
 
     assert run.paths.shape == (50, 7, 3)
     assert np.allclose(run.paths[:, 3, 0], 9.0, atol=1e-9, rtol=0)
@@ -107,14 +123,21 @@ def test_unknown_names_are_refused(model):
         simulate(model, scenario([value("ru.b", 1, 1.0)], shocks=["ru.nope"]), draws=1, seed=0)
 
 
-def test_severity_matches_the_analytic_value_for_a_gaussian_model(model):
-    # One draw, constant volatility: W y is exactly normal.
+def test_the_law_of_one_gaussian_draw_matches_the_analytic_value(model):
+    # One draw, constant volatility, both shocks named as causes: W y given R is exactly
+    # normal with nothing free left, and the law's single row per group carries its mean
+    # and covariance; the price is -log of the exact box probability of the two constraints.
+    # The unnamed third shock moves nothing: with both named shocks as causes, R then has
+    # no free column left and the law's row is exactly the analytic gaussian.
+    rotation = model.rotation[:1].copy()
+    rotation[:, :, 2] = 0.0
     one = replace(
         model,
         **{
             name: getattr(model, name)[:1]
-            for name in ("const", "lags", "dummy", "chol", "logvar", "history", "rotation")
+            for name in ("const", "lags", "dummy", "chol", "logvar", "history")
         },
+        rotation=rotation,
         volvol=np.zeros((1, 3)),
         dof=np.full((1, 3), np.inf),
     )
@@ -127,40 +150,93 @@ def test_severity_matches_the_analytic_value_for_a_gaussian_model(model):
     cov12 = sigma @ lag.T  # cov(y_1, y_2)
     w_mean = np.array([mean[0][1], mean[1][2]])
     w_cov = np.array([[cov11[1, 1], cov12[1, 2]], [cov12[1, 2], cov22[2, 2]]])
-    targets = np.array([w_mean[0] + 2.0, w_mean[1] - 1.0])
-    gap = targets - w_mean
+    low = np.array([w_mean[0] + 1.5, w_mean[1] - 1.0])
+    high = np.array([w_mean[0] + 2.5, w_mean[1] + 0.0])
 
-    found = severity(
+    found = constraint_law(
         one,
-        scenario([value("ru.b", 1, targets[0]), value("ru.c", 2, targets[1])]),
-        draws=4000,
+        scenario(
+            [
+                {"terms": [{"variable": "ru.b", "month": 1, "weight": 1.0}],
+                 "low": low[0], "high": high[0]},
+                {"terms": [{"variable": "ru.c", "month": 2, "weight": 1.0}],
+                 "low": low[1], "high": high[1]},
+            ],
+            shocks=["ru.t", "gl.s"],
+        ),
+        draws=4,
         seed=0,
     )
-
-    assert found.distance == pytest.approx(np.sqrt(gap @ np.linalg.solve(w_cov, gap)), rel=1e-9)
-    assert found.probabilities == pytest.approx(stats.norm.cdf(gap / np.sqrt(np.diag(w_cov))))
-    assert found.exceeded == pytest.approx(stats.chi2.sf(found.distance**2, 2), abs=0.03)
-
-
-def test_a_rarer_move_is_more_severe(model):
-    mild = severity(model, scenario([value("ru.b", 2, 0.0, 0.0)]), draws=200, seed=0)
-    wild = severity(model, scenario([value("ru.b", 2, 50.0, 50.0)]), draws=200, seed=0)
-    assert wild.distance > mild.distance and wild.exceeded <= mild.exceeded
-    assert wild.probabilities[0] > 0.99
-
-
-def test_severity_counts_the_spread_between_parameter_draws(model):
-    two = replace(
-        model,
-        **{
-            name: getattr(model, name)[:2]
-            for name in ("lags", "dummy", "chol", "logvar", "history", "rotation", "volvol", "dof")
-        },
-        const=model.const[:2] + np.array([[0.0, 0.0, 0.0], [0.0, 6.0, 0.0]]),
+    assert found.means.shape == (4, 2) and found.covs.shape == (4, 2, 2)
+    for k in range(4):
+        assert np.allclose(found.means[k], w_mean)
+        assert np.allclose(found.covs[k], w_cov)
+    distance, _, _ = price_of_law(
+        found, low, high, rng=np.random.default_rng(1), samples=4000
     )
-    chosen = scenario([value("ru.b", 3, 0.0), value("ru.c", 3, 0.0)])
-    found = severity(two, chosen, draws=400, seed=0)
-    paths = simulate(two, scenario([], horizon=3), draws=6000, seed=1).paths[:, 3, 1:]
-    gap = -paths.mean(axis=0)
-    empirical = np.sqrt(gap @ np.linalg.solve(np.cov(paths.T), gap))
-    assert found.distance == pytest.approx(empirical, rel=0.05)
+    from scipy.stats import multivariate_normal
+
+    exact = multivariate_normal(w_mean, w_cov).cdf(high, lower_limit=low)
+    assert distance == pytest.approx(-np.log(exact), rel=0.02)
+
+
+def test_without_causes_the_law_carries_volatility_candidates(model):
+    # The volatility path is a hidden coordinate: every parameter draw owns a group of
+    # LATENT_CANDIDATES rows. Under stochastic volatility the candidates differ in their
+    # covariance; under the constant variant every candidate is the same draw repeated.
+    found = constraint_law(
+        model, scenario([value("ru.b", 2, 0.0, 1.0)]), draws=3, seed=0
+    )
+    assert len(found.group) == 3 * LATENT_CANDIDATES
+    assert set(found.group.tolist()) == {0, 1, 2}
+    per_group = [found.covs[found.group == g].ravel() for g in range(3)]
+    if model.volvol[0].max() > 0:
+        assert any(rows.min() < rows.max() for rows in per_group)
+    else:
+        assert all(np.allclose(rows, rows[0]) for rows in per_group)
+
+
+def test_with_named_causes_the_law_has_one_row_per_group(model):
+    found = constraint_law(
+        model,
+        scenario([value("ru.b", 2, 0.0, 1.0)], shocks=["ru.t"]),
+        draws=5,
+        seed=0,
+    )
+    assert len(found.group) == 5
+    assert set(found.group.tolist()) == set(range(5))
+    assert np.all(found.log_weight == 0.0)
+
+
+def test_a_tail_event_prices_the_volatility_candidates(model):
+    # A tail event needs volatility: the candidate rows of a group mix the volatile paths
+    # in, so a box in the tail costs less than the first candidate alone would say — the
+    # mixture reaches further than one unconditional draw.
+    one = replace(
+        model,
+        **{name: getattr(model, name)[:1] for name in ("const", "lags", "dummy", "chol",
+                                                        "logvar", "history", "rotation",
+                                                        "volvol", "dof")},
+    )
+    if one.volvol[0].max() <= 0:
+        pytest.skip("the constant variant has no volatility to price")
+    reference = constraint_law(one, scenario([value("ru.b", 2, 0.0, 1.0)]), draws=1, seed=0)
+    spread = float(np.sqrt(reference.covs[0, 0, 0]))
+    low = float(reference.means[0, 0]) + 3.0 * spread
+    chosen = scenario([value("ru.b", 2, low, low + 0.5)])
+    law = constraint_law(one, chosen, draws=8, seed=0)
+    first_only = replace(
+        law,
+        means=law.means[::LATENT_CANDIDATES],
+        covs=law.covs[::LATENT_CANDIDATES],
+        log_weight=law.log_weight[::LATENT_CANDIDATES],
+        group=law.group[::LATENT_CANDIDATES],
+    )
+    rng = np.random.default_rng(3)
+    distance, _, _ = price_of_law(
+        law, np.array([low]), np.array([low + 0.5]), rng=rng, samples=4000
+    )
+    single, _, _ = price_of_law(
+        first_only, np.array([low]), np.array([low + 0.5]), rng=rng, samples=4000
+    )
+    assert distance < single

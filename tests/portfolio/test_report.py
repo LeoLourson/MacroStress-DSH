@@ -1,4 +1,4 @@
-"""mst.portfolio.report: the loss of the portfolio at P5/P50/P95 and the severity of a scenario."""
+"""mst.portfolio.report: the loss of the portfolio at P5/P50/P95 and the price of a scenario."""
 
 from dataclasses import dataclass, replace
 
@@ -22,17 +22,12 @@ SERVED = {
 
 
 @dataclass(frozen=True)
-class Severity:
-    probabilities: np.ndarray
-    distance: float
-    exceeded: float
-
-
-@dataclass(frozen=True)
 class Dist:
-    probability: float
     distance: float
-    way: str
+    log_probability: float
+    standard_error: float
+    causes: tuple[str, ...] = ()
+    tolerances: tuple[float, ...] = ()
     message: str | None = None
 
 
@@ -67,44 +62,39 @@ def test_the_report_sums_losses_inside_each_repetition():
     assert [row["position"] for row in report["positions"]] == ["sber", "gazp"]
 
 
-def test_the_severity_is_what_macro_computed():
-    found = Severity(probabilities=np.array([0.2, 0.8]), distance=6.984, exceeded=0.01)
-    report = build(portfolio(equity()), batch(equity()).results, severity_found=found)
-    assert report["severity"] == {
-        "distance": 6.984,
-        "exceeded": 0.01,
-        "probabilities": [0.2, 0.8],
-    }
-    plain = build(portfolio(equity()), batch(equity()).results)
-    assert plain["severity"] is None
-
-
-def test_the_dist_stands_beside_the_severity():
-    found = Dist(probability=0.07, distance=2.659, way="exact")
+def test_the_price_of_the_scenario_stands_beside_the_loss():
+    found = Dist(
+        distance=2.659,
+        log_probability=-3.1,
+        standard_error=0.2,
+        causes=("ru.monetary",),
+        tolerances=(0.4,),
+    )
     report = build(portfolio(equity()), batch(equity()).results, dist_found=found)
     assert report["dist"] == {
-        "probability": 0.07,
         "distance": 2.659,
-        "way": "exact",
+        "log_probability": -3.1,
+        "standard_error": 0.2,
+        "causes": ["ru.monetary"],
+        "tolerances": [0.4],
         "message": None,
     }
     assert build(portfolio(equity()), batch(equity()).results)["dist"] is None
 
 
-def test_an_infinite_dist_is_passed_as_is_with_its_message():
-    # P(C) = 0: no unconditional path satisfies the constraints — the gate is failed, and the
-    # report names it instead of passing a bare infinity.
+def test_an_infinite_price_is_passed_as_is_with_its_message():
+    # At some value of R the event has no probability: the report names the contradiction
+    # instead of passing a bare infinity.
     found = Dist(
-        probability=0.0,
         distance=float("inf"),
-        way="mc",
-        message="the unconditional model gives the constraint box no probability; the "
-        "constraint gate pi_c is failed",
+        log_probability=float("-inf"),
+        standard_error=float("inf"),
+        message="the event has no probability at some value of R: the scenario contradicts "
+        "the models (lemma 2 of the canon)",
     )
     report = build(portfolio(equity()), batch(equity()).results, dist_found=found)
     assert report["dist"]["distance"] == float("inf")
-    assert report["dist"]["probability"] == 0.0
-    assert "gate pi_c is failed" in report["dist"]["message"]
+    assert "contradicts the models" in report["dist"]["message"]
 
 
 def test_an_invalid_position_is_excluded_with_its_reason():

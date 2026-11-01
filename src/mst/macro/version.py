@@ -37,6 +37,9 @@ class MacroVersion:
     plugin: MacroModel
     model: object
     meta: dict
+    panel: Panel
+    """The panel the version was estimated on, in the model scale: the tolerance of a
+    point-fixed constraint reads the typical monthly movement of its variables from here."""
 
     @property
     def as_of(self) -> date:
@@ -106,6 +109,13 @@ def load(root: Path, name: str, models: Mapping[str, MacroModel]) -> MacroVersio
         plugin=models[model_id],
         model=models[model_id].load(meta, arrays),
         meta=meta,
+        panel=Panel(
+            ids=meta["ids"],
+            n_global=meta["n_global"],
+            months=[date.fromisoformat(m) for m in meta["months"]],
+            y=arrays["panel_y"],
+            approximate=arrays["panel_approximate"],
+        ),
     )
 
 

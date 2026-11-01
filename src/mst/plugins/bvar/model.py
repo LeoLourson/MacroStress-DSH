@@ -1,11 +1,11 @@
-"""The BVAR as a macro model plugin: estimate, load, simulate, severity and the episode check.
+"""The BVAR as a macro model plugin: estimate, load, simulate and the constraint law.
 
 The economics lives in ``estimate``, ``sv``, ``var``, ``identify`` and ``forecast``; this
 module is the adapter to the model SDK. ``estimate`` builds the panel known on the calculation
 date, draws the posterior, identifies the shocks of the sign table and returns the metadata
-and arrays of the version. ``load`` rebuilds the posterior of a saved version. ``simulate``,
-``severity`` and ``constraint_moments`` convert the platform's neutral plan into the scenario
-contract the forecast module works with.
+and arrays of the version. ``load`` rebuilds the posterior of a saved version. ``simulate``
+and ``constraint_law`` convert the platform's neutral plan into the scenario contract the
+forecast module works with.
 """
 
 from datetime import date
@@ -14,18 +14,17 @@ import numpy as np
 
 from mst.macro.panel import build_panel
 from mst.model_sdk.contracts import (
+    ConstraintLaw,
     MacroEstimate,
     MacroEstimateContext,
     MacroModel,
     MacroSimulation,
     ScenarioPlan,
-    Severity,
 )
 from mst.scenario.contracts import Scenario
 
 from .estimate import Posterior, estimate
-from .forecast import constraint_moments as constraint_moments_bvar
-from .forecast import severity as severity_bvar
+from .forecast import constraint_law as constraint_law_bvar
 from .forecast import simulate as simulate_bvar
 from .identify import identify
 from .signs import load_signs
@@ -132,10 +131,7 @@ class BvarModel(MacroModel):
     def simulate(self, model, plan: ScenarioPlan, *, draws: int, seed: int) -> MacroSimulation:
         return simulate_bvar(model, to_scenario(plan), draws=draws, seed=seed)
 
-    def severity(self, model, plan: ScenarioPlan, *, draws: int, seed: int) -> Severity | None:
-        return severity_bvar(model, to_scenario(plan), draws=draws, seed=seed)
-
-    def constraint_moments(
+    def constraint_law(
         self, model, plan: ScenarioPlan, *, draws: int, seed: int
-    ) -> tuple[np.ndarray, np.ndarray] | None:
-        return constraint_moments_bvar(model, to_scenario(plan), draws=draws, seed=seed)
+    ) -> ConstraintLaw | None:
+        return constraint_law_bvar(model, to_scenario(plan), draws=draws, seed=seed)

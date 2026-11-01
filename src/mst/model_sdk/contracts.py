@@ -41,6 +41,12 @@ BUNDLE_META_REQUIRED = ("macro", "as_of", "registry", "quantities", "correlated"
 #: count of every node and the check of every driver.
 PART_META_REQUIRED = ("model", "months", "nodes", "driver", "checks", "rows")
 
+#: How many candidates of a hidden coordinate — a regime path, a volatility path: anything the
+#: constraints reweight but no gaussian draw reaches — the platform and the models draw per
+#: value of ``R``. The stage-4 imposition selects one candidate by its box probability, and the
+#: price of a scenario averages the candidates of a group into ``P(S | R)``.
+LATENT_CANDIDATES = 64
+
 
 @dataclass(frozen=True)
 class LinearTerm:
@@ -53,11 +59,21 @@ class LinearTerm:
 
 @dataclass(frozen=True)
 class LinearConstraint:
-    """``low <= sum(weight * y[variable, month]) <= high``; ``low == high`` fixes the value."""
+    """``low <= sum(weight * y[variable, month]) <= high`` with the point mark of its origin.
+
+    The scenario contract fixes a value either by an interval ``low < high`` or by a point
+    ``value``; the platform expands a point to ``value ± tolerance`` (half-width ``tau``), so a
+    plan always carries ``low < high``. ``point`` keeps the origin of such an interval — the
+    1 % gate of the metrics does not apply to it, because its probability measures ``tau``
+    rather than the scenario — and ``tolerance`` is the ``tau`` the point was expanded to (the
+    same scale the platform would use for a narrow interval of the same terms).
+    """
 
     terms: tuple[LinearTerm, ...]
     low: float
     high: float
+    point: bool = False
+    tolerance: float = 0.0
 
 
 @dataclass(frozen=True)
@@ -105,37 +121,47 @@ class MacroSimulation:
 
 
 @dataclass(frozen=True)
-class Severity:
-    """How far a scenario pushes the paths from what the model expects without it."""
+class ConstraintLaw:
+    """The law of ``W y`` given ``R``, row by row: what the price of a scenario mixes.
 
-    probabilities: np.ndarray
-    """pi_c: the unconditional probability that ``w_c' y`` ends at or below its midpoint."""
-    distance: float
-    """delta: the Mahalanobis distance of the midpoints from the unconditional forecast."""
-    exceeded: float
-    """The share of unconditional paths farther away than ``delta``."""
+    One row is one gaussian law of the ``m`` constraint functionals: ``means`` is ``(N, m)``
+    and ``covs`` is ``(N, m, m)``. Rows share a group — ``group`` is ``(N,)`` — when they share
+    the value of ``R``; within a group the rows are the candidates of everything ``R`` does not
+    fix (the hidden coordinates and the free shocks) with importance weights ``e**log_weight``
+    relative to a plain draw. A group of one row with ``log_weight = log pi`` is a forced
+    hidden coordinate — the event that a regime path holds — whose prior weight the row
+    carries. The platform turns the rows of a group into ``P(S | R)`` and averages
+    ``-log P(S | R)`` over the groups (``mst.model_sdk.dist``).
+    """
+
+    means: np.ndarray
+    covs: np.ndarray
+    log_weight: np.ndarray
+    group: np.ndarray
 
 
 @dataclass(frozen=True)
 class Dist:
-    """The platform measure of scenario implausibility: ``dist(P_s, P) = -log P(C)``.
+    """The price of a scenario: ``dist(s) = KL(P_s || P) = E_P[-log P(S | R)]``.
 
-    Section 4 of the scheme measures the implausibility of a scenario by the distance
-    ``dist(P_s, P)``; under the conditional scheme the platform's assumption puts it at
-    ``-log P(C)``, where ``P(C)`` is the joint probability that the *unconditional* run of
-    the model satisfies every constraint at once. Measured on ``C`` without the impacts,
-    like the plugin's ``Severity``.
+    With no moment conditions the imposition of the canon is conditioning on the event ``S``,
+    and the Kullback—Leibler divergence from the base measure is the mean of ``-log P(S | R)``
+    over the law of ``R`` — not ``-log P(S)``, which the older code measured and which ignores
+    the causes. ``log_probability`` is ``log P(S)`` beside it: the difference
+    ``distance + log_probability`` is the parameter uncertainty the causes cannot explain.
+    ``standard_error`` is the spread of ``-log P(S | R)`` over the groups; ``causes`` names the
+    coordinates the scenario holds responsible, and ``tolerances`` carries the half-width
+    ``tau`` of every point-fixed constraint, in the order of the plan. ``message`` is set when
+    a group has no probability at all: the scenario contradicts the models, the case lemma 2
+    of the canon names.
     """
 
-    probability: float
-    """P(C): the joint probability of all constraints on the unconditional run."""
     distance: float
-    """``-log P(C)``; infinite when the probability is zero."""
-    way: str
-    """How ``P(C)`` was estimated: ``mc`` — the share of the base run's paths, ``exact`` —
-    the gaussian box probability of the parameter mixture."""
+    log_probability: float
+    standard_error: float
+    causes: tuple[str, ...] = ()
+    tolerances: tuple[float, ...] = ()
     message: str | None = None
-    """Set when the probability is zero: no unconditional path satisfies every constraint."""
 
 
 @dataclass(frozen=True)
@@ -297,20 +323,17 @@ class MacroModel(ABC):
         Raises ``InfeasibleScenario`` when the driving shocks cannot meet the constraints.
         """
 
-    def severity(self, model, plan: ScenarioPlan, *, draws: int, seed: int) -> Severity | None:
-        """How improbable the plan is under the model; ``None`` when the model does not say."""
-        return None
-
-    def constraint_moments(
+    def constraint_law(
         self, model, plan: ScenarioPlan, *, draws: int, seed: int
-    ) -> tuple[np.ndarray, np.ndarray] | None:
-        """The mean and covariance of the constraint functionals under each parameter draw.
+    ) -> ConstraintLaw | None:
+        """The law of the constraint functionals given ``R``, as ``ConstraintLaw`` rows.
 
-        ``means`` is ``(R, m)`` and ``covs`` is ``(R, m, m)`` in the order of
-        ``plan.constraints``: per drawn parameter set the constraint functionals ``W y`` are
-        normal, so the platform turns the mixture into the exact probability of the
-        constraint box (``mst.model_sdk.dist``). ``None`` — the default — says the model
-        does not measure them, and the platform estimates ``P(C)`` by Monte Carlo alone.
+        One group of rows belongs to one draw of ``R`` — the parameters and every coordinate
+        the plan's driving shocks do not name — and holds the candidates of the hidden
+        coordinates the model carries (``LATENT_CANDIDATES`` of them) with their importance
+        weights. A model whose representation has no hidden structure returns one row per
+        draw. ``None`` — the default — says the model does not measure the law, and the
+        platform reports no price for its scenarios.
         """
         return None
 

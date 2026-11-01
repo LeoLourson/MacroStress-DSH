@@ -107,7 +107,7 @@ def test_describe_names_the_kind_and_the_served_quantities():
         "description": "",
     }
     assert Two().describe()["kind"] == "macro"
-    assert Two().severity(None, ScenarioPlan(horizon=1), draws=1, seed=0) is None
+    assert Two().constraint_law(None, ScenarioPlan(horizon=1), draws=1, seed=0) is None
 
 
 def test_the_version_contracts_name_the_required_keys():

@@ -211,10 +211,19 @@ def test_constraint_probabilities_are_not_applicable_to_a_point():
     from mst.model_sdk import LinearConstraint, LinearTerm
 
     exact = LinearConstraint(
-        terms=(LinearTerm(variable="x", month=1, weight=1.0),), low=1.0, high=1.0
+        terms=(LinearTerm(variable="x", month=1, weight=1.0),),
+        low=0.9,
+        high=1.1,
+        point=True,
+        tolerance=0.1,
     )
-    # A continuous draw meets a point with probability zero: the share is None, not 0.0.
+    # A point constraint expanded to ±tau: its share would measure tau rather than the
+    # scenario, so it is None, not a number.
     assert constraint_probabilities(paths, ["x"], [exact]) == {0: None}
+    interval = LinearConstraint(
+        terms=(LinearTerm(variable="x", month=1, weight=1.0),), low=1.0, high=2.0
+    )
+    assert constraint_probabilities(paths, ["x"], [interval]) == {0: 1 / 3}
 
 
 def test_random_walk_gappy_history_uses_only_true_distance_pairs():

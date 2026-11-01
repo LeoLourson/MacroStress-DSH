@@ -40,8 +40,7 @@ def spec(versions, **changes):
 def fixed(variable, month, value):
     return {
         "terms": [{"variable": variable, "month": month, "weight": 1.0}],
-        "low": value,
-        "high": value,
+        "value": value,
     }
 
 
@@ -51,8 +50,7 @@ def scenario(versions, **changes):
     def at(variable, month):
         return {
             "terms": [{"variable": variable, "month": month, "weight": 1.0}],
-            "low": 1.0,
-            "high": 1.0,
+            "value": 1.0,
         }
 
     changes.setdefault("constraints", [at("gl.brent", 2)])

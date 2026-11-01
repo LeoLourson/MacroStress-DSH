@@ -55,6 +55,7 @@ from mst.model_sdk.contracts import (
 )
 from mst.model_sdk.version import MODEL_SDK_VERSION
 from mst.plugin_sdk.version import SDK_VERSION
+from mst.scenario.build import point_constraint
 
 from .baselines import (
     CONSTRAINT,
@@ -250,10 +251,10 @@ def _episode(
         for k, value in enumerate(realized[:, i], start=1):
             if not np.isnan(value):
                 constraints.append(
-                    LinearConstraint(
-                        terms=(LinearTerm(variable=id_, month=k, weight=1.0),),
-                        low=float(value),
-                        high=float(value),
+                    point_constraint(
+                        (LinearTerm(variable=id_, month=k, weight=1.0),),
+                        float(value),
+                        macro,
                     )
                 )
     return Episode(
@@ -736,13 +737,19 @@ def _macro_cells(
 
 
 def _pinned(constraints) -> set[tuple[str, int]]:
-    """The ``(variable, month)`` cells an exact single-term constraint fixes."""
+    """The ``(variable, month)`` cells a single-term constraint fixes.
+
+    A constraint of one term pins its cell when its band is no wider than the tolerance a
+    point of the same terms would expand to — a fact-reconstructed point arrives exactly
+    that wide, and a narrow interval of the same scale carries no scoring information
+    either. The weights count through the tolerance, which scales with ``|w|``.
+    """
     pinned = set()
     for constraint in constraints:
-        if constraint.low != constraint.high or len(constraint.terms) != 1:
+        if len(constraint.terms) != 1:
             continue
         term = constraint.terms[0]
-        if term.weight == 1.0:
+        if constraint.high - constraint.low <= 2 * constraint.tolerance:
             pinned.add((term.variable, term.month))
     return pinned
 
@@ -930,9 +937,10 @@ def _quantity_rules(cells: list[Cell]) -> dict:
 def _constraint_gate(shares: dict[str, dict[int, float | None]]) -> dict:
     """``pi_c > 1 %`` for every informative constraint, per episode.
 
-    A constraint reconstructed as an exact point (``low == high``) cannot be met by a
-    continuous draw: its probability is not applicable and is left out of the gate. The report
-    says how many constraints of each kind the gate saw.
+    A constraint that fixes a point — the facts of an episode, expanded to ``value ± tau`` —
+    would have its probability measure the tolerance rather than the scenario, so it is not
+    applicable and is left out of the gate. The report says how many constraints of each kind
+    the gate saw.
     """
     applicable = 0
     not_applicable = 0
@@ -953,7 +961,7 @@ def _constraint_gate(shares: dict[str, dict[int, float | None]]) -> dict:
         "failed_constraints": failed,
         "failed": bool(failed),
         "note": (
-            "a fact-reconstructed episode fixes its constrained values exactly, so pi_c is "
+            "a fact-reconstructed episode fixes its constrained values as points, so pi_c is "
             "not applicable there and is excluded from the gate; a range constraint keeps it"
         ),
     }
@@ -1476,7 +1484,7 @@ def _meta(
             "is negative; the split by source is manual against llm",
             "realized loss: the portfolio valued on the facts at t = 0 and t = H; an episode "
             "without the fact at t = H is dropped by name",
-            "dist(P_s, P) = -log P(C) on the unconditional run (plan assumption 2)",
+            "dist(s) = E_P[-log P(S | R)] on the constraint law (docs/concept/formalization.md)",
         ],
         "macro_models": [
             {"model_id": model_id, "version": version}

@@ -301,9 +301,7 @@ def _write(
         },
     )
     summary = (
-        portfolio_report.build(
-            portfolio, batch.results, severity_found=paths.severity, dist_found=paths.dist
-        )
+        portfolio_report.build(portfolio, batch.results, dist_found=paths.dist)
         if portfolio is not None
         else None
     )
@@ -330,7 +328,6 @@ def _write(
         "driver_flags": {
             driver: sorted(paths.drivers.flags[driver]) for driver in paths.drivers.ids
         },
-        "severity": portfolio_report.severity(paths.severity),
         "dist": _dist_meta(paths.dist),
         "models": {
             result.position_id: {
@@ -353,20 +350,21 @@ def _now() -> str:
 
 
 def _dist_meta(found) -> dict | None:
-    """The platform distance with what it assumes and how it was estimated.
+    """The price of the scenario with everything the reader needs to judge it.
 
-    The definition is the plan's assumption 2: under the conditional scheme the scenario
-    differs from ``P`` only in the marginal of the driving shocks, so
-    ``dist(P_s, P) = -log P(C)``. ``way`` says how ``P(C)`` was estimated; an infinite
-    distance is passed as is, with the message naming the failed gate.
+    The definition is the canon's: ``dist(s) = KL(P_s || P) = E_P[-log P(S | R)]``. The
+    standard error reads the spread over the groups; an infinite distance is passed as is,
+    with the message naming the contradiction.
     """
     if found is None:
         return None
     return {
-        "definition": "dist(P_s, P) = -log P(C) on the unconditional run (plan assumption 2)",
-        "probability": float(found.probability),
+        "definition": "dist(s) = KL(P_s || P) = E_P[-log P(S | R)] (docs/concept/formalization.md)",
         "distance": float(found.distance),
-        "way": found.way,
+        "log_probability": float(found.log_probability),
+        "standard_error": float(found.standard_error),
+        "causes": list(found.causes),
+        "tolerances": list(found.tolerances),
         "message": found.message,
     }
 

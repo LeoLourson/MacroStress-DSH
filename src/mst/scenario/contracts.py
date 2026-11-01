@@ -28,17 +28,35 @@ class Term(Contract):
 
 
 class Constraint(Contract):
-    """``low <= sum(weight * y[variable, month]) <= high``; ``low == high`` fixes the value."""
+    """One condition on the paths: an interval ``low <= w'y <= high`` or a point ``value``.
+
+    A point is a value the scenario fixes exactly; the platform expands it to
+    ``value ± tau`` with the tolerance of the variable's typical monthly movement
+    (``mst.scenario.build.plan_of``), because an exact value has no probability under a
+    continuous law and the canon asks for a half-width ``tau > 0``. Exactly one of the two
+    forms is allowed: ``low`` with ``high`` strictly above it, or ``value`` alone — an
+    interval of zero width is a point and belongs in ``value``.
+    """
 
     terms: list[Term] = Field(min_length=1)
-    low: Number
-    high: Number
-    note: str = ""
+    low: Number | None = None
+    high: Number | None = None
+    value: Number | None = None
 
     @model_validator(mode="after")
     def well_formed(self):
-        if self.low > self.high:
-            raise ValueError("Require low <= high")
+        interval = self.low is not None or self.high is not None
+        if interval and self.value is not None:
+            raise ValueError("a constraint names either an interval or a value, not both")
+        if not interval and self.value is None:
+            raise ValueError("a constraint needs either low and high, or a value")
+        if interval and (self.low is None or self.high is None):
+            raise ValueError("an interval constraint needs both low and high")
+        if interval and self.low >= self.high:
+            raise ValueError(
+                "Require low < high: an exact value belongs in `value`, which the platform "
+                "expands to value ± tau"
+            )
         seen = set()
         for term in self.terms:
             key = (term.variable, term.month)
@@ -46,6 +64,11 @@ class Constraint(Contract):
                 raise ValueError(f"{term.variable} in month {term.month} appears twice")
             seen.add(key)
         return self
+
+    @property
+    def point(self) -> bool:
+        """Whether the constraint fixes its value exactly, as a point."""
+        return self.value is not None
 
 
 class Impact(Contract):

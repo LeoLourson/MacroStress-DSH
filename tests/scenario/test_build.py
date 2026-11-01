@@ -10,10 +10,8 @@ from mst.corpus.index import Chunk
 from mst.corpus.index import write as write_index
 from mst.macro.registry import load_registry
 from mst.model_sdk import InfeasibleScenario
-from mst.model_sdk.contracts import ScenarioPlan
-from mst.model_sdk.dist import box_probability_mc, box_probability_mixture
 from mst.plugins.hier.simulate import IMPACT
-from mst.scenario.build import build, dist_of, plan_of, validate
+from mst.scenario.build import build, dist_of, plan_of, tolerance_of, validate
 from mst.scenario.contracts import Impact
 from mst.scenario.spec import Spec
 
@@ -34,8 +32,7 @@ def scenario(versions, **changes) -> Spec:
 def fixed(variable: str, month: int, value: float) -> dict:
     return {
         "terms": [{"variable": variable, "month": month, "weight": 1.0}],
-        "low": value,
-        "high": value,
+        "value": value,
     }
 
 
@@ -53,8 +50,7 @@ def change(variable: str, month: int, other: int, value: float) -> dict:
             {"variable": variable, "month": month, "weight": 1.0},
             {"variable": variable, "month": other, "weight": -1.0},
         ],
-        "low": value,
-        "high": value,
+        "value": value,
     }
 
 
@@ -75,15 +71,22 @@ def test_the_paths_run_from_the_last_month_of_the_panel_for_the_horizon(versions
         )
 
 
-def test_exact_constraints_hold_in_every_path_to_machine_precision(versions):
+def test_point_constraints_hold_within_the_tolerance_in_every_path(versions):
+    # A point arrives as an interval of half-width tau, so the paths land inside the band
+    # rather than on the exact value; the plan carries strict bounds with the point mark.
     registry = load_registry()
     target = float(versions.data.y[-1, 0] + 5.0)
     spec = scenario(versions, constraints=[fixed("gl.brent", 2, target)])
+    plan = plan_of(spec, versions.loaded)
+    (constraint,) = plan.constraints
+    assert constraint.point and constraint.low < constraint.high
+    assert constraint.tolerance == pytest.approx(
+        tolerance_of(constraint.terms, versions.loaded)
+    )
     paths = paths_of(versions, spec)
     moved = registry.variable("gl.brent").to_model(paths.macro[:, 2, 0])
-    assert np.allclose(moved, target, atol=1e-9, rtol=0)
+    assert np.all(np.abs(moved - target) <= constraint.tolerance + 1e-9)
     assert paths.macro[:, 2, 1].std() > 0  # the other variables still vary
-    assert paths.severity is not None and paths.severity.distance > 0
 
 
 def test_an_impact_on_a_constrained_variable_meets_the_constraint(versions):
@@ -97,13 +100,16 @@ def test_an_impact_on_a_constrained_variable_meets_the_constraint(versions):
     assert report == {"ok": True, "problems": []}
     paths = paths_of(versions, spec)
     moved = registry.variable("gl.brent").to_model(paths.macro[:, 2, 0])
-    assert np.allclose(moved, target, atol=1e-9, rtol=0)
+    (constraint,) = plan_of(spec, versions.loaded).constraints
+    assert np.all(np.abs(moved - target) <= constraint.tolerance + 1e-9)
 
 
 def test_a_change_constraint_holds_across_months(versions):
     spec = scenario(versions, constraints=[change("ru.key_rate", 3, 1, 2.0)])
+    (constraint,) = plan_of(spec, versions.loaded).constraints
     paths = paths_of(versions, spec)
-    assert np.allclose(paths.macro[:, 3, 1] - paths.macro[:, 1, 1], 2.0, atol=1e-9, rtol=0)
+    difference = paths.macro[:, 3, 1] - paths.macro[:, 1, 1]
+    assert np.all(np.abs(difference - 2.0) <= constraint.tolerance + 1e-9)
 
 
 def test_the_paths_repeat_bit_for_bit_for_the_same_seed(versions):
@@ -116,69 +122,79 @@ def test_the_paths_repeat_bit_for_bit_for_the_same_seed(versions):
     assert not np.array_equal(first.macro, other.macro)
 
 
-def test_a_scenario_without_constraints_has_no_severity(versions):
+def test_a_scenario_without_constraints_has_no_price(versions):
     paths = paths_of(versions, scenario(versions))
-    assert paths.severity is None
-    assert paths.dist is None  # no dist, not a zero distance
+    assert paths.dist is None  # no price, not a zero distance
 
 
-def test_the_paths_carry_the_platform_dist_of_the_constraints(versions):
-    # The MC share of the base run's paths estimates P(C); the distance is -log P(C) of the
-    # constraint box on the unconditional run, not the Mahalanobis delta of the plugin.
+def test_the_paths_carry_the_price_of_the_constraints(versions):
+    # The price is E_P[-log P(S | R)] over the constraint law of the model, with the standard
+    # error of the groups and log P(S) beside it; a plain interval constraint has no
+    # tolerances and names no causes.
     spec = scenario(versions, constraints=[interval("gl.brent", 2, 1.0, 3.0)])
     paths = paths_of(versions, spec)
     assert paths.dist is not None
-    assert paths.dist.way == "mc"
     assert paths.dist.message is None
-    assert paths.dist.distance == pytest.approx(-np.log(paths.dist.probability))
-    assert 0.0 < paths.dist.probability < 1.0
+    assert paths.dist.distance > 0 and np.isfinite(paths.dist.distance)
+    assert paths.dist.standard_error >= 0
+    assert -paths.dist.log_probability <= paths.dist.distance  # Jensen
+    assert paths.dist.causes == ()
+    assert paths.dist.tolerances == ()
 
 
-def test_the_mc_dist_agrees_with_the_exact_mixture(versions):
-    # The share of the base run's paths (the same draws and seed the constraint gate reads)
-    # must agree with the exact probability of the parameter mixture within the MC error.
-    spec = scenario(versions, constraints=[interval("gl.brent", 2, 1.0, 4.0)])
-    constraints = plan_of(spec).constraints
-    base = versions.loaded.plugin.simulate(
-        versions.loaded.model, ScenarioPlan(horizon=spec.horizon), draws=4000, seed=SEED
+def test_a_point_constraint_carries_its_tolerance_into_the_price(versions):
+    spec = scenario(versions, constraints=[fixed("gl.brent", 2, 1.0)])
+    found = dist_of(spec, versions.loaded, draws=DRAWS, seed=SEED)
+    (tolerance,) = found.tolerances
+    assert tolerance == pytest.approx(
+        tolerance_of(plan_of(spec, versions.loaded).constraints[0].terms, versions.loaded)
     )
-    # The same 4000 drawings: the share of the dist is the share counted here, exactly.
-    found = dist_of(spec, versions.loaded, draws=4000, seed=SEED)
-    mc = box_probability_mc(base.paths, base.ids, constraints)
-    assert found.way == "mc"
-    assert found.probability == mc
-    means, covs = versions.loaded.plugin.constraint_moments(
-        versions.loaded.model, plan_of(spec), draws=100, seed=SEED
+
+
+def test_named_causes_cost_no_less_than_unnamed(versions):
+    # Explaining the event through one named shock narrows R, so the price cannot fall;
+    # the difference is within the Monte-Carlo noise of the two estimates.
+    spec = scenario(versions, constraints=[interval("gl.brent", 2, 0.0, 1.0)])
+    unnamed = dist_of(spec, versions.loaded, draws=200, seed=SEED)
+    named = dist_of(
+        scenario(versions, constraints=spec.constraints, driving_shocks=["gl.oil"]),
+        versions.loaded,
+        draws=200,
+        seed=SEED,
     )
-    exact = box_probability_mixture(means, covs, constraints)
-    assert exact == pytest.approx(mc, abs=0.02)
+    assert named.causes == ("gl.oil",)
+    assert named.distance >= unnamed.distance - 2 * (
+        named.standard_error + unnamed.standard_error
+    )
 
 
-def test_a_zero_share_falls_back_to_the_exact_mixture(versions):
-    # A box three and a half standard deviations out: none of the few drawn paths lands in it,
-    # so the Monte-Carlo share is zero and the exact probability of the mixture takes over;
-    # the distance is large but finite.
+def test_a_far_box_has_a_large_finite_price(versions):
+    # A box far in the tail: the GHK sampler keeps the answer finite where a path share
+    # would read zero, and the price is large.
     spec = scenario(versions, constraints=[interval("gl.brent", 2, 9.0, 9.5)])
     found = dist_of(spec, versions.loaded, draws=DRAWS, seed=SEED)
-    assert found.way == "exact"
-    assert 0.0 < found.probability < 1.0
-    assert np.isfinite(found.distance) and found.distance > 0
+    assert np.isfinite(found.distance) and found.distance > 1.0
+    assert found.message is None
 
 
-def test_a_model_without_moments_leaves_the_monte_carlo_zero(versions):
-    # A macro model that does not measure the per-draw moments: a zero share stays a zero
-    # share, and the dist is infinite with the failed gate named.
+def test_an_unreachable_box_contradicts_the_models(versions):
+    # The functional the box constrains is fixed by the model at a value the box excludes:
+    # the event has no probability at all and the price is infinite with the message.
     spec = scenario(versions, constraints=[interval("gl.brent", 2, 100.0, 101.0)])
-    stripped = replace(versions.loaded, plugin=NoMoments(versions.loaded.plugin))
-    found = dist_of(spec, stripped, draws=DRAWS, seed=SEED)
-    assert found.way == "mc"
-    assert found.probability == 0.0
+    found = dist_of(spec, versions.loaded, draws=DRAWS, seed=SEED)
     assert found.distance == float("inf")
-    assert "gate pi_c is failed" in found.message
+    assert "contradicts the models" in found.message
 
 
-class NoMoments:
-    """A macro plugin that simulates but does not measure the constraint moments."""
+def test_a_model_without_a_law_has_no_price(versions):
+    # A macro model that does not measure the constraint law leaves the price absent.
+    spec = scenario(versions, constraints=[interval("gl.brent", 2, 1.0, 3.0)])
+    stripped = replace(versions.loaded, plugin=NoLaw(versions.loaded.plugin))
+    assert dist_of(spec, stripped, draws=DRAWS, seed=SEED) is None
+
+
+class NoLaw:
+    """A macro plugin that simulates but does not measure the constraint law."""
 
     def __init__(self, inner):
         self._inner = inner
@@ -186,17 +202,27 @@ class NoMoments:
     def simulate(self, model, plan, *, draws, seed):
         return self._inner.simulate(model, plan, draws=draws, seed=seed)
 
-    def severity(self, model, plan, *, draws, seed):
-        return self._inner.severity(model, plan, draws=draws, seed=seed)
-
-    def constraint_moments(self, model, plan, *, draws, seed):
+    def constraint_law(self, model, plan, *, draws, seed):
         return None
 
 
-def test_a_wide_box_gives_a_dist_near_zero(versions):
+def test_the_price_reads_the_impact_shifted_bounds(versions):
+    # The impact moves the constrained variable, so the plan the model solves — and the price
+    # with it — reads the box with the impact taken out: the same constraint with the impact
+    # prices the event the paths actually carry, not the unshifted one.
+    impact = Impact(target="gl.brent", start=1, end=3, delta=10.0, reason="шок", sources=["s"])
+    plain = scenario(versions, constraints=[interval("gl.brent", 2, 1.0, 3.0)])
+    shifted = scenario(
+        versions, constraints=plain.constraints, impacts=[impact]
+    )
+    found_plain = dist_of(plain, versions.loaded, draws=100, seed=SEED)
+    found_shifted = dist_of(shifted, versions.loaded, draws=100, seed=SEED)
+    assert found_shifted.distance > found_plain.distance + 0.5
+
+
+def test_a_wide_box_gives_a_price_near_zero(versions):
     wide = scenario(versions, constraints=[interval("gl.brent", 2, -50.0, 50.0)])
     narrow = scenario(versions, constraints=[interval("gl.brent", 2, 1.0, 3.0)])
-    assert dist_of(wide, versions.loaded, draws=40, seed=SEED).probability > 0.99
     assert dist_of(wide, versions.loaded, draws=40, seed=SEED).distance < 0.1
     assert dist_of(narrow, versions.loaded, draws=40, seed=SEED).distance > dist_of(
         wide, versions.loaded, draws=40, seed=SEED

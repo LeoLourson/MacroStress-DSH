@@ -11,11 +11,12 @@ SATELLITES = "b" * 64
 
 
 def rate_at(month, low, high=None):
-    return {
-        "terms": [{"variable": "ru.key_rate", "month": month, "weight": 1.0}],
-        "low": low,
-        "high": low if high is None else high,
-    }
+    """A constraint on the key rate: a point when only the value is given, an interval
+    otherwise."""
+    row = {"terms": [{"variable": "ru.key_rate", "month": month, "weight": 1.0}]}
+    if high is None:
+        return row | {"value": low}
+    return row | {"low": low, "high": high}
 
 
 def impact(**changes):
@@ -40,7 +41,9 @@ def test_a_scenario_file_names_its_versions_and_the_contract_holds():
         spec(constraints=[rate_at(3, 21.0), rate_at(12, 15.0, 18.0)], impacts=[impact()])
     )
     assert built.macro == MACRO and built.satellites == SATELLITES
-    assert [(c.low, c.high) for c in built.constraints] == [(21.0, 21.0), (15.0, 18.0)]
+    assert [c.value for c in built.constraints] == [21.0, None]
+    assert [(c.low, c.high) for c in built.constraints] == [(None, None), (15.0, 18.0)]
+    assert built.constraints[0].point and not built.constraints[1].point
     assert built.impacts[0].target == "price:alpha"
 
 
@@ -60,9 +63,23 @@ def test_unknown_fields_are_refused():
         Spec.model_validate(spec() | {"seed": 1})
 
 
-def test_constraint_requires_low_not_above_high():
-    with pytest.raises(ValidationError, match="low <= high"):
+def test_constraint_requires_low_below_high():
+    with pytest.raises(ValidationError, match="low < high"):
         Constraint.model_validate(rate_at(3, 21.0, 20.0))
+
+
+def test_a_constraint_of_zero_width_is_a_point_not_an_interval():
+    with pytest.raises(ValidationError, match="low < high"):
+        Constraint.model_validate(rate_at(3, 21.0, 21.0))
+
+
+def test_a_constraint_names_either_an_interval_or_a_value():
+    with pytest.raises(ValidationError, match="not both"):
+        Constraint.model_validate(rate_at(3, 20.0, 22.0) | {"value": 21.0})
+    with pytest.raises(ValidationError, match="low and high, or a value"):
+        Constraint.model_validate({"terms": rate_at(3, 21.0)["terms"]})
+    with pytest.raises(ValidationError, match="both low and high"):
+        Constraint.model_validate(rate_at(3, None, 20.0))
 
 
 def test_a_constraint_month_must_lie_in_the_horizon():
