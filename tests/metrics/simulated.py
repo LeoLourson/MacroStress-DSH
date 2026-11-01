@@ -50,6 +50,7 @@ class _Loaded:
     months: list[date]
     last: np.ndarray
     sigma: np.ndarray
+    panel: np.ndarray = None
 
 
 class FakeMacro(MacroModel):
@@ -93,6 +94,48 @@ class FakeMacro(MacroModel):
             months=[date.fromisoformat(m) for m in meta["months"]],
             last=arrays["panel_y"][-1],
             sigma=arrays["panel_y"].std(axis=0) / 4,
+            panel=arrays["panel_y"],
+        )
+
+    def constraint_law(self, model, plan, *, draws, seed):
+        """The exact law of the constraint functionals: a random walk is a gaussian.
+
+        y_t is the last value plus t independent steps of scale sigma, so a
+        functional's mean is the weighted last value and two functionals share the months
+        their horizons overlap.
+        """
+        if not plan.constraints:
+            return None
+        from mst.model_sdk.contracts import ConstraintLaw
+
+        index = {id_: k for k, id_ in enumerate(model.ids)}
+        m = len(plan.constraints)
+        means = np.zeros((draws, m))
+        covs = np.zeros((draws, m, m))
+        for c, constraint in enumerate(plan.constraints):
+            level = sum(
+                term.weight * model.last[index[term.variable]]
+                for term in constraint.terms
+            )
+            means[:, c] = level
+            for other, every in enumerate(plan.constraints):
+                spread = 0.0
+                for one in constraint.terms:
+                    for two in every.terms:
+                        if one.variable != two.variable:
+                            continue
+                        spread += (
+                            one.weight
+                            * two.weight
+                            * min(one.month, two.month)
+                            * model.sigma[index[one.variable]] ** 2
+                        )
+                covs[:, c, other] = spread
+        return ConstraintLaw(
+            means=means,
+            covs=covs,
+            log_weight=np.zeros(draws),
+            group=np.arange(draws),
         )
 
     def simulate(self, model, plan: ScenarioPlan, *, draws: int, seed: int):

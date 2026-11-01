@@ -524,12 +524,26 @@ def _report(
     levels: dict[str, str] = {}
     unverified: set[str] = set()
     constraint_shares: dict[str, dict[int, float | None]] = {}
+    sensitivity: dict[str, dict] = {}
 
     for episode in episodes:
-        draws = episode.macro.plugin.simulate(
+        # Two runs of every episode: at R = theta, with no cause named — the run the
+        # uniformity of u and the CRPS read, the only law the canon's uniformity holds for —
+        # and with the causes the card's sources named, for the sensitivity of both to the
+        # choice of the causes.
+        plain_run = episode.macro.plugin.simulate(
+            episode.macro.model,
+            ScenarioPlan(
+                horizon=episode.horizon,
+                constraints=episode.scenario.constraints,
+            ),
+            draws=plan.draws,
+            seed=plan.seed,
+        )
+        driven = episode.macro.plugin.simulate(
             episode.macro.model, episode.scenario, draws=plan.draws, seed=plan.seed
         )
-        episode.macro_paths = draws
+        episode.macro_paths = driven
         base = episode.macro.plugin.simulate(
             episode.macro.model,
             ScenarioPlan(horizon=episode.horizon),
@@ -539,9 +553,17 @@ def _report(
         constraint_shares[episode.id] = constraint_probabilities(
             base.paths, base.ids, episode.scenario.constraints
         )
-        _macro_cells(episode, draws, base, cells, levels, registry, plan)
+        plain_cells: list[Cell] = []
+        driven_cells: list[Cell] = []
+        _macro_cells(episode, plain_run, base, plain_cells, levels, registry, plan)
+        _macro_cells(episode, driven, base, driven_cells, levels, registry, plan)
+        sensitivity[episode.id] = _cause_sensitivity(episode, plain_cells, driven_cells)
         if episode.bundle is not None and episode.driver_paths is not None:
-            _driver_cells(episode, cells, levels, unverified, plan)
+            plain_drivers = episode.bundle.simulate(
+                plain_run, episode.bundle.served(), (), seed=plan.seed
+            )
+            _driver_cells(episode, plain_drivers, plain_cells, levels, unverified, plan)
+        cells.extend(plain_cells)
 
     by_quantity: dict[str, list[Cell]] = {}
     for cell in cells:
@@ -552,6 +574,7 @@ def _report(
         row = score_cells(own)
         row["level"] = levels.get(quantity, "")
         row["unverified_tail"] = quantity in unverified
+        row["uniformity_run"] = "s_no_causes"
         row["admission"] = _quantity_rules(own)
         row["intervals"] = {
             "crps": _interval(row["months"], "crps", plan),
@@ -593,6 +616,19 @@ def _report(
     aggregate["rows"] = rows
     admission = _admission(cells)
     gate = _constraint_gate(constraint_shares)
+    rolling = {}
+    if plan.rolling is not None:
+        from .rolling import rolling_report
+
+        rolling = rolling_report(
+            plugin=plugin,
+            store=SeriesStore(store),
+            registry=registry,
+            root=root,
+            plan=plan,
+            known_on=known_on,
+            macro_of=_episode_macro,
+        )
     report = {
         "meta": _meta(
             episodes,
@@ -628,6 +664,17 @@ def _report(
         ),
         "target_level": target_level,
         "admission": admission,
+        "rolling": rolling,
+        "cause_sensitivity": {
+            "episodes": sensitivity,
+            "mean_difference": float(np.mean([row["difference"] for row in sensitivity.values() if row["difference"] is not None]))
+            if any(row["difference"] is not None for row in sensitivity.values())
+            else None,
+            "note": (
+                "the CRPS of every episode at R = theta and with the named causes; the "
+                "uniformity of u and the calibration read the run without named causes only"
+            ),
+        },
         "constraint_gate": gate,
         "admission_failed": admission["failed"] or gate["failed"],
         "problems": [],
@@ -642,6 +689,43 @@ def _report(
             episodes, plan, portfolio_id, store=store, known_on=known_on
         )
     return report
+
+
+def _cause_sensitivity(episode: Episode, plain: list[Cell], driven: list[Cell]) -> dict:
+    """How the scores move between the causes: the canon's check of the choice of D.
+
+    The CRPS of the episode's macro cells is averaged per run — the plain one at
+    R = theta and the one with the named causes — and the difference is the episode's
+    sensitivity; the mean over the episodes says how much the choice of the causes moves the
+    forecast at all.
+    """
+    from .cells import finite_draws
+
+    def mean_of(found: list[Cell]) -> float | None:
+        values = [
+            _cell_crps(cell)
+            for cell in found
+            if not cell.constrained and np.isfinite(cell.fact) and cell.sigma > 0
+        ]
+        return float(np.mean(values)) if values else None
+
+    plain_mean, driven_mean = mean_of(plain), mean_of(driven)
+    return {
+        "crps_plain": plain_mean,
+        "crps_driven": driven_mean,
+        "difference": None
+        if plain_mean is None or driven_mean is None
+        else driven_mean - plain_mean,
+    }
+
+
+def _cell_crps(cell) -> float:
+    """The CRPS of one cell, unnormalised."""
+    from .cells import crps, finite_draws
+
+    if not len(finite_draws(cell.draws)):
+        return float("nan")
+    return float(crps(finite_draws(cell.draws), cell.fact))
 
 
 def _cell_rows(cells: list[Cell], levels: dict[str, str]) -> list[dict]:
@@ -758,13 +842,14 @@ def _pinned(constraints) -> set[tuple[str, int]]:
 
 def _driver_cells(
     episode: Episode,
+    paths,
     cells: list[Cell],
     levels: dict[str, str],
     unverified: set[str],
     plan: Episodes,
 ) -> None:
     """The cells of the episode's served drivers, with the random walk and the naive forecast."""
-    bundle, paths = episode.bundle, episode.driver_paths
+    bundle = episode.bundle
     driver_registry = bundle.registry
     series_of = {driver.id: driver.series for driver in driver_registry.drivers}
     months = list(range(1, len(episode.months) + 1))

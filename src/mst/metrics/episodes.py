@@ -18,7 +18,7 @@ from typing import Annotated, Literal
 
 from pydantic import Field, field_validator
 
-from mst.contracts import Contract, Identifier, Seed
+from mst.contracts import Contract, Identifier, Number, Seed
 
 EPISODES_PATH = Path(__file__).with_name("episodes.toml")
 Count = Annotated[int, Field(strict=True, ge=1)]
@@ -57,6 +57,36 @@ class EpisodeCheck(Contract):
     sources: list[Identifier] = Field(min_length=1)
 
 
+class PriceEvent(Contract):
+    """One event of the family the price is checked on: a box on the horizon, by months.
+
+    The terms follow the scenario contract's shape — variable, month, weight — in the model
+    scale; the family is fixed before the check and independent of the dates, and the events
+    are data of the plan, not of the code.
+    """
+
+    id: Identifier
+    horizon: Annotated[int, Field(strict=True, ge=1, le=360)]
+    terms: list[dict]
+    low: Number
+    high: Number
+    note: str = ""
+
+
+class Rolling(Contract):
+    """The rolling check over the dates of history: the grid and the events of the price.
+
+    step_months is the step of the grid the models are re-estimated on; the grid runs
+    from the first estimation date the history allows to the last month the facts know. The
+    price_events name the family of events the price is checked on: each is a box on the
+    horizon, fixed before the check and independent of the dates, and each carries its own
+    horizon in months.
+    """
+
+    step_months: Annotated[int, Field(strict=True, ge=1, le=12)]
+    price_events: list[PriceEvent] = []
+
+
 class Episodes(Contract):
     """The plan of the backtest: the episodes, the window and the simulation of each one."""
 
@@ -66,6 +96,7 @@ class Episodes(Contract):
     """The window ends this many months after the start month, as in the episode cards."""
     exclusions: list[Exclusion] = []
     episodes: list[EpisodeCheck] = Field(min_length=1)
+    rolling: Rolling | None = None
     path: Path | None = Field(default=None, exclude=True)
     """The file the plan was loaded from, for the report's hash; not a TOML key."""
 
