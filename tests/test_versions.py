@@ -1,5 +1,6 @@
 """mst.versions: the folders of model versions, named by their hash."""
 
+import json
 import os
 
 import numpy as np
@@ -44,3 +45,18 @@ def test_folders_leave_out_drafts_and_put_the_newest_first(tmp_path):
     os.utime(draft, (stamp + 120, stamp + 120))
 
     assert [path.name for path in versions.folders(tmp_path)] == [newer, older]
+
+
+def test_a_version_without_a_model_is_listed_with_model_none(tmp_path):
+    # A pre-plugin version records no "model" in its meta; the list reports it as null
+    # instead of failing on the missing key.
+    from mst.macro import version as macro_version
+
+    folder = tmp_path / "macro" / ("a" * 64)
+    folder.mkdir(parents=True)
+    (folder / "meta.json").write_text(
+        json.dumps({"as_of": "2020-01-01", "ids": ["gl.a"]}), encoding="utf-8"
+    )
+    listed = macro_version.catalogue(tmp_path)
+    assert [row["version"] for row in listed] == ["a" * 64]
+    assert listed[0]["model"] is None
