@@ -227,22 +227,21 @@ def constraint_law(
 def _law_row(plan: _Plan, rep: _Repetition, driving: np.ndarray, eps_free):
     """The mean and covariance of ``W y`` under one repetition.
 
-    ``eps_free`` are the drawn non-driving shocks — part of ``R`` when the scenario names
-    causes; without them every shock is free and the covariance counts all of it.
+    ``eps_free`` are the drawn shocks the causes do not name, part of ``R``; the covariance
+    counts the named ones, none when only a hidden coordinate is named. ``None`` means no cause
+    is named: every shock is free and the covariance counts all of them.
     """
     m = len(plan.terms)
     if m == 0:
         return np.zeros(0), np.zeros((0, 0))
     z = _loadings(plan, rep)
-    z_flat = z.reshape(m, -1)
     mean = _level(plan, rep.mean)
-    if not driving.any():
+    if eps_free is None:
+        z_flat = z.reshape(m, -1)
         return mean, z_flat @ z_flat.T
-    z_free = z[:, :, ~driving].reshape(len(plan.terms), -1)
-    z_driving = z[:, :, driving].reshape(len(plan.terms), -1)
-    if eps_free is not None:
-        mean = mean + z_free @ eps_free
-    return mean, z_driving @ z_driving.T
+    z_free = z[:, :, ~driving].reshape(m, -1)
+    z_driving = z[:, :, driving].reshape(m, -1)
+    return mean + z_free @ eps_free, z_driving @ z_driving.T
 
 
 #: How many GHK draws estimate the box probability of one volatility candidate.

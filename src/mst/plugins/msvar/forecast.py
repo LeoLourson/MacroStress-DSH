@@ -65,7 +65,6 @@ class _Plan:
     terms: list[list[tuple[int, int, float]]]  # per constraint: (variable, month, weight)
     low: np.ndarray
     high: np.ndarray
-    driving: np.ndarray  # column indices of the economic shocks named as causes
     regime: int | None  # the regime element of the event, fixed over the horizon
     regime_cause: bool  # the regime path is named as a cause
     causes_named: bool  # any cause is named at all
@@ -108,13 +107,11 @@ def _plan(model: Posterior, plan: ScenarioPlan) -> _Plan:
             )
     if problems:
         raise ValueError("; ".join(problems))
-    driving = [model.shocks.index(s) for s in plan.causes if s in model.shocks]
     return _Plan(
         horizon=plan.horizon,
         terms=terms,
         low=np.array([c.low for c in plan.constraints]),
         high=np.array([c.high for c in plan.constraints]),
-        driving=np.array(driving or range(len(model.shocks)), dtype=int),
         regime=regime,
         regime_cause=REGIME_PATH in plan.causes,
         causes_named=bool(plan.causes),
@@ -257,8 +254,10 @@ def constraint_law(
     if not chosen.terms and chosen.regime is None:
         return None
     n = len(model.ids)
+    # The law reads the causes themselves, as ``simulate`` does: a shock the causes do not name
+    # belongs to ``R`` and is drawn into the mean, and with no cause named every shock is free.
     driving = np.zeros(n, dtype=bool)
-    driving[chosen.driving] = True
+    driving[[model.shocks.index(s) for s in plan.causes if s in model.shocks]] = True
     # The regime path belongs to ``R`` only when other causes are named without it: then the
     # repetition draws the path and one row reports the law given it. Unnamed causes — or
     # ``regime_path`` itself among them — leave the path a hidden coordinate, and every
@@ -268,31 +267,28 @@ def constraint_law(
     for r in range(draws):
         rng_theta = np.random.default_rng([seed, r, 0])
         draw = int(rng_theta.integers(model.draws))
+        eps_free = (
+            np.random.default_rng([seed, r, 2])
+            .standard_normal((chosen.horizon, int((~driving).sum())))
+            .reshape(-1)
+            if plan.causes
+            else None
+        )
         if chosen.regime is not None:
             path = np.full(chosen.horizon, chosen.regime, dtype=int)
             rep = _repetition_of(model, draw, path)
-            eps_free = (
-                np.random.default_rng([seed, r, 2])
-                .standard_normal((chosen.horizon, int((~driving).sum())))
-                .reshape(-1)
-                if driving.any()
-                else None
-            )
             mean, cov = _law_row(chosen, rep, driving, eps_free)
             means.append(mean)
             covs.append(cov)
-            log_weights.append(np.log(_path_probability(model, draw, chosen.regime, chosen.horizon)))
+            log_weights.append(
+                np.log(_path_probability(model, draw, chosen.regime, chosen.horizon))
+            )
             groups.append(r)
             continue
         rng_path = np.random.default_rng([seed, r, 1])
         if named:
             path = _regime_path(model, draw, chosen.horizon, rng_path, None)
             rep = _repetition_of(model, draw, path)
-            eps_free = (
-                np.random.default_rng([seed, r, 2])
-                .standard_normal((plan.horizon, int((~driving).sum())))
-                .reshape(-1)
-            )
             mean, cov = _law_row(chosen, rep, driving, eps_free)
             means.append(mean)
             covs.append(cov)
@@ -302,7 +298,7 @@ def constraint_law(
         for _ in range(candidates):
             path = _regime_path(model, draw, chosen.horizon, rng_path, None)
             rep = _repetition_of(model, draw, path)
-            mean, cov = _law_row(chosen, rep, driving, None)
+            mean, cov = _law_row(chosen, rep, driving, eps_free)
             means.append(mean)
             covs.append(cov)
             log_weights.append(0.0)
@@ -321,22 +317,21 @@ def constraint_law(
 def _law_row(chosen: _Plan, rep: _Repetition, driving: np.ndarray, eps_free):
     """The mean and covariance of ``W y`` under one repetition.
 
-    ``eps_free`` are the drawn non-driving shocks — part of ``R`` when the plan names causes;
-    without them every shock is free and the covariance counts all of it.
+    ``eps_free`` are the drawn shocks the causes do not name, part of ``R``; the covariance
+    counts the named ones, none when only a hidden coordinate is named. ``None`` means no cause
+    is named: every shock is free and the covariance counts all of them.
     """
     m = len(chosen.terms)
     if m == 0:
         return np.zeros(0), np.zeros((0, 0))
     z = _loadings(chosen, rep)
-    z_flat = z.reshape(m, -1)
     mean = _level(chosen, rep.mean)
-    if not driving.any():
+    if eps_free is None:
+        z_flat = z.reshape(m, -1)
         return mean, z_flat @ z_flat.T
-    z_free = z[:, :, ~driving].reshape(len(chosen.terms), -1)
-    z_driving = z[:, :, driving].reshape(len(chosen.terms), -1)
-    if eps_free is not None:
-        mean = mean + z_free @ eps_free
-    return mean, z_driving @ z_driving.T
+    z_free = z[:, :, ~driving].reshape(m, -1)
+    z_driving = z[:, :, driving].reshape(m, -1)
+    return mean + z_free @ eps_free, z_driving @ z_driving.T
 
 
 #: The GHK draws behind the weight of one hidden-coordinate candidate.

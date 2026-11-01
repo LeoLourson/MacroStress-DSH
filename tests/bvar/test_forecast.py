@@ -36,7 +36,9 @@ def scenario(constraints, causes=(), horizon=6):
         constraints=tuple(
             LinearConstraint(
                 terms=tuple(
-                    LinearTerm(variable=term["variable"], month=term["month"], weight=term["weight"])
+                    LinearTerm(
+                        variable=term["variable"], month=term["month"], weight=term["weight"]
+                    )
                     for term in row["terms"]
                 ),
                 low=row["low"],
@@ -194,6 +196,14 @@ def test_without_causes_the_law_carries_volatility_candidates(model):
         assert any(rows.min() < rows.max() for rows in per_group)
     else:
         assert all(np.allclose(rows, rows[0]) for rows in per_group)
+
+
+def test_naming_the_volatility_path_alone_leaves_every_shock_in_r(model):
+    box = [value("ru.b", 2, 0.0, 1.0)]
+    every = constraint_law(model, scenario(box), draws=2, seed=0)
+    hidden = constraint_law(model, scenario(box, causes=["volatility_path"]), draws=2, seed=0)
+    assert np.allclose(hidden.covs, 0.0)
+    assert not np.allclose(hidden.means, every.means)
 
 
 def test_with_named_causes_the_law_has_one_row_per_group(model):

@@ -9,7 +9,6 @@ import pytest
 from mst.model_sdk.contracts import LATENT_CANDIDATES, LinearConstraint, LinearTerm, ScenarioPlan
 from mst.model_sdk.dist import price_of_law
 from mst.plugins.msvar import estimate, identify
-from mst.model_sdk.dist import ContradictsModels
 from mst.plugins.msvar.forecast import (
     InfeasibleScenario,
     constraint_law,
@@ -242,6 +241,22 @@ def test_with_named_shocks_the_law_has_one_row_per_group(model):
     assert len(found.group) == 5
     assert set(found.group.tolist()) == set(range(5))
     assert np.all(found.log_weight == 0.0)
+
+
+def test_the_law_of_a_hidden_coordinate_carries_the_shocks_the_causes_leave_in_r(model):
+    # Naming the regime path beside a shock leaves the other shocks in R: they shift the mean
+    # and leave the covariance, as they do in the paths. Naming the regime path alone leaves no
+    # shock free to carry the event.
+    half = np.full((2, 2), 0.5)
+    pinned = one_draw(model, transition=half, states=np.zeros((1, model.states.shape[1]), int))
+    box = [value("ru.b", 3, 0.0, 1.0)]
+    every = constraint_law(pinned, plan(box), draws=3, seed=0)
+    named = constraint_law(pinned, plan(box, causes=["regime_path", "ru.t"]), draws=3, seed=0)
+    hidden = constraint_law(pinned, plan(box, causes=["regime_path"]), draws=3, seed=0)
+    assert np.all(named.covs[:, 0, 0] < every.covs[:, 0, 0])
+    assert not np.allclose(named.means, every.means)
+    assert np.allclose(hidden.covs, 0.0)
+    assert not np.allclose(hidden.means, every.means)
 
 
 def test_the_regime_event_costs_the_log_of_the_path_prior(model):
