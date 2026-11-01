@@ -105,9 +105,13 @@ uv run macrostress --workspace C:/data/macrostress
 В путях JSON на Windows используйте прямые слеши: обратный слеш начинает
 escape-последовательность.
 
+### Что получает любой клиент
+
+При подключении сервер передаёт инструкции: когда читать руководство и что сценарий строится по корпусу. Инструмент `guide` отдаёт сами руководства, поэтому они работают и там, где клиент не показывает инструкции или промпты. Промпт `scenario_from_event(event)` начинает работу над сценарием по тексту события. Для этого не нужна никакая обвязка.
+
 ### DeepSeek Harness
 
-Плагин в `dsh/` запускает тот же сервер, регистрирует три скилла и добавляет состояние workspace
+Плагин в `dsh/` запускает тот же сервер, регистрирует те же руководства как три скилла и добавляет состояние workspace
 в промпт агента. Шаги подключения — в [install.md](install.md).
 
 ## Первый сеанс
@@ -124,7 +128,7 @@ escape-последовательность.
 Пошаговый сеанс с полными вызовами — в [first-session.md](first-session.md). Полный справочник —
 [../reference/tools.md](../reference/tools.md), контракты чисел —
 [../reference/platform.md](../reference/platform.md), метод —
-[../concept/scenario-formalization.md](../concept/scenario-formalization.md).
+[../concept/formalization.md](../concept/formalization.md).
 
 ## Что где лежит
 

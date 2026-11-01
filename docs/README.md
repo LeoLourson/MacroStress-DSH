@@ -13,7 +13,7 @@
 | Файл | Вопрос, на который отвечает |
 |---|---|
 | [concept/formalization.md](concept/formalization.md) | Общая схема: уровни, сценарий, наложение, условный прогноз, метрики качества — что система делает и в каком порядке |
-| [concept/scenario-formalization.md](concept/scenario-formalization.md) | Как устроен метод: переменные, сценарий, макромодель, условный прогноз, цена, драйверы, отчёт; что из этого делает код |
+| [concept/bvar-method-legacy.md](concept/bvar-method-legacy.md) | Устаревшее описание первой версии метода на BVAR, не канон: подробности оценки BVAR и сателлитов |
 | [concept/architecture.md](concept/architecture.md) | Как схема реализована в коде: пакеты и поток данных, workspace, версии моделей, задачи, раздел системного промпта |
 | [howto/install.md](howto/install.md) | Как поставить Python-часть, подключить плагин к профилю DSH и проверить, что всё видно |
 | [howto/mcp.md](howto/mcp.md) | Как подключить сервер к любому MCP-клиенту и разобрать типовые ошибки |
@@ -22,7 +22,7 @@
 | [reference/tools.md](reference/tools.md) | Какие есть MCP-инструменты и команды `python -m mst.*`, что они принимают и возвращают |
 | [reference/platform.md](reference/platform.md) | Контракты расчёта: слои, позиция, пути, модель, диспетчер, реестр, расчёт и отчёт |
 
-Порядок чтения для нового читателя: formalization → scenario-formalization → architecture →
+Порядок чтения для нового читателя: formalization → architecture →
 install → mcp → first-session → tools → platform → plugins.
 
 Описание каждого пакета лежит в README его папки (`src/mst/*/README.md`), корпуса — в

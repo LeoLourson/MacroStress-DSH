@@ -1,70 +1,59 @@
 ---
 name: run-report
-description: Запустить расчёт портфеля и прочитать P5/P50/P95, ES95, цену сценария и пометки отчёта
-whenToUse: когда есть сценарий и портфель и нужны потери, покрытие и цена сценария
+description: Start a portfolio calculation and read P5/P50/P95, ES95, the scenario price and the report flags
+whenToUse: when a scenario and a portfolio exist and losses, coverage and the scenario price are needed
 ---
 
-# Расчёт и отчёт
+# Calculation and report
 
-## 1. Запуск
+## 1. Start
 
-`run(action="start", scenario="...", portfolio="...", draws=2048, seed=20261029)` создаёт
-`runs/<id>/` и задачу на ресурсе `runs`; возвращает `run` и `job`. `draws` — число
-розыгрышей путей, `seed` — целое 0..2^32-1. Тот же сценарий, версии, `draws` и `seed` дают
-те же числа.
+`run(action="start", scenario="...", portfolio="...", draws=2048, seed=20261029)` creates `runs/<id>/` and a job on the `runs` resource; it returns `run` and `job`. `draws` is the number of path draws, `seed` an integer in 0..2^32-1. The same scenario, versions, `draws` and `seed` give the same numbers.
 
-`run(action="status", id=<run>)` — мета расчёта и задача; `jobs(action="status", id=<job>)`
-и `jobs(action="log", id=<job>)` — ход и лог. `run(action="start")` принимает и `positions`
-вместо портфеля (`base_currency` только RUB).
+`run(action="status", id=<run>)` gives the meta of the calculation and the job; `jobs(action="status", id=<job>)` and `jobs(action="log", id=<job>)` give progress and the log. `run(action="start")` also takes `positions` instead of a portfolio (`base_currency` RUB only).
 
-## 2. Результат
+## 2. Result
 
-`run(action="result", id=<run>)` возвращает `run`, `positions` и `summary`. Для портфеля
-`summary` — отчёт:
+`run(action="result", id=<run>)` returns `run`, `positions` and `summary`. For a portfolio `summary` is the report:
 
-| Поле | Как читать |
+| Field | How to read it |
 |---|---|
-| `loss` | Потери портфеля; `null`, если ни одна позиция не рассчитана — это не ноль |
-| `loss.p05`, `loss.p50`, `loss.p95` | Потери портфеля: P5/P50/P95, всегда вместе, в миллионах базовой валюты |
-| `loss.es95` | ES95: средний хвост за P95; не заменяет P95 и не показывается без него |
-| `dist` | Цена сценария; `null` целиком, если условий нет — это не ноль |
-| `dist.distance` | $\mathrm{dist}(s)$: сколько сценарий уходит от базовых моделей, в натах; бесконечность значит, что сценарий противоречит моделям, причина — в `dist.message` |
-| `dist.log_probability` | $\log P(S)$: логарифм вероятности события при базовых моделях |
-| `dist.standard_error` | Ошибка оценки цены по группам $R$ |
-| `dist.by_level` | Из чего сложилась цена по уровням, если есть условия на драйверы: ключ — номер уровня (0 — макропеременные), сумма равна `dist.distance`; показывает, на каком уровне сценарий дальше всего от базовых моделей |
-| `dist.causes`, `dist.tolerances` | Названные причины и допуски точных значений; цены сравнимы только при одинаковых допусках |
-| `status` | `ok`, `needs_review` или `incomplete` |
-| `coverage.share` | Доля измеримой стоимости, которую покрывают числа; `null` — есть неизмеримая позиция |
-| `coverage.excluded` | Позиции вне чисел: id, статус и причина |
-| `coverage.unknown` | id позиций с неизмеримой стоимостью (без причины) |
-| `flags` | Пометки отчёта |
+| `loss` | Portfolio losses; `null` when no position was computed, which is not zero |
+| `loss.p05`, `loss.p50`, `loss.p95` | Portfolio losses P5/P50/P95, always together, in millions of the base currency |
+| `loss.es95` | ES95, the mean tail beyond P95; it does not replace P95 and is not shown without it |
+| `dist` | The scenario price; `null` as a whole when there are no conditions, which is not zero |
+| `dist.distance` | $\mathrm{dist}(s)$: how far the scenario departs from the base models, in nats; infinity means the scenario contradicts the models, with the reason in `dist.message` |
+| `dist.log_probability` | $\log P(S)$: the log probability of the event under the base models |
+| `dist.standard_error` | The error of the price estimate over the groups of $R$ |
+| `dist.by_level` | The price by level when there are conditions on drivers: the key is the level number (0 is macro variables), the sum equals `dist.distance`; it shows on which level the scenario is furthest from the base models |
+| `dist.causes`, `dist.tolerances` | The named causes and the tolerances of exact values; prices are comparable only at equal tolerances |
+| `status` | `ok`, `needs_review` or `incomplete` |
+| `coverage.share` | The share of measurable value the numbers cover; `null` means a position is unmeasurable |
+| `coverage.excluded` | Positions outside the numbers: id, status and reason |
+| `coverage.unknown` | Ids of positions with unmeasurable value (no reason) |
+| `flags` | The report flags |
 
-Потери складываются **внутри розыгрыша** и только потом берутся квантили. Сумма P95 позиций
-— не P95 портфеля: разница и есть диверсификация, не выдавайте одно за другое.
+Losses add up **within a draw**, and only then are quantiles taken. The sum of the P95 of positions is not the P95 of the portfolio: the difference is diversification, so do not present one as the other.
 
-## 3. Позиции и пометки
+## 3. Positions and flags
 
-`positions` результата — по позиции: `status`, `value_current`, `metrics`, `flags`,
-`diagnostics`. `invalid` не имеет метрик и изменения стоимости: назовите `diagnostics` и не
-считайте позицию нулевым убытком.
+`positions` of the result are per position: `status`, `value_current`, `metrics`, `flags`, `diagnostics`. An `invalid` position has no metrics and no value change: name its `diagnostics` and do not count it as a zero loss.
 
-Пометки:
+Flags:
 
-- `approximate_data:<driver>` — дата публикации истории драйвера оценена, а не взята из
-  источника; на дату расчёта число может быть менее точным;
-- `parameters_from_above:<driver>` — у драйвера нет своей истории, параметры взяты у
-  ближайшего объекта выше;
-- `impact:<driver>` — путь сдвинут воздействием сценария;
-- `portfolio_exclusions` — в отчёт не вошли позиции; `portfolio_incomplete` — непокрытая
-  доля выше `coverage.limit` (5 %) или есть неизмеримая стоимость;
-- `exposure_unknown:<position>` — стоимость позиции не измерить; `coverage.share = null`.
+- `approximate_data:<driver>`: the publication date of the driver's history is estimated, not taken from the source; the number may be less accurate on the calculation date;
+- `parameters_from_above:<driver>`: the driver has no history of its own, its parameters come from the nearest object above;
+- `impact:<driver>`: the path is shifted by an impact of the scenario;
+- `portfolio_exclusions`: positions are left out of the report; `portfolio_incomplete`: the uncovered share exceeds `coverage.limit` (5 %) or some value is unmeasurable;
+- `exposure_unknown:<position>`: the value of the position cannot be measured; `coverage.share = null`.
 
-Это раскрытия, а не ошибки. `needs_review` означает, что числа можно читать с оговоркой;
-`incomplete` — что покрытие неполное и это сказано в отчёте.
+These are disclosures, not errors. `needs_review` means the numbers can be read with a caveat; `incomplete` means coverage is partial and the report says so.
 
-## 4. Что сказать
+## 4. What to say
 
-- Все три квантиля вместе и с единицей; не округляйте сверх нужного.
-- Цену называйте ценой сценария, а не вероятностью; вероятность события — $e^{\text{log\_probability}}$.
-- Исключённую позицию называйте с причиной и долей покрытия.
-- `run(action="list")` — найти расчёт; `run(action="result")` — его числа.
+Write in the language of the user.
+
+- Give all three quantiles together with the unit; do not round beyond need.
+- Call the price the scenario price, not a probability; the probability of the event is $e^{\text{log\_probability}}$.
+- Name an excluded position with its reason and the coverage share.
+- `run(action="list")` finds a calculation; `run(action="result")` gives its numbers.

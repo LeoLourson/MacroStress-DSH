@@ -102,7 +102,7 @@ def test_an_impact_on_a_constrained_variable_meets_the_constraint(versions):
     impact = Impact(target="gl.brent", start=2, end=2, delta=2.0, reason="r", basis=["s"])
     spec = scenario(versions, constraints=[fixed("gl.brent", 2, target)], impacts=[impact])
     report = validate(spec, versions.loaded, versions.satellite, as_of=versions.data.months[-1])
-    assert report == {"ok": True, "problems": []}
+    assert report["ok"] is True and report["problems"] == []
     paths = paths_of(versions, spec)
     moved = registry.variable("gl.brent").to_model(paths.macro[:, 2, 0])
     (constraint,) = plan_of(spec, versions.loaded).constraints
@@ -434,7 +434,7 @@ def test_an_impact_on_a_rejected_driver_names_the_reason(versions):
 def test_validate_accepts_a_scenario_the_model_can_compute(versions):
     spec = scenario(versions, constraints=[fixed("gl.brent", 2, 1.0)])
     report = validate(spec, versions.loaded, versions.satellite, as_of=versions.data.months[-1])
-    assert report == {"ok": True, "problems": []}
+    assert report["ok"] is True and report["problems"] == []
 
 
 def test_validate_names_a_scenario_without_an_approver(versions):

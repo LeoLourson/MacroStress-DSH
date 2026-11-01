@@ -6,7 +6,7 @@ import subprocess
 import tomllib
 from pathlib import Path
 
-from mst import mcp
+from mst import guides, mcp
 
 ROOT = Path(__file__).resolve().parent.parent
 ABSOLUTE = re.compile(r"[A-Za-z]:[\\/][A-Za-z]|/home/[a-z]|/Users/[A-Za-z]")
@@ -36,6 +36,15 @@ def test_the_plugin_is_public_and_shares_the_version_of_the_package():
     assert "dsh-plugin" in plugin["keywords"]
     patch = (ROOT / "dsh" / "cordis.patch.yml").read_text(encoding="utf-8")
     assert f"macrostress>={project['version']}" in patch
+
+
+def test_the_skills_are_the_guides_of_the_server():
+    found = sorted((ROOT / "dsh" / "skills").glob("*.md"))
+    skills = [path for path in found if not path.name.startswith("README")]
+    assert [path.stem for path in skills] == [item["name"] for item in guides.catalogue()]
+    for path in skills:
+        own = (guides.ROOT / path.name).read_text(encoding="utf-8")
+        assert path.read_text(encoding="utf-8").replace("\r\n", "\n") == own.replace("\r\n", "\n")
 
 
 def test_the_default_workspace_follows_the_rule_of_the_plugin(monkeypatch, tmp_path):

@@ -24,7 +24,7 @@ from .update import update
 
 START = date(2012, 1, 1)
 """T0, the first month of history of the macro model
-(docs/concept/scenario-formalization.md, 4.1)."""
+(docs/concept/bvar-method-legacy.md, 4.1)."""
 
 ROOTS_PATH = SOURCES_PATH.with_name("mintsifry-roots.pem")
 """Roots and sub CAs of the Russian Trusted Root CA (Mintsifry), which signs rosstat.gov.ru."""

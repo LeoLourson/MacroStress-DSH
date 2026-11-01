@@ -691,14 +691,93 @@ def validate(
     if corpus is not None:
         cited = list(spec.sources) + [
             source
-            for impact in spec.impacts
-            for source in (impact.basis if impact.basis != "assumption" else ())
+            for element in _marked(spec)
+            for source in (element.basis if not isinstance(element.basis, str) else ())
         ]
-
         missing = sources_missing(corpus / "index", cited, as_of)
         if missing:
             problems.append(f"no corpus fragment {', '.join(missing)} visible on {as_of}")
-    return {"ok": not problems, "problems": problems}
+    marks = _labels(spec)
+    return {
+        "ok": not problems,
+        "problems": problems,
+        "labels": marks["labels"],
+        "warnings": marks["warnings"] + _reach(spec, satellites),
+    }
+
+
+def _marked(spec: Spec) -> list:
+    """The elements of ``O`` and ``C``: the canon marks each with the event, a source or an
+    assumption."""
+    return [*spec.constraints, *spec.expectations, *spec.probabilities, *spec.impacts]
+
+
+def _reach(spec: Spec, satellites: SatelliteBundle) -> list[str]:
+    """Where the impacts of the scenario do not go: the macro level, and the drivers below."""
+    registry = satellites.registry
+    served = set(satellites.served())
+    targets = {impact.target for impact in spec.impacts}
+    warnings = []
+    for target in sorted(targets):
+        if ":" not in target:
+            readers = [
+                quantity.id
+                for quantity in registry.quantities
+                if target in quantity.regressors
+                or any(feature.variable == target for feature in quantity.features)
+            ]
+            warnings.append(
+                f"impact on {target}: the other macro variables do not react to it, and "
+                f"{'only ' + ', '.join(readers) + ' read' if readers else 'no satellite reads'} "
+                "it; if the effect must spread, write it as a condition"
+            )
+            continue
+        quantity, _, object_ = target.partition(":")
+        below = sorted(
+            driver.id
+            for driver in registry.drivers
+            if driver.quantity == quantity
+            and driver.id in served
+            and driver.id not in targets
+            and object_ in registry.ancestors(driver.object)
+        )
+        if below:
+            warnings.append(
+                f"impact on {target} does not reach the {len(below)} served drivers below it: "
+                f"{', '.join(below)}; to move them, list them"
+            )
+    return warnings
+
+
+def _labels(spec: Spec) -> dict:
+    """How the elements are marked, and what a valid scenario still leaves to the reader.
+
+    Nothing here keeps a scenario from being computed: an assumption is an honest mark, and
+    only the human who approves can tell whether a cited fragment gives the number.
+    """
+    marked = _marked(spec)
+    assumed = sum(element.basis == "assumption" for element in marked)
+    stated = sum(element.basis == "event" for element in marked)
+    warnings = []
+    if not spec.sources:
+        warnings.append("the narrative cites no source")
+    if marked and assumed == len(marked):
+        warnings.append("every condition and impact is an assumption: none rests on the corpus")
+    conditioned = spec.constraints or spec.expectations or spec.probabilities or spec.regime_event
+    if not conditioned and not spec.impacts:
+        warnings.append("no condition and no impact: this is the base s_0, it records no event")
+    elif not conditioned:
+        warnings.append(
+            "no condition: Q = P, so the price is zero and says nothing about the impacts"
+        )
+    return {
+        "labels": {
+            "event": stated,
+            "sourced": len(marked) - assumed - stated,
+            "assumption": assumed,
+        },
+        "warnings": warnings,
+    }
 
 
 def _drivers(satellites: SatelliteBundle, spec: Spec, macro: MacroVersion) -> list[str]:
@@ -753,6 +832,11 @@ def _with_macro_impacts(simulation: MacroSimulation, impacts: list[Impact]) -> M
 
 def _version_problems(macro: MacroVersion, satellites: SatelliteBundle) -> list[str]:
     """The satellites of another macro version are not the ones these paths were drawn on."""
+    if satellites.macro != macro.name:
+        return [
+            f"the satellites were estimated on the macro version {satellites.macro}, "
+            f"the scenario names {macro.name}"
+        ]
     last = satellites.part_months_end()
     if last is None or last == macro.months[-1]:
         return []

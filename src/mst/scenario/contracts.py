@@ -12,12 +12,26 @@ coordinates the macro model declares — against the macro version by
 
 from typing import Annotated, Literal
 
-from pydantic import Field, model_validator
+from pydantic import BeforeValidator, Field, model_validator
 
 from ..contracts import Contract, Horizon, Identifier, Number, Probability
 
 #: A month of the scenario horizon, 1..H; month 0 is the calculation date.
 Month = Annotated[int, Field(strict=True, ge=1, le=360)]
+
+
+def _the_word(value):
+    """A word in a list is still the word: left as a list it would read as a corpus fragment."""
+    return value[0] if value in (["assumption"], ["event"]) else value
+
+
+#: What an element of ``O`` or ``C`` rests on: the word ``event`` when the text of the event
+#: states the number, corpus fragments, or the word ``assumption``.
+Basis = Annotated[
+    list[Identifier] | Literal["assumption", "event"],
+    BeforeValidator(_the_word),
+    Field(min_length=1),
+]
 
 
 
@@ -61,8 +75,8 @@ class Constraint(Contract):
     low: Number | None = None
     high: Number | None = None
     value: Number | None = None
-    basis: list[Identifier] | Literal["assumption"] = Field(min_length=1)
-    """The corpus fragments behind the condition, or ``assumption`` when it is the author's."""
+    basis: Basis
+    """``event``, the corpus fragments behind the condition, or ``assumption``."""
 
     @model_validator(mode="after")
     def well_formed(self):
@@ -103,7 +117,7 @@ class Expectation(Contract):
     terms: list[Term] = Field(min_length=1)
     low: Number | None = None
     high: Number | None = None
-    basis: list[Identifier] | Literal["assumption"] = Field(min_length=1)
+    basis: Basis
 
     @model_validator(mode="after")
     def one_side_at_least(self):
@@ -133,7 +147,7 @@ class ProbabilityCondition(Contract):
     low: Number
     high: Number
     at_least: Probability
-    basis: list[Identifier] | Literal["assumption"] = Field(min_length=1)
+    basis: Basis
 
     @model_validator(mode="after")
     def well_formed(self):
@@ -155,8 +169,8 @@ class Impact(Contract):
     ``<quantity>:<object>`` of a level above, in the model scale of its level. The impact of
     a level is applied before the levels below it are simulated, so an impact on a macro
     variable reaches every satellite; an impact on a driver moves that driver alone. Every
-    impact carries its reason and what it rests on: the corpus fragments it cites, or the
-    word ``assumption`` when it is the author's own.
+    impact carries its reason and what it rests on: the word ``event``, the corpus fragments
+    it cites, or the word ``assumption`` when it is the author's own.
     """
 
     target: Identifier
@@ -164,7 +178,7 @@ class Impact(Contract):
     end: Month
     delta: Number
     reason: Identifier
-    basis: list[Identifier] | Literal["assumption"] = Field(min_length=1)
+    basis: Basis
 
     @property
     def on_driver(self) -> bool:

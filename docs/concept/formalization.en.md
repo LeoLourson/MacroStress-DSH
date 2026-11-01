@@ -59,7 +59,7 @@ $$
 
 This recursion defines the map $F_O$. The maps $G^l$ themselves do not change, and a shift reaches the lower levels only through them.
 
-So a *scenario* is a tuple $s=(N,m,O,D,\mathcal C)$, where $N$ describes the event in text with references to sources, $m$ are the model versions and $\mathcal C$ are the requirements on $Q$. If the outcomes of an event diverge, there are several scenarios, each calculated separately. Every element of $O$ and $\mathcal C$ is marked with a source or with the word "assumption", and a person approves the scenario.
+So a *scenario* is a tuple $s=(N,m,O,D,\mathcal C)$, where $N$ describes the event in text with references to sources, $m$ are the model versions and $\mathcal C$ are the requirements on $Q$. If the outcomes of an event diverge, there are several scenarios, each calculated separately. Every element of $O$ and $\mathcal C$ is marked with the event itself when the description of the event states its number, with a source, or with the word "assumption", and a person approves the scenario.
 
 ## 4. Overlay of a scenario
 

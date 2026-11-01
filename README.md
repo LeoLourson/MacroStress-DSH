@@ -13,7 +13,7 @@ consistent paths for the other variables, satellite models turn those paths into
 prices, bond spreads, industry overdue shares, housing prices), and every position is repriced
 along the same draws. The output is a loss distribution with $P_5$, $P_{50}$, $P_{95}$, ES95 and
 the scenario price $\mathrm{dist}(s)$. The method is described in
-[docs/concept/scenario-formalization.en.md](docs/concept/scenario-formalization.en.md).
+[docs/concept/formalization.en.md](docs/concept/formalization.en.md).
 
 The server speaks MCP, so any client can drive it: Claude Desktop, Cursor, Claude Code. A
 DeepSeek Harness plugin in `dsh/` adds three skills and a workspace snapshot for the agent
@@ -92,8 +92,8 @@ Every document exists in English (`*.en.md`) and Russian (`*.md`); the index is
 
 - [docs/concept/formalization.en.md](docs/concept/formalization.en.md) — the general scheme: levels, the
   scenario, the conditional forecast, and the quality metrics;
-- [docs/concept/scenario-formalization.en.md](docs/concept/scenario-formalization.en.md) — the method and
-  what the code implements;
+- [docs/concept/bvar-method-legacy.en.md](docs/concept/bvar-method-legacy.en.md) — outdated description
+  of the first BVAR version, not the canon;
 - [docs/concept/architecture.en.md](docs/concept/architecture.en.md) — packages, workspace, versions, jobs;
 - [docs/howto/install.en.md](docs/howto/install.en.md) — the Python package and the DeepSeek Harness plugin;
 - [docs/howto/mcp.en.md](docs/howto/mcp.en.md) — any MCP client and troubleshooting;

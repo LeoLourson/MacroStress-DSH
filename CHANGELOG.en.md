@@ -4,6 +4,20 @@
 
 All notable changes to this project are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project uses [semantic versioning](https://semver.org/).
 
+## Unreleased
+
+- **The way of working is now in the server, not in the harness.** Any MCP client gets instructions on connecting, the `guide` tool with the guides and the prompt `scenario_from_event`. Only the DSH plugin saw this before. The guides live in `src/mst/guides`, and `dsh/skills` is their copy under a test.
+- **The scenario guide is rewritten by the canon:** the event, the calendar, conditions, impacts, causes, labels and human approval.
+- **The guides and the plugin's system prompt section are in English:** the model reads them, and English costs fewer tokens. The model answers in the language of the user.
+- **`model describe`** returns `origin` (the month $t=0$ and the last values in the model scale), `latents` and the scales of the variables, and for satellites the scales and regressors of the quantities.
+- **`scenario validate`** checks the visibility of the fragments cited by conditions too, as the documentation promised, and returns `labels` and `warnings`. The warnings name who reads a shift of a macro variable and which companies a sector shift does not reach.
+- **The pair of versions.** `jobs state` names the satellites of the macro version it names, and `scenario validate` refuses satellites of another macro version: before, this came out only when a calculation started.
+- **`series get`** accepts a driver id, for example `share_price:sibn`.
+- **The label `"basis": "event"`** for a number stated in the event itself; the canon now has this label.
+- **`model(kind="macro", action="base")`** returns the base path under $s_0$ without a calculation, so that conditions can be written as a deviation from the base.
+- **The scenario guide:** an effect that must spread through the economy is written as a condition; the event is split into clauses, the outcomes step is mandatory, measurements go in `reason`, and there are rules on the start date, phased measures and the choice of version.
+- **`docs/concept/scenario-formalization.md` is renamed to `bvar-method-legacy.md`** and marked as outdated: it describes the first BVAR version and is not the canon.
+
 ## 1.0.1: the plugin installs on any machine (2026-11-01)
 
 - **The DSH plugin without machine paths.** `dsh/cordis.patch.yml` starts `uvx macrostress`, and the server and the plugin find the data directory by one rule: `MACROSTRESS_WORKSPACE`, else `~/.macrostress/workspace`; settings of one machine go in the profile patch. `--workspace` of `mst.mcp` became optional. `dsh/package.json` is public and its version equals the package version; tests guard this and the absence of absolute paths.

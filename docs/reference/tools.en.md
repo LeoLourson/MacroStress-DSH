@@ -4,7 +4,16 @@ The general scheme is in [../concept/formalization.en.md](../concept/formalizati
 
 ## MCP tools
 
-The server `macrostress` (`src/mst/mcp.py`) gives seven tools. An argument error comes back as a call error whose text lists the allowed values. A tool that starts a job returns its id at once, without waiting for the end (`run start` also returns the run id).
+The server `macrostress` (`src/mst/mcp.py`) gives eight tools, the prompt `scenario_from_event(event)` and instructions that any client receives when it connects. They send the agent to the `guide` tool before it starts work. An argument error comes back as a call error whose text lists the allowed values. A tool that starts a job returns its id at once, without waiting for the end (`run start` also returns the run id).
+
+### `guide`
+
+| Arguments | Result |
+|---|---|
+| none | The list of guides: `name`, `description`, `whenToUse` |
+| `name` | The text of a guide: `scenario-from-corpus`, `run-report` or `drivers` |
+
+These are the same texts the DSH plugin registers as skills.
 
 ### `jobs`
 
@@ -49,7 +58,7 @@ A scenario is `scenarios/<id>.json`; `validate` reads both versions the file nam
 | `list` | none | Scenarios with versions, horizon, the number of conditions and impacts; a file that fails the contract is named separately |
 | `get` | `id` | The scenario file as it is |
 | `save` | `id`, `spec` | Checks the contract and writes `scenarios/<id>.json`; the id is lowercase letters, digits, hyphens |
-| `validate` | `id` | `{"ok": true, "problems": []}` or each problem by name: an unknown variable or cause, a condition the causes cannot reach, a regime event without a hidden coordinate among the causes, a missing approver, an impact on an unserved driver, satellites of another macro version, a corpus fragment cited by the narrative, a condition or an impact and published after the calculation date (if the index is built) |
+| `validate` | `id` | `ok`, `problems`, `labels` (how many elements of $O$ and $\mathcal C$ are marked with the event, a source and an assumption) and `warnings` (no sources, everything on assumptions, a shift of a macro variable with the quantities that read it, a sector shift with the companies it does not reach, no conditions and so a zero price, neither conditions nor impacts and so the base $s_0$; none of them stops a calculation). `problems` names each problem: an unknown variable or cause, a condition the causes cannot reach, a regime event without a hidden coordinate among the causes, a missing approver, an impact on an unserved driver, satellites of another macro version, a corpus fragment cited by the narrative, a condition or an impact and published after the calculation date (if the index is built) |
 | `reverse` | `id`, `portfolio`, `draws`, `seed`, `kappa` or `level` | Searches the scenario's family: the worst loss under the price `kappa`, or the lowest price whose loss reaches `level`; returns the answer and every point of the search |
 
 ### `run`
@@ -82,6 +91,7 @@ A portfolio is `portfolios/<id>.json`: the base currency (the ruble: models calc
 |---|---|---|---|
 | `macro` | `list` | none | Macro model versions, newest first |
 | `macro` | `describe` | `version` | The version metadata: model, date, variables, shocks and the share of draws that passed the sign restrictions |
+| `macro` | `base` | `version`, `horizon` (default 12), `only` | The base path under $s_0$ by month: `p5`, `p50`, `p95` in the model scale; conditions are written against it. It computes no drivers and starts no job |
 | `macro` | `estimate` | `as_of`, `model_id` (may be omitted if only one is installed) | A job on `models`: `python -m mst.models estimate-macro` |
 | `macro` | `backtest` | `as_of`, `model_id`, `only` | A job on `models`: `python -m mst.metrics backtest`: cells, CRPS, band coverage, admission, the aggregate by level and horizon, and the tuning and validation halves |
 | `satellites` | `list` | none | Satellite versions (bundles) |

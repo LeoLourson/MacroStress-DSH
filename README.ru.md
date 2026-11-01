@@ -19,8 +19,7 @@ $P_5$, $P_{50}$, $P_{95}$, ES95 и цена сценария $\mathrm{dist}(s)$.
 добавляют эффекты, которые не проходят через верхние уровни, — например запрет экспорта для
 одной отрасли. Качество моделей проверяется бэктестом на исторических эпизодах.
 
-Общая схема с определениями — [docs/concept/formalization.md](docs/concept/formalization.md),
-метод и его реализация — [docs/concept/scenario-formalization.md](docs/concept/scenario-formalization.md).
+Общая схема с определениями — [docs/concept/formalization.md](docs/concept/formalization.md).
 
 ## Как устроена система
 
@@ -97,7 +96,7 @@ uv run macrostress --workspace C:/data/macrostress
 | Слой | Файл | Вопрос |
 |---|---|---|
 | Концепция | [docs/concept/formalization.md](docs/concept/formalization.md) | Что система делает: уровни, сценарий, наложение, результат, метрики качества |
-| Концепция | [docs/concept/scenario-formalization.md](docs/concept/scenario-formalization.md) | Как устроен метод и что из него реализовано в коде |
+| Концепция | [docs/concept/bvar-method-legacy.md](docs/concept/bvar-method-legacy.md) | Устаревшее описание первой версии метода на BVAR, не канон |
 | Концепция | [docs/concept/architecture.md](docs/concept/architecture.md) | Как схема реализована в коде: пакеты, workspace, версии моделей, задачи |
 | Как работать | [docs/howto/install.md](docs/howto/install.md) | Как поставить Python-часть и подключить плагин к профилю DSH |
 | Как работать | [docs/howto/mcp.md](docs/howto/mcp.md) | Как подключить сервер к любому MCP-клиенту и разобрать типовые ошибки |

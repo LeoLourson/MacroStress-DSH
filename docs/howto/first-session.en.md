@@ -36,4 +36,4 @@ Long operations start as jobs: the tool returns a `job` at once, and progress is
 
 ## Further reading
 
-The method behind the calculation steps is in [../concept/scenario-formalization.en.md](../concept/scenario-formalization.en.md), the number contracts in [../reference/platform.en.md](../reference/platform.en.md), the general scheme in [../concept/formalization.en.md](../concept/formalization.en.md).
+The method behind the calculation steps is in [../concept/formalization.en.md](../concept/formalization.en.md), the number contracts in [../reference/platform.en.md](../reference/platform.en.md).

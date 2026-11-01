@@ -1,62 +1,42 @@
 ---
 name: drivers
-description: Обновить каталог драйверов, оценить сателлиты и понять отказ проверки
-whenToUse: когда позиция не считается из-за драйвера, когда нужен новый объект или новая версия сателлитов
+description: Update the driver catalog, estimate satellites and understand a rejection by the check
+whenToUse: when a position is not computed because of a driver, or a new object or a new satellite version is needed
 ---
 
-# Драйверы и сателлиты
+# Drivers and satellites
 
-Драйвер — величина объекта, `<величина>:<объект>`. Конкретные id берите из
-`model(kind="satellites", action="describe")` или `workspace/drivers/catalog.json`: в
-текущем workspace это, например, `share_price:sber`, `bond_spread:ru000a0jxpg2`,
-`overdue_share:stroitelstvo`, `housing_price_primary:okato_77000000000`. Сателлит — модель
-драйвера от макропеременных; версия сателлитов оценивается на панели конкретной макроверсии.
+A driver is a quantity of an object, `<quantity>:<object>`. Take concrete ids from `model(kind="satellites", action="describe")` or `workspace/drivers/catalog.json`, for example `share_price:sber`, `bond_spread:ru000a0jxpg2`, `overdue_share:stroitelstvo`, `housing_price_primary:okato_77000000000`. A satellite is the model of a driver given the macro variables; a satellite version is estimated on the panel of one macro version.
 
-## 1. Обновить каталог
+## 1. Update the catalog
 
-`series(action="update", quantity="share_price")` запускает задачу на `series`: каталог
-находит объекты величины, загружает их ряды и пишет `workspace/drivers/catalog.json`.
-Так же для `bond_spread`, `overdue_share`, `housing_price_primary`,
-`housing_price_secondary`. Новый объект источника появляется сам при следующем `update`;
-упавший каталог оставляет прошлую запись величины.
+`series(action="update", quantity="share_price")` starts a job on `series`: the catalog finds the objects of the quantity, loads their series and writes `workspace/drivers/catalog.json`. The same works for `bond_spread`, `overdue_share`, `housing_price_primary`, `housing_price_secondary`. A new object of a source appears by itself on the next `update`; a failed catalog keeps the previous record of the quantity.
 
-`jobs(action="status", id=<job>)` и `jobs(action="log", id=<job>)` — ход задачи.
+`jobs(action="status", id=<job>)` and `jobs(action="log", id=<job>)` show the progress of a job.
 
-## 2. Оценить сателлиты
+## 2. Estimate the satellites
 
-`model(kind="satellites", action="estimate", version=<макроверсия>)` — задача на `models`:
-оценка на панели этой макроверсии, проверка вне выборки и запись версии в
-`workspace/models/satellites/<hash>/`. `model(kind="satellites", action="list")` — версии.
+`model(kind="satellites", action="estimate", version=<macro version>)` is a job on `models`: estimation on the panel of that macro version, an out-of-sample check and a version written to `workspace/models/satellites/<hash>/`. `model(kind="satellites", action="list")` lists the versions.
 
-## 3. Прочитать отказ
+## 3. Read a rejection
 
-`model(kind="satellites", action="describe", version=<сателлиты>)` возвращает `served` и
-`rejected`. У отклонённого драйвера есть `reason`, `satellite`, `baseline`, `forecasts`.
-Причины:
+`model(kind="satellites", action="describe", version=<satellites>)` returns `served` and `rejected`. A rejected driver has `reason`, `satellite`, `baseline`, `forecasts`. The reasons:
 
-- `too few observations before the holdout` — истории мало для проверки;
-- `no observation of the holdout forecast` — в проверочном окне нечего прогнозировать;
-- `not more accurate than without macro` — сателлит не точнее авторегрессии без
-  макропеременных;
-- `no checked driver above it` — у драйвера нет своей истории и нет проверенного объекта выше;
-- `the driver above, <driver>, is not served` — параметры берутся у объекта, который сам
-  отклонён.
+- `too few observations before the holdout`: the history is too short for the check;
+- `no observation of the holdout forecast`: nothing to forecast in the check window;
+- `not more accurate than without macro`: the satellite is no more accurate than an autoregression without macro variables;
+- `no checked driver above it`: the driver has no history of its own and no checked object above it;
+- `the driver above, <driver>, is not served`: its parameters come from an object that is itself rejected.
 
-Отказ — не ошибка данных и не ноль. Платформа не симулирует такой драйвер; позиция, которой
-он нужен, остаётся `invalid` с `driver_missing:<величина>`, а отчёт исключает её с причиной и
-показывает покрытие. Не выдавайте исключённую позицию за нулевой убыток.
+A rejection is neither a data error nor a zero. The platform does not simulate such a driver; a position that needs it stays `invalid` with `driver_missing:<quantity>`, and the report excludes it with the reason and shows coverage. Do not present an excluded position as a zero loss.
 
-## 4. Команды
+## 4. Commands
 
-Оценка запускается только через `python -m` из корня репозитория и тем же интерпретатором,
-что в `dsh/cordis.patch.yml`: точка входа ставит `OPENBLAS_NUM_THREADS=1`, иначе мелкие
-системы решаются в 20 потоков и оценка идёт часы вместо минут.
+Estimation runs only through `python -m` from the repository root, with the interpreter of the server: the entry point sets `OPENBLAS_NUM_THREADS=1`, otherwise small systems are solved in 20 threads and estimation takes hours instead of minutes.
 
 ```powershell
 python -m mst.drivers update share_price --store workspace/series --drivers workspace/drivers/catalog.json
 python -m mst.models estimate-satellites --macro <hash> --store workspace/series --models workspace/models --drivers workspace/drivers/catalog.json
 ```
 
-`estimate` пишет версию, `check` делает то же без записи. Новая величина — правка
-`src/mst/drivers/registry.toml` и, если у источника нет каталога, класс в
-`src/mst/drivers/catalogs/`; это изменение кода платформы, а не работа агента в workspace.
+`estimate` writes a version, `check` does the same without writing. A new quantity means editing `src/mst/drivers/registry.toml` and, if the source has no catalog, adding a class in `src/mst/drivers/catalogs/`; that is a change to the platform code, not agent work in the workspace.
