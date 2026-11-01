@@ -9,9 +9,13 @@ requires-python = ">=3.12"
 authors = [{ name = "LeoLourson" }]
 keywords = [
   "stress-testing",
+  "reverse-stress-testing",
   "scenario-analysis",
   "macroeconomic",
   "bvar",
+  "ms-var",
+  "entropic-tilting",
+  "expected-shortfall",
   "portfolio-risk",
   "mcp",
 ]
