@@ -102,10 +102,11 @@ class Workspace:
 
 def state(ws: Workspace) -> dict[str, Any]:
     """What the workspace holds: the model versions, the corpus index, the counts."""
+    macro = _latest(ws.macro_models)
     return {
         "workspace": str(ws.root),
-        "macro": _latest(ws.macro_models),
-        "satellites": _latest(ws.satellite_models),
+        "macro": macro,
+        "satellites": _satellites_of(ws.satellite_models, macro),
         "corpus_index": read_json(ws.corpus / "index" / "state.json"),
         "portfolios": _count(ws.portfolios),
         "scenarios": _count(ws.scenarios, suffix=".json"),
@@ -125,6 +126,14 @@ def _latest(directory: Path) -> str | None:
     """The newest finished version of ``directory``, or None when there is none."""
     found = versions.folders(directory)
     return found[0].name if found else None
+
+
+def _satellites_of(directory: Path, macro: str | None) -> str | None:
+    """The newest satellites estimated on ``macro``: only those can run on its paths."""
+    for folder in versions.folders(directory):
+        if (read_json(folder / "meta.json") or {}).get("macro") == macro:
+            return folder.name
+    return None
 
 
 def _count(directory: Path, suffix: str = "") -> int:

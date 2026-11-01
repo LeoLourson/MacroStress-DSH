@@ -1,4 +1,4 @@
-# The estimation specification of the macro model (docs/concept/scenario-formalization.md, section 4).
+# The estimation specification of the macro model (docs/concept/bvar-method-legacy.md, section 4).
 # A model version stores this file as it was.
 
 # T0: the first month of history.

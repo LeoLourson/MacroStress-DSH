@@ -1,4 +1,4 @@
-# The estimation of the satellite models (docs/concept/scenario-formalization.md, section 6.2).
+# The estimation of the satellite models (docs/concept/bvar-method-legacy.md, section 6.2).
 # A satellite version stores this file as it was.
 
 # The columns of z_t except the constant are centred and divided by their standard deviation

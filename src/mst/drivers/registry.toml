@@ -1,4 +1,4 @@
-# Drivers and their satellite models (docs/concept/scenario-formalization.md, section 6).
+# Drivers and their satellite models (docs/concept/bvar-method-legacy.md, section 6).
 #
 # A quantity is measured on objects; a driver is a quantity of one object. The object above an
 # object (`parent`) carries the same quantity a level higher, and the satellite parameters of

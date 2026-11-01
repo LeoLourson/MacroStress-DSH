@@ -8,20 +8,55 @@ from typing import Any
 
 from fastmcp import FastMCP
 
+from . import guides, models, runs, store
 from . import jobs as tasks
-from . import models, runs, store
 from .corpus import tool as corpus_tool
 from .data import sources
 from .data.store import SeriesStore
 from .drivers import bundle as satellite_bundle
+from .drivers.objects import series_id as driver_series
 from .macro import version as macro_version
 from .portfolio import tool as portfolio_tool
 from .scenario import tool as scenario_tool
 
+INSTRUCTIONS = """\
+MacroStress answers one question: how the target indicators of an object are distributed if a \
+given event happens. A scenario s = (N, m, O, D, C) is built from the text of the event and the \
+corpus; the conditions extend the description of the event, and the models compute its \
+consequences.
+
+Read a guide before the work it covers: guide(name="scenario-from-corpus") when the user names \
+an event or asks what happens if it occurs, even without the words scenario or corpus; \
+guide(name="run-report") before a calculation or its report; guide(name="drivers") before work \
+on drivers and satellites. guide() lists them.
+
+Search the corpus before writing any number of a scenario. Mark a condition or an impact with \
+"event" when the text of the event states its number, with a corpus fragment only when the \
+fragment gives its number, and with "assumption" otherwise. When \
+neither the event nor the corpus gives a number, propose one from the nearest episode and mark \
+it "assumption": a scenario with no conditions and no impacts records no event, and questions \
+to the user come after the scenario, not instead of it. A human approves a scenario: never \
+fill approved_by yourself and never start a calculation that was not asked for.\
+"""
+
 
 def build(ws: store.Workspace) -> FastMCP:
     """The server of one workspace; every tool closes over it."""
-    server = FastMCP("macrostress")
+    server = FastMCP("macrostress", instructions=INSTRUCTIONS)
+
+    @server.tool
+    def guide(name: str | None = None) -> dict:
+        """The working guides of the agent: how to do the work, whatever the client.
+
+        Without ``name``, the list. ``scenario-from-corpus`` turns an event into a scenario;
+        read it before ``scenario save``.
+        """
+        return guides.get(name) if name else {"guides": guides.catalogue()}
+
+    @server.prompt
+    def scenario_from_event(event: str) -> str:
+        """Build a scenario from the text of an event, by the corpus, for a human to approve."""
+        return f"{guides.get('scenario-from-corpus')['content']}\n\n## Event\n\n{event}"
 
     @server.tool
     def jobs(action: str, id: str | None = None, tail: int = 50) -> dict:
@@ -124,10 +159,12 @@ def build(ws: store.Workspace) -> FastMCP:
     ) -> dict:
         """Stored scenarios. Actions: list, get, save, validate, reverse.
 
-        ``save`` checks the contract and writes ``scenarios/<id>.json``; ``validate`` loads the
-        macro and satellite versions the file names and names every problem that keeps the
-        scenario from being computed, including corpus fragments not visible on the
-        calculation day when the index exists. ``reverse`` searches the scenario's family on
+        Read ``guide(name="scenario-from-corpus")`` before building one. ``save`` checks the
+        contract and writes ``scenarios/<id>.json``; ``validate`` loads the macro and satellite
+        versions the file names and names every problem that keeps the scenario from being
+        computed, including corpus fragments not visible on the calculation day when the index
+        exists, and reports how the elements are marked and what the scenario leaves unsaid
+        under ``labels`` and ``warnings``. ``reverse`` searches the scenario's family on
         ``portfolio``: the worst loss under the price ``kappa``, or the lowest price whose loss
         reaches ``level``.
         """
@@ -189,13 +226,14 @@ def build(ws: store.Workspace) -> FastMCP:
     ) -> dict:
         """Runs on the paths of a scenario. Actions: start, status, result, list.
 
-        ``start`` draws the scenario's paths and calculates a portfolio's positions — or the
-        ``positions`` given in the call — on them, as a job on the ``runs`` resource; ``status``
-        reports that job and what the run has written, ``result`` the per-position results, the
-        conditional forecast of the ``targets`` (``forecast.json``: P5/P50/P95 of every target
-        driver by month, in its own unit; every driver when ``targets`` is omitted) and the
-        report of a portfolio run, ``list`` every run of the workspace. ``base_currency`` is
-        the base of ``positions``; a portfolio brings its own.
+        Read ``guide(name="run-report")`` first. ``start`` draws the scenario's paths and
+        calculates a portfolio's positions — or the ``positions`` given in the call — on them,
+        as a job on the ``runs`` resource; ``status`` reports that job and what the run has
+        written, ``result`` the per-position results, the conditional forecast of the
+        ``targets`` (``forecast.json``: P5/P50/P95 of every target driver by month, in its own
+        unit; every driver when ``targets`` is omitted) and the report of a portfolio run,
+        ``list`` every run of the workspace. ``base_currency`` is the base of ``positions``; a
+        portfolio brings its own.
         """
         if action == "start":
             if portfolio and positions:
@@ -281,16 +319,19 @@ def build(ws: store.Workspace) -> FastMCP:
         only: list[str] | None = None,
         model_id: str | None = None,
         assignment: dict[str, str] | None = None,
+        horizon: int = 12,
     ) -> dict:
         """Model versions and plugins. kind: macro, satellites, catalog.
 
         The episode check of the models is ``backtest`` (``python -m mst.metrics``).
-        Actions for ``macro``: list, describe, estimate, backtest; for ``satellites``: list,
-        describe, estimate; for ``catalog``: list, the installed model plugins.
+        Actions for ``macro``: list, describe, base, estimate, backtest; for ``satellites``:
+        list, describe, estimate; for ``catalog``: list, the installed model plugins.
+        ``base`` gives p5, p50 and p95 of the macro variables under the base s_0 by month, up
+        to ``horizon``, in the model scale, for ``only`` the variables named; it starts no job.
         ``model_id`` names the macro model to estimate or backtest — the only one installed
         when omitted; ``assignment`` maps a quantity to the satellite model that estimates
         it in an ``estimate`` of the satellites, overriding the model that declares it.
-        ``version`` is the version hash ``describe`` reads and the macro version the
+        ``version`` is the version hash ``describe`` and ``base`` read and the macro version the
         satellites of an ``estimate`` are built on; ``list`` takes no version.
         """
         if kind == "catalog":
@@ -314,6 +355,16 @@ def build(ws: store.Workspace) -> FastMCP:
             return {"versions": macro_version.catalogue(ws.models)}
         if action == "describe":
             return macro_version.describe(ws.models, _need(version, "version"))
+        if action == "base":
+            from mst import plugins as _plugins
+
+            return macro_version.base(
+                ws.models,
+                _need(version, "version"),
+                _plugins.registry().macro,
+                horizon=horizon,
+                only=only,
+            )
         if action == "estimate":
             return _start(
                 ws,
@@ -331,7 +382,7 @@ def build(ws: store.Workspace) -> FastMCP:
                 ws, "models", _backtest_argv(ws, _need(as_of, "as_of"), model, only or [])
             )
         raise ValueError(
-            f"model: unknown action {action!r}, try list, describe, estimate, backtest"
+            f"model: unknown action {action!r}, try list, describe, base, estimate, backtest"
         )
 
     return server
@@ -462,9 +513,14 @@ def _update_drivers(ws: store.Workspace, quantity: str) -> dict:
 
 
 def _rows(ws: store.Workspace, series_id: str, as_of: str | None) -> dict:
-    """The values of ``series_id`` known on ``as_of``, one row per month."""
+    """The values of ``series_id`` known on ``as_of``, one row per month.
+
+    A driver ``<quantity>:<object>`` reads the series of its history.
+    """
     day = date.fromisoformat(as_of) if as_of else date.today()
-    observations = SeriesStore(ws.series).as_of(series_id, day)
+    quantity, on_driver, object_ = series_id.partition(":")
+    stored = driver_series(quantity, object_) if on_driver else series_id
+    observations = SeriesStore(ws.series).as_of(stored, day)
     return {
         "id": series_id,
         "as_of": day.isoformat(),

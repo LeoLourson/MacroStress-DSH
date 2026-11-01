@@ -63,28 +63,16 @@ function shortVersion(value) {
   return typeof value === 'string' && value !== '' ? value.slice(0, 12) : '—';
 }
 
-/** The Russian form of a count: 1 портфель, 2 портфеля, 5 портфелей. */
-function plural(count, one, few, many) {
-  const n = Math.abs(Number(count) || 0);
-  const mod10 = n % 10;
-  const mod100 = n % 100;
-  if (mod10 === 1 && mod100 !== 11) return one;
-  if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) return few;
-  return many;
-}
-
 /** The section text: five lines, whatever the workspace holds. */
 function describe(state) {
-  const corpus = state.corpus_index?.as_of ?? 'не индексирован';
+  const corpus = state.corpus_index?.as_of ?? 'not indexed';
   return [
-    'MacroStress: стресс-тест портфеля, данные лежат в workspace ниже.',
+    'MacroStress: portfolio stress test, data in the workspace below.',
     `workspace ${state.workspace}`,
-    `макромодель ${shortVersion(state.macro)} · сателлиты ${shortVersion(state.satellites)} · корпус ${corpus}`,
-    `${state.portfolios} ${plural(state.portfolios, 'портфель', 'портфеля', 'портфелей')} · ` +
-      `${state.scenarios} ${plural(state.scenarios, 'сценарий', 'сценария', 'сценариев')} · ` +
-      `${state.runs} ${plural(state.runs, 'расчёт', 'расчёта', 'расчётов')} · ` +
-      `задач в работе: ${state.jobs ?? 0}`,
-    'Начать с jobs(action="state"): он обновляет этот снимок из файла.',
+    `macro ${shortVersion(state.macro)} · satellites ${shortVersion(state.satellites)} · corpus ${corpus}`,
+    `portfolios ${state.portfolios} · scenarios ${state.scenarios} · runs ${state.runs} · ` +
+      `jobs running ${state.jobs ?? 0}`,
+    'Start with jobs(action="state"): it refreshes this snapshot from the file.',
   ].join('\n');
 }
 
@@ -96,7 +84,7 @@ function snapshotText(workspace, cache) {
     const info = statSync(file);
     stamp = `${info.mtimeMs}:${info.size}`;
   } catch {
-    return `MacroStress: у workspace ${workspace} ещё нет состояния — вызови jobs(action="state").`;
+    return `MacroStress: workspace ${workspace} has no state yet, call jobs(action="state").`;
   }
   if (cache.stamp === stamp) return cache.text;
   cache.text = describe(JSON.parse(readFileSync(file, 'utf8')));

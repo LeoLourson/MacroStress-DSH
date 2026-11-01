@@ -1,4 +1,4 @@
-"""The out-of-sample check of the satellites (docs/concept/scenario-formalization.md, section 9).
+"""The out-of-sample check of the satellites (docs/concept/bvar-method-legacy.md, section 9).
 
 The models are estimated on the months before the last ``holdout`` months of the panel. From
 every observation in the holdout a driver is forecast, month by month on the realized macro

@@ -56,6 +56,5 @@
 
 ## Что читать дальше
 
-Метод за шагами расчёта — [../concept/scenario-formalization.md](../concept/scenario-formalization.md),
-контракты чисел — [../reference/platform.md](../reference/platform.md), общая схема —
-[../concept/formalization.md](../concept/formalization.md).
+Метод за шагами расчёта — [../concept/formalization.md](../concept/formalization.md),
+контракты чисел — [../reference/platform.md](../reference/platform.md).

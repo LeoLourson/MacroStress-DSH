@@ -57,9 +57,9 @@ $$
 x^0=G^0(\omega^0)+o^0,\qquad x^l=G^l(x^{<l},\omega^l)+o^l,\quad l=1,\dots,L.
 $$
 
-This recursion defines the map $F_O$. The maps $G^l$ themselves do not change, and a shift reaches the lower levels only through them.
+This recursion defines the map $F_O$. The maps $G^l$ themselves do not change, and a shift reaches the lower levels only through them. An impact has no dynamics of its own: in a month where the component of $o^l$ is zero, the path of level $l$ equals the model output again, and quantities of the same level do not react to the shift even if the model links them. So $o^l$ itself contains everything the event does to level $l$: aftereffects are written as nonzero values after the event, and the reaction of neighbouring quantities as their components. A condition, by contrast, spreads through the laws of the models.
 
-So a *scenario* is a tuple $s=(N,m,O,D,\mathcal C)$, where $N$ describes the event in text with references to sources, $m$ are the model versions and $\mathcal C$ are the requirements on $Q$. If the outcomes of an event diverge, there are several scenarios, each calculated separately. Every element of $O$ and $\mathcal C$ is marked with a source or with the word "assumption", and a person approves the scenario.
+So a *scenario* is a tuple $s=(N,m,O,D,\mathcal C)$, where $N$ describes the event in text with references to sources, $m$ are the model versions and $\mathcal C$ are the requirements on $Q$. If the outcomes of an event diverge, there are several scenarios, each calculated separately. Every element of $O$ and $\mathcal C$ is marked with the event itself when the description of the event states its number, with a source, or with the word "assumption", and a person approves the scenario.
 
 ## 4. Overlay of a scenario
 
@@ -169,7 +169,7 @@ $$
 \mathrm{dist}(s)=\mathbb E_P\big[-\log P(S\mid R)\big]\ \ge\ -\log P(S),
 $$
 
-and for constant $R$ equality holds, so that $e^{-\mathrm{dist}(s)}=P(S)$. If $R'$ determines $R$, the set of admissible measures under $R'$ is narrower and the price under it is no smaller. Explaining an event through fewer causes therefore costs more.
+and for constant $R$ equality holds, so that $e^{-\mathrm{dist}(s)}=P(S)$. If $R'$ determines $R$, the set of admissible measures under $R'$ is narrower and the price under it is no smaller. Explaining an event through fewer causes therefore costs more. The difference $\mathrm{dist}(s)+\log P(S)$ equals $\log\mathbb E_PP(S\mid R)-\mathbb E_P\log P(S\mid R)$ and is nonnegative by Jensen's inequality; it grows with the spread of $P(S\mid R)$ over $R$, so the price can far exceed $-\log P(S)$.
 
 If no causes are named, $\omega_{\bar D}$ is empty and $R=\theta$. The price then decomposes by levels: for given $\theta$, let $P^l_\theta$ and $Q^l_\theta$ be the conditional laws of level $l$ given $x^{<l}$ under $P$ and $P_s$. Then
 
@@ -179,7 +179,15 @@ $$
 
 Here $S$ and $f$ are assumed to depend only on $(\theta,x)$. The decomposition shows at which level the scenario moves furthest from the base models.
 
-If the conditional law of the restricted quantities has a density, then for a small tolerance $\tau$ of an exact value the price grows as $-k\log(2\tau)$, where $k$ is the number of such conditions. Scenarios can therefore be compared only at equal tolerances.
+Let the law of $k$ restricted quantities given $R$ have a continuous positive density $g_R$, and let the event be a box $\mathcal B$ of volume $\lvert\mathcal B\rvert$ shrinking to a point $y_0$. Then
+
+$$
+-\log P(S\mid R)=-\log g_R(y_0)-\log\lvert\mathcal B\rvert+o(1).
+$$
+
+The first term measures how far the point is from the law, and the second is set by the width the author of the scenario chose. An exact value with tolerance $\tau$ is the case $\lvert\mathcal B\rvert=(2\tau)^k$, where the price grows as $-k\log(2\tau)$. The price of a narrow event therefore speaks first of all of its width, and prices can be compared directly only for events with equal boxes.
+
+The severity of events is compared by the *one-sided price* $\mathrm{dist}^+(s)$, the price of the event $A^+$ in which every interval condition on a quantity $y$ is replaced by a ray. An interval below the median of $y$ under $P$ and the same $O$ is replaced by the ray down from its upper bound, an interval above the median by the ray up from its lower bound, and a condition whose interval contains the median is dropped. Since $A\subseteq A^+$, under a condition on the support $\mathrm{dist}^+(s)\le\mathrm{dist}(s)$, and the width of the interval does not enter $\mathrm{dist}^+(s)$. The report gives both.
 
 The impact $O$ is not random and has no price of its own, although through $F_O$ it changes the price of the restrictions. The report shows $\mathrm{dist}(s)$ together with the list of $O$.
 
@@ -187,9 +195,13 @@ The impact $O$ is not random and has no price of its own, although through $F_O$
 
 The conditional forecast is the law of $v$ under $\omega\sim P_s$, where $v$ is the last component of $F_O(\omega)$. The system represents it by a sample, possibly weighted, and computes from it the probabilities of events and functionals $\rho$, for example $\mathrm{ES}_{95\%}$.
 
-The forecast is compared with the calculation under the scenario $s_0$ with no restrictions or impacts, whose overlay equals $P$. The contribution of a single condition or impact is found by removing it from the scenario and repeating the calculation with the same random numbers.
+The indicator $v$ is a path, so a functional is tied to a moment. Let $\Delta_t$ be the loss by month $t$, a function of $v$. The system computes $\rho_t(s)=\rho(\Delta_t)$ for every $t\le H$ and the value over the whole path $\rho_{\max}(s)=\rho(\max_{t\le H}\Delta_t)$; for a monotone $\rho$, $\rho_{\max}(s)\ge\max_t\rho_t(s)$. The value at the end of the horizon is not enough, because it shows neither an impact that ended before $H$ nor consequences the models have damped by $H$.
 
-In the reverse problem $m$, $O$, $D$ and the form of the restrictions with a parameter $c$ are fixed, and one of two problems is solved:
+The forecast is compared with the calculation under the scenario $s_0$ with no restrictions or impacts, whose overlay equals $P$. A condition fixes part of the path, and by the law of total variance the spread of the indicator, averaged over the outcomes of the condition, does not grow. So $\rho(s)<\rho(s_0)$ does not yet mean that the event lowers risk: the law may only have narrowed. The comparison separates the shift of the centre of the law from the change of its width $p_{95}-p_5$, each with an error interval.
+
+The contribution of a single condition or impact is the difference $\rho(s)-\rho(s')$ with an error interval, where $s'$ is $s$ without that element. Both calculations use the same random numbers, and the error falls as far as their paths are linked. If the scenario has no conditions, the measure does not depend on the impact, and the difference of paths at one $\omega$ expresses the action of the impact. A condition changes the measure, so one draw number under $s$ and $s'$ means different outcomes, and the difference on a single path is not the contribution of a condition.
+
+In the reverse problem $m$, $O$, $D$, the form of the restrictions with a parameter $c$ and one of the functionals $\rho_t$, $\rho_{\max}$, written $\rho$, are fixed, and one of two problems is solved:
 
 $$
 \sup\big\lbrace\rho(s(c)):\ \mathrm{dist}(s(c))\le\kappa\big\rbrace,
@@ -269,9 +281,15 @@ Episodes are split in advance into two halves: the models are tuned on the first
 3. A version is rejected if its CRPS is worse by more than two standard errors.
 4. In all other cases the difference counts as undetected, and the current version stays.
 
+### Admission of a calculation
+
+The admission conditions on paths belong to the pair of a version and a scenario, since one version can give admissible paths under one scenario and inadmissible paths under another. A calculation is admitted if fewer than 5 % of the cells of month and quantity on its paths break each of these conditions. Otherwise its result is not read as an estimate of losses: the report gets the status "not admitted" and names the broken conditions and quantities, and the numbers are kept for diagnostics. The mark of an unverified tail passes from the quantity to the whole report, because losses add up over all positions within one path.
+
 ### Accuracy of the calculation
 
 For a sample of size $n$ with weights $w_i$ the report gives the effective size $(\sum_iw_i)^2/\sum_iw_i^2$. On the sample we check $Q(S)=1$ and $\ell\le\mathbb E_Qf\le r$, and for $\lambda$ the conditions of the theorem on the form of $Q^\ast$. Values of $\mathrm{ES}$ come with an interval, the sensitivity to dropping the 1 % most extreme paths and a horizon mark. The Monte Carlo error is estimated by a bootstrap over realizations, separately from the sampling error. For reproducibility the report records the versions of models and data, the date, the initial value of the random number generator and the commit.
+
+The price is estimated by a mean over values of $R$, and the term $-\log P(S\mid R)$ is unbounded above, so the mean can be set by rare $R$ at which the event is almost unreachable. Every estimate of the price comes with a standard error. If the error exceeds 10 % of the estimate, the price is treated as not estimated: the report gives it only with this mark, and the reverse problem does not use such a point, since noise would otherwise set the bound on the price.
 
 ## 8. Special cases
 

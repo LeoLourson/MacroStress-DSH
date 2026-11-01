@@ -1,6 +1,6 @@
 # mst.macro
 
-The contract of level 0 of the [formalization](../../../docs/concept/scenario-formalization.en.md): the macro variable registry, the assembly of the panel on the calculation date and the store of macro model versions. The macro model itself is a connected plugin: the BVAR with stochastic volatility lives in [mst.plugins.bvar](../plugins/bvar/README.en.md), the MS-VAR in [mst.plugins.msvar](../plugins/msvar/README.en.md), and another model is a separate package with its own `model_id`, connected through the registry `mst.plugins` (entry points, `MST_PLUGINS_PATH` or a package in the namespace), see [docs/howto/plugins.en.md](../../../docs/howto/plugins.en.md).
+The contract of level 0 of the [formalization](../../../docs/concept/formalization.en.md): the macro variable registry, the assembly of the panel on the calculation date and the store of macro model versions. The macro model itself is a connected plugin: the BVAR with stochastic volatility lives in [mst.plugins.bvar](../plugins/bvar/README.en.md), the MS-VAR in [mst.plugins.msvar](../plugins/msvar/README.en.md), and another model is a separate package with its own `model_id`, connected through the registry `mst.plugins` (entry points, `MST_PLUGINS_PATH` or a package in the namespace), see [docs/howto/plugins.en.md](../../../docs/howto/plugins.en.md).
 
 ```powershell
 python -m mst.models estimate-macro bvar.sv --as-of 2026-10-29 --store DIR --models DIR

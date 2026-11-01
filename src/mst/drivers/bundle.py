@@ -448,6 +448,15 @@ def describe(root: Path, name: str) -> dict:
         "macro": meta["macro"],
         "as_of": meta["as_of"],
         "models": {q: part["model"] for q, part in meta["quantities"].items()},
+        "quantities": [
+            {
+                "id": quantity["id"],
+                "transform": quantity["transform"],
+                "unit": quantity.get("unit"),
+                "regressors": quantity["regressors"],
+            }
+            for quantity in meta["registry"]["quantities"]
+        ],
         "served": served,
         "rejected": rejected,
     }

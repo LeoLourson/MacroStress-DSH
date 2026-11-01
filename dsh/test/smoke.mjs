@@ -44,21 +44,10 @@ function context() {
   return { ctx, skills, sections, disposers };
 }
 
-function plural(count, one, few, many) {
-  const n = Math.abs(Number(count) || 0);
-  const mod10 = n % 10;
-  const mod100 = n % 100;
-  if (mod10 === 1 && mod100 !== 11) return one;
-  if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) return few;
-  return many;
-}
-
 function counts(state) {
   return (
-    `${state.portfolios} ${plural(state.portfolios, 'портфель', 'портфеля', 'портфелей')} · ` +
-    `${state.scenarios} ${plural(state.scenarios, 'сценарий', 'сценария', 'сценариев')} · ` +
-    `${state.runs} ${plural(state.runs, 'расчёт', 'расчёта', 'расчётов')} · ` +
-    `задач в работе: ${state.jobs ?? 0}`
+    `portfolios ${state.portfolios} · scenarios ${state.scenarios} · runs ${state.runs} · ` +
+    `jobs running ${state.jobs ?? 0}`
   );
 }
 

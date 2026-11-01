@@ -1,2 +1,2 @@
-"""The macro model of docs/concept/scenario-formalization.md:
+"""The macro model of docs/concept/bvar-method-legacy.md:
 registry, estimation, conditional forecast."""

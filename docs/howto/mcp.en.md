@@ -94,9 +94,13 @@ The same works directly from the repository:
 
 In JSON paths on Windows use forward slashes, because a backslash starts an escape sequence.
 
+### What any client gets
+
+On connecting, the server passes instructions: when to read a guide, and that a scenario is built from the corpus. The `guide` tool returns the guides themselves, so they work even where a client shows neither instructions nor prompts. The prompt `scenario_from_event(event)` starts work on a scenario from the text of an event. None of this needs a harness.
+
 ### DeepSeek Harness
 
-The plugin in `dsh/` starts the same server, registers three skills and adds the workspace state to the agent's prompt. The connection steps are in [install.en.md](install.en.md).
+The plugin in `dsh/` starts the same server, registers the same guides as three skills and adds the workspace state to the agent's prompt. The connection steps are in [install.en.md](install.en.md).
 
 ## First session
 
@@ -108,7 +112,7 @@ A session follows the scheme: prepare the history from series, estimate the mode
 4. `scenario(action="save")` and `scenario(action="validate")`: the scenario.
 5. `run(action="start")` and `run(action="result")`: the calculation: the conditional forecast of the target indicators and the portfolio report.
 
-A step-by-step session with full calls is in [first-session.en.md](first-session.en.md). The full reference is [../reference/tools.en.md](../reference/tools.en.md), the number contracts are in [../reference/platform.en.md](../reference/platform.en.md), the method in [../concept/scenario-formalization.en.md](../concept/scenario-formalization.en.md).
+A step-by-step session with full calls is in [first-session.en.md](first-session.en.md). The full reference is [../reference/tools.en.md](../reference/tools.en.md), the number contracts are in [../reference/platform.en.md](../reference/platform.en.md), the method in [../concept/formalization.en.md](../concept/formalization.en.md).
 
 ## What lives where
 

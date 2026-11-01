@@ -108,11 +108,8 @@ def test_validate_accepts_a_scenario_the_versions_can_compute(tmp_path, versions
     ws = store.Workspace(tmp_path)
     install(ws, versions)
     call(ws, "scenario", {"action": "save", "id": "oil", "spec": scenario(versions)})
-    assert call(ws, "scenario", {"action": "validate", "id": "oil"}).data == {
-        "id": "oil",
-        "ok": True,
-        "problems": [],
-    }
+    report = call(ws, "scenario", {"action": "validate", "id": "oil"}).data
+    assert report["id"] == "oil" and report["ok"] is True and report["problems"] == []
 
 
 def test_validate_names_the_unknown_variable(tmp_path, versions):

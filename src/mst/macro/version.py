@@ -15,17 +15,23 @@ from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
 
+import numpy as np
+
 from mst import versions
 from mst.macro.panel import Panel
 from mst.model_sdk.contracts import (
     MACRO_ARRAYS_REQUIRED,
     MACRO_META_REQUIRED,
     MacroModel,
+    ScenarioPlan,
 )
 
 # The keys of the meta a macro version must record, beyond the model SDK's own: the block
 # structure of the panel, which ``panel_of`` needs to rebuild it.
 META_REQUIRED = (*MACRO_META_REQUIRED, "n_global")
+
+BASE_DRAWS = 400
+"""Enough for the quantiles of the base path a scenario is written against."""
 
 
 @dataclass(frozen=True)
@@ -143,8 +149,12 @@ def catalogue(root: Path) -> list[dict]:
 
 
 def describe(root: Path, name: str) -> dict:
-    """One version: the model that estimated it, its dates, variables and shocks."""
-    meta, _ = read(root, name)
+    """One version: the model that estimated it, its dates, variables, shocks and start.
+
+    ``origin`` is what a scenario is written against: the month ``t = 0`` and the last known
+    value of each variable in the model scale, seasonally adjusted where the panel is.
+    """
+    meta, arrays = read(root, name)
     diagnostics = meta.get("diagnostics", {})
     identified, estimated = diagnostics.get("identified"), diagnostics.get("estimated")
     return {
@@ -154,9 +164,86 @@ def describe(root: Path, name: str) -> dict:
         "ids": meta.get("ids"),
         "months": meta.get("months"),
         "shocks": meta.get("shocks"),
+        "latents": _latents(meta["model"]),
+        "variables": _variables(meta.get("ids") or []),
+        "origin": _origin(meta, arrays),
         "diagnostics": diagnostics,
         "identification_share": identified / estimated if identified and estimated else None,
     }
+
+
+def base(
+    root: Path,
+    name: str,
+    models: Mapping[str, MacroModel],
+    *,
+    horizon: int = 12,
+    only: list[str] | None = None,
+) -> dict:
+    """The law ``P`` of the paths by month: what a deviation from the base is measured against.
+
+    The quantiles are in the model scale, the scale of the conditions, for the months
+    ``1 .. horizon``. The draws are few and the seed is fixed: this is for writing a scenario,
+    and a calculation draws its own paths.
+    """
+    version = load(root, name, models)
+    unknown = sorted(set(only or ()) - set(version.ids))
+    if unknown:
+        raise ValueError(f"the macro version has no variable {', '.join(unknown)}")
+    simulation = version.plugin.simulate(
+        version.model, ScenarioPlan(horizon=horizon), draws=BASE_DRAWS, seed=0
+    )
+    paths = {}
+    for k, id_ in enumerate(simulation.ids):
+        if only and id_ not in only:
+            continue
+        low, middle, high = np.nanquantile(simulation.paths[:, 1:, k], [0.05, 0.5, 0.95], axis=0)
+        paths[id_] = {
+            "p5": [round(float(value), 4) for value in low],
+            "p50": [round(float(value), 4) for value in middle],
+            "p95": [round(float(value), 4) for value in high],
+        }
+    return {
+        "version": name,
+        "draws": BASE_DRAWS,
+        "months": [month.isoformat() for month in simulation.months[1:]],
+        "paths": paths,
+    }
+
+
+def _latents(model_id: str) -> list[str]:
+    """The hidden coordinates the model declares; none when it is not installed."""
+    from mst import plugins
+
+    return list(getattr(plugins.registry().macro.get(model_id), "latents", ()))
+
+
+def _variables(ids: list[str]) -> list[dict]:
+    """The scale of each variable a scenario names: its transform, unit and seasonality."""
+    from mst.macro.registry import load_registry
+
+    known = {variable.id: variable for variable in load_registry().variables}
+    return [
+        {
+            "id": id_,
+            "transform": known[id_].transform,
+            "unit": known[id_].unit,
+            "seasonal": known[id_].seasonal,
+        }
+        for id_ in ids
+        if id_ in known
+    ]
+
+
+def _origin(meta: dict, arrays: dict) -> dict:
+    """The month ``t = 0`` and each variable's last value in the panel with its month."""
+    months, y = meta["months"], arrays["panel_y"]
+    last = {}
+    for k, id_ in enumerate(meta["ids"]):
+        known = np.flatnonzero(np.isfinite(y[:, k]))
+        if known.size:
+            last[id_] = {"month": months[known[-1]], "y": float(y[known[-1], k])}
+    return {"month": months[-1], "last": last}
 
 
 def _summary(folder: Path) -> dict:

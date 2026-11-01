@@ -1,4 +1,4 @@
-"""Drivers: quantities of objects tied to the macro variables (scenario-formalization.md, 6).
+"""Drivers: quantities of objects tied to the macro variables (bvar-method-legacy.md, 6).
 
 ``registry.toml`` declares the quantities: unit, transform, the macro variables and features
 of ``x_t``, the deepest lag, how often the source observes it and the catalog that lists its

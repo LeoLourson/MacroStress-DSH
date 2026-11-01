@@ -12,11 +12,11 @@ whenToUse: optional; when the agent should take this skill
 The text of the skill.
 ```
 
-`../index.js` reads all `*.md` files of this folder in alphabetical order and skips files without `name`, `description` or text. The READMEs have no frontmatter, so they do not become skills. The skills themselves are in Russian: they are instructions the agent loads at run time, not documentation.
+`../index.js` reads all `*.md` files of this folder in alphabetical order and skips files without `name`, `description` or text. The READMEs have no frontmatter, so they do not become skills. The skills themselves are in English because the model reads them, and English costs fewer tokens.
 
 | File | What it covers |
 |---|---|
-| `scenario-from-corpus.md` | How to search corpus fragments and assemble a scenario; how `save` differs from `validate` |
+| `scenario-from-corpus.md` | How to turn an event into a scenario $s=(N,m,O,D,\mathcal C)$ from the corpus: the calendar, conditions, impacts, causes, labels and human approval |
 | `run-report.md` | How to start a run and read $P_5$/$P_{50}$/$P_{95}$, ES95, the price, the coverage and the flags |
 | `drivers.md` | How to update the catalog, estimate satellites and what "satellite rejected" means |
 

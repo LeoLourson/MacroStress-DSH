@@ -1,6 +1,6 @@
-# Method: formalization and implementation
+# Legacy description of the BVAR method
 
-The canon of the formalization is [formalization.en.md](formalization.en.md); this document unfolds it into a method. Where statements diverge, the canon is right.
+**This document is outdated and is not the canon.** It describes the first version of the method with a single BVAR macro model and in places differs from the current scenario contract. The canon is [formalization.en.md](formalization.en.md); the code refers here only for details of estimating the BVAR and the satellites.
 
 A stress-test scenario sets the paths of several macro variables, for example the key rate and the oil price, and names the economic shocks that cause these paths. A macro model estimated on history completes them with consistent paths of the other macro variables, and satellite models translate macro variables into drivers: indicators of industries, regions, companies and other parts of the economy on which the value of positions depends. Position values give the portfolio loss.
 
