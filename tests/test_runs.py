@@ -9,7 +9,7 @@ import numpy as np
 import pytest
 from fastmcp import Client
 
-from mst import jobs, runs
+from mst import jobs, runs, store
 from mst.mcp import build
 from mst.plugin_sdk import FixedPaths
 from mst.portfolio import tool as portfolio_tool
@@ -226,7 +226,7 @@ def portfolio(workspace):
 
 @pytest.fixture
 def shock_pair(workspace):
-    """Two scenarios of horizon 6: one with an impact on months 2..3, one without it."""
+    """Three scenarios of horizon 6: no impact, one on months 2..3, one lasting to the end."""
     spec = scenario_tool.get(workspace.scenarios, "oil")["spec"]
     common = {
         "narrative": "перебой",
@@ -252,21 +252,39 @@ def shock_pair(workspace):
             ]
         },
     )
-    return "plain", "shock"
+    scenario_tool.save(
+        workspace.scenarios,
+        "lasting",
+        common
+        | {
+            "impacts": [
+                {
+                    "target": "share_price:sber",
+                    "start": 1,
+                    "values": [-10.0] * 6,
+                    "reason": "r",
+                    "basis": "assumption",
+                }
+            ]
+        },
+    )
+    return "plain", "shock", "lasting"
 
 
-def _report_of(ws, scenario, portfolio):
-    """The report of one run and its saved ``path_losses.npz`` array."""
+def _report_of(ws, scenario, portfolio, draws: int = 5):
+    """The report of one run, its saved monthly losses and its folder."""
     run_id = runs.new_id()
-    runs.begin(ws, run_id, {"scenario": scenario, "draws": 5, "seed": 11, "portfolio": portfolio})
+    runs.begin(
+        ws, run_id, {"scenario": scenario, "draws": draws, "seed": 11, "portfolio": portfolio}
+    )
     runs.execute(ws, run_id)
     stored = runs.result(ws, run_id)
     with np.load(runs.folder(ws, run_id) / "path_losses.npz") as saved:
-        return stored["summary"], saved["losses"]
+        return stored["summary"], saved["losses"], runs.folder(ws, run_id)
 
 
 def test_the_last_month_of_losses_by_month_equals_the_loss(workspace, portfolio, shock_pair):
-    report, monthly = _report_of(workspace, "plain", portfolio)
+    report, monthly, _ = _report_of(workspace, "plain", portfolio)
     block = report["losses_by_month"]
     assert monthly.shape == (5, 6)
     assert len(block["by_month"]) == 6
@@ -281,9 +299,9 @@ def test_the_last_month_of_losses_by_month_equals_the_loss(workspace, portfolio,
 def test_an_impact_that_ends_before_the_horizon_shows_in_its_months_alone(
     workspace, portfolio, shock_pair
 ):
-    plain, shock = shock_pair
-    plain_report, _ = _report_of(workspace, plain, portfolio)
-    shock_report, _ = _report_of(workspace, shock, portfolio)
+    plain, shock = shock_pair[:2]
+    plain_report, _, _ = _report_of(workspace, plain, portfolio)
+    shock_report, _, _ = _report_of(workspace, shock, portfolio)
     plain_rows = plain_report["losses_by_month"]["by_month"]
     shock_rows = shock_report["losses_by_month"]["by_month"]
     for key in ("p05", "p50", "p95", "es95"):
@@ -294,6 +312,66 @@ def test_an_impact_that_ends_before_the_horizon_shows_in_its_months_alone(
             assert shock_rows[t][key] == plain_rows[t][key]
         # The end of the horizon sees nothing of an impact that vanished at month 3.
         assert shock_report["loss"][key] == plain_report["loss"][key]
+
+
+def test_the_comparison_of_a_scenario_of_impacts_only_matches_the_shift(
+    workspace, portfolio, shock_pair
+):
+    plain, _, lasting = shock_pair
+    lasting_report, _, lasting_folder = _report_of(workspace, lasting, portfolio, draws=40)
+    plain_report, _, plain_folder = _report_of(workspace, plain, portfolio, draws=40)
+    comparison = lasting_report["comparison"]
+    assert set(comparison) == {"loss", "path"}
+    centre = comparison["loss"]["centre"]
+    # The impact lowers the share in the log100 scale by 10, that is a factor of exp(-0.1)
+    # in own units from month 1 to the end; the other positions read no share price, so the
+    # whole shift of the loss is the equity position's notional * (1 - exp(-0.1)) * P(T)/P(0).
+    meta = runs.meta(workspace, plain_folder.name)
+    k = meta["drivers"].index("share_price:sber")
+    with np.load(plain_folder / "paths.npz") as saved:
+        price = saved["drivers"][:, :, k]
+    shift = 10.0 * (1.0 - np.exp(-0.1)) * price[:, -1] / price[:, 0]
+    assert centre["value"] == pytest.approx(float(np.median(shift)), rel=0.05)
+    assert centre["interval"][0] > 0.0  # narrow and clear of zero
+    assert comparison["path"]["centre"]["value"] > 0.0
+    # The comparison of the base with itself is absent, not zero.
+    assert plain_report["comparison"] is None
+
+
+def test_a_scenario_without_conditions_and_impacts_has_no_comparison(
+    workspace, portfolio, shock_pair
+):
+    report, _, _ = _report_of(workspace, "plain", portfolio)
+    assert report["comparison"] is None
+
+
+def test_the_contributions_carry_the_interval_of_the_same_function(
+    workspace, portfolio, shock_pair
+):
+    plain, shock, _ = shock_pair
+    run_id = runs.new_id()
+    runs.begin(
+        workspace,
+        run_id,
+        {
+            "scenario": shock,
+            "draws": 5,
+            "seed": 11,
+            "portfolio": portfolio,
+            "contributions": True,
+        },
+    )
+    runs.execute(workspace, run_id)
+    stored = store.read_json(runs.folder(workspace, run_id) / "contributions.json")
+    (row,) = stored["contributions"]
+    assert row["element"] == "impact#1"
+    assert row["loss"] is not None and row["difference"] is not None
+    interval = row["interval"]
+    assert set(interval) == {"centre", "width", "p95", "es95"}
+    for block in interval.values():
+        assert block["interval"][0] <= block["interval"][1]
+    # The centre of the same function is the difference of the medians the row reports.
+    assert interval["centre"]["value"] == pytest.approx(row["difference"]["p50"])
 
 
 def test_the_paths_cut_at_a_month_keep_the_start_flags_and_seed():

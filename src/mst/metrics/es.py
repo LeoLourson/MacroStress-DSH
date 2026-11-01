@@ -60,6 +60,9 @@ DEFINITION = (
 #: The stream of the ES bootstrap of a single run, apart from every episode stream.
 RUN_BOOTSTRAP_STREAM = 23
 
+#: The stream of the paired bootstrap of a comparison with the base, apart from every other.
+PAIRED_STREAM = 29
+
 
 def es_block(losses: np.ndarray, *, repetitions: int = 1000, seed: int = 0) -> dict:
     """The expected shortfall of one run's losses with what the canon asks beside it.
@@ -98,6 +101,55 @@ def value_at_risk(losses: np.ndarray, level: float = 0.95) -> float:
     if values.size == 0:
         raise ValueError("the losses carry no repetition")
     return float(np.percentile(values, 100.0 * level))
+
+
+def paired_difference(a, b, *, seed: int, replications: int = 1000) -> dict:
+    """The differences ``a - b`` of the median, ``p95 - p5``, ``p95`` and ES95, with intervals.
+
+    One set of indices is drawn per replication and applied to both samples: draw ``i`` of
+    ``a`` and draw ``i`` of ``b`` come from the same random numbers, so whatever link the two
+    samples have — the same random numbers of two runs — survives the resampling. A
+    difference per draw is never reported; only the difference of a statistic carries, with
+    its 95 % bootstrap interval. ``centre`` is the difference of medians, ``width`` the
+    difference of ``p95 - p5``: the shift of the centre of the law apart from the change of
+    its width, as the canon's comparison with ``s_0`` asks (section 6).
+    """
+    left = np.asarray(a, dtype=float)
+    right = np.asarray(b, dtype=float)
+    if left.ndim != 1 or left.shape != right.shape or left.size == 0:
+        raise ValueError(
+            "the comparison needs two samples of one shape, not "
+            f"{left.shape} and {right.shape}"
+        )
+    rng = np.random.default_rng([seed, PAIRED_STREAM])
+    drawn = {name: np.empty(replications) for name in ("centre", "width", "p95", "es95")}
+    for replication in range(replications):
+        picked = rng.integers(0, left.size, left.size)
+        first, second = left[picked], right[picked]
+        drawn["centre"][replication] = np.median(first) - np.median(second)
+        drawn["width"][replication] = _width(first) - _width(second)
+        drawn["p95"][replication] = (
+            np.percentile(first, 95) - np.percentile(second, 95)
+        )
+        drawn["es95"][replication] = (
+            expected_shortfall(first) - expected_shortfall(second)
+        )
+
+    def block(name: str, value: float) -> dict:
+        low, high = np.percentile(drawn[name], [2.5, 97.5])
+        return {"value": float(value), "interval": [float(low), float(high)]}
+
+    return {
+        "centre": block("centre", np.median(left) - np.median(right)),
+        "width": block("width", _width(left) - _width(right)),
+        "p95": block("p95", np.percentile(left, 95) - np.percentile(right, 95)),
+        "es95": block("es95", expected_shortfall(left) - expected_shortfall(right)),
+    }
+
+
+def _width(values: np.ndarray) -> float:
+    """``p95 - p5``: the width the comparison with ``s_0`` reports beside the centre."""
+    return float(np.percentile(values, 95) - np.percentile(values, 5))
 
 
 def contributions(terms: Sequence[tuple[float, float, float]]) -> list[float]:

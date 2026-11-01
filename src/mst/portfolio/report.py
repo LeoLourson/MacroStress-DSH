@@ -61,12 +61,15 @@ def build(
     coverage_limit: float = DEFAULT_COVERAGE_LIMIT,
     monthly: np.ndarray | None = None,
     months: list[str] | None = None,
+    comparison: dict | None = None,
 ) -> dict:
     """The report of ``results`` against the portfolio that produced them.
 
     ``monthly`` is the portfolio loss by months ``1 .. H`` — with ``months`` their labels —
     which becomes ``losses_by_month``: the risk functionals of the canon tied to a moment of
     the path and the value over the whole path beside the one at the end of the horizon.
+    ``comparison`` is the same losses against the empty scenario ``s_0`` on the shared random
+    numbers: the shift of the centre apart from the change of width, each with its interval.
     """
     included = [result for result in results if result.status != "invalid"]
     excluded = [
@@ -116,6 +119,7 @@ def build(
         "flags": flags,
         "loss": _loss(losses, seed=seed, horizon=horizon),
         "losses_by_month": None if monthly is None else path_block(monthly, months, seed=seed),
+        "comparison": comparison,
         "dist": dist(dist_found),
         "coverage": {
             "share": share,

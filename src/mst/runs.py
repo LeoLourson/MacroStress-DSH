@@ -33,6 +33,7 @@ from .contracts import Contract, Currency, Identifier, Seed
 from .drivers import bundle as satellite_bundle
 from .engine import run as calculate_run
 from .macro import version as macro_version
+from .metrics.es import paired_difference
 from .plugin_sdk import FixedPaths, Position
 from .portfolio import report as portfolio_report
 from .portfolio import tool as portfolio_tool
@@ -173,11 +174,12 @@ def execute(ws: store.Workspace, run_id: str) -> dict:
             return engine_on(readable(found))
 
         batch = valued(paths)
+        losses = portfolio_report.losses_of(batch.results)
         # The loss by every month of the horizon: the same positions valued on the paths cut
         # at t, so a model reading the end of the horizon sees month t — the canon's Delta_t.
         # A run without a portfolio writes no report, so it carries no monthly losses.
         monthly = None
-        if portfolio is not None and portfolio_report.losses_of(batch.results).size:
+        if portfolio is not None and losses.size:
             base = readable(paths)
             monthly = np.column_stack(
                 [
@@ -185,6 +187,37 @@ def execute(ws: store.Workspace, run_id: str) -> dict:
                     for t in range(1, len(paths.months))
                 ]
             )
+        # The comparison with s_0: the same numbers against the empty scenario, which keeps
+        # the versions, the horizon and the seed and drops every condition and impact. The
+        # pairing of the bootstrap holds on the shared random numbers of the two runs.
+        comparison = None
+        if (
+            portfolio is not None
+            and (
+                spec.constraints
+                or spec.impacts
+                or spec.expectations
+                or spec.probabilities
+                or spec.regime_event
+            )
+            and losses.size
+        ):
+            empty_batch = valued(empty)
+            empty_losses = portfolio_report.losses_of(empty_batch.results)
+            if empty_losses.size:
+                comparison = {"loss": paired_difference(losses, empty_losses, seed=request.seed)}
+                if monthly is not None:
+                    empty_monthly = np.column_stack(
+                        [
+                            portfolio_report.losses_of(
+                                engine_on(readable(empty).up_to(t)).results
+                            )
+                            for t in range(1, len(paths.months))
+                        ]
+                    )
+                    comparison["path"] = paired_difference(
+                        monthly.max(axis=1), empty_monthly.max(axis=1), seed=request.seed
+                    )
         contributions = None
         if request.contributions:
             full = portfolio_report.loss_block(
@@ -195,11 +228,13 @@ def execute(ws: store.Workspace, run_id: str) -> dict:
                 variant_paths = scenario_build.build(
                     variant, macro, satellites, draws=request.draws, seed=request.seed
                 )
+                variant_batch = valued(variant_paths)
                 found = portfolio_report.loss_block(
-                    valued(variant_paths).results,
+                    variant_batch.results,
                     seed=request.seed,
                     horizon=variant_paths.months[-1].isoformat(),
                 )
+                variant_losses = portfolio_report.losses_of(variant_batch.results)
                 contributions.append(
                     {
                         "element": name,
@@ -211,6 +246,11 @@ def execute(ws: store.Workspace, run_id: str) -> dict:
                             for key in ("p05", "p50", "p95", "es95")
                             if found.get(key) is not None and full.get(key) is not None
                         },
+                        "interval": (
+                            paired_difference(variant_losses, losses, seed=request.seed)
+                            if variant_losses.size and losses.size
+                            else None
+                        ),
                     }
                 )
         written = _write(
@@ -229,6 +269,7 @@ def execute(ws: store.Workspace, run_id: str) -> dict:
             checks=_checks(spec, macro, paths, empty, satellites),
             contributions=contributions,
             monthly=monthly,
+            comparison=comparison,
             workspace=ws,
         )
     except BaseException as error:
@@ -350,6 +391,7 @@ def _write(
     checks: dict | None = None,
     contributions: list | None = None,
     monthly: np.ndarray | None = None,
+    comparison: dict | None = None,
     workspace: store.Workspace | None = None,
 ) -> dict:
     """The paths, the results of every position, the report and the meta that names them."""
@@ -379,6 +421,7 @@ def _write(
             horizon=paths.months[-1].isoformat(),
             monthly=monthly,
             months=months[1:],
+            comparison=comparison,
         )
         if portfolio is not None
         else None
