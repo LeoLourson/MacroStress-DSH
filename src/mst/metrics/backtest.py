@@ -779,7 +779,9 @@ def _driver_cells(
     for k, driver in enumerate(paths.ids):
         quantity = quantity_of[driver]
         declared = driver_registry.quantity(quantity)
-        levels[driver] = f"driver/{quantity}"
+        levels[driver] = (
+            f"driver/{quantity}" if declared.level <= 1 else f"driver{declared.level}/{quantity}"
+        )
         own = own_of[driver]
         domain = _model_domain(declared)
         spread = history_range(own)

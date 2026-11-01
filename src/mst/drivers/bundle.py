@@ -43,6 +43,7 @@ from mst.model_sdk.contracts import (
     SatelliteEstimate,
     SatelliteModel,
     SatellitePart,
+    UpperPaths,
 )
 
 from .history import correlation
@@ -112,13 +113,16 @@ class SatelliteBundle:
     ) -> DriverPaths:
         """The paths of ``drivers`` on ``macro``, in the model scale, by their own models.
 
-        The platform draws the joint shocks of every model itself: one standard normal draw
-        per repetition from the stream ``[seed, 0, r]`` over every correlated driver of the
-        request, multiplied by the Cholesky factor of the full matrix ``assemble`` measured,
-        so the cross-model correlation reaches the joint paths. Each model receives its own
-        slice of those shocks, in the order of the drivers it was asked for. The platform
-        draws ``horizon + max(len(part["months"])) - 1`` rows: a model that starts from its
-        last observed month ``last >= 0`` needs ``horizon + len(its months) - 1 - last``
+        The levels are drawn in ascending order — the recursion of the canon: every model of
+        level ``l`` reads the macro paths and the driver paths of the levels below its own,
+        with the impacts of those levels applied, through ``UpperPaths``. The platform draws
+        the joint shocks of a level's models itself — one standard normal draw per repetition
+        from the stream ``[seed, 0, level, r]`` over every correlated driver of the level — so
+        the cross-model correlation reaches the joint paths of the level, while the levels
+        stay independent of one another as the product measure of the canon asks. Each model
+        receives its own slice of those shocks, in the order of the drivers it was asked for,
+        and draws ``horizon + max(len(part["months"])) - 1`` rows: a model that starts from
+        its last observed month ``last >= 0`` needs ``horizon + len(its months) - 1 - last``
         steps, which does not exceed that count, and reads the first rows it needs.
         """
         impacts = list(impacts)
@@ -137,32 +141,71 @@ class SatelliteBundle:
         by_model: dict[str, list[str]] = {}
         for driver in drivers:
             by_model.setdefault(self.quantity_model[self.node(driver)[0]], []).append(driver)
+        model_level = {
+            model_id: max(
+                self.registry.quantity(quantity).level
+                for quantity in self.quantities_of(model_id)
+            )
+            for model_id in by_model
+        }
         draws, horizon = macro.paths.shape[0], macro.paths.shape[1] - 1
-        platform = self._platform_shocks(macro, drivers, by_model, horizon, seed)
         paths = np.empty((draws, horizon + 1, len(drivers)))
         flags: dict[str, set[str]] = {driver: set() for driver in drivers}
-        # Streams start at 1: the platform's own shock stream is 0, so a model's stream never
-        # collides with it.
-        for stream, model_id in enumerate(sorted(by_model), start=1):
-            found = self.plugins[model_id].simulate(
-                self.models[model_id],
-                macro,
-                by_model[model_id],
-                [item for item in impacts if item.target in by_model[model_id]],
-                correlation=(self.correlated, self.correlation),
-                shocks=platform[model_id],
-                seed=seed,
-                stream=stream,
+        drawn: dict[int, DriverPaths] = {}
+        level_ids: dict[int, list[str]] = {}
+        level_paths: dict[int, list[np.ndarray]] = {}
+        level_flags: dict[int, dict[str, frozenset[str]]] = {}
+        # Streams start at 1: the platform's own shock streams are keyed with a 0, so a
+        # model's stream never collides with them.
+        stream_of = {
+            model_id: stream
+            for stream, model_id in enumerate(
+                sorted(by_model, key=lambda m: (model_level[m], m)), start=1
             )
-            if sorted(found.ids) != sorted(by_model[model_id]):
-                raise ValueError(
-                    f"{model_id} returned the drivers {', '.join(found.ids) or 'none'}; "
-                    f"the run asked for {', '.join(by_model[model_id])}"
+        }
+        for level in sorted(set(model_level.values())):
+            upper = UpperPaths(
+                macro=macro,
+                levels={
+                    number: DriverPaths(
+                        ids=list(level_ids[number]),
+                        paths=np.concatenate(level_paths[number], axis=2)
+                        if level_paths[number]
+                        else np.empty((draws, horizon + 1, 0)),
+                        flags=dict(level_flags[number]),
+                    )
+                    for number in sorted(drawn)
+                },
+            )
+            of_level = [m for m in sorted(by_model) if model_level[m] == level]
+            platform = self._platform_shocks(
+                macro, drivers, {m: by_model[m] for m in of_level}, level, horizon, seed
+            )
+            for model_id in of_level:
+                found = self.plugins[model_id].simulate(
+                    self.models[model_id],
+                    upper,
+                    by_model[model_id],
+                    [item for item in impacts if item.target in by_model[model_id]],
+                    correlation=(self.correlated, self.correlation),
+                    shocks=platform[model_id],
+                    seed=seed,
+                    stream=stream_of[model_id],
                 )
-            for k, driver in enumerate(found.ids):
-                column = drivers.index(driver)
-                paths[:, :, column] = found.paths[:, :, k]
-                flags[driver] |= set(found.flags[driver])
+                if sorted(found.ids) != sorted(by_model[model_id]):
+                    raise ValueError(
+                        f"{model_id} returned the drivers {', '.join(found.ids) or 'none'}; "
+                        f"the run asked for {', '.join(by_model[model_id])}"
+                    )
+                for k, driver in enumerate(found.ids):
+                    column = drivers.index(driver)
+                    paths[:, :, column] = found.paths[:, :, k]
+                    flags[driver] |= set(found.flags[driver])
+                # The paths of this level, impacts applied, feed the levels below it.
+                level_ids.setdefault(level, []).extend(found.ids)
+                level_paths.setdefault(level, []).append(found.paths)
+                level_flags.setdefault(level, {}).update(found.flags)
+                drawn[level] = True
         for column, driver in enumerate(drivers):
             flags[driver] |= _training_range_flags(self, driver, paths[:, :, column])
         return DriverPaths(
@@ -171,21 +214,31 @@ class SatelliteBundle:
             flags={driver: frozenset(flags[driver]) for driver in drivers},
         )
 
+    def quantities_of(self, model_id: str) -> set[str]:
+        """The quantities a model of this bundle was assigned."""
+        return {
+            quantity
+            for quantity, assigned in self.quantity_model.items()
+            if assigned == model_id
+        }
+
     def _platform_shocks(
         self,
         macro: MacroSimulation,
         drivers: list[str],
         by_model: dict[str, list[str]],
+        level: int,
         horizon: int,
         seed: int,
     ) -> dict[str, np.ndarray]:
-        """The standardized residuals of every model's correlated drivers, drawn once.
+        """The standardized residuals of one level's models, drawn once for the level.
 
         ``(R, rows, k)`` per model, in the order of that model's ``drivers`` argument, where
         ``rows`` is the number the platform supplies and ``k`` counts only the drivers with a
         history of their own: the matrix was measured on those, and a driver without history
         stays on the model's own independent noise. The full matrix is positive definite by
-        construction; a matrix edited outside ``assemble`` that is not is refused here.
+        construction; a matrix edited outside ``assemble`` that is not is refused here. The
+        stream is keyed by the level, so the levels draw independently of one another.
         """
         positions = {driver: column for column, driver in enumerate(self.correlated)}
         requested = [driver for driver in drivers if driver in positions]
@@ -208,7 +261,7 @@ class SatelliteBundle:
         draws = macro.paths.shape[0]
         shocks = np.empty((draws, rows, len(requested)))
         for repetition in range(draws):
-            rng = np.random.default_rng([seed, 0, repetition])
+            rng = np.random.default_rng([seed, 0, level, repetition])
             shocks[repetition] = rng.standard_normal((rows, len(requested))) @ cholesky.T
         column = {driver: k for k, driver in enumerate(requested)}
         return {

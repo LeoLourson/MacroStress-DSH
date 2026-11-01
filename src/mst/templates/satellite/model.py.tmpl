@@ -10,6 +10,7 @@ import numpy as np
 
 from mst.drivers.history import history, x_from_paths
 from mst.drivers.registry import Quantity
+from mst.model_sdk.contracts import UpperPaths
 from mst.model_sdk.contracts import (
     AdditiveImpact,
     DriverPaths,
@@ -164,7 +165,7 @@ class {{class}}(SatelliteModel):
     def simulate(
         self,
         model: {{class}}Model,
-        macro: MacroSimulation,
+        upper: UpperPaths,
         drivers: list[str],
         impacts: list[AdditiveImpact],
         *,
@@ -173,6 +174,7 @@ class {{class}}(SatelliteModel):
         seed: int,
         stream: int,
     ) -> DriverPaths:
+        macro = upper.macro
         draws, horizon = macro.paths.shape[0], macro.paths.shape[1] - 1
         rng = np.random.default_rng([seed, stream])
         plan = []

@@ -20,7 +20,6 @@ from mst.model_sdk import Check
 from mst.model_sdk.contracts import (
     AdditiveImpact,
     DriverPaths,
-    MacroSimulation,
     SatelliteEstimate,
     SatelliteEstimateContext,
     SatelliteModel,
@@ -143,7 +142,7 @@ class HierModel(SatelliteModel):
     def simulate(
         self,
         model,
-        macro: MacroSimulation,
+        upper,
         drivers: list[str],
         impacts: list[AdditiveImpact],
         *,
@@ -154,7 +153,7 @@ class HierModel(SatelliteModel):
     ) -> DriverPaths:
         return simulate_hier(
             model,
-            macro,
+            upper,
             drivers,
             impacts,
             correlation=correlation,

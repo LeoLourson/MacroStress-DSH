@@ -159,7 +159,7 @@ class FakeSatellite(SatelliteModel):
     def simulate(
         self,
         model,
-        macro,
+        upper,
         drivers,
         impacts,
         *,
@@ -168,6 +168,7 @@ class FakeSatellite(SatelliteModel):
         seed: int,
         stream: int,
     ) -> DriverPaths:
+        macro = upper.macro
         horizon = macro.paths.shape[1] - 1
         draws = macro.paths.shape[0]
         history = model["share_price"]

@@ -87,7 +87,7 @@ class FakeSatellite(SatelliteModel):
     def simulate(
         self,
         model,
-        macro,
+        upper,
         drivers,
         impacts,
         *,
@@ -96,6 +96,7 @@ class FakeSatellite(SatelliteModel):
         seed: int,
         stream: int,
     ) -> DriverPaths:
+        macro = upper.macro
         self.calls.append(
             (tuple(drivers), stream, tuple(sorted(item.target for item in impacts)))
         )
@@ -374,10 +375,10 @@ class TrainingSatellite(FakeSatellite):
         return estimate
 
     def simulate(
-        self, model, macro, drivers, impacts, *, correlation=None, shocks=None, seed, stream
+        self, model, upper, drivers, impacts, *, correlation=None, shocks=None, seed, stream
     ):
         paths = np.full(
-            (macro.paths.shape[0], macro.paths.shape[1], len(drivers)), self.value
+            (upper.macro.paths.shape[0], upper.macro.paths.shape[1], len(drivers)), self.value
         )
         return DriverPaths(
             ids=list(drivers),
@@ -500,10 +501,10 @@ class ShockSatellite(SatelliteModel):
         return {quantity: part.meta["driver"] for quantity, part in parts.items()}
 
     def simulate(
-        self, model, macro, drivers, impacts, *, correlation=None, shocks=None, seed, stream
+        self, model, upper, drivers, impacts, *, correlation=None, shocks=None, seed, stream
     ) -> DriverPaths:
         self.received.append(shocks)
-        draws, horizon = macro.paths.shape[0], macro.paths.shape[1] - 1
+        draws, horizon = upper.macro.paths.shape[0], upper.macro.paths.shape[1] - 1
         paths = np.zeros((draws, horizon + 1, len(drivers)))
         paths[:, 1:, :] = shocks[:, :horizon, :]
         return DriverPaths(

@@ -18,7 +18,7 @@ The impacts of the scenario add their ``delta`` to the path in the model scale.
 import numpy as np
 
 from mst.drivers.history import x_from_paths
-from mst.model_sdk.contracts import AdditiveImpact, DriverPaths, MacroSimulation
+from mst.model_sdk.contracts import AdditiveImpact, DriverPaths, UpperPaths
 
 from .estimate import regressors
 
@@ -50,7 +50,7 @@ def _nearest(hist, node: int, rows: np.ndarray) -> int:
 
 def simulate(
     model,
-    macro: MacroSimulation,
+    upper: UpperPaths,
     drivers: list[str],
     impacts: list[AdditiveImpact],
     *,
@@ -59,16 +59,19 @@ def simulate(
     seed: int,
     stream: int,
 ) -> DriverPaths:
-    """The paths of ``drivers`` on ``macro``, in the model scale of each quantity.
+    """The paths of ``drivers`` on the levels above, in the model scale of each quantity.
 
-    ``model`` is what ``HierModel.load`` returned: the fits of its quantities and the check of
-    every driver. ``correlation`` is the bundle's residual correlation with the driver ids it
-    was measured on; the joint noise of this model's drivers with history is drawn from its
-    slice. ``shocks`` holds those joint residuals already drawn by the platform,
-    ``(R, steps, k)`` in the order of the drivers of this model that have history; the model
-    uses the first ``steps`` rows instead of drawing them and keeps its stream for the
-    posterior draw and the independent noise.
+    ``upper`` carries the macro simulation this model reads — the hierarchical model serves
+    quantities of the first level, so ``upper.levels`` is empty for it. ``model`` is what
+    ``HierModel.load`` returned: the fits of its quantities and the check of every driver.
+    ``correlation`` is the bundle's residual correlation with the driver ids it was measured
+    on; the joint noise of this model's drivers with history is drawn from its slice.
+    ``shocks`` holds those joint residuals already drawn by the platform, ``(R, steps, k)`` in
+    the order of the drivers of this model that have history; the model uses the first
+    ``steps`` rows instead of drawing them and keeps its stream for the posterior draw and the
+    independent noise.
     """
+    macro = upper.macro
     if macro.history is None:
         raise ValueError("the macro simulation carries no history months")
     draws, horizon = macro.paths.shape[0], macro.paths.shape[1] - 1

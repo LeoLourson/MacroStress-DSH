@@ -154,6 +154,13 @@ def macro_paths(panel, x_future, draws=3):
     return Simulation(ids=panel.ids, months=months, paths=paths, history=history)
 
 
+def upper_of(macro):
+    """The upper paths of the first level: the macro simulation alone."""
+    from mst.model_sdk.contracts import UpperPaths
+
+    return UpperPaths(macro=macro, levels={})
+
+
 def platform_shocks(model, macro, drivers, rows: int = 64, seed: int = 5) -> np.ndarray:
     """The standardized residuals the platform draws for these drivers' own histories."""
     fit_ = next(iter(model.fits.values()))
@@ -183,7 +190,7 @@ def test_driver_paths_follow_the_satellite_and_carry_impacts(version, data):
     impact = AdditiveImpact(target="price:alpha", start=2, end=3, delta=10.0)
     result = simulate_hier(
         model,
-        macro,
+        upper_of(macro),
         ["price:alpha", "price:delta"],
         [impact],
         correlation=(version.correlated, version.correlation),
@@ -214,7 +221,7 @@ def test_a_driver_the_check_rejected_or_too_old_is_not_served(version, data):
     rejected[node] = replace(rejected[node], served=False, reason="not more accurate")
     with pytest.raises(NotServed, match="not more accurate"):
         simulate_hier(
-            replace(model, checks={quantity: rejected}), macro, ["price:alpha"], [],
+            replace(model, checks={quantity: rejected}), upper_of(macro), ["price:alpha"], [],
             shocks=platform_shocks(model, macro, ["price:alpha"]), seed=1, stream=0,
         )
 
@@ -226,7 +233,7 @@ def test_a_driver_the_check_rejected_or_too_old_is_not_served(version, data):
     unknown = replace(fit_, history=replace(fit_.history, d=d, x=x))
     with pytest.raises(NotServed, match="x is unknown"):
         simulate_hier(
-            replace(model, fits={"price": unknown}), macro, ["price:alpha"], [],
+            replace(model, fits={"price": unknown}), upper_of(macro), ["price:alpha"], [],
             shocks=platform_shocks(model, macro, ["price:alpha"]), seed=1, stream=0,
         )
 
@@ -243,7 +250,7 @@ def test_a_driver_that_lags_the_panel_is_simulated_up_to_t0(version, data):
                       history=replace(fit_.history, d=d))  # fmt: skip
     macro = macro_paths(panel, np.array([1.0]))
     result = simulate_hier(
-        replace(model, fits={"price": lagging}), macro, ["price:alpha"], [],
+        replace(model, fits={"price": lagging}), upper_of(macro), ["price:alpha"], [],
         correlation=(version.correlated, version.correlation),
         shocks=platform_shocks(model, macro, ["price:alpha"]), seed=1, stream=0,
     )
@@ -320,12 +327,14 @@ def test_driver_paths_repeat_bit_for_bit(version, data):
     model = version.models[MODEL.model_id]
     shocks = platform_shocks(model, macro, ["price:alpha", "price:beta"])
     first = simulate_hier(
-        model, macro, ["price:alpha", "price:beta"], [],
+        model,
+        upper_of(macro), ["price:alpha", "price:beta"], [],
         correlation=(version.correlated, version.correlation), shocks=shocks,
         seed=11, stream=0,
     )
     again = simulate_hier(
-        model, macro, ["price:alpha", "price:beta"], [],
+        model,
+        upper_of(macro), ["price:alpha", "price:beta"], [],
         correlation=(version.correlated, version.correlation), shocks=shocks,
         seed=11, stream=0,
     )
@@ -341,18 +350,21 @@ def test_the_platform_shocks_replace_the_models_correlated_noise(version, data):
     drivers = ["price:alpha", "price:beta"]
 
     given = simulate_hier(
-        model, macro, drivers, [],
+        model,
+        upper_of(macro), drivers, [],
         correlation=(version.correlated, version.correlation),
         shocks=shocks, seed=11, stream=0,
     )
     # The platform gives more rows than this model needs: only the first ones are read.
     trimmed = simulate_hier(
-        model, macro, drivers, [],
+        model,
+        upper_of(macro), drivers, [],
         correlation=(version.correlated, version.correlation),
         shocks=shocks[:, :steps], seed=11, stream=0,
     )
     other = simulate_hier(
-        model, macro, drivers, [],
+        model,
+        upper_of(macro), drivers, [],
         correlation=(version.correlated, version.correlation),
         shocks=shocks[:, :steps] * 0.5, seed=11, stream=0,
     )
@@ -361,7 +373,8 @@ def test_the_platform_shocks_replace_the_models_correlated_noise(version, data):
 
     with pytest.raises(ValueError, match="steps of shocks"):
         simulate_hier(
-            model, macro, drivers, [],
+        model,
+        upper_of(macro), drivers, [],
             correlation=(version.correlated, version.correlation),
             shocks=shocks[:, : steps - 1], seed=11, stream=0,
         )

@@ -163,18 +163,54 @@ def estimate_satellites(
     by_model: dict[str, list[str]] = {}
     for quantity, model_id in chosen.items():
         by_model.setdefault(model_id, []).append(quantity)
+    level_of = {
+        model_id: max(registry.quantity(quantity).level for quantity in own)
+        for model_id, own in by_model.items()
+    }
     estimates: dict[str, SatelliteEstimate] = {}
-    for model_id in sorted(by_model):
-        estimates[model_id] = satellites()[model_id].estimate(
-            SatelliteEstimateContext(
-                store=SeriesStore(store),
-                registry=registry,
-                panel=panel,
-                as_of=as_of,
-                macro=macro,
-                quantities=tuple(by_model[model_id]),
+    # The levels are estimated in ascending order: a model of level l receives the observed
+    # rows of every quantity of the levels above its own, so a quantity that reads quantities
+    # instead of macro variables has its inputs in ``upper_history``. The rows are the
+    # observed series, read once per quantity whatever model estimates it.
+    from mst.drivers.history import history as driver_history
+    from mst.model_sdk.contracts import UpperHistory
+
+    series = SeriesStore(store)
+    rows: dict[str, UpperHistory] = {}
+
+    def upper_history_of(level: int) -> dict[str, UpperHistory]:
+        found = {}
+        for quantity in sorted(registry.quantities, key=lambda q: (q.level, q.id)):
+            if quantity.level >= level or not any(
+                driver.quantity == quantity.id for driver in registry.drivers
+            ):
+                continue
+            if quantity.id not in rows:
+                history = driver_history(registry, quantity.id, panel, series, as_of)
+                rows[quantity.id] = UpperHistory(
+                    months=history.months,
+                    drivers=[driver or "" for driver in history.driver],
+                    values=history.d,
+                )
+            found[quantity.id] = rows[quantity.id]
+        return found
+
+    for level in sorted(set(level_of.values())):
+        upper_history = upper_history_of(level)
+        for model_id in sorted(by_model, key=lambda m: (level_of[m], m)):
+            if level_of[model_id] != level:
+                continue
+            estimates[model_id] = satellites()[model_id].estimate(
+                SatelliteEstimateContext(
+                    store=series,
+                    registry=registry,
+                    panel=panel,
+                    as_of=as_of,
+                    macro=macro,
+                    quantities=tuple(by_model[model_id]),
+                    upper_history=dict(upper_history),
+                )
             )
-        )
     meta, arrays = satellite_bundle.assemble(
         registry, macro, as_of, estimates, unserved=unserved
     )

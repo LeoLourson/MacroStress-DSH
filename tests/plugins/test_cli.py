@@ -228,9 +228,11 @@ def test_a_scaffolded_satellite_model_starts_from_the_object_above(tmp_path):
         },
     )
     loaded = model.load({"bond_spread": part})
+    from mst.model_sdk.contracts import UpperPaths
+
     simulation = model.simulate(
         loaded,
-        _satellite_macro(quantity.regressors, horizon=2),
+        UpperPaths(macro=_satellite_macro(quantity.regressors, horizon=2), levels={}),
         ["bond_spread:child"],
         [],
         correlation=None,
@@ -243,6 +245,8 @@ def test_a_scaffolded_satellite_model_starts_from_the_object_above(tmp_path):
 
 
 def test_a_scaffolded_satellite_model_names_a_driver_without_any_history(tmp_path):
+    from mst.model_sdk.contracts import UpperPaths
+
     import numpy as np
 
     from mst.drivers.registry import load_registry
@@ -275,7 +279,7 @@ def test_a_scaffolded_satellite_model_names_a_driver_without_any_history(tmp_pat
     with pytest.raises(ValueError, match="no history of its own"):
         model.simulate(
             loaded,
-            _satellite_macro(quantity.regressors, horizon=1),
+            UpperPaths(macro=_satellite_macro(quantity.regressors, horizon=1), levels={}),
             ["bond_spread:child"],
             [],
             correlation=None,

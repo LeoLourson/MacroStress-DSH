@@ -17,7 +17,7 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from .contracts import AdditiveImpact, MacroSimulation, SatelliteModel
+from .contracts import AdditiveImpact, MacroSimulation, SatelliteModel, UpperPaths
 
 
 @dataclass(frozen=True)
@@ -66,10 +66,11 @@ def check_shocks(
     second_shocks = np.random.default_rng([seed, 0, 1]).standard_normal(
         (macro.paths.shape[0], rows, len(columns))
     )
+    upper = UpperPaths(macro=macro, levels={})
     try:
         first = model.simulate(
             loaded,
-            macro,
+            upper,
             list(drivers),
             list(impacts),
             shocks=first_shocks,
@@ -81,7 +82,7 @@ def check_shocks(
     try:
         second = model.simulate(
             loaded,
-            macro,
+            upper,
             list(drivers),
             list(impacts),
             shocks=second_shocks,

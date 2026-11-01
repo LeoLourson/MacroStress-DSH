@@ -181,6 +181,36 @@ class DriverPaths:
 
 
 @dataclass(frozen=True)
+class UpperPaths:
+    """Everything a satellite of level ``l`` simulates on: the macro paths and the paths of
+    every level above it, with its impacts already applied.
+
+    ``macro`` is the level-0 simulation the run starts from; ``levels`` maps a level number
+    to the paths of that level's quantities, in the model scale, with every impact of those
+    levels applied — the recursion of the canon draws the levels in ascending order, so a
+    model of level ``l`` reads the levels below its own and nothing else.
+    """
+
+    macro: MacroSimulation
+    levels: dict[int, DriverPaths]
+
+
+@dataclass(frozen=True)
+class UpperHistory:
+    """The history of one quantity of a level above, as a level-``l`` estimate reads it.
+
+    ``values`` is ``(T, N)`` in the model scale of the quantity on its ``months``, NaN where
+    unknown; ``drivers`` names the object of every column. A model of a level above builds
+    its own inputs from these rows when its quantities read quantities instead of macro
+    variables.
+    """
+
+    months: list[date]
+    drivers: list[str]
+    values: np.ndarray
+
+
+@dataclass(frozen=True)
 class Check:
     """The out-of-sample check of one driver, as the platform reads it from a version."""
 
@@ -254,6 +284,9 @@ class SatelliteEstimateContext:
     explicit ``quantity=model_id`` assignment hands to it, even one it does not declare. The
     driver registry carries the quantities, the object tree and the drivers with their series;
     ``mst.drivers.history`` builds the standard inputs of a quantity from it and the panel.
+    ``upper_history`` carries, for every quantity of the levels above the model's own, its
+    observed rows in the model scale — the inputs of a quantity that reads quantities instead
+    of macro variables are built from these, not from the panel.
     """
 
     store: SeriesStoreLike
@@ -263,6 +296,7 @@ class SatelliteEstimateContext:
     as_of: date
     macro: str
     quantities: tuple[str, ...]
+    upper_history: dict[str, UpperHistory] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -369,9 +403,9 @@ class SatelliteModel(ABC):
     is loaded once for all its quantities: ``load`` receives the parts of every quantity
     assigned to it.
 
-    This release supports ``L = 1``: ``simulate`` receives the level-0 ``MacroSimulation`` only,
-    so a model of a level above 1 has to build its own inputs for the levels in between rather
-    than read them from an SDK structure.
+    ``simulate`` receives the paths of every level above the quantities it serves
+    (``UpperPaths``): the macro simulation and the driver paths of the levels below its own,
+    impacts applied, so a model of any level reads its inputs the same way.
     """
 
     model_id: str
@@ -391,7 +425,7 @@ class SatelliteModel(ABC):
     def simulate(
         self,
         model,
-        macro: MacroSimulation,
+        upper: UpperPaths,
         drivers: list[str],
         impacts: list[AdditiveImpact],
         *,
@@ -400,18 +434,22 @@ class SatelliteModel(ABC):
         seed: int,
         stream: int,
     ) -> DriverPaths:
-        """The paths of ``drivers`` on ``macro``, with the impacts of the scenario added.
+        """The paths of ``drivers`` on the levels above them, with the impacts added.
 
-        ``correlation`` is the bundle's residual correlation: the driver ids it is measured on
-        and their matrix. ``shocks`` holds the standardized residuals the platform drew for
-        this model's correlated drivers — ``(R, steps, k)`` columns in the order of
-        ``drivers``, counting only the drivers with a history of their own; a driver without
-        one stays on the model's own independent noise. The model must use these columns as
-        the residuals of those drivers and read the first rows it needs, not all ``steps``:
-        the platform draws the joint shocks of all its drivers once, so the measured
-        cross-model correlation reaches the joint paths. ``stream`` separates the random
-        streams of the models of one bundle — the posterior draw and the independent noise
-        come from it, while the platform's shocks come from its own stream.
+        ``upper`` carries the macro simulation and the driver paths of every level above the
+        quantities the model serves, impacts of those levels applied; a model of level 1 reads
+        ``upper.macro`` alone. ``correlation`` is the bundle's residual correlation: the driver
+        ids it is measured on and their matrix. ``shocks`` holds the standardized residuals the
+        platform drew for this model's correlated drivers — ``(R, steps, k)`` columns in the
+        order of ``drivers``, counting only the drivers with a history of their own; a driver
+        without one stays on the model's own independent noise. The model must use these
+        columns as the residuals of those drivers and read the first rows it needs, not all
+        ``steps``: the platform draws the joint shocks of all its drivers once per level, so
+        the measured cross-model correlation reaches the joint paths, and the levels draw
+        independently of one another as the product measure of the canon asks.
+        ``stream`` separates the random streams of the models of one bundle — the posterior
+        draw and the independent noise come from it, while the platform's shocks come from its
+        own stream.
         """
 
     def describe(self) -> dict:

@@ -1,0 +1,11 @@
+{
+  "quantities": {
+    "exposure": {
+      "objects": [
+        {"id": "sber", "class": "company", "label": "Сбер", "parent": "sector"},
+        {"id": "gazp", "class": "company", "label": "Газпром", "parent": "sector"}
+      ],
+      "drivers": ["sber", "gazp"]
+    }
+  }
+}
