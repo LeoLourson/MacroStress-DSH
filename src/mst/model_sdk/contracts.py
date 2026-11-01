@@ -117,12 +117,16 @@ class MacroSimulation:
     ``paths`` is ``(R, H + 1, n)`` in the model scale ``y = g(X)``; month ``t = 0`` is the last
     month of history. ``history`` carries the months ``1 - p .. 0`` of every repetition, drawn
     where the panel did not know them, for the satellites that need the recent past.
+    ``diagnostics`` reports what the imposition did beyond drawing: the spread of the
+    effective sizes of the hidden-coordinate candidates, so a scenario riding a single
+    candidate is seen as such.
     """
 
     ids: list[str]
     months: list[date]
     paths: np.ndarray
     history: np.ndarray | None = None
+    diagnostics: dict = field(default_factory=dict)
 
 
 @dataclass(frozen=True)

@@ -138,4 +138,7 @@ def test_check_names_an_infeasible_scenario(workspace, portfolio, versions):
     )
     report = tool.check(workspace, portfolio, "bad")
     assert report["ok"] is False
-    assert any("cannot meet constraints 2" in problem for problem in report["problems"])
+    # Two disjoint bands on one functional: the candidate weights read an empty event, and
+    # the run refuses the scenario by lemma 2 — the driving-shock check would name the
+    # second constraint the same way.
+    assert any("contradicts the models" in problem for problem in report["problems"])

@@ -36,6 +36,8 @@ from mst.model_sdk.conditional import (
     InfeasibleScenario,
     dependent_rows,
     draw_driving,
+    log_box_probability,
+    pick_latent,
 )
 from mst.model_sdk.contracts import (
     LATENT_CANDIDATES,
@@ -43,6 +45,7 @@ from mst.model_sdk.contracts import (
     MacroSimulation,
     ScenarioPlan,
 )
+from mst.model_sdk.dist import ContradictsModels
 
 from .estimate import Posterior
 from .var import iterate
@@ -65,12 +68,14 @@ class _Plan:
     driving: np.ndarray  # column indices of the economic shocks named as causes
     regime: int | None  # the regime element of the event, fixed over the horizon
     regime_cause: bool  # the regime path is named as a cause
+    causes_named: bool  # any cause is named at all
 
     @property
     def regime_in_r(self) -> bool:
-        """Whether the regime path belongs to ``R``: a cause is missing, so the law of the
-        path stays as it was."""
-        return not self.regime_cause
+        """Whether the regime path belongs to ``R``: the causes name coordinates without
+        the regime path, so its law stays as it was. Unnamed causes put everything but the
+        parameters into ``D``, the regime path included."""
+        return self.causes_named and not self.regime_cause
 
 
 def _plan(model: Posterior, plan: ScenarioPlan) -> _Plan:
@@ -112,6 +117,7 @@ def _plan(model: Posterior, plan: ScenarioPlan) -> _Plan:
         driving=np.array(driving or range(len(model.shocks)), dtype=int),
         regime=regime,
         regime_cause=REGIME_PATH in plan.causes,
+        causes_named=bool(plan.causes),
     )
 
 
@@ -333,24 +339,136 @@ def _law_row(chosen: _Plan, rep: _Repetition, driving: np.ndarray, eps_free):
     return mean, z_driving @ z_driving.T
 
 
+#: The GHK draws behind the weight of one hidden-coordinate candidate.
+CANDIDATE_SAMPLES = 64
+"""How many GHK draws estimate the box probability of one candidate of a hidden coordinate:
+the weight only has to rank the candidates, not price them, and the price carries its own
+error of its own."""
+
+
+def _hidden(
+    model: Posterior,
+    chosen: _Plan,
+    draw: int,
+    horizon: int,
+    driving: np.ndarray,
+    free: np.ndarray | None,
+    rng_path,
+    candidates: int,
+    cache: dict,
+):
+    """``(repetition, ess)``: the regime path of one repetition under the imposition.
+
+    The regime path belongs to ``R`` — drawn from the kernel as it always was — unless the
+    event fixes it or the plan leaves it outside ``R``. Outside ``R`` it is a hidden
+    coordinate: ``candidates`` paths are drawn, each weighted by the probability its law
+    gives the constraint box at the drawn value of ``R`` (`free``, the shocks the causes do
+    not name, when there are any), and one is picked with that weight — the conditional law
+    of the path given the event the canon asks for. The effective size of the weights comes
+    back for the diagnostics; a path of ``R`` carries no size.
+    """
+    if chosen.regime is not None:
+        return _repetition_of(model, draw, np.full(horizon, chosen.regime, dtype=int)), None
+    if chosen.regime_in_r:
+        path = _regime_path(model, draw, horizon, rng_path, None)
+        return _repetition_of(model, draw, path), None
+    # An exact row (low == high) is fixed by the truncation itself whatever the candidate,
+    # so only the interval rows carry the weight; a plan of exact rows alone weighs every
+    # candidate the same.
+    interval = chosen.low < chosen.high
+    log_probabilities = []
+    paths = []
+    for _ in range(candidates):
+        path = _regime_path(model, draw, horizon, rng_path, None)
+        key = (draw, path.tobytes())
+        if key not in cache:
+            rep_of_path = _repetition_of(model, draw, path)
+            cache[key] = (_loadings(chosen, rep_of_path), _level(chosen, rep_of_path.mean))
+        z, level = cache[key]
+        paths.append(path)
+        if not chosen.terms or not interval.any():
+            log_probabilities.append(0.0)
+            continue
+        mean, cov = level[interval], None
+        if driving.any():
+            z_driving = z[:, :, driving].reshape(len(chosen.terms), -1)[interval]
+            cov = z_driving @ z_driving.T
+            if free is not None:
+                z_free = z[:, :, ~driving].reshape(len(chosen.terms), -1)[interval]
+                mean = mean + z_free @ free.ravel()
+        elif free is not None:
+            # Only a hidden coordinate is named as a cause: every shock belongs to R, the
+            # candidate gives the box a deterministic verdict, and the drawn shocks carry it.
+            z_flat = z.reshape(len(chosen.terms), -1)[interval]
+            cov = np.zeros((int(interval.sum()), int(interval.sum())))
+            mean = mean + z_flat @ free.ravel()
+        else:
+            z_flat = z.reshape(len(chosen.terms), -1)[interval]
+            cov = z_flat @ z_flat.T
+        log_probabilities.append(
+            log_box_probability(
+                mean, cov, chosen.low[interval], chosen.high[interval], rng_path,
+                CANDIDATE_SAMPLES,
+            )
+        )
+    if np.all(np.isneginf(log_probabilities)):
+        raise ContradictsModels()
+    picked, ess = pick_latent(log_probabilities, rng_path)
+    return _repetition_of(model, draw, paths[picked]), ess
+
+
 def simulate(
-    model: Posterior, plan: ScenarioPlan, *, draws: int, seed: int, sweeps: int = SWEEPS
+    model: Posterior,
+    plan: ScenarioPlan,
+    *,
+    draws: int,
+    seed: int,
+    sweeps: int = SWEEPS,
+    candidates: int = LATENT_CANDIDATES,
 ) -> MacroSimulation:
     """``draws`` paths of the macro variables under the scenario, one regime path each.
+
+    The streams are separate — ``[seed, r, 0]`` the parameters, ``[seed, r, 1]`` the regime
+    paths, ``[seed, r, 2]`` the free shocks, ``[seed, r, 3]`` the driving shocks — so a
+    scenario and its softened variant share everything their conditions do not touch. The
+    regime path is drawn from the kernel unless the event fixes it or the plan leaves it
+    outside ``R``: then it is a hidden coordinate, and ``candidates`` of its paths are
+    weighted by the probability each gives the constraint box before one is picked.
 
     Raises ``InfeasibleScenario`` naming the constraints the driving shocks cannot meet.
     """
     chosen = _plan(model, plan)
     n, horizon = len(model.ids), chosen.horizon
+    # The shocks the causes name are conditioned; with no cause named every shock is, and
+    # with only a hidden coordinate named none is — the latent selection carries the event.
     driving = np.zeros(n, dtype=bool)
-    driving[chosen.driving] = True
+    if not plan.causes:
+        driving[:] = True
+    else:
+        driving[[model.shocks.index(s) for s in plan.causes if s in model.shocks]] = True
     paths = np.empty((draws, horizon + 1, n))
     history = np.empty((draws, model.lags_count, n))
+    ess: list[float] = []
+    cache: dict = {}
     for r in range(draws):
-        rng = np.random.default_rng([seed, r])
-        rep = _repetition(model, horizon, rng, chosen.regime)
-        eps = rng.standard_normal((horizon, n))
-        if chosen.terms:
+        draw = int(np.random.default_rng([seed, r, 0]).integers(model.draws))
+        free = (
+            np.random.default_rng([seed, r, 2]).standard_normal(
+                (horizon, int((~driving).sum()))
+            )
+            if (~driving).any()
+            else None
+        )
+        rep, size = _hidden(
+            model, chosen, draw, horizon, driving, free,
+            np.random.default_rng([seed, r, 1]), candidates, cache,
+        )
+        if size is not None:
+            ess.append(size)
+        eps = np.zeros((horizon, n))
+        if free is not None:
+            eps[:, ~driving] = free
+        if chosen.terms and driving.any():
             z = _loadings(chosen, rep)
             z_all = z.reshape(len(z), -1)
             z_d = z[:, :, driving].reshape(len(z), -1)
@@ -361,9 +479,21 @@ def simulate(
                 "csj,sj->c", z[:, :, ~driving], eps[:, ~driving]
             )
             drawn = draw_driving(
-                z_d, chosen.low - offset, chosen.high - offset, rng, sweeps, every=z_all
+                z_d,
+                chosen.low - offset,
+                chosen.high - offset,
+                np.random.default_rng([seed, r, 3]),
+                sweeps,
+                every=z_all,
             )
             eps[:, driving] = drawn.reshape(horizon, driving.sum())
+        elif not driving.any() and chosen.terms:
+            # Only a hidden coordinate is a cause: the drawn R shocks carry the event with
+            # the picked candidate, and no shock is touched.
+            eps = free
+        elif not driving.any():
+            # Nothing to meet: every shock is drawn freely from its own stream.
+            eps = np.random.default_rng([seed, r, 3]).standard_normal((horizon, n))
         shocks = np.einsum("tij,tj->ti", rep.impacts, eps)
         future = iterate(rep.history, rep.lags, rep.intercept, shocks)
         paths[r] = np.vstack([rep.history[-1], future])
@@ -374,4 +504,20 @@ def simulate(
         months=[shift(last, t) for t in range(horizon + 1)],
         paths=paths,
         history=history,
+        diagnostics=_ess_summary(ess, candidates),
     )
+
+
+def _ess_summary(ess: list[float], candidates: int) -> dict:
+    """The spread of the candidate weights, as the report reads it."""
+    if not ess:
+        return {}
+    values = np.asarray(ess, dtype=float)
+    return {
+        "latent_candidates": candidates,
+        "latent_ess": {
+            "min": float(values.min()),
+            "median": float(np.median(values)),
+            "max": float(values.max()),
+        },
+    }

@@ -160,6 +160,34 @@ def _merge_redundant(z, low, high, every=None):
     return z[index], low[index], high[index]
 
 
+def pick_latent(log_probabilities, rng) -> tuple[int, float]:
+    """``(index, ess)``: one candidate of a hidden coordinate drawn by its weight.
+
+    The candidates of a hidden coordinate — a regime path, a volatility path — are weighted
+    by the probability each gives the event; the imposition of the canon keeps the law of
+    ``R`` and reweights everything else, so a candidate is picked with probability
+    proportional to ``exp(log p)``. The effective sample size ``(sum p)^2 / sum p^2`` tells
+    how many candidates carry the weight: a size near one means the event rides a single
+    candidate, and the plan's stopping rule reads the median of these sizes on a real
+    scenario.
+    """
+    weights = np.asarray(log_probabilities, dtype=float)
+    if len(weights) == 0:
+        raise ValueError("a hidden coordinate needs at least one candidate")
+    shift = weights - weights.max()
+    share = np.exp(shift)
+    total = share.sum()
+    if not np.isfinite(total) or total <= 0.0:
+        # Every candidate gives the event no probability: any pick is as good, and the
+        # caller sees the effective size of zero — the scenario contradicts the models.
+        return int(rng.integers(len(weights))), 0.0
+    share = share / total
+    picked = int(np.searchsorted(np.cumsum(share), rng.random()))
+    picked = min(picked, len(weights) - 1)
+    ess = float(1.0 / np.sum(share**2))
+    return picked, ess
+
+
 def log_box_probability(mean, cov, low, high, rng, samples: int) -> float:
     """``log P(low <= X <= high)`` for ``X ~ N(mean, cov)`` by the GHK sampler.
 

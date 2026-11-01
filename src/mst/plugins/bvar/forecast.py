@@ -26,6 +26,8 @@ from mst.model_sdk.conditional import (
     box_gibbs,
     dependent_rows,
     draw_driving,
+    log_box_probability,
+    pick_latent,
     truncated_normal,
 )
 from mst.model_sdk.contracts import (
@@ -34,6 +36,7 @@ from mst.model_sdk.contracts import (
     MacroSimulation,
     ScenarioPlan,
 )
+from mst.model_sdk.dist import ContradictsModels
 
 from .estimate import Posterior
 from .var import iterate, responses
@@ -242,23 +245,104 @@ def _law_row(plan: _Plan, rep: _Repetition, driving: np.ndarray, eps_free):
     return mean, z_driving @ z_driving.T
 
 
+#: How many GHK draws estimate the box probability of one volatility candidate.
+CANDIDATE_SAMPLES = 64
+"""How many GHK draws estimate the box probability of one candidate of the volatility path:
+the weight only has to rank the candidates, not price them."""
+
+
 def simulate(
-    model: Posterior, scenario: ScenarioPlan, *, draws: int, seed: int, sweeps: int = SWEEPS
+    model: Posterior,
+    scenario: ScenarioPlan,
+    *,
+    draws: int,
+    seed: int,
+    sweeps: int = SWEEPS,
+    candidates: int = LATENT_CANDIDATES,
 ) -> Simulation:
-    """Steps 1-3 of section 7: ``draws`` paths of the macro variables under the scenario.
+    """``draws`` paths of the macro variables under the scenario.
+
+    The streams are separate — ``[seed, r, 0]`` the parameters, ``[seed, r, 1]`` the
+    volatility paths, ``[seed, r, 2]`` the free shocks, ``[seed, r, 3]`` the driving shocks —
+    so a scenario and its softened variant share everything their conditions do not touch.
+    The volatility path belongs to ``R`` — drawn as one repetition — unless the scenario
+    names no cause or names the volatility path itself: then it is a hidden coordinate, and
+    ``candidates`` of its paths are weighted by the probability each gives the constraint
+    box before one is picked, so a tail event prices the volatility it needs instead of
+    riding the moderate path a single draw happens to pick.
 
     Raises ``InfeasibleScenario`` naming the constraints the driving shocks cannot meet.
     """
     plan = _plan(model, scenario)
     n, horizon = len(model.ids), plan.horizon
+    # The shocks the causes name are conditioned; with no cause named every shock is, and
+    # with only a hidden coordinate named none is — the latent selection carries the event.
     driving = np.zeros(n, dtype=bool)
-    driving[plan.driving] = True
+    if not scenario.causes:
+        driving[:] = True
+    else:
+        driving[[model.shocks.index(s) for s in scenario.causes if s in model.shocks]] = True
+    hidden = not scenario.causes or VOLATILITY_PATH in scenario.causes
     paths = np.empty((draws, horizon + 1, n))
     history = np.empty((draws, model.lags_count, n))
+    ess: list[float] = []
     for r in range(draws):
-        rng = np.random.default_rng([seed, r])
-        rep = _repetition(model, horizon, rng)
-        eps = rng.standard_normal((horizon, n))
+        draw = int(np.random.default_rng([seed, r, 0]).integers(model.draws))
+        rng_volatility = np.random.default_rng([seed, r, 1])
+        free = (
+            np.random.default_rng([seed, r, 2]).standard_normal(
+                (horizon, int((~driving).sum()))
+            )
+            if (~driving).any()
+            else None
+        )
+        if not hidden:
+            rep = _repetition(model, horizon, rng_volatility, draw)
+        else:
+            reps, log_probabilities = [], []
+            for _ in range(candidates):
+                rep = _repetition(model, horizon, rng_volatility, draw)
+                reps.append(rep)
+                if not plan.terms:
+                    log_probabilities.append(0.0)
+                    continue
+                z = _loadings(plan, rep)
+                mean = _level(plan, rep.mean)
+                # An exact row (low == high) is fixed by the truncation itself whatever the
+                # candidate, so only the interval rows carry the weight; a plan of exact
+                # rows alone weighs every candidate the same.
+                interval = plan.low < plan.high
+                if not interval.any():
+                    log_probabilities.append(0.0)
+                    continue
+                if driving.any():
+                    z_driving = z[:, :, driving].reshape(len(plan.terms), -1)[interval]
+                    cov = z_driving @ z_driving.T
+                    if free is not None:
+                        z_free = z[:, :, ~driving].reshape(len(plan.terms), -1)[interval]
+                        mean = mean[interval] + z_free @ free.ravel()
+                    else:
+                        mean = mean[interval]
+                else:
+                    z_flat = z.reshape(len(plan.terms), -1)[interval]
+                    cov = np.zeros((int(interval.sum()), int(interval.sum())))
+                    mean = mean[interval] + (
+                        z_flat @ free.ravel() if free is not None else 0.0
+                    )
+                log_probabilities.append(
+                    log_box_probability(
+                        mean, cov, plan.low[interval], plan.high[interval], rng_volatility,
+                        CANDIDATE_SAMPLES,
+                    )
+                )
+            if np.all(np.isneginf(log_probabilities)):
+                raise ContradictsModels()
+            picked, size = pick_latent(log_probabilities, rng_volatility)
+            ess.append(size)
+            rep = reps[picked]
+        eps = np.zeros((horizon, n))
+        if free is not None:
+            eps[:, ~driving] = free
         if plan.terms:
             z = _loadings(plan, rep)
             z_all = z.reshape(len(z), -1)
@@ -270,17 +354,36 @@ def simulate(
                 "csj,sj->c", z[:, :, ~driving], eps[:, ~driving]
             )
             drawn = draw_driving(
-                z_d, plan.low - offset, plan.high - offset, rng, sweeps, every=z_all
+                z_d,
+                plan.low - offset,
+                plan.high - offset,
+                np.random.default_rng([seed, r, 3]),
+                sweeps,
+                every=z_all,
             )
             eps[:, driving] = drawn.reshape(horizon, driving.sum())
+        else:
+            eps = np.random.default_rng([seed, r, 3]).standard_normal((horizon, n))
         shocks = np.einsum("tij,tj->ti", rep.impacts, eps)
         future = iterate(rep.history, rep.lags, rep.intercept, shocks)
         paths[r] = np.vstack([rep.history[-1], future])
         history[r] = rep.history
     last = model.months[-1]
+    diagnostics = {}
+    if ess:
+        values = np.asarray(ess, dtype=float)
+        diagnostics = {
+            "latent_candidates": candidates,
+            "latent_ess": {
+                "min": float(values.min()),
+                "median": float(np.median(values)),
+                "max": float(values.max()),
+            },
+        }
     return Simulation(
         ids=model.ids,
         months=[shift(last, t) for t in range(horizon + 1)],
         paths=paths,
         history=history,
+        diagnostics=diagnostics,
     )
