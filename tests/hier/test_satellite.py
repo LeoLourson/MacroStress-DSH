@@ -187,7 +187,7 @@ def test_driver_paths_follow_the_satellite_and_carry_impacts(version, data):
     fixed = replace(fit_, gamma=gamma, sigma=np.zeros_like(fit_.sigma))
     model = _with_fit(version, fixed)
     macro = macro_paths(panel, np.array([1.0, 2.0, 3.0]))
-    impact = AdditiveImpact(target="price:alpha", start=2, end=3, delta=10.0)
+    impact = AdditiveImpact(target="price:alpha", start=2, values=(10.0, 10.0))
     result = simulate_hier(
         model,
         upper_of(macro),

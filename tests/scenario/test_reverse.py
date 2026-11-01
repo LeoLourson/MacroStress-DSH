@@ -150,7 +150,9 @@ def test_a_family_whose_impacts_move_is_refused(versions):
         return spec.model_copy(
             update={
                 "impacts": [
-                    spec.impacts[0].model_copy(update={"delta": spec.impacts[0].delta * c})
+                    spec.impacts[0].model_copy(
+                        update={"values": [value * c for value in spec.impacts[0].values]}
+                    )
                 ]
             }
         )
@@ -183,8 +185,7 @@ def _spec_of(versions):
                 {
                     "target": "gl.brent",
                     "start": 1,
-                    "end": 3,
-                    "delta": 1.0,
+                    "values": [1.0, 1.0, 1.0],
                     "reason": "шок",
                     "basis": "assumption",
                 }

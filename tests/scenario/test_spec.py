@@ -26,8 +26,7 @@ def impact(**changes):
     return {
         "target": "price:alpha",
         "start": 1,
-        "end": 6,
-        "delta": -10.0,
+        "values": [-10.0, -6.0, -3.0],
         "reason": "перебой поставок",
         "basis": ["S1/2020#1/1"],
     } | changes
@@ -98,11 +97,45 @@ def test_a_constraint_month_must_lie_in_the_horizon():
         Spec.model_validate(spec(constraints=[rate_at(13, 21.0)]))
 
 
-def test_an_impact_must_end_in_the_horizon_and_go_forwards():
+def test_a_file_impact_names_its_target_start_and_values():
+    built = Impact.model_validate(impact())
+    assert built.target == "price:alpha"
+    assert built.start == 1 and built.values == [-10.0, -6.0, -3.0]
+    assert built.end == 3
+
+
+def test_an_impact_is_a_path_with_a_value_for_every_month_it_touches():
+    built = Impact.model_validate(impact())
+    assert built.value_at(0) == 0.0
+    assert built.value_at(1) == -10.0
+    assert built.value_at(2) == -6.0
+    assert built.value_at(3) == -3.0
+    assert built.value_at(4) == 0.0
+    # A gap inside the path is a written zero, not a missing month.
+    gapped = Impact.model_validate(impact(values=[-10.0, 0.0, -3.0]))
+    assert gapped.value_at(2) == 0.0 and gapped.end == 3
+
+
+def test_an_impact_refuses_an_empty_path_and_non_finite_values():
+    with pytest.raises(ValidationError, match="at least 1"):
+        Impact.model_validate(impact(values=[]))
+    for bad in (float("nan"), float("inf")):
+        with pytest.raises(ValidationError):
+            Impact.model_validate(impact(values=[-10.0, bad]))
+
+
+def test_an_impact_must_stay_in_the_horizon():
+    # Twelve values from month 1 end at month 12; a thirteenth reaches month 13.
     with pytest.raises(ValidationError, match="month 13 is beyond the horizon"):
-        Spec.model_validate(spec(impacts=[impact(end=13)]))
-    with pytest.raises(ValidationError, match="start <= end"):
-        Impact.model_validate(impact(start=7, end=6))
+        Spec.model_validate(spec(impacts=[impact(values=[-10.0] * 13)]))
+
+
+def test_the_old_impact_fields_are_refused():
+    # The constant shift of the old format is a repeated value now; the fields themselves
+    # are gone, and a file that still carries them does not pass the contract.
+    for field in ("end", "delta"):
+        with pytest.raises(ValidationError):
+            Impact.model_validate(impact(**{field: 6 if field == "end" else -10.0}))
 
 
 def test_an_impact_needs_a_reason_and_a_basis():

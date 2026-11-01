@@ -163,33 +163,42 @@ class ProbabilityCondition(Contract):
 
 
 class Impact(Contract):
-    """A direct impact ``o_l``: ``delta`` added to ``target`` in months ``start..end``.
+    """A direct impact ``o_l``: a path of values added to ``target`` from month ``start``.
 
     The target is a macro variable (level 0, its id names it) or a driver
-    ``<quantity>:<object>`` of a level above, in the model scale of its level. The impact of
-    a level is applied before the levels below it are simulated, so an impact on a macro
-    variable reaches every satellite; an impact on a driver moves that driver alone. Every
-    impact carries its reason and what it rests on: the word ``event``, the corpus fragments
-    it cites, or the word ``assumption`` when it is the author's own.
+    ``<quantity>:<object>`` of a level above, in the model scale of its level. ``values[k]``
+    is added in month ``start + k``; a month the path does not touch gets zero, and a gap
+    inside the path is written as ``0.0`` — an impact has no dynamics of its own, so its
+    aftereffects are nonzero values after the event and a constant shift is a repeated
+    value. The impact of a level is applied before the levels below it are simulated, so an
+    impact on a macro variable reaches every satellite; an impact on a driver moves that
+    driver alone. Every impact carries its reason and what it rests on: the word ``event``,
+    the corpus fragments it cites, or the word ``assumption`` when it is the author's own.
     """
 
     target: Identifier
     start: Month
-    end: Month
-    delta: Number
+    """The first month the impact touches."""
+    values: list[Number] = Field(min_length=1)
+    """``values[k]`` is added in month ``start + k``; at least one value."""
     reason: Identifier
     basis: Basis
+
+    @property
+    def end(self) -> int:
+        """The last month the path touches: ``start + len(values) - 1``."""
+        return self.start + len(self.values) - 1
+
+    def value_at(self, month: int) -> float:
+        """The value added in ``month``; ``0.0`` outside ``start .. end``."""
+        if self.start <= month <= self.end:
+            return float(self.values[month - self.start])
+        return 0.0
 
     @property
     def on_driver(self) -> bool:
         """Whether the impact targets a driver rather than a macro variable."""
         return ":" in self.target
-
-    @model_validator(mode="after")
-    def ordered(self):
-        if self.start > self.end:
-            raise ValueError("Require start <= end")
-        return self
 
 
 class Scenario(Contract):

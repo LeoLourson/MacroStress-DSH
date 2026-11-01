@@ -380,13 +380,13 @@ def test_an_impact_on_the_first_level_reaches_the_second_and_not_back(estimated)
     lower = bundle.simulate(
         simulation,
         drivers,
-        [AdditiveImpact(target="price:sector", start=1, end=4, delta=3.0)],
+        [AdditiveImpact(target="price:sector", start=1, values=(3.0,) * 4)],
         seed=7,
     )
     upper = bundle.simulate(
         simulation,
         drivers,
-        [AdditiveImpact(target="exposure:sber", start=1, end=4, delta=3.0)],
+        [AdditiveImpact(target="exposure:sber", start=1, values=(3.0,) * 4)],
         seed=7,
     )
     # o^1 moves the price, and through G^2 the exposure reads the moved price; o^2 moves the

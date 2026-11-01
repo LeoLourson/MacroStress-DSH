@@ -393,7 +393,7 @@ class RefLevel2Model(SatelliteModel):
                     f"an impact on {impact.target}, which this model does not simulate"
                 )
             k = drivers.index(impact.target)
-            paths[:, impact.start : impact.end + 1, k] += impact.delta
+            paths[:, impact.start : impact.end + 1, k] += np.asarray(impact.values)
             flags[impact.target] = flags[impact.target] | {"impact"}
         return DriverPaths(ids=list(drivers), paths=paths, flags=flags)
 

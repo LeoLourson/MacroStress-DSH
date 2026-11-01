@@ -89,15 +89,15 @@ An impact records an effect absent from the models that stays where you put it, 
 **Macro effects are conditions.** An impact on a macro variable moves that variable alone: the other macro variables do not react, and it reaches only the satellites with it in `regressors`. `ru.cpi` and `ru.output`, for example, move no share price. So when an effect on a macro variable must spread through the economy, or the event asserts the path of a macro variable, write a condition: the models then derive the other variables, and the scenario gets a price. This holds even when the models do not know the cause of the effect. Use an impact on a macro variable only if you want no reaction, and say why in `reason`. `validate` warns which quantities read each macro variable you shift.
 
 ```json
-{"target": "share_price:<object>", "start": 1, "end": 6, "delta": -10.54, "reason": "why", "basis": ["<chunk_id>"]}
+{"target": "share_price:<object>", "start": 1, "values": [-10.54, -8.0, -5.0], "reason": "why", "basis": ["<chunk_id>"]}
 ```
 
-- `delta` is in the model scale of the quantity: a 10 % fall under `log100` is $100\ln 0.9\approx -10.54$, not $-0.1$.
+- `values` are in the model scale of the quantity: a 10 % fall under `log100` is $100\ln 0.9\approx -10.54$, not $-0.1$. `values[k]` is added in month `start + k`; a constant shift is one value repeated.
 - An impact on a macro variable enters the path before the satellites and reaches only those with it in `regressors`.
 - An impact on a driver shifts that driver alone. A sector shift (`share_price:oil_gas`) does not reach the shares of its companies (`share_price:lkoh`): to move the companies, list them, and give each its own number when the event hits them differently. `validate` names the served drivers a shift does not reach. Lower levels feel a shift only through their models. The driver must be in `served`; name in the report any important driver found in `rejected`.
-- A shift acts only in months `start..end` and vanishes entirely after `end`. Hold a lasting effect until the end of the horizon.
-- Overlapping impacts on one target add up. Write a measure phased in over months as several impacts that add a step each, not as one constant shift.
-- A condition on the same quantity holds on the final path: do not add `delta` to the bounds by hand.
+- An impact is a path: it acts in the months `start .. start + len(values) - 1` and vanishes entirely after. An impact has no dynamics of its own, so write aftereffects as nonzero values after the event and hold a lasting effect until the end of the horizon. A gap inside the path is a written `0.0`.
+- Overlapping impacts on one target add up. Write a measure phased in over months as one path with the values of each month, not as several constant shifts.
+- A condition on the same quantity holds on the final path: do not add the impact to the bounds by hand.
 - An impact is not random and has no price of its own. A scenario of impacts alone has $Q=P$, so its price is zero, may be missing from the result, and says nothing about how plausible the scenario is. Say so in the report.
 
 ## 6. Causes $D$

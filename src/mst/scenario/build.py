@@ -228,10 +228,10 @@ def plan_with_impacts(spec: Spec, macro: MacroVersion) -> ScenarioPlan:
 def _impact_shift(constraint: LinearConstraint, impacts: list[Impact]) -> float:
     """``w'o_0``: what the level-0 impacts add to the left side of one constraint."""
     return sum(
-        term.weight * impact.delta
+        term.weight * impact.value_at(term.month)
         for impact in impacts
         for term in constraint.terms
-        if term.variable == impact.target and impact.start <= term.month <= impact.end
+        if term.variable == impact.target
     )
 
 
@@ -314,7 +314,7 @@ def build(
         _drivers(satellites, spec, macro),
         [
             AdditiveImpact(
-                target=impact.target, start=impact.start, end=impact.end, delta=impact.delta
+                target=impact.target, start=impact.start, values=tuple(impact.values)
             )
             for impact in spec.impacts
             if impact.on_driver
@@ -794,6 +794,11 @@ def _impact_problems(spec: Spec, macro: MacroVersion, satellites: SatelliteBundl
     served = set(satellites.served())
     problems = []
     for impact in spec.impacts:
+        if impact.end > spec.horizon:
+            problems.append(
+                f"impact on {impact.target}: its path ends at month {impact.end}, beyond the "
+                f"horizon of {spec.horizon}"
+            )
         if not impact.on_driver:
             if impact.target not in macro.ids:
                 problems.append(
@@ -826,7 +831,7 @@ def _with_macro_impacts(simulation: MacroSimulation, impacts: list[Impact]) -> M
     paths = simulation.paths.copy()
     for impact in of_macro:
         k = simulation.ids.index(impact.target)
-        paths[:, impact.start : impact.end + 1, k] += impact.delta
+        paths[:, impact.start : impact.end + 1, k] += np.asarray(impact.values)
     return replace(simulation, paths=paths)
 
 

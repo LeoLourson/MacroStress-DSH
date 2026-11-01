@@ -12,7 +12,8 @@ up to ``t = 0`` are simulated on the observed macro panel and, for its last ``p`
 the history drawn by the repetition; a month whose ``x`` the panel does not know stops the
 driver. A driver without history of its own starts from the level of the nearest object above
 it and has the residual spread of the nearest one with data, independent of the others.
-The impacts of the scenario add their ``delta`` to the path in the model scale.
+The impacts of the scenario add their ``values`` to the path in the model scale, one
+value a month from ``start``.
 """
 
 import numpy as np
@@ -153,7 +154,7 @@ def simulate(
         if impact.target not in flags:
             raise ValueError(f"an impact on {impact.target}, which this model does not simulate")
         k = drivers.index(impact.target)
-        paths[:, impact.start : impact.end + 1, k] += impact.delta
+        paths[:, impact.start : impact.end + 1, k] += np.asarray(impact.values)
         flags[impact.target].add(IMPACT)
     return DriverPaths(
         ids=list(drivers),
