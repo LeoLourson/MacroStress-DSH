@@ -26,7 +26,8 @@ Webb weights re-checks the paired intervals. Monte-Carlo error is separated from
 error with ``--mc-bootstrap``. Episodes are split into tuning and validation halves by the
 plan's marks; the halves are reported apart and the final tables stay over all episodes. The
 driver whose simulated path leaves the range of its own
-training history carries an unverified tail. ``--portfolio`` adds the Acerbi-Székely section: the portfolio's
+training history carries an unverified tail. ``--portfolio`` adds the Acerbi-Székely section:
+the portfolio's
 predictive losses on the episodes' conditional paths, its realized loss on the facts of the
 window, ``Z``, the episode and wild intervals and the 1 % trimming. The accept/reject verdict is
 spoken only in the ``decision`` block behind ``--against``: the per-quantity tables stay
@@ -49,7 +50,6 @@ from mst.macro.registry import REGISTRY_PATH as MACRO_REGISTRY_PATH
 from mst.macro.registry import Registry, load_registry
 from mst.macro.version import MacroVersion
 from mst.model_sdk.contracts import (
-    LinearConstraint,
     LinearTerm,
     ScenarioPlan,
 )
@@ -667,7 +667,15 @@ def _report(
         "rolling": rolling,
         "cause_sensitivity": {
             "episodes": sensitivity,
-            "mean_difference": float(np.mean([row["difference"] for row in sensitivity.values() if row["difference"] is not None]))
+            "mean_difference": float(
+                np.mean(
+                    [
+                        row["difference"]
+                        for row in sensitivity.values()
+                        if row["difference"] is not None
+                    ]
+                )
+            )
             if any(row["difference"] is not None for row in sensitivity.values())
             else None,
             "note": (
@@ -699,7 +707,6 @@ def _cause_sensitivity(episode: Episode, plain: list[Cell], driven: list[Cell]) 
     sensitivity; the mean over the episodes says how much the choice of the causes moves the
     forecast at all.
     """
-    from .cells import finite_draws
 
     def mean_of(found: list[Cell]) -> float | None:
         values = [
@@ -825,17 +832,17 @@ def _macro_cells(
 def _pinned(constraints) -> set[tuple[str, int]]:
     """The ``(variable, month)`` cells a single-term constraint fixes.
 
-    A constraint of one term pins its cell when its band is no wider than the tolerance a
-    point of the same terms would expand to — a fact-reconstructed point arrives exactly
-    that wide, and a narrow interval of the same scale carries no scoring information
-    either. The weights count through the tolerance, which scales with ``|w|``.
+    A constraint of one term pins its cell when it comes from a point, or when its band is
+    narrower than the tolerance a point of the same terms would expand to: a narrow interval
+    of that scale carries no scoring information either. The mark decides for a point, since
+    ``value ± tau`` need not round back to a band of ``2 tau``.
     """
     pinned = set()
     for constraint in constraints:
         if len(constraint.terms) != 1:
             continue
         term = constraint.terms[0]
-        if constraint.high - constraint.low <= 2 * constraint.tolerance:
+        if constraint.point or constraint.high - constraint.low <= 2 * constraint.tolerance:
             pinned.add((term.variable, term.month))
     return pinned
 
@@ -1623,6 +1630,10 @@ def _git_commit() -> str | None:
         if not head.startswith("ref: "):
             return head[:40] or None
         ref = head[len("ref:"):].strip()
+        # A linked worktree keeps its HEAD apart and its refs in the common directory.
+        common = marker / "commondir"
+        if common.is_file():
+            marker = (marker / common.read_text(encoding="utf-8").strip()).resolve()
         try:
             return (marker / ref).read_text(encoding="utf-8").strip()[:40] or None
         except OSError:

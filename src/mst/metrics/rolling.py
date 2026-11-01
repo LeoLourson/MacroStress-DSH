@@ -28,7 +28,7 @@ from datetime import date
 
 import numpy as np
 
-from .episodes import Episodes, PriceEvent
+from .episodes import Episodes
 
 BUCKETS = (0.05, 0.5, 0.95)
 """The canon's calibration buckets: below a, between a and the median, median to b, above b."""
@@ -49,7 +49,7 @@ class Grid:
     forecasts: dict
     """The ``s_0`` simulation of every date, in the model scale."""
     facts: dict
-    """The realized values a date knows, keyed by ``(date, variable)``: a dict of months."""
+    """The facts after every date in the model scale, by date: ``(month, variable) -> value``."""
 
 
 def rolling_report(
@@ -80,42 +80,43 @@ def rolling_report(
 
 def _grid(plugin, store, registry, root, plan, known_on, macro_of) -> Grid:
     """The dates of the grid with their model versions, ``s_0`` simulations and facts."""
+    from mst.macro.panel import shift
     from mst.model_sdk.contracts import ScenarioPlan
 
-    first = min(episode.as_of for episode in _episode_dates(plan)) if False else None
-    # The grid runs over the months the store knows; the models need the history before the
-    # date, so the grid starts after the panel's first months.
-    months = sorted({row.month for variable in registry.variables for row in store.as_of(variable.id, known_on)})
-    step = plan.rolling.step_months
-    # A model needs history behind its date: the grid starts where two years of months have
-    # passed, whatever the events are.
-    ripe = [month for month in months if sum(1 for other in months if other < month) >= 24]
-    dates = ripe[::step]
-    versions, forecasts, facts = {}, {}, {}
     from .backtest import _realized, calculation_date  # the episode machinery, reused
 
+    # The grid runs over the months the store knows; a model needs two years of history behind
+    # its date, whatever the events are.
+    months = sorted(
+        {row.month for variable in registry.variables for row in store.as_of(variable.id, known_on)}
+    )
+    dates = months[24 :: plan.rolling.step_months]
+    reach = max([plan.after_months, *(event.horizon for event in plan.rolling.price_events)])
+    versions, forecasts, facts = {}, {}, {}
     for when in dates:
-        versions[when] = macro_of(plugin, store, registry, calculation_date(when))
-        forecasts[when] = versions[when].plugin.simulate(
-            versions[when].model,
+        as_of = calculation_date(when)
+        version = macro_of(plugin, store, registry, as_of, root)
+        versions[when] = version
+        forecasts[when] = version.plugin.simulate(
+            version.model,
             ScenarioPlan(horizon=plan.after_months),
             draws=plan.draws,
             seed=plan.seed,
         )
-        panel_months = set(versions[when].panel.months)
-        facts[when] = {}
-        for variable in registry.variables:
-            if variable.id not in versions[when].ids:
-                continue
-            for row in store.as_of(variable.id, known_on):
-                if row.month not in panel_months:
-                    facts[when][(row.month, variable.id)] = variable.to_model(row.value)
+        # The facts in the scale of the model: a seasonal variable loses the calendar profile
+        # the panel lost, on the date's own estimate.
+        panel_months = list(version.panel.months)
+        ahead = [shift(panel_months[-1], k) for k in range(1, reach + 1)]
+        realized = _realized(
+            store, registry, version.panel, panel_months, ahead, as_of, known_on, plan
+        )
+        facts[when] = {
+            (month, id_): float(realized[t, i])
+            for t, month in enumerate(ahead)
+            for i, id_ in enumerate(version.panel.ids)
+            if np.isfinite(realized[t, i])
+        }
     return Grid(dates=dates, versions=versions, forecasts=forecasts, facts=facts)
-
-
-def _episode_dates(plan: Episodes):
-    """The estimation dates of the plan's episodes — the anchors the grid starts between."""
-    return []
 
 
 def _uniformity(grid: Grid, plan: Episodes) -> dict:
@@ -132,7 +133,6 @@ def _uniformity(grid: Grid, plan: Episodes) -> dict:
             horizon = simulation.paths.shape[1] - 1
             for t in range(1, horizon + 1):
                 month = simulation.months[t]
-                fact = grid.facts[when].get((month, id_)) if False else None
                 value = _fact_of(grid, when, month, id_)
                 if value is None or not np.isfinite(value):
                     continue
@@ -203,7 +203,7 @@ def _price(grid: Grid, plan: Episodes, known_on: date) -> dict:
                 np.array([constraint.high]),
                 rng=np.random.default_rng([plan.seed, DIST_STREAM]),
             )
-            happened = _happened(grid, when, event, terms, constraint)
+            happened = _happened(grid, when, terms, constraint)
             if happened is None:
                 continue
             rows.append(
@@ -229,17 +229,18 @@ def _price(grid: Grid, plan: Episodes, known_on: date) -> dict:
     }
 
 
-def _happened(grid: Grid, when: date, event, terms, constraint):
+def _happened(grid: Grid, when: date, terms, constraint):
     """Whether the event's box held in the window that follows the date; None without facts."""
-    simulation = grid.forecasts[when]
-    horizon = min(event.horizon, simulation.paths.shape[1] - 1)
-    inside = True
+    from mst.macro.panel import shift
+
+    last = grid.versions[when].panel.months[-1]
+    total = 0.0
     for term in terms:
-        value = _fact_of(grid, when, simulation.months[term.month], term.variable)
+        value = _fact_of(grid, when, shift(last, term.month), term.variable)
         if value is None or not np.isfinite(value):
             return None
-        inside &= constraint.low <= term.weight * value <= constraint.high
-    return inside
+        total += term.weight * value
+    return constraint.low <= total <= constraint.high
 
 
 def _scores(rows: list[dict]) -> dict:
@@ -255,7 +256,7 @@ def _scores(rows: list[dict]) -> dict:
     by_event: dict[str, list[dict]] = {}
     for row in rows:
         by_event.setdefault(row["event"], []).append(row)
-    for event, found in by_event.items():
+    for found in by_event.values():
         seen = 0
         hits = 0
         for row in found:

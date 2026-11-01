@@ -1031,3 +1031,21 @@ def test_the_shipped_episodes_fit_the_shocked_variables():
     for check in plan.episodes:
         assert set(check.constrained) <= variables, check.id
         assert set(check.driving) <= shocks, check.id
+
+
+def test_every_point_pins_its_cell_whatever_its_rounding():
+    from mst.model_sdk.contracts import LinearConstraint, LinearTerm
+
+    rng = np.random.default_rng(3)
+    for value, tolerance in zip(rng.uniform(0, 20, 500), rng.uniform(1e-4, 0.1, 500), strict=True):
+        term = LinearTerm("x", 1, 1.0)
+        point = LinearConstraint(
+            terms=(term,),
+            low=value - tolerance,
+            high=value + tolerance,
+            point=True,
+            tolerance=tolerance,
+        )
+        assert runner._pinned([point]) == {("x", 1)}
+    wide = LinearConstraint(terms=(term,), low=0.0, high=1.0, tolerance=0.01)
+    assert runner._pinned([wide]) == set()

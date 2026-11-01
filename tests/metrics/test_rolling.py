@@ -13,11 +13,10 @@ from datetime import date
 import numpy as np
 import pytest
 
+from mst.macro.registry import load_registry
 from mst.metrics.block import block_interval
 from mst.metrics.episodes import load_episodes
 from mst.metrics.rolling import rolling_report
-from mst.macro.registry import load_registry
-from mst.model_sdk.contracts import MacroEstimateContext
 
 from . import simulated
 
@@ -127,7 +126,11 @@ def report_of(tmp_path, monkeypatch, macro=None, *, events=(), step=3, months=12
     store = simulated.series_store(tmp_path / "series", months=months, seed=14)
     macro = macro or WalkMacro()
     monkeypatch.setattr(models_pkg, "selected", lambda model_id=None: macro)
-    monkeypatch.setattr(runner, "load_episodes", lambda path=None: load_episodes(plan_file(tmp_path, step=step, events=events)))
+    monkeypatch.setattr(
+        runner,
+        "load_episodes",
+        lambda path=None: load_episodes(plan_file(tmp_path, step=step, events=events)),
+    )
     registry = load_registry()
     root = tmp_path / "models"
     plan = load_episodes(plan_file(tmp_path, step=step, events=events))
@@ -138,15 +141,8 @@ def report_of(tmp_path, monkeypatch, macro=None, *, events=(), step=3, months=12
         root=root,
         plan=plan,
         known_on=KNOWN_ON,
-        macro_of=lambda plugin, data, reg, when: _macro_of(macro, data, reg, when, root),
+        macro_of=runner._episode_macro,
     )
-
-
-def _macro_of(macro, store, registry, when, root):
-    """The cached episode estimator for the fake model: estimate once per date."""
-    from mst.metrics.backtest import _episode_macro
-
-    return _episode_macro(macro, store, registry, when, root)
 
 
 def test_the_transform_of_the_facts_is_uniform_on_a_right_model(tmp_path, monkeypatch):
@@ -188,16 +184,6 @@ def test_a_biased_model_drifts_away_from_uniform(tmp_path, monkeypatch):
 def test_the_price_of_an_event_beats_the_historical_frequency(tmp_path, monkeypatch):
     # An event a fair share of windows sees: the model's probability carries the information
     # of the current level, the frequency only the base rate.
-    from mst.data.store import SeriesStore
-
-    store = simulated.series_store(tmp_path / "series", months=96, seed=7)
-    macro = simulated.FakeMacro()
-    plan = load_episodes(
-        plan_file(
-            tmp_path,
-            events=[("brent-up", 1, 1.0, 1e6)],
-        )
-    )
     # The threshold sits in the model scale of the middle of the store, so the event's
     # probability moves over the grid and the model's level carries information the base
     # rate has not.
@@ -236,3 +222,24 @@ def test_the_block_bootstrap_is_wider_on_an_autocorrelated_series():
     # A single block carries everything: the interval closes on the mean.
     one = block_interval([1.0, 2.0, 3.0], ["a", "a", "a"])
     assert one[0] == one[1] == pytest.approx(2.0)
+
+
+def test_an_event_of_two_terms_reads_their_sum():
+    from types import SimpleNamespace
+
+    from mst.metrics.rolling import Grid, _happened
+    from mst.model_sdk.contracts import LinearConstraint, LinearTerm
+
+    when = date(2020, 1, 1)
+    grid = Grid(
+        dates=[when],
+        versions={when: SimpleNamespace(panel=SimpleNamespace(months=[date(2019, 12, 1)]))},
+        forecasts={},
+        facts={when: {(date(2020, 1, 1), "a"): 3.0, (date(2020, 1, 1), "b"): 4.0}},
+    )
+    terms = (LinearTerm("a", 1, 1.0), LinearTerm("b", 1, 1.0))
+    assert _happened(grid, when, terms, LinearConstraint(terms=terms, low=6.0, high=8.0)) is True
+    assert _happened(grid, when, terms, LinearConstraint(terms=terms, low=0.0, high=5.0)) is False
+    missing = (LinearTerm("c", 1, 1.0),)
+    absent = LinearConstraint(terms=missing, low=0.0, high=1.0)
+    assert _happened(grid, when, missing, absent) is None
