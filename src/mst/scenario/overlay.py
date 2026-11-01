@@ -80,18 +80,19 @@ def solve_lambda(
     group = np.asarray(group, dtype=int)
     low = np.asarray(low, dtype=float)
     high = np.asarray(high, dtype=float)
-    n, k = values.shape
-    if k == 0:
-        return _tilt(np.zeros(0), np.full(n, 1.0 / n), 0.0, values, group, True, ())
+    k = values.shape[1]
     counts = np.bincount(group)
     if np.any(counts == 0):
         raise ValueError("a group of the tilt holds no path")
-    plain = _means(np.full(n, 1.0 / n), values, group)
+    even = _weights(np.zeros(k), values, group)
+    if k == 0:
+        return _tilt(np.zeros(0), even, 0.0, values, group, True, ())
+    plain = _means(even, values, group)
     if np.all(plain >= low - 1e-12) and np.all(plain <= high + 1e-12):
         # Every condition already holds: no tilt, no price, the sample as it is.
         return _tilt(
             np.zeros(k),
-            np.full(n, 1.0 / n),
+            even,
             0.0,
             values,
             group,
@@ -165,7 +166,9 @@ def resample(weights: np.ndarray, group: np.ndarray, rng) -> np.ndarray:
         share = weights[rows] / weights[rows].sum()
         positions = (rng.random() + np.arange(len(rows))) / len(rows)
         cumulative = np.cumsum(share)
-        picked[rows] = rows[np.searchsorted(cumulative, positions - 1e-12)]
+        # The first cumulative share above the position: a path of zero weight is never picked.
+        chosen = np.searchsorted(cumulative, positions, side="right")
+        picked[rows] = rows[np.minimum(chosen, len(rows) - 1)]
     return picked
 
 

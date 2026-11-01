@@ -36,7 +36,6 @@ from ..macro.version import MacroVersion
 from ..metrics.cells import typical_movement
 from ..model_sdk import dist as dist_sdk
 from ..model_sdk.conditional import InfeasibleScenario
-from ..model_sdk.dist import ContradictsModels
 from ..model_sdk.contracts import (
     AdditiveImpact,
     Dist,
@@ -46,13 +45,17 @@ from ..model_sdk.contracts import (
     MacroSimulation,
     ScenarioPlan,
 )
+from ..model_sdk.dist import ContradictsModels
 from . import overlay
 from .contracts import Impact
 from .spec import Spec
 
-
 #: The stream of the overlay's resampling draw, away from the model's own streams.
 OVERLAY_STREAM = 4
+MIXED_CONDITION = (
+    "a condition mixes macro variables and drivers: split it, the macro model meets one part "
+    "and the overlay the other"
+)
 
 
 @dataclass(frozen=True)
@@ -178,10 +181,7 @@ def driver_constraints(spec: Spec, macro: MacroVersion) -> tuple[LinearConstrain
         on_driver = any(term.on_driver for term in constraint.terms)
         on_macro = any(not term.on_driver for term in constraint.terms)
         if on_driver and on_macro:
-            raise ValueError(
-                "a condition mixes macro variables and drivers: split it, the macro model "
-                "meets one part and the overlay the other"
-            )
+            raise ValueError(MIXED_CONDITION)
         if not on_driver:
             continue
         terms = tuple(
@@ -338,7 +338,7 @@ def build(
     # the same weights. A group without a surviving path contradicts the models.
     below = _below_levels(spec, macro, satellites, drivers, simulation, seed)
     if below is not None:
-        tilt_price, picked, by_level, ess = below
+        price, picked, by_level, ess = below
         simulation = MacroSimulation(
             ids=simulation.ids,
             months=simulation.months,
@@ -356,16 +356,16 @@ def build(
         if found is None:
             # No macro condition to price: the levels above carry the whole price.
             found = Dist(
-                distance=tilt_price or 0.0,
+                distance=price,
                 log_probability=0.0,
                 standard_error=0.0,
                 causes=tuple(spec.causes),
                 by_level=by_level,
             )
         else:
-            if tilt_price is not None:
-                found = replace(found, distance=found.distance + tilt_price)
-            found = replace(found, by_level=by_level)
+            found = replace(
+                found, distance=found.distance + price, by_level={0: found.distance, **by_level}
+            )
     checks = _checks(spec, plan, simulation, tilt)
     if below is not None and below[3] is not None:
         checks["effective_size"] = below[3]
@@ -389,6 +389,16 @@ def _names_drivers(spec: Spec) -> bool:
     return any(term.on_driver for term in terms)
 
 
+def _mixes_levels(spec: Spec) -> bool:
+    """Whether a condition sums macro variables and drivers: no single imposer can meet it."""
+    elements = (*spec.constraints, *spec.expectations, *spec.probabilities)
+    return any(
+        any(term.on_driver for term in element.terms)
+        and not all(term.on_driver for term in element.terms)
+        for element in elements
+    )
+
+
 def _driver_condition_problems(spec: Spec, macro, satellites) -> list[str]:
     """What keeps the conditions on the quantities above from being carried."""
     problems = []
@@ -402,6 +412,8 @@ def _driver_condition_problems(spec: Spec, macro, satellites) -> list[str]:
             problems.append(
                 f"the condition names {term.variable}, which the satellites do not serve"
             )
+    if _mixes_levels(spec):
+        problems.append(MIXED_CONDITION)
     if spec.inner < 2:
         problems.append(
             "the conditions on the quantities of the levels above need inner >= 2: a "
@@ -419,103 +431,111 @@ def _below_levels(
     simulation: MacroSimulation,
     seed: int,
 ):
-    """``(tilt price, picked rows, price by level, effective size)`` of the driver conditions.
+    """``(price, picked rows, price by level, effective size)`` of the driver conditions.
 
     The support conditions on drivers zero the paths that break them inside every group of
     ``R`` — a group without a survivor contradicts the models, the case lemma 2 names — and
-    the expectation conditions on drivers tilt the same weights. Both resample the macro and
-    the driver paths together, the rows being one draw of the whole system. The price of the
-    levels above is the mean of ``-log`` of the surviving share over the groups, reported by
-    the level of the conditioned quantity; the macro level keeps its own price beside it.
+    the conditions on means tilt the survivors. Both resample the macro and the driver paths
+    together, the rows being one draw of the whole system. The support price is the mean of
+    ``-log`` of the surviving share over the groups; going through the levels in order splits
+    it by the chain rule, every level paying for what it removes from the survivors of the
+    levels before it, and the tilt's price goes to the deepest level it reads.
     """
     constraints = driver_constraints(spec, macro)
-    expectations = [
-        expectation
-        for expectation in spec.expectations
-        if any(term.on_driver for term in expectation.terms)
+    moments = [
+        element
+        for element in (*spec.expectations, *spec.probabilities)
+        if any(term.on_driver for term in element.terms)
     ]
-    probabilities = [
-        condition
-        for condition in spec.probabilities
-        if any(term.on_driver for term in condition.terms)
-    ]
-    if not constraints and not expectations and not probabilities:
+    if not constraints and not moments:
         return None
+    if _mixes_levels(spec):
+        raise ValueError(MIXED_CONDITION)
     if simulation.group is None:
         group = np.arange(simulation.paths.shape[0])
     else:
         group = simulation.group
-    if constraints and np.all(np.bincount(group) == 1):
+    if np.all(np.bincount(group) == 1):
         raise ValueError(
             "the conditions on the quantities of the levels above need inner >= 2: a "
             "single draw of the causes per value of R leaves the overlay nothing to "
             "reweight, and every broken path would read as a contradiction"
         )
+    groups = np.unique(group)
     inside = np.ones(simulation.paths.shape[0], dtype=bool)
-    for constraint in constraints:
-        value = _functional(constraint, drivers.paths, drivers.ids)
-        inside &= (constraint.low <= value) & (value <= constraint.high)
-    for g in np.unique(group):
-        if not inside[group == g].any():
-            raise ContradictsModels()
+    by_level: dict[int, float] = {}
+    levels = {_level_of_term(satellites, c.terms[0].variable) for c in constraints}
+    for level in sorted(levels):
+        survivors = inside.copy()
+        for constraint in constraints:
+            if _level_of_term(satellites, constraint.terms[0].variable) != level:
+                continue
+            value = _functional(constraint, drivers.paths, drivers.ids)
+            inside &= (constraint.low <= value) & (value <= constraint.high)
+        lost = 0.0
+        for g in groups:
+            kept = inside[group == g].sum()
+            if not kept:
+                raise ContradictsModels()
+            lost -= np.log(kept / survivors[group == g].sum())
+        by_level[level] = float(lost / len(groups))
+    price = sum(by_level.values())
     weights = inside.astype(float)
-    values, lows, highs = [], [], []
-    for expectation in expectations:
-        value = np.zeros(simulation.paths.shape[0])
-        for term in expectation.terms:
-            value += term.weight * _term_of(term, drivers.paths, drivers.ids)
-        values.append(value)
-        lows.append(expectation.low if expectation.low is not None else -np.inf)
-        highs.append(expectation.high if expectation.high is not None else np.inf)
-    for condition in probabilities:
-        value = np.zeros(simulation.paths.shape[0])
-        for term in condition.terms:
-            value += term.weight * _term_of(term, drivers.paths, drivers.ids)
-        values.append((value >= condition.low) & (value <= condition.high))
-        lows.append(condition.at_least)
-        highs.append(np.inf)
-    tilt_price = None
     ess = None
-    if values:
+    if moments:
+        values, lows, highs = _moment_conditions(
+            moments,
+            lambda term: _term_of(term, drivers.paths, drivers.ids),
+            simulation.paths.shape[0],
+        )
+        alive = np.flatnonzero(inside)
         tilt = overlay.solve_lambda(
-            np.column_stack(values) * weights[:, None] if False else np.column_stack(values),
-            group,
-            np.array(lows),
-            np.array(highs),
+            values[alive], np.unique(group[alive], return_inverse=True)[1], lows, highs
         )
         if not tilt.feasible:
             raise ValueError(
                 "the conditions on the means of the drivers cannot be met: no tilt of the "
                 "causes brings them inside their bounds on this sample"
             )
-        weights = weights * tilt.weights
-        tilt_price = tilt.price
+        weights[alive] = tilt.weights
+        deepest = max(
+            _level_of_term(satellites, term.variable)
+            for element in moments
+            for term in element.terms
+        )
+        by_level[deepest] = by_level.get(deepest, 0.0) + tilt.price
+        price += tilt.price
         ess = tilt.effective_size
-    # The price of the levels above: the mean of -log of the surviving share per group,
-    # by the level of the conditioned quantity.
-    by_level: dict[int, float] = {}
-    groups = np.unique(group)
-    for g in groups:
-        # The surviving share of the group: what the conditions of the levels above leave
-        # of the draws of the causes at this value of R.
-        share = inside[group == g].mean()
-        for constraint in constraints:
-            level = _level_of_term(satellites, constraint.terms[0].variable)
-            by_level[level] = by_level.get(level, 0.0) - np.log(max(share, 1e-300)) / len(
-                groups
-            )
     picked = overlay.resample(
         weights, group, np.random.default_rng([seed, OVERLAY_STREAM, 1])
     )
-    return tilt_price, picked, by_level, ess
+    return price, picked, by_level, ess
+
+
+def _moment_conditions(chosen, term_paths, rows: int):
+    """``(values, lows, highs)``: the functionals of the conditions on means and probabilities.
+
+    ``values`` is ``(rows, k)``. A condition ``Q(B) >= p`` is the mean of ``1_B`` above ``p``.
+    """
+    values, lows, highs = [], [], []
+    for element in chosen:
+        value = np.zeros(rows)
+        for term in element.terms:
+            value += term.weight * term_paths(term)
+        if hasattr(element, "at_least"):
+            values.append(((value >= element.low) & (value <= element.high)).astype(float))
+            lows.append(element.at_least)
+            highs.append(np.inf)
+        else:
+            values.append(value)
+            lows.append(element.low if element.low is not None else -np.inf)
+            highs.append(element.high if element.high is not None else np.inf)
+    return np.column_stack(values), np.array(lows), np.array(highs)
 
 
 def _functional(constraint, paths: np.ndarray, ids: list[str]) -> np.ndarray:
     """The value of a condition's functional on every path."""
-    value = np.zeros(paths.shape[0])
-    for term in constraint.terms:
-        value += term.weight * _term_of(term, paths, ids)
-    return value
+    return sum(term.weight * _term_of(term, paths, ids) for term in constraint.terms)
 
 
 def _term_of(term, paths: np.ndarray, ids: list[str]) -> np.ndarray:
@@ -546,32 +566,26 @@ def _tilted(
     chosen by the support box once per group, and the tilt reweights the draws of the
     causes — the approximation the overlay lives with.
     """
-    if not spec.expectations and not spec.probabilities:
+    # The conditions on drivers wait for the drivers: the overlay of the levels above takes them.
+    chosen = [
+        element
+        for element in (*spec.expectations, *spec.probabilities)
+        if not any(term.on_driver for term in element.terms)
+    ]
+    if not chosen:
         return None, simulation
     index = {id_: k for k, id_ in enumerate(simulation.ids)}
-    values, lows, highs = [], [], []
-    for expectation in spec.expectations:
-        value = np.zeros(simulation.paths.shape[0])
-        for term in expectation.terms:
-            value += term.weight * simulation.paths[:, term.month, index[term.variable]]
-        values.append(value)
-        lows.append(expectation.low if expectation.low is not None else -np.inf)
-        highs.append(expectation.high if expectation.high is not None else np.inf)
-    for condition in spec.probabilities:
-        value = np.zeros(simulation.paths.shape[0])
-        for term in condition.terms:
-            value += term.weight * simulation.paths[:, term.month, index[term.variable]]
-        values.append((value >= condition.low) & (value <= condition.high))
-        lows.append(condition.at_least)
-        highs.append(np.inf)
+    values, lows, highs = _moment_conditions(
+        chosen,
+        lambda term: simulation.paths[:, term.month, index[term.variable]],
+        simulation.paths.shape[0],
+    )
     group = (
         simulation.group
         if simulation.group is not None
         else np.arange(simulation.paths.shape[0])
     )
-    tilt = overlay.solve_lambda(
-        np.column_stack(values), group, np.array(lows), np.array(highs)
-    )
+    tilt = overlay.solve_lambda(values, group, lows, highs)
     if not tilt.feasible:
         raise ValueError(
             "the conditions on means cannot be met: no tilt of the causes brings them "
@@ -734,12 +748,7 @@ def _with_macro_impacts(simulation: MacroSimulation, impacts: list[Impact]) -> M
     for impact in of_macro:
         k = simulation.ids.index(impact.target)
         paths[:, impact.start : impact.end + 1, k] += impact.delta
-    return MacroSimulation(
-        ids=simulation.ids,
-        months=simulation.months,
-        paths=paths,
-        history=simulation.history,
-    )
+    return replace(simulation, paths=paths)
 
 
 def _version_problems(macro: MacroVersion, satellites: SatelliteBundle) -> list[str]:

@@ -10,6 +10,7 @@ from mst.corpus.index import Chunk
 from mst.corpus.index import write as write_index
 from mst.macro.registry import load_registry
 from mst.model_sdk import InfeasibleScenario
+from mst.model_sdk.contracts import ConstraintLaw
 from mst.plugins.hier.simulate import IMPACT
 from mst.scenario.build import build, dist_of, plan_of, tolerance_of, validate
 from mst.scenario.contracts import Impact
@@ -185,9 +186,19 @@ def test_an_unreachable_box_contradicts_the_models(versions):
     # The functional the box constrains is fixed by the model at a value the box excludes:
     # the event has no probability at all and the price is infinite with the message.
     spec = scenario(versions, constraints=[interval("gl.brent", 2, 100.0, 101.0)])
-    found = dist_of(spec, versions.loaded, draws=DRAWS, seed=SEED)
+    fixed = replace(versions.loaded, plugin=FixedLaw())
+    found = dist_of(spec, fixed, draws=DRAWS, seed=SEED)
     assert found.distance == float("inf")
     assert "contradicts the models" in found.message
+
+
+def test_a_far_box_of_a_gaussian_law_is_dear_but_has_a_price(versions):
+    # A gaussian law gives every box a probability, however far: the price is large and finite
+    # in the upper tail as in the lower one.
+    above = scenario(versions, constraints=[interval("gl.brent", 2, 100.0, 101.0)])
+    found = dist_of(above, versions.loaded, draws=DRAWS, seed=SEED)
+    assert np.isfinite(found.distance) and found.distance > 100.0
+    assert found.message is None
 
 
 def test_a_model_without_a_law_has_no_price(versions):
@@ -195,6 +206,18 @@ def test_a_model_without_a_law_has_no_price(versions):
     spec = scenario(versions, constraints=[interval("gl.brent", 2, 1.0, 3.0)])
     stripped = replace(versions.loaded, plugin=NoLaw(versions.loaded.plugin))
     assert dist_of(spec, stripped, draws=DRAWS, seed=SEED) is None
+
+
+class FixedLaw:
+    """A macro plugin whose constraint functional does not move: zero in every group."""
+
+    def constraint_law(self, model, plan, *, draws, seed):
+        return ConstraintLaw(
+            means=np.zeros((draws, 1)),
+            covs=np.zeros((draws, 1, 1)),
+            log_weight=np.zeros(draws),
+            group=np.arange(draws),
+        )
 
 
 class NoLaw:
@@ -263,6 +286,30 @@ def test_an_expectation_condition_tilts_the_paths_and_prices_them(versions):
     assert tilted.dist is not None and tilted.dist.distance > 0
     # Without the condition there is no tilt to report.
     assert plain.effective_size is None and plain.checks == {}
+
+
+def test_a_macro_impact_keeps_the_groups_the_tilt_runs_in(versions):
+    # The impact rebuilds the paths; the groups of R must survive it, or every path becomes its
+    # own group and no tilt can move anything.
+    registry = load_registry()
+    impact = Impact(target="gl.brent", start=1, end=3, delta=1.0, reason="шок", basis=["S1#1/1"])
+    plain = paths_of(versions, scenario(versions, impacts=[impact]))
+    level = float(np.mean(registry.variable("gl.brent").to_model(plain.macro[:, 2, 0])))
+    spec = scenario(
+        versions,
+        inner=8,
+        impacts=[impact],
+        expectations=[
+            {
+                "terms": [{"variable": "gl.brent", "month": 2, "weight": 1.0}],
+                "low": level + 1.0,
+                "basis": "assumption",
+            }
+        ],
+    )
+    tilted = paths_of(versions, spec)
+    moved = float(np.mean(registry.variable("gl.brent").to_model(tilted.macro[:, 2, 0])))
+    assert moved == pytest.approx(level + 1.0, abs=0.15)
 
 
 def test_a_probability_condition_raises_the_share_of_the_event(versions):

@@ -21,7 +21,7 @@ from mst.data.store import Observation, SeriesStore
 from mst.drivers import bundle as satellite_bundle
 from mst.drivers.registry import Registry, merge
 from mst.macro import version as macro_version
-from mst.macro.panel import months_between, shift
+from mst.macro.panel import shift
 from mst.model_sdk.contracts import (
     DriverPaths,
     MacroEstimate,
@@ -31,12 +31,6 @@ from mst.model_sdk.contracts import (
     ScenarioPlan,
     UpperPaths,
 )
-from mst.model_sdk.contracts import SatelliteEstimateContext
-from mst.plugins.hier.model import HierModel
-from mst.plugins.hier.spec import Sampler
-from mst.plugins.hier.spec import load_spec as load_hier_spec
-from mst.plugins.reflevel2.model import MODEL as REFERENCE
-
 from tests.drivers import simulated as drivers_simulated
 
 CATALOG = Path(__file__).with_name("level2_catalog.json")
@@ -191,7 +185,8 @@ class WalkMacro(MacroModel):
             [np.tile(last, (draws * inner, 1, 1)), last + np.cumsum(steps, axis=1)],
             axis=1,
         )
-        months = [shift(date.fromisoformat(model["months"][-1]), k) for k in range(plan.horizon + 1)]
+        last = date.fromisoformat(model["months"][-1])
+        months = [shift(last, k) for k in range(plan.horizon + 1)]
         group = (
             np.arange(draws) if inner == 1 else np.repeat(np.arange(draws), inner)
         )
@@ -340,9 +335,10 @@ def test_the_chain_estimation_recovers_the_known_coefficients(estimated):
 
 def test_the_conditional_variance_of_the_second_level_is_the_residual_scale(estimated):
     data, macro, name, bundle, root = estimated
-    fit = bundle.models["reflevel2.regression"].fits["exposure"]
     macro_version_loaded = macro_version.load(root, name, {"levels.macro": macro})
-    simulation = macro.simulate(macro_version_loaded.model, ScenarioPlan(horizon=6), draws=400, seed=3)
+    simulation = macro.simulate(
+        macro_version_loaded.model, ScenarioPlan(horizon=6), draws=400, seed=3
+    )
     upper = UpperPaths(
         macro=simulation,
         levels={
@@ -400,7 +396,8 @@ def test_an_impact_on_the_first_level_reaches_the_second_and_not_back(estimated)
     exposure_gap = lower.paths[:, 1:, exposure_column] - plain.paths[:, 1:, exposure_column]
     assert abs(exposure_gap.mean()) > 1.0  # the slope carries most of the price move
     assert np.allclose(upper.paths[:, :, price_column], plain.paths[:, :, price_column])
-    assert np.allclose(upper.paths[:, 1:, exposure_column] - plain.paths[:, 1:, exposure_column], 3.0)
+    moved = upper.paths[:, 1:, exposure_column] - plain.paths[:, 1:, exposure_column]
+    assert np.allclose(moved, 3.0)
 
 
 def test_levels_draw_independent_shocks_a_level_shares_its_measured_correlation(estimated):
@@ -431,7 +428,9 @@ def test_levels_draw_independent_shocks_a_level_shares_its_measured_correlation(
     across = np.corrcoef(first.ravel(), second.ravel())[0, 1]
     assert abs(across) < 0.03  # two independent streams of thirty-two thousand draws
 
-    correlated = [driver for driver in ("exposure:sber", "exposure:gazp") if driver in bundle.correlated]
+    correlated = [
+        driver for driver in ("exposure:sber", "exposure:gazp") if driver in bundle.correlated
+    ]
     positions = {driver: k for k, driver in enumerate(bundle.correlated)}
     matrix = np.eye(len(bundle.correlated))
     for one in correlated:
@@ -573,6 +572,68 @@ class TestDriverConditions:
                 draws=4,
                 seed=3,
             )
+
+    def test_the_price_of_driver_conditions_is_their_joint_share_once(self, estimated):
+        from mst.scenario.build import build
+
+        data, macro, name, bundle, root = estimated
+        macro = macro_version.load(root, name, {"levels.macro": macro})
+        plain = build(self._spec(data, root, name, inner=8), macro, bundle, draws=6, seed=3)
+        column = plain.drivers.paths[:, 1, plain.drivers.ids.index("exposure:sber")]
+        condition = {
+            "terms": [{"variable": "exposure:sber", "month": 1, "weight": 1.0}],
+            "low": float(np.percentile(column, 10)),
+            "high": float(np.percentile(column, 90)),
+            "basis": "assumption",
+        }
+
+        def priced(*conditions):
+            spec = self._spec(data, root, name, inner=8, constraints=list(conditions))
+            return build(spec, macro, bundle, draws=6, seed=3).dist
+
+        single, twice = priced(condition), priced(condition, condition)
+        # The price enters the total, and a repeated condition removes no further path.
+        assert single.distance > 0
+        assert single.distance == pytest.approx(single.by_level[2])
+        assert twice.distance == pytest.approx(single.distance)
+
+    def test_a_driver_expectation_tilts_the_survivors_and_is_priced(self, estimated):
+        from mst.scenario.build import build
+
+        data, macro, name, bundle, root = estimated
+        macro = macro_version.load(root, name, {"levels.macro": macro})
+        plain = build(self._spec(data, root, name, inner=16), macro, bundle, draws=8, seed=3)
+        k = plain.drivers.ids.index("exposure:sber")
+        column = plain.drivers.paths[:, 1, k]
+        term = {"variable": "exposure:sber", "month": 1, "weight": 1.0}
+        target = float(column.mean() + 0.5 * column.std())
+        found = build(
+            self._spec(
+                data,
+                root,
+                name,
+                inner=16,
+                constraints=[
+                    {
+                        "terms": [term],
+                        "low": float(np.percentile(column, 5)),
+                        "high": float(np.percentile(column, 95)),
+                        "basis": "assumption",
+                    }
+                ],
+                expectations=[{"terms": [term], "low": target, "basis": "assumption"}],
+            ),
+            macro,
+            bundle,
+            draws=8,
+            seed=3,
+        )
+        moved = found.drivers.paths[:, 1, k]
+        assert moved.mean() == pytest.approx(target, abs=0.5 * column.std())
+        assert column.min() <= moved.min()
+        assert found.dist.distance > 0 and found.dist.by_level[2] == pytest.approx(
+            found.dist.distance
+        )
 
     def test_a_driver_condition_needs_inner_draws(self, estimated):
         from mst.scenario.build import build

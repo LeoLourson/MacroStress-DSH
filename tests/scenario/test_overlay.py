@@ -128,3 +128,28 @@ def test_an_unreachable_condition_is_named_infeasible():
     )
     assert beyond.feasible is False
     assert beyond.price == float("inf")
+
+
+def test_a_broken_condition_is_not_read_as_held_whatever_the_groups():
+    # Twenty groups with the mean at ten: the upper bound of nine is broken and must be tilted.
+    values = 10.0 + np.random.default_rng(2).standard_normal((4000, 1))
+    group = np.repeat(np.arange(20), 200)
+    found = solve_lambda(values, group, np.array([-np.inf]), np.array([9.0]))
+    assert found.active == (True,) and found.price > 0
+    assert found.means[0] == pytest.approx(9.0, abs=0.01)
+
+
+def test_a_held_condition_reports_the_plain_mean():
+    values = 10.0 + np.random.default_rng(2).standard_normal((4000, 1))
+    group = np.repeat(np.arange(20), 200)
+    found = solve_lambda(values, group, np.array([5.0]), np.array([np.inf]))
+    assert found.price == 0.0 and found.active == (False,)
+    assert found.means[0] == pytest.approx(values.mean(), abs=1e-9)
+    assert np.allclose(np.bincount(group, found.weights), 1.0)
+
+
+def test_a_path_of_zero_weight_is_never_resampled():
+    weights = np.tile([0.0, 0.5, 0.0, 0.5], 500)
+    group = np.repeat(np.arange(500), 4)
+    picked = resample(weights, group, np.random.default_rng(1))
+    assert set((picked % 4).tolist()) == {1, 3}
