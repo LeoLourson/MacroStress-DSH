@@ -38,11 +38,13 @@ from ..model_sdk import dist as dist_sdk
 from ..model_sdk.conditional import InfeasibleScenario
 from ..model_sdk.contracts import (
     AdditiveImpact,
+    ConstraintLaw,
     Dist,
     DriverPaths,
     LinearConstraint,
     LinearTerm,
     MacroSimulation,
+    OneSided,
     ScenarioPlan,
 )
 from ..model_sdk.dist import ContradictsModels
@@ -247,6 +249,11 @@ def dist_of(
     model does not measure the law. An event some value of ``R`` cannot reach gives an
     infinite distance with the message naming lemma 2; the standard error reads the spread
     of ``-log P(S | R)`` over the groups, so a price with a large error is seen as such.
+
+    Beside the price stands the one-sided price ``dist+(s)`` — the event with every
+    interval condition replaced by a ray, which the width of the interval does not enter —
+    when there are support conditions and no conditions on means or probabilities: those
+    carry no interval to open, and the one-sided price of a mixture is not defined on them.
     """
     plan = plan_with_impacts(spec, macro)
     if not plan.constraints and not plan.causes and plan.regime_event is None:
@@ -260,6 +267,7 @@ def dist_of(
     distance, log_probability, standard_error = dist_sdk.price_of_law(
         law, low, high, rng=rng
     )
+    one_sided = _one_sided_of(spec, plan, law, low, high, seed=seed)
     return Dist(
         distance=distance,
         log_probability=log_probability,
@@ -268,12 +276,49 @@ def dist_of(
         tolerances=tuple(
             constraint.tolerance for constraint in plan.constraints if constraint.point
         ),
+        one_sided=one_sided,
         message=(
             "the event has no probability at some value of R: the scenario contradicts "
             "the models (lemma 2 of the canon)"
             if not np.isfinite(distance)
             else None
         ),
+    )
+
+
+def _one_sided_of(spec: Spec, plan: ScenarioPlan, law: ConstraintLaw, low, high, *, seed: int):
+    """``dist+(s)``: the price of the event with every interval condition opened to a ray.
+
+    The medians of the law's coordinates — weighted over its rows, one draw set per row —
+    decide the side: an interval below the median opens downwards, above it upwards, and
+    one that holds the median is dropped, because the one-sided event does not restrict
+    that coordinate at all. The sliced law and the ray bounds go through the same
+    ``price_of_law`` on a stream of their own; with nothing kept the price is zero.
+    """
+    if not plan.constraints or spec.expectations or spec.probabilities:
+        return None
+    rng = np.random.default_rng([seed, dist_sdk.ONE_SIDED_STREAM])
+    medians = dist_sdk.median_of_law(law, rng)
+    side_low, side_high, kept = dist_sdk.one_sided_box(low, high, medians)
+    dropped = tuple(
+        int(k) for k in range(len(low)) if k not in set(kept.tolist())
+    )
+    if not len(kept):
+        return OneSided(distance=0.0, log_probability=0.0, standard_error=0.0, dropped=dropped)
+    sliced = ConstraintLaw(
+        means=law.means[:, kept],
+        covs=law.covs[:, kept][:, :, kept],
+        log_weight=law.log_weight,
+        group=law.group,
+    )
+    distance, log_probability, standard_error = dist_sdk.price_of_law(
+        sliced, side_low, side_high, rng=rng
+    )
+    return OneSided(
+        distance=distance,
+        log_probability=log_probability,
+        standard_error=standard_error,
+        dropped=dropped,
     )
 
 

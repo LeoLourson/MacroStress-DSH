@@ -7,7 +7,7 @@ import pytest
 
 from mst.engine import run
 from mst.metrics.es import es_block
-from mst.model_sdk.contracts import Dist
+from mst.model_sdk.contracts import Dist, OneSided
 from mst.plugin_sdk import Position
 from mst.portfolio.report import build, path_block
 from mst.portfolio.spec import Portfolio
@@ -72,9 +72,42 @@ def test_the_price_of_the_scenario_stands_beside_the_loss():
         "causes": ["ru.monetary"],
         "tolerances": [0.4],
         "by_level": {"0": 2.0, "2": 0.659},
+        "one_sided": None,
         "message": None,
     }
     assert build(portfolio(equity()), batch(equity()).results)["dist"] is None
+
+
+def test_the_one_sided_price_stands_beside_the_price():
+    found = Dist(
+        distance=2.659,
+        log_probability=-3.1,
+        standard_error=0.2,
+        one_sided=OneSided(
+            distance=1.2, log_probability=-1.3, standard_error=0.05, dropped=(1,)
+        ),
+    )
+    report = build(portfolio(equity()), batch(equity()).results, dist_found=found)
+    assert report["dist"]["one_sided"] == {
+        "distance": 1.2,
+        "log_probability": -1.3,
+        "standard_error": 0.05,
+        "estimated": True,
+        "dropped": [1],
+    }
+    assert "price_not_estimated" not in report["flags"]
+    noisy = Dist(
+        distance=2.659,
+        log_probability=-3.1,
+        standard_error=0.2,
+        one_sided=OneSided(
+            distance=1.2, log_probability=-1.3, standard_error=0.5, dropped=()
+        ),
+    )
+    flagged = build(portfolio(equity()), batch(equity()).results, dist_found=noisy)
+    assert flagged["dist"]["one_sided"]["estimated"] is False
+    assert "price_not_estimated" in flagged["flags"]
+    assert flagged["status"] == "ok"
 
 
 def test_a_price_with_a_large_error_is_not_estimated_but_stays_visible():

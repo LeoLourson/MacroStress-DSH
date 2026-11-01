@@ -180,6 +180,25 @@ class ConstraintLaw:
 
 
 @dataclass(frozen=True)
+class OneSided:
+    """The one-sided price ``dist+(s)`` of the canon (section 5): the price of the event ``A+``.
+
+    Every interval condition on the support becomes a ray — an interval below the median of
+    its functional opens downwards from its upper bound, one above the median opens upwards
+    from its lower bound — and a condition whose interval contains the median is dropped.
+    ``A+`` holds ``A``, so ``dist+(s) <= dist(s)`` under a condition on the support, and the
+    width of the interval does not enter ``dist+(s)``: events of unequal boxes are compared
+    by it. ``dropped`` numbers the coordinates that were dropped; with nothing kept the
+    distance, the log probability and the error are zero, and the price is estimated.
+    """
+
+    distance: float
+    log_probability: float
+    standard_error: float
+    dropped: tuple[int, ...] = ()
+
+
+@dataclass(frozen=True)
 class Dist:
     """The price of a scenario: ``dist(s) = KL(P_s || P) = E_P[-log P(S | R)]``.
 
@@ -204,6 +223,11 @@ class Dist:
     """The price split by the level of the conditioned quantity, at ``R = theta``: the level
     the scenario moves furthest from its base model. Empty when there is nothing to split —
     no conditions below the macro level, or a price no law measured."""
+    one_sided: OneSided | None = None
+    """The one-sided price ``dist+(s)`` beside the price: the event with every interval
+    condition replaced by a ray, so the width of the intervals does not enter it. ``None``
+    when there is nothing to one-side — no support conditions, or conditions on means and
+    probabilities, which carry no interval to open."""
     message: str | None = None
 
 

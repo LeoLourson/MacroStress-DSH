@@ -252,6 +252,68 @@ def test_the_price_reads_the_impact_shifted_bounds(versions):
     assert found_shifted.distance > found_plain.distance + 0.5
 
 
+def test_narrowing_an_interval_raises_the_price_and_not_the_one_sided_price(versions):
+    # Both boxes share their upper bound and sit below the median of the functional, so
+    # they open into the same ray: the price grows with the narrowing, the one-sided price
+    # of the ray does not.
+    wide = scenario(versions, constraints=[interval("gl.brent", 2, -6.0, -2.0)])
+    narrow = scenario(versions, constraints=[interval("gl.brent", 2, -4.0, -2.0)])
+    found_wide = dist_of(wide, versions.loaded, draws=200, seed=SEED)
+    found_narrow = dist_of(narrow, versions.loaded, draws=200, seed=SEED)
+    assert found_narrow.distance > found_wide.distance
+    assert found_wide.one_sided is not None and found_narrow.one_sided is not None
+    assert found_wide.one_sided.dropped == () and found_narrow.one_sided.dropped == ()
+    assert found_narrow.one_sided.distance == pytest.approx(
+        found_wide.one_sided.distance, abs=0.15
+    )
+    assert found_narrow.one_sided.distance <= found_narrow.distance + 2 * (
+        found_narrow.standard_error + found_narrow.one_sided.standard_error
+    )
+
+
+def test_an_interval_that_holds_the_median_is_dropped_from_the_one_sided_event(versions):
+    # A box that holds the median of the functional: the price is the box's, the one-sided
+    # event holds nothing of it, so the one-sided price is zero with the coordinate named.
+    spec = scenario(versions, constraints=[interval("gl.brent", 2, 1.0, 8.0)])
+    found = dist_of(spec, versions.loaded, draws=200, seed=SEED)
+    assert found.distance > 0.0
+    assert found.one_sided is not None
+    assert found.one_sided.dropped == (0,)
+    assert found.one_sided.distance == 0.0
+    assert found.one_sided.log_probability == 0.0
+    assert found.one_sided.standard_error == 0.0
+
+
+def test_the_one_sided_price_is_at_most_the_price(versions):
+    # A+ holds A, so the price of the ray is below the price of the box, within the error
+    # of the two estimates.
+    spec = scenario(versions, constraints=[interval("gl.brent", 2, 1.0, 3.0)])
+    found = dist_of(spec, versions.loaded, draws=200, seed=SEED)
+    assert found.one_sided is not None
+    assert found.one_sided.distance <= found.distance + 2 * (
+        found.standard_error + found.one_sided.standard_error
+    )
+
+
+def test_a_scenario_of_conditions_on_means_has_no_one_sided_price(versions):
+    # Conditions on means and probabilities carry no interval to open into a ray, so the
+    # one-sided price is absent even beside a support condition.
+    spec = scenario(
+        versions,
+        inner=4,
+        constraints=[interval("gl.brent", 2, 1.0, 3.0)],
+        expectations=[
+            {
+                "terms": [{"variable": "gl.brent", "month": 2, "weight": 1.0}],
+                "low": 1.0,
+                "basis": "assumption",
+            }
+        ],
+    )
+    found = dist_of(spec, versions.loaded, draws=200, seed=SEED)
+    assert found is not None and found.one_sided is None
+
+
 def test_a_wide_box_gives_a_price_near_zero(versions):
     wide = scenario(versions, constraints=[interval("gl.brent", 2, -50.0, 50.0)])
     narrow = scenario(versions, constraints=[interval("gl.brent", 2, 1.0, 3.0)])

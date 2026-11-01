@@ -42,9 +42,13 @@ def dist(found) -> dict | None:
     as is, with the message the estimate attached, beside the standard error and the causes
     the scenario names. ``estimated`` is the canon's ten-percent rule: a price whose error
     exceeds a tenth of it is shown, but only with the mark that it is not an estimate.
+    ``one_sided`` is the price of the event with every interval condition opened to a ray —
+    what scenarios of unequal boxes are compared by — with the coordinates that were
+    dropped and its own mark.
     """
     if found is None:
         return None
+    side = found.one_sided
     return {
         "distance": float(found.distance),
         "log_probability": float(found.log_probability),
@@ -53,6 +57,15 @@ def dist(found) -> dict | None:
         "causes": list(found.causes),
         "tolerances": list(found.tolerances),
         "by_level": {str(level): float(price) for level, price in sorted(found.by_level.items())},
+        "one_sided": None
+        if side is None
+        else {
+            "distance": float(side.distance),
+            "log_probability": float(side.log_probability),
+            "standard_error": float(side.standard_error),
+            "estimated": price_estimated(side.distance, side.standard_error),
+            "dropped": list(side.dropped),
+        },
         "message": found.message,
     }
 
@@ -133,7 +146,13 @@ def build(
     if not_admitted:
         flags.append("not_admitted")
     price_block = dist(dist_found)
-    if price_block is not None and not price_block["estimated"]:
+    if price_block is not None and (
+        not price_block["estimated"]
+        or (
+            price_block["one_sided"] is not None
+            and not price_block["one_sided"]["estimated"]
+        )
+    ):
         flags.append("price_not_estimated")
     if any(
         flag.startswith(f"{OUTSIDE_TRAINING}:")

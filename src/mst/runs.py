@@ -689,11 +689,14 @@ def _dist_meta(found) -> dict | None:
     standard error reads the spread over the groups; an infinite distance is passed as is,
     with the message naming the contradiction. ``estimated`` applies the canon's
     ten-percent rule: a price whose error exceeds a tenth of it is not an estimate.
+    ``one_sided`` is the price of the event with every interval condition opened to a ray,
+    with the dropped coordinates and its own mark.
     """
     if found is None:
         return None
     from .model_sdk.dist import price_estimated
 
+    side = found.one_sided
     return {
         "definition": "dist(s) = KL(P_s || P) (docs/concept/formalization.md, sections 4-5)",
         "distance": float(found.distance),
@@ -703,6 +706,15 @@ def _dist_meta(found) -> dict | None:
         "causes": list(found.causes),
         "tolerances": list(found.tolerances),
         "by_level": {str(level): float(price) for level, price in sorted(found.by_level.items())},
+        "one_sided": None
+        if side is None
+        else {
+            "distance": float(side.distance),
+            "log_probability": float(side.log_probability),
+            "standard_error": float(side.standard_error),
+            "estimated": price_estimated(side.distance, side.standard_error),
+            "dropped": list(side.dropped),
+        },
         "message": found.message,
     }
 
