@@ -815,6 +815,13 @@ def _labels(spec: Spec) -> dict:
         warnings.append(
             "no condition: Q = P, so the price is zero and says nothing about the impacts"
         )
+    for impact in spec.impacts:
+        if impact.end < spec.horizon:
+            warnings.append(
+                f"impact on {impact.target} ends at month {impact.end}, before the horizon "
+                f"of {spec.horizon}: the loss at the end of the horizon does not see it, "
+                "and losses_by_month of the report shows it in its own months"
+            )
     return {
         "labels": {
             "event": stated,

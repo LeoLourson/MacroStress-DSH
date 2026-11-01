@@ -112,6 +112,45 @@ def test_validate_accepts_a_scenario_the_versions_can_compute(tmp_path, versions
     assert report["id"] == "oil" and report["ok"] is True and report["problems"] == []
 
 
+def test_validate_warns_about_an_impact_that_ends_before_the_horizon(tmp_path, versions):
+    ws = store.Workspace(tmp_path)
+    install(ws, versions)
+    short = scenario(
+        versions,
+        impacts=[
+            {
+                "target": "gl.brent",
+                "start": 1,
+                "values": [1.0, 1.0, 1.0],
+                "reason": "r",
+                "basis": "assumption",
+            }
+        ],
+    )
+    call(ws, "scenario", {"action": "save", "id": "short", "spec": short})
+    report = call(ws, "scenario", {"action": "validate", "id": "short"}).data
+    assert report["ok"] is True  # a warning, not a problem
+    warnings = "; ".join(report["warnings"])
+    assert "ends at month 3" in warnings and "horizon of 6" in warnings
+    assert "losses_by_month" in warnings
+    # An impact held to the end of the horizon does not warn.
+    held = scenario(
+        versions,
+        impacts=[
+            {
+                "target": "gl.brent",
+                "start": 1,
+                "values": [1.0] * 6,
+                "reason": "r",
+                "basis": "assumption",
+            }
+        ],
+    )
+    call(ws, "scenario", {"action": "save", "id": "held", "spec": held})
+    calm = call(ws, "scenario", {"action": "validate", "id": "held"}).data
+    assert all("ends at month" not in warning for warning in calm["warnings"])
+
+
 def test_validate_names_the_unknown_variable(tmp_path, versions):
     ws = store.Workspace(tmp_path)
     install(ws, versions)
