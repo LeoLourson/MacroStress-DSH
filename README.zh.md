@@ -16,7 +16,7 @@ ES95，以及情景的不可信度 $\delta$。
 使约束 $C$ 得到满足；直接作用 $O$ 补充那些不经由上层传导的效应，例如针对某一行业的出口禁令。模型
 质量通过历史情节（episode）上的回测检验。
 
-总体方案及定义见 [docs/concept/system-scheme.md](docs/concept/system-scheme.md)，方法及其实现见
+总体方案及定义见 [docs/concept/formalization.md](docs/concept/formalization.md)，方法及其实现见
 [docs/concept/scenario-formalization.md](docs/concept/scenario-formalization.md)（俄文）。
 
 ## 系统如何工作
@@ -91,7 +91,7 @@ uv run macrostress --workspace C:/data/macrostress
 
 | 层 | 文件 | 问题 |
 |---|---|---|
-| 概念 | [docs/concept/system-scheme.md](docs/concept/system-scheme.md) | 系统做什么：层、情景、叠加、结果、质量指标（俄文） |
+| 概念 | [docs/concept/formalization.md](docs/concept/formalization.md) | 系统做什么：层、情景、叠加、结果、质量指标（俄文） |
 | 概念 | [docs/concept/scenario-formalization.md](docs/concept/scenario-formalization.md) | 方法如何构造，代码实现了其中哪些部分（俄文） |
 | 概念 | [docs/concept/architecture.md](docs/concept/architecture.md) | 方案在代码中的实现：包、工作区、模型版本、任务（俄文） |
 | 操作 | [docs/howto/install.md](docs/howto/install.md) | 安装 Python 部分并把插件接入 DSH 配置（俄文） |

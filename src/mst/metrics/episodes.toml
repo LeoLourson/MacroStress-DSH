@@ -12,6 +12,11 @@
 # - source = "manual" | "llm": who formalised the scenario. The scenario utility reports the
 #   two apart; an llm mark is only trusted in calculations forward of its formalisation date.
 # The set grows as new historical events are carded; the marks travel with their episodes.
+#
+# The optional [rolling] block turns the rolling check on: step_months is the step of the
+# date grid the models are re-estimated on, and [[rolling.price_events]] names the family of
+# events the price is checked on (fixed before the check, independent of the dates; the
+# events are data of this plan, not of the code).
 
 draws = 1000
 seed = 20261029

@@ -41,6 +41,12 @@ BUNDLE_META_REQUIRED = ("macro", "as_of", "registry", "quantities", "correlated"
 #: count of every node and the check of every driver.
 PART_META_REQUIRED = ("model", "months", "nodes", "driver", "checks", "rows")
 
+#: How many candidates of a hidden coordinate — a regime path, a volatility path: anything the
+#: constraints reweight but no gaussian draw reaches — the platform and the models draw per
+#: value of ``R``. The stage-4 imposition selects one candidate by its box probability, and the
+#: price of a scenario averages the candidates of a group into ``P(S | R)``.
+LATENT_CANDIDATES = 64
+
 
 @dataclass(frozen=True)
 class LinearTerm:
@@ -53,25 +59,44 @@ class LinearTerm:
 
 @dataclass(frozen=True)
 class LinearConstraint:
-    """``low <= sum(weight * y[variable, month]) <= high``; ``low == high`` fixes the value."""
+    """``low <= sum(weight * y[variable, month]) <= high`` with the point mark of its origin.
+
+    The scenario contract fixes a value either by an interval ``low < high`` or by a point
+    ``value``; the platform expands a point to ``value ± tolerance`` (half-width ``tau``), so a
+    plan always carries ``low < high``. ``point`` keeps the origin of such an interval — the
+    1 % gate of the metrics does not apply to it, because its probability measures ``tau``
+    rather than the scenario — and ``tolerance`` is the ``tau`` the point was expanded to (the
+    same scale the platform would use for a narrow interval of the same terms).
+    """
 
     terms: tuple[LinearTerm, ...]
     low: float
     high: float
+    point: bool = False
+    tolerance: float = 0.0
 
 
 @dataclass(frozen=True)
 class ScenarioPlan:
-    """What a macro model simulates under: the horizon, the constraints and the driving shocks.
+    """What a macro model simulates under: the horizon, the constraints and the causes.
 
-    ``constraints`` are in the model scale ``y = g(X)`` of each variable; ``driving_shocks``
-    names the shocks of the model's own ``J`` set that are held responsible for them, an empty
-    tuple leaving every shock free.
+    ``constraints`` are in the model scale ``y = g(X)`` of each variable; ``causes`` names the
+    coordinates of ``omega`` beyond the parameters that the scenario holds responsible for the
+    event — shocks of the model's own ``J`` set and the hidden coordinates the model declares
+    in ``latents``. An empty tuple means every coordinate except the parameters, so the law of
+    ``R`` the price conditions on is the parameters alone. ``regime_event`` names the regime
+    element the event itself asserts, fixed over the horizon — a cause named ``regime_path``
+    explains the event through the regime instead, without fixing it.
     """
 
     horizon: int
     constraints: tuple[LinearConstraint, ...] = ()
-    driving_shocks: tuple[str, ...] = ()
+    causes: tuple[str, ...] = ()
+    regime_event: str | None = None
+    inner: int = 1
+    """How many values of the causes the model draws per value of ``R``: the conditions on
+    means and probabilities reweight them inside their group, so a plan that carries such
+    conditions asks for more than one."""
 
 
 @dataclass(frozen=True)
@@ -96,46 +121,68 @@ class MacroSimulation:
     ``paths`` is ``(R, H + 1, n)`` in the model scale ``y = g(X)``; month ``t = 0`` is the last
     month of history. ``history`` carries the months ``1 - p .. 0`` of every repetition, drawn
     where the panel did not know them, for the satellites that need the recent past.
+    ``diagnostics`` reports what the imposition did beyond drawing: the spread of the
+    effective sizes of the hidden-coordinate candidates, so a scenario riding a single
+    candidate is seen as such.
     """
 
     ids: list[str]
     months: list[date]
     paths: np.ndarray
     history: np.ndarray | None = None
+    diagnostics: dict = field(default_factory=dict)
+    group: np.ndarray | None = None
+    """``(R,)`` which value of ``R`` every path belongs to: the paths of one group share
+    their parameters and everything else the causes do not name, and the conditions on
+    means reweight them inside it. ``None`` when every path is its own group."""
 
 
 @dataclass(frozen=True)
-class Severity:
-    """How far a scenario pushes the paths from what the model expects without it."""
+class ConstraintLaw:
+    """The law of ``W y`` given ``R``, row by row: what the price of a scenario mixes.
 
-    probabilities: np.ndarray
-    """pi_c: the unconditional probability that ``w_c' y`` ends at or below its midpoint."""
-    distance: float
-    """delta: the Mahalanobis distance of the midpoints from the unconditional forecast."""
-    exceeded: float
-    """The share of unconditional paths farther away than ``delta``."""
+    One row is one gaussian law of the ``m`` constraint functionals: ``means`` is ``(N, m)``
+    and ``covs`` is ``(N, m, m)``. Rows share a group — ``group`` is ``(N,)`` — when they share
+    the value of ``R``; within a group the rows are the candidates of everything ``R`` does not
+    fix (the hidden coordinates and the free shocks) with importance weights ``e**log_weight``
+    relative to a plain draw. A group of one row with ``log_weight = log pi`` is a forced
+    hidden coordinate — the event that a regime path holds — whose prior weight the row
+    carries. The platform turns the rows of a group into ``P(S | R)`` and averages
+    ``-log P(S | R)`` over the groups (``mst.model_sdk.dist``).
+    """
+
+    means: np.ndarray
+    covs: np.ndarray
+    log_weight: np.ndarray
+    group: np.ndarray
 
 
 @dataclass(frozen=True)
 class Dist:
-    """The platform measure of scenario implausibility: ``dist(P_s, P) = -log P(C)``.
+    """The price of a scenario: ``dist(s) = KL(P_s || P) = E_P[-log P(S | R)]``.
 
-    Section 4 of the scheme measures the implausibility of a scenario by the distance
-    ``dist(P_s, P)``; under the conditional scheme the platform's assumption puts it at
-    ``-log P(C)``, where ``P(C)`` is the joint probability that the *unconditional* run of
-    the model satisfies every constraint at once. Measured on ``C`` without the impacts,
-    like the plugin's ``Severity``.
+    With no moment conditions the imposition of the canon is conditioning on the event ``S``,
+    and the Kullback—Leibler divergence from the base measure is the mean of ``-log P(S | R)``
+    over the law of ``R`` — not ``-log P(S)``, which the older code measured and which ignores
+    the causes. ``log_probability`` is ``log P(S)`` beside it: the difference
+    ``distance + log_probability`` is the parameter uncertainty the causes cannot explain.
+    ``standard_error`` is the spread of ``-log P(S | R)`` over the groups; ``causes`` names the
+    coordinates the scenario holds responsible, and ``tolerances`` carries the half-width
+    ``tau`` of every point-fixed constraint, in the order of the plan. ``message`` is set when
+    a group has no probability at all: the scenario contradicts the models, the case lemma 2
+    of the canon names.
     """
 
-    probability: float
-    """P(C): the joint probability of all constraints on the unconditional run."""
     distance: float
-    """``-log P(C)``; infinite when the probability is zero."""
-    way: str
-    """How ``P(C)`` was estimated: ``mc`` — the share of the base run's paths, ``exact`` —
-    the gaussian box probability of the parameter mixture."""
+    log_probability: float
+    standard_error: float
+    causes: tuple[str, ...] = ()
+    tolerances: tuple[float, ...] = ()
+    by_level: dict[int, float] = field(default_factory=dict)
+    """The price split by the level of the conditioned quantity, at ``R = theta``: the level
+    the scenario moves furthest from its base model. Empty when there is nothing to split —
+    no conditions below the macro level, or a price no law measured."""
     message: str | None = None
-    """Set when the probability is zero: no unconditional path satisfies every constraint."""
 
 
 @dataclass(frozen=True)
@@ -147,6 +194,36 @@ class DriverPaths:
     """``(R, H + 1, K)``; ``t = 0`` is the calculation month."""
     flags: dict[str, frozenset[str]]
     """The disclosures of every driver: parameters from above, approximate data, an impact."""
+
+
+@dataclass(frozen=True)
+class UpperPaths:
+    """Everything a satellite of level ``l`` simulates on: the macro paths and the paths of
+    every level above it, with its impacts already applied.
+
+    ``macro`` is the level-0 simulation the run starts from; ``levels`` maps a level number
+    to the paths of that level's quantities, in the model scale, with every impact of those
+    levels applied — the recursion of the canon draws the levels in ascending order, so a
+    model of level ``l`` reads the levels below its own and nothing else.
+    """
+
+    macro: MacroSimulation
+    levels: dict[int, DriverPaths]
+
+
+@dataclass(frozen=True)
+class UpperHistory:
+    """The history of one quantity of a level above, as a level-``l`` estimate reads it.
+
+    ``values`` is ``(T, N)`` in the model scale of the quantity on its ``months``, NaN where
+    unknown; ``drivers`` names the object of every column. A model of a level above builds
+    its own inputs from these rows when its quantities read quantities instead of macro
+    variables.
+    """
+
+    months: list[date]
+    drivers: list[str]
+    values: np.ndarray
 
 
 @dataclass(frozen=True)
@@ -223,6 +300,9 @@ class SatelliteEstimateContext:
     explicit ``quantity=model_id`` assignment hands to it, even one it does not declare. The
     driver registry carries the quantities, the object tree and the drivers with their series;
     ``mst.drivers.history`` builds the standard inputs of a quantity from it and the panel.
+    ``upper_history`` carries, for every quantity of the levels above the model's own, its
+    observed rows in the model scale — the inputs of a quantity that reads quantities instead
+    of macro variables are built from these, not from the panel.
     """
 
     store: SeriesStoreLike
@@ -232,6 +312,7 @@ class SatelliteEstimateContext:
     as_of: date
     macro: str
     quantities: tuple[str, ...]
+    upper_history: dict[str, UpperHistory] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -243,11 +324,10 @@ class SatellitePart:
     was fitted on and the ``Check`` of every driver with one. The platform adds ``model`` — the id
     of the model that returned the part; a part that names another model is refused. A model that
     stores the drivers' own history conventionally names its array ``d`` inside the part (the
-    platform saves it as ``<quantity>.d``). It may also record the bounds a node was trained on
-    as ``train_low`` and ``train_high`` (a list per node, ``None`` where a node has no range);
-    the platform then marks the paths that leave those bounds, and reads a part without them —
-    a version written before the bounds were recorded — from the whole history column, marking
-    the driver ``legacy_training_range``.
+    platform saves it as ``<quantity>.d``). It records the bounds a node was trained on as
+    ``train_low`` and ``train_high`` (a list per node, ``None`` where a node has no range):
+    the platform marks the paths that leave those bounds, and a part without the bounds is
+    refused — the outside-range check cannot run on it.
     """
 
     meta: dict
@@ -280,6 +360,12 @@ class MacroModel(ABC):
     version: str
     label: str
     variables: tuple[str, ...] = ()
+    latents: tuple[str, ...] = ()
+    """The hidden coordinates of ``omega`` beyond the parameters and the shocks: a regime
+    path, a volatility path — anything the constraints reweight but no gaussian draw
+    reaches. A scenario names them among its causes to keep them out of ``R``, and the
+    model draws their candidates (``LATENT_CANDIDATES``) when the price and the imposition
+    need them. A model without such coordinates declares none."""
 
     @abstractmethod
     def estimate(self, context: MacroEstimateContext) -> MacroEstimate:
@@ -298,20 +384,17 @@ class MacroModel(ABC):
         Raises ``InfeasibleScenario`` when the driving shocks cannot meet the constraints.
         """
 
-    def severity(self, model, plan: ScenarioPlan, *, draws: int, seed: int) -> Severity | None:
-        """How improbable the plan is under the model; ``None`` when the model does not say."""
-        return None
-
-    def constraint_moments(
+    def constraint_law(
         self, model, plan: ScenarioPlan, *, draws: int, seed: int
-    ) -> tuple[np.ndarray, np.ndarray] | None:
-        """The mean and covariance of the constraint functionals under each parameter draw.
+    ) -> ConstraintLaw | None:
+        """The law of the constraint functionals given ``R``, as ``ConstraintLaw`` rows.
 
-        ``means`` is ``(R, m)`` and ``covs`` is ``(R, m, m)`` in the order of
-        ``plan.constraints``: per drawn parameter set the constraint functionals ``W y`` are
-        normal, so the platform turns the mixture into the exact probability of the
-        constraint box (``mst.model_sdk.dist``). ``None`` — the default — says the model
-        does not measure them, and the platform estimates ``P(C)`` by Monte Carlo alone.
+        One group of rows belongs to one draw of ``R`` — the parameters and every coordinate
+        the plan's driving shocks do not name — and holds the candidates of the hidden
+        coordinates the model carries (``LATENT_CANDIDATES`` of them) with their importance
+        weights. A model whose representation has no hidden structure returns one row per
+        draw. ``None`` — the default — says the model does not measure the law, and the
+        platform reports no price for its scenarios.
         """
         return None
 
@@ -336,9 +419,9 @@ class SatelliteModel(ABC):
     is loaded once for all its quantities: ``load`` receives the parts of every quantity
     assigned to it.
 
-    This release supports ``L = 1``: ``simulate`` receives the level-0 ``MacroSimulation`` only,
-    so a model of a level above 1 has to build its own inputs for the levels in between rather
-    than read them from an SDK structure.
+    ``simulate`` receives the paths of every level above the quantities it serves
+    (``UpperPaths``): the macro simulation and the driver paths of the levels below its own,
+    impacts applied, so a model of any level reads its inputs the same way.
     """
 
     model_id: str
@@ -358,31 +441,31 @@ class SatelliteModel(ABC):
     def simulate(
         self,
         model,
-        macro: MacroSimulation,
+        upper: UpperPaths,
         drivers: list[str],
         impacts: list[AdditiveImpact],
         *,
         correlation: tuple[list[str], np.ndarray] | None = None,
-        shocks: np.ndarray | None = None,
+        shocks: np.ndarray,
         seed: int,
         stream: int,
     ) -> DriverPaths:
-        """The paths of ``drivers`` on ``macro``, with the impacts of the scenario added.
+        """The paths of ``drivers`` on the levels above them, with the impacts added.
 
-        ``correlation`` is the bundle's residual correlation: the driver ids it is measured on
-        and their matrix. ``shocks`` is passed only for a bundle of two or more models, and
-        ``None`` is equivalent to its absence: the platform then does not pass the argument at
-        all, and a model written before model SDK 1.1 keeps working as it did. When given, it
-        holds the standardized residuals the platform drew for this model's correlated drivers —
-        ``(R, steps, k)`` columns in the order of ``drivers``, counting only the drivers with a
-        history of their own; a driver without one stays on the model's own independent noise.
-        The model must use these columns as the residuals of those drivers and read the first
-        rows it needs, not all ``steps``: a bundle of two or more models draws the joint shocks
-        of all its drivers once, so the measured cross-model correlation reaches the joint
-        paths. Without them the model draws its own correlated residuals from ``correlation``,
-        as it always did. ``stream`` separates the random streams of the models of one bundle —
-        the posterior draw and the independent noise come from it, while the platform's shocks
-        come from its own stream.
+        ``upper`` carries the macro simulation and the driver paths of every level above the
+        quantities the model serves, impacts of those levels applied; a model of level 1 reads
+        ``upper.macro`` alone. ``correlation`` is the bundle's residual correlation: the driver
+        ids it is measured on and their matrix. ``shocks`` holds the standardized residuals the
+        platform drew for this model's correlated drivers — ``(R, steps, k)`` columns in the
+        order of ``drivers``, counting only the drivers with a history of their own; a driver
+        without one stays on the model's own independent noise. The model must use these
+        columns as the residuals of those drivers and read the first rows it needs, not all
+        ``steps``: the platform draws the joint shocks of all its drivers once per level, so
+        the measured cross-model correlation reaches the joint paths, and the levels draw
+        independently of one another as the product measure of the canon asks.
+        ``stream`` separates the random streams of the models of one bundle — the posterior
+        draw and the independent noise come from it, while the platform's shocks come from its
+        own stream.
         """
 
     def describe(self) -> dict:

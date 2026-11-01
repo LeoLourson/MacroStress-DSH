@@ -1,16 +1,15 @@
-"""The report of a run: the loss at P5, P50 and P95, and the severity of its scenario.
+"""The report of a run: the loss at P5, P50 and P95, and the price of its scenario.
 
 Losses are summed inside each repetition and only then turned into quantiles: the sum of the
 positions' own P95 is descriptive statistics and is never reported as the portfolio's P95. A
 position that was not calculated does not quietly disappear: it is excluded with its reason, and
-the report states the share of the value the numbers cover. ``delta`` is the distance of the
-scenario's paths from the unconditional forecast (``mst.macro.forecast.Severity``); a scenario
-without constraints has no severity, and the report says so instead of inventing a zero.
+the report states the share of the value the numbers cover.
 
-Beside the severity stands the platform's ``dist(P_s, P) = -log P(C)`` (``mst.model_sdk.dist``):
-the same unconditional forecast, but the probability of the whole constraint box. A zero
-probability is an infinite distance, passed as is and named: no unconditional path satisfies
-every constraint at once, which also fails the constraint gate.
+The price of the scenario — ``dist(s) = E_P[-log P(S | R)]`` of the canon
+(``mst.model_sdk.dist``) — stands beside the loss: the mean of ``-log P(S | R)`` over the law
+of ``R``, with its standard error and the causes the scenario names. An infinite distance is
+passed as is and named: at some value of ``R`` the event has no probability, the case lemma 2
+of the canon names, and the scenario contradicts the models.
 """
 
 from typing import Literal
@@ -18,7 +17,7 @@ from typing import Literal
 import numpy as np
 
 from ..engine.status import worst
-from ..plugin_sdk import expected_shortfall
+from ..metrics.es import es_block
 
 DEFAULT_COVERAGE_LIMIT = 0.05
 """Uncovered value above this share turns the portfolio's status into ``incomplete``."""
@@ -26,29 +25,21 @@ DEFAULT_COVERAGE_LIMIT = 0.05
 PortfolioStatus = Literal["ok", "needs_review", "incomplete"]
 
 
-def severity(found) -> dict | None:
-    """The severity of a scenario as the report states it, or None without constraints."""
-    if found is None:
-        return None
-    return {
-        "distance": found.distance,
-        "exceeded": found.exceeded,
-        "probabilities": [float(value) for value in found.probabilities],
-    }
-
-
 def dist(found) -> dict | None:
-    """The platform distance of the scenario as the report states it, or None without any.
+    """The price of the scenario as the report states it, or None when there is none.
 
-    An infinite distance — no unconditional path satisfies every constraint — is passed as
-    is, with the message the estimate attached and the way ``P(C)`` was estimated.
+    An infinite distance — the event has no probability at some value of ``R`` — is passed
+    as is, with the message the estimate attached, beside the standard error and the causes
+    the scenario names.
     """
     if found is None:
         return None
     return {
-        "probability": float(found.probability),
         "distance": float(found.distance),
-        "way": found.way,
+        "log_probability": float(found.log_probability),
+        "standard_error": float(found.standard_error),
+        "causes": list(found.causes),
+        "tolerances": list(found.tolerances),
         "message": found.message,
     }
 
@@ -57,8 +48,9 @@ def build(
     portfolio,
     results,
     *,
-    severity_found=None,
     dist_found=None,
+    seed: int = 0,
+    horizon: str | None = None,
     coverage_limit: float = DEFAULT_COVERAGE_LIMIT,
 ) -> dict:
     """The report of ``results`` against the portfolio that produced them."""
@@ -99,11 +91,7 @@ def build(
         if excluded or position_status == "needs_review"
         else "ok"
     )
-    losses = (
-        -np.sum([np.asarray(result.value_change, dtype=float) for result in included], axis=0)
-        if included
-        else np.zeros(0)
-    )
+    losses = losses_of(results)
     return {
         "portfolio": {
             "name": portfolio.name,
@@ -112,8 +100,7 @@ def build(
         },
         "status": status,
         "flags": flags,
-        "loss": _loss(losses),
-        "severity": severity(severity_found),
+        "loss": _loss(losses, seed=seed, horizon=horizon),
         "dist": dist(dist_found),
         "coverage": {
             "share": share,
@@ -136,9 +123,40 @@ def build(
     }
 
 
-def _loss(losses: np.ndarray) -> dict | None:
-    """P5/P50/P95 of the portfolio's loss and ES95; None when nothing was calculated."""
+def losses_of(results) -> np.ndarray:
+    """The portfolio loss of every repetition: minus the sum of the calculated positions."""
+    included = [result for result in results if result.status != "invalid"]
+    if not included:
+        return np.zeros(0)
+    return -np.sum(
+        [np.asarray(result.value_change, dtype=float) for result in included], axis=0
+    )
+
+
+def loss_block(results, *, seed: int = 0, horizon: str | None = None) -> dict | None:
+    """P5/P50/P95 and the ES block of one run's results — what a contribution reports."""
+    return _loss(losses_of(results), seed=seed, horizon=horizon)
+
+
+def _loss(losses: np.ndarray, *, seed: int = 0, horizon: str | None = None) -> dict | None:
+    """P5/P50/P95 of the portfolio's loss and ES95 with its interval and trimming.
+
+    The expected shortfall carries what the canon asks beside it — a bootstrap interval, the
+    sensitivity to dropping the heaviest one percent of the paths and the horizon it belongs
+    to — through the shared block of ``mst.metrics.es``; the horizon mark names the month the
+    loss is measured at when the caller knows it.
+    """
     if losses.size == 0:
         return None
     p05, p50, p95 = (float(value) for value in np.percentile(losses, [5, 50, 95]))
-    return {"p05": p05, "p50": p50, "p95": p95, "es95": max(expected_shortfall(losses), p95)}
+    tail = es_block(losses, seed=seed)
+    return {
+        "p05": p05,
+        "p50": p50,
+        "p95": p95,
+        "es95": max(tail["es95"], p95),
+        "es95_interval": tail["interval"],
+        "trimmed_es95": tail["trimmed_es95"],
+        "trim": tail["trim"],
+        "horizon_month": horizon,
+    }

@@ -115,13 +115,20 @@ def build(ws: store.Workspace) -> FastMCP:
         action: str,
         id: str | None = None,
         spec: dict[str, Any] | None = None,
+        portfolio: str | None = None,
+        kappa: float | None = None,
+        level: float | None = None,
+        draws: int | None = None,
+        seed: int | None = None,
     ) -> dict:
-        """Stored scenarios. Actions: list, get, save, validate.
+        """Stored scenarios. Actions: list, get, save, validate, reverse.
 
         ``save`` checks the contract and writes ``scenarios/<id>.json``; ``validate`` loads the
         macro and satellite versions the file names and names every problem that keeps the
         scenario from being computed, including corpus fragments not visible on the
-        calculation day when the index exists.
+        calculation day when the index exists. ``reverse`` searches the scenario's family on
+        ``portfolio``: the worst loss under the price ``kappa``, or the lowest price whose loss
+        reaches ``level``.
         """
         if action == "list":
             return scenario_tool.catalogue(ws.scenarios)
@@ -129,9 +136,42 @@ def build(ws: store.Workspace) -> FastMCP:
             return scenario_tool.get(ws.scenarios, _need(id, "id"))
         if action == "save":
             return scenario_tool.save(ws.scenarios, _need(id, "id"), _need(spec, "spec"))
+        if action == "reverse":
+            from mst import plugins as _plugins
+            from mst.scenario.reverse import inf_dist, sup_rho, width_family
+
+            loaded = scenario_tool.load(ws.scenarios, _need(id, "id"))
+            installed = _plugins.registry()
+            macro = macro_version.load(ws.models, loaded.macro, installed.macro)
+            satellites = satellite_bundle.load(
+                ws.models, loaded.satellites, installed.satellites
+            )
+            found = portfolio_tool.load(ws.portfolios, _need(portfolio, "portfolio"))
+            family = width_family(loaded, macro)
+            if kappa is not None:
+                return sup_rho(
+                    family,
+                    kappa,
+                    macro=macro,
+                    satellites=satellites,
+                    positions=found.positions,
+                    draws=_need(draws, "draws"),
+                    seed=_need(seed, "seed"),
+                )
+            return inf_dist(
+                family,
+                _need(level, "level"),
+                macro=macro,
+                satellites=satellites,
+                positions=found.positions,
+                draws=_need(draws, "draws"),
+                seed=_need(seed, "seed"),
+            )
         if action == "validate":
             return scenario_tool.validate(ws.scenarios, _need(id, "id"), ws.models, _indexed(ws))
-        raise ValueError(f"scenario: unknown action {action!r}, try list, get, save, validate")
+        raise ValueError(
+            f"scenario: unknown action {action!r}, try list, get, save, reverse, validate"
+        )
 
     @server.tool
     def run(
@@ -144,6 +184,7 @@ def build(ws: store.Workspace) -> FastMCP:
         seed: int | None = None,
         base_currency: str = "RUB",
         targets: list[str] | None = None,
+        contributions: bool = False,
     ) -> dict:
         """Runs on the paths of a scenario. Actions: start, status, result, list.
 
@@ -170,6 +211,8 @@ def build(ws: store.Workspace) -> FastMCP:
                 request["base_currency"] = base_currency
             if targets is not None:
                 request["targets"] = targets
+            if contributions:
+                request["contributions"] = True
             run_id = runs.new_id()
             runs.begin(ws, run_id, request)
             try:

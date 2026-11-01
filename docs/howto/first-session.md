@@ -58,4 +58,4 @@
 
 Метод за шагами расчёта — [../concept/scenario-formalization.md](../concept/scenario-formalization.md),
 контракты чисел — [../reference/platform.md](../reference/platform.md), общая схема —
-[../concept/system-scheme.md](../concept/system-scheme.md).
+[../concept/formalization.md](../concept/formalization.md).

@@ -32,7 +32,7 @@ def test_the_model_meets_its_constraints_in_every_path():
                 high=18.0,
             ),
         ),
-        driving_shocks=("ru.key_rate",),
+        causes=("ru.key_rate",),
     )
     simulation = MODEL.simulate(_Fake(), plan, draws=5, seed=1)
     assert simulation.paths.shape == (5, 4, 2)

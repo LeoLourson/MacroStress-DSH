@@ -1,12 +1,11 @@
 """The conformance check of the model SDK's shock contract, for a plugin's own tests.
 
-A satellite model of a bundle of two or more models receives the standardized residuals of its
-correlated drivers from the platform (``simulate(..., shocks=...)``) and must use them instead
-of drawing those residuals itself; otherwise the measured cross-model correlation never reaches
-the joint paths. ``check_shocks`` calls ``simulate`` with and without such an array on the same
-seed and stream and reports a finding when the paths come out equal: the model ignored the
-shocks. A model that cannot accept the argument at all (written against model SDK 1.0) or that
-returns other drivers or other shapes is reported too.
+A satellite model receives the standardized residuals of its correlated drivers from the
+platform (``simulate(..., shocks=...)``) and must use them instead of drawing those residuals
+itself; otherwise the measured cross-model correlation never reaches the joint paths.
+``check_shocks`` calls ``simulate`` twice with different platform shocks on the same seed and
+stream and reports a finding when the paths come out equal: the model ignored the shocks. A
+model that returns other drivers or other shapes is reported too.
 
 The plan of the metrics work named ``mst.plugin_sdk.testing`` for this check, but that module
 conforms position plugins (declarations and the demo calculation); the shock contract belongs
@@ -18,7 +17,7 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from .contracts import AdditiveImpact, MacroSimulation, SatelliteModel
+from .contracts import AdditiveImpact, MacroSimulation, SatelliteModel, UpperPaths
 
 
 @dataclass(frozen=True)
@@ -61,17 +60,34 @@ def check_shocks(
         return []
     horizon = macro.paths.shape[1] - 1
     rows = horizon + max((history or 1) - 1, 0)
-    rng = np.random.default_rng([seed, 0, 0])
-    shocks = rng.standard_normal((macro.paths.shape[0], rows, len(columns)))
-    plain_options = {"seed": seed, "stream": stream}
-    with_shocks_options = {**plain_options, "shocks": shocks}
+    first_shocks = np.random.default_rng([seed, 0, 0]).standard_normal(
+        (macro.paths.shape[0], rows, len(columns))
+    )
+    second_shocks = np.random.default_rng([seed, 0, 1]).standard_normal(
+        (macro.paths.shape[0], rows, len(columns))
+    )
+    upper = UpperPaths(macro=macro, levels={})
     try:
-        plain = model.simulate(loaded, macro, list(drivers), list(impacts), **plain_options)
+        first = model.simulate(
+            loaded,
+            upper,
+            list(drivers),
+            list(impacts),
+            shocks=first_shocks,
+            seed=seed,
+            stream=stream,
+        )
     except Exception as error:  # noqa: BLE001 - a broken model is a finding
         return [Finding("simulate", f"{type(error).__name__}: {error}")]
     try:
-        with_shocks = model.simulate(
-            loaded, macro, list(drivers), list(impacts), **with_shocks_options
+        second = model.simulate(
+            loaded,
+            upper,
+            list(drivers),
+            list(impacts),
+            shocks=second_shocks,
+            seed=seed,
+            stream=stream,
         )
     except Exception as error:  # noqa: BLE001 - a model that rejects shocks is a finding
         return [
@@ -81,21 +97,21 @@ def check_shocks(
             )
         ]
     findings: list[Finding] = []
-    if sorted(with_shocks.ids) != sorted(plain.ids):
+    if sorted(second.ids) != sorted(first.ids):
         findings.append(Finding("shocks", "the model returned other drivers with the shocks"))
-    if with_shocks.paths.shape != plain.paths.shape:
+    if second.paths.shape != first.paths.shape:
         findings.append(
             Finding(
                 "shocks",
                 "the paths changed shape: "
-                f"{plain.paths.shape} without shocks, {with_shocks.paths.shape} with them",
+                f"{first.paths.shape} on the first shocks, {second.paths.shape} on the second",
             )
         )
-    elif np.array_equal(with_shocks.paths, plain.paths):
+    elif np.array_equal(second.paths, first.paths):
         findings.append(
             Finding(
                 "shocks",
-                "the model ignored the platform shocks: its paths with and without them are "
+                "the model ignored the platform shocks: its paths on two different shocks are "
                 "equal",
             )
         )

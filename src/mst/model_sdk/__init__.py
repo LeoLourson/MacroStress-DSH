@@ -20,11 +20,13 @@ from .conditional import (
 )
 from .contracts import (
     BUNDLE_META_REQUIRED,
+    LATENT_CANDIDATES,
     MACRO_ARRAYS_REQUIRED,
     MACRO_META_REQUIRED,
     PART_META_REQUIRED,
     AdditiveImpact,
     Check,
+    ConstraintLaw,
     Dist,
     DriverPaths,
     LinearConstraint,
@@ -38,7 +40,6 @@ from .contracts import (
     SatelliteModel,
     SatellitePart,
     ScenarioPlan,
-    Severity,
 )
 from .testing import Finding, check_shocks
 from .version import MODEL_SDK_VERSION, model_compatible
@@ -51,10 +52,12 @@ __all__ = [
     "PART_META_REQUIRED",
     "AdditiveImpact",
     "Check",
+    "ConstraintLaw",
     "Dist",
     "DriverPaths",
     "Finding",
     "InfeasibleScenario",
+    "LATENT_CANDIDATES",
     "LinearConstraint",
     "LinearTerm",
     "MacroEstimate",
@@ -68,7 +71,6 @@ __all__ = [
     "SatelliteModel",
     "SatellitePart",
     "ScenarioPlan",
-    "Severity",
     "box_gibbs",
     "check_shocks",
     "dependent_rows",

@@ -13,7 +13,7 @@ catalog covers. A driver's id is
 import json
 import tomllib
 from pathlib import Path
-from typing import Literal
+from typing import Annotated, Literal
 
 import numpy as np
 from pydantic import Field, model_validator
@@ -59,7 +59,13 @@ class Feature(Contract):
 
     id: Name
     variable: BlockId
+    """The feature reads a macro variable: a quantity above cannot be its threshold."""
     above: Number
+
+
+#: An input of a quantity: a macro variable of level 0 or a quantity of a level below its
+#: own — ``Registry.check`` tells the two apart and refuses the misplaced ones.
+InputId = Annotated[str, Field(pattern=r"^((gl|ru)\.[a-z0-9_]+|[a-z][a-z0-9_]*)$")]
 
 
 class Quantity(Contract):
@@ -67,7 +73,11 @@ class Quantity(Contract):
     label: Identifier
     unit: Identifier
     transform: Transform
-    regressors: list[BlockId] = Field(min_length=1)
+    level: int = Field(default=1, strict=True, ge=1, le=9)
+    """The level of the quantity above the macro variables: 1 reads the macro variables,
+    2 and further read the quantities of the levels below their own. The satellites of a
+    level are simulated only after every level above them has produced its paths."""
+    regressors: list[InputId] = Field(min_length=1)
     features: list[Feature] = []
     lags: int = Field(strict=True, ge=0, le=3)
     span: int = Field(default=1, strict=True, ge=1, le=12)
@@ -90,6 +100,18 @@ class Registry(Contract):
 
     @model_validator(mode="after")
     def consistent(self):
+        levels = {q.id: q.level for q in self.quantities}
+        misplaced = [
+            f"{q.id} (level {q.level}) reads {name} (level {levels.get(name, 0)})"
+            for q in self.quantities
+            for name in q.regressors + [f.variable for f in q.features]
+            if name in levels and levels[name] >= q.level
+        ]
+        if misplaced:
+            raise ValueError(
+                "a quantity reads its own level or a level above it: "
+                + "; ".join(misplaced)
+            )
         for kind, items in (("quantity", self.quantities), ("object", self.objects)):
             seen = set()
             for item in items:
@@ -176,13 +198,18 @@ class Registry(Contract):
         return None
 
     def check(self, macro: MacroRegistry) -> None:
-        """Raises ``ValueError`` naming every macro variable the macro registry does not know."""
+        """Raise ``ValueError`` naming every input the registries do not know.
+
+        An input is a macro variable of level 0 or a quantity of a level strictly below the
+        quantity reading it — the registry itself refuses the misplaced ones at validation,
+        because the recursion of the canon draws the levels in ascending order.
+        """
         known = {v.id for v in macro.variables}
         unknown = [
             name
             for q in self.quantities
             for name in q.regressors + [f.variable for f in q.features]
-            if name not in known
+            if name not in known and name not in {item.id for item in self.quantities}
         ]
         if unknown:
             raise ValueError("unknown macro variables: " + ", ".join(dict.fromkeys(unknown)))

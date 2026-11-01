@@ -19,7 +19,7 @@ $P_5$, $P_{50}$, $P_{95}$, ES95 и неправдоподобность сцен
 добавляют эффекты, которые не проходят через верхние уровни, — например запрет экспорта для
 одной отрасли. Качество моделей проверяется бэктестом на исторических эпизодах.
 
-Общая схема с определениями — [docs/concept/system-scheme.md](docs/concept/system-scheme.md),
+Общая схема с определениями — [docs/concept/formalization.md](docs/concept/formalization.md),
 метод и его реализация — [docs/concept/scenario-formalization.md](docs/concept/scenario-formalization.md).
 
 ## Как устроена система
@@ -96,7 +96,7 @@ uv run macrostress --workspace C:/data/macrostress
 
 | Слой | Файл | Вопрос |
 |---|---|---|
-| Концепция | [docs/concept/system-scheme.md](docs/concept/system-scheme.md) | Что система делает: уровни, сценарий, наложение, результат, метрики качества |
+| Концепция | [docs/concept/formalization.md](docs/concept/formalization.md) | Что система делает: уровни, сценарий, наложение, результат, метрики качества |
 | Концепция | [docs/concept/scenario-formalization.md](docs/concept/scenario-formalization.md) | Как устроен метод и что из него реализовано в коде |
 | Концепция | [docs/concept/architecture.md](docs/concept/architecture.md) | Как схема реализована в коде: пакеты, workspace, версии моделей, задачи |
 | Как работать | [docs/howto/install.md](docs/howto/install.md) | Как поставить Python-часть и подключить плагин к профилю DSH |

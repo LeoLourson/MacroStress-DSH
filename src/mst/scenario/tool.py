@@ -38,7 +38,7 @@ def catalogue(root: Path) -> dict:
                 "satellites": item.satellites,
                 "horizon": item.horizon,
                 "constraints": len(item.constraints),
-                "driving_shocks": list(item.driving_shocks),
+                "causes": list(item.causes),
                 "impacts": len(item.impacts),
                 "sources": len(item.sources),
             }

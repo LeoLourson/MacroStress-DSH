@@ -10,7 +10,7 @@
 
 | Файл | Вопрос, на который отвечает |
 |---|---|
-| [concept/system-scheme.md](concept/system-scheme.md) | Общая схема: уровни, сценарий $(N,D,C,O)$, наложение, условный прогноз, метрики качества — что система делает и в каком порядке |
+| [concept/formalization.md](concept/formalization.md) | Общая схема: уровни, сценарий $(N,D,C,O)$, наложение, условный прогноз, метрики качества — что система делает и в каком порядке |
 | [concept/scenario-formalization.md](concept/scenario-formalization.md) | Как устроен метод: переменные, сценарий, макромодель, условный прогноз, неправдоподобность, драйверы, отчёт; что из этого делает код |
 | [concept/architecture.md](concept/architecture.md) | Как схема реализована в коде: пакеты и поток данных, workspace, версии моделей, задачи, раздел системного промпта |
 | [howto/install.md](howto/install.md) | Как поставить Python-часть, подключить плагин к профилю DSH и проверить, что всё видно |
@@ -20,7 +20,7 @@
 | [reference/tools.md](reference/tools.md) | Какие есть MCP-инструменты и команды `python -m mst.*`, что они принимают и возвращают |
 | [reference/platform.md](reference/platform.md) | Контракты расчёта: слои, позиция, пути, модель, диспетчер, реестр, прогон и отчёт |
 
-Порядок чтения для нового читателя: system-scheme → scenario-formalization → architecture →
+Порядок чтения для нового читателя: formalization → scenario-formalization → architecture →
 install → mcp → first-session → tools → platform → plugins.
 
 Описание каждого пакета лежит в README его папки (`src/mst/*/README.md`), корпуса — в

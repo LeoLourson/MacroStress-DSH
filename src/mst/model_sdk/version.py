@@ -8,7 +8,7 @@ written for in ``Plugin.model_sdk``; a plugin outside the range blocks start-up 
 from ..sdk_version import compatible as _compatible
 from ..sdk_version import parse
 
-MODEL_SDK_VERSION = "1.1.0"
+MODEL_SDK_VERSION = "2.0.0"
 
 __all__ = ["MODEL_SDK_VERSION", "model_compatible", "parse"]
 

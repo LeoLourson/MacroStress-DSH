@@ -118,11 +118,13 @@ class ShocklessSatellite(SatelliteModel):
     def load(self, parts): ...
 
     def simulate(
-        self, model, macro, drivers, impacts, *, correlation=None, shocks=None, seed, stream
+        self, model, upper, drivers, impacts, *, correlation=None, shocks=None, seed, stream
     ) -> DriverPaths:
         return DriverPaths(
             ids=list(drivers),
-            paths=np.zeros((macro.paths.shape[0], macro.paths.shape[1], len(drivers))),
+            paths=np.zeros(
+                (upper.macro.paths.shape[0], upper.macro.paths.shape[1], len(drivers))
+            ),
             flags={driver: frozenset() for driver in drivers},
         )
 
@@ -134,10 +136,10 @@ class UsingSatellite(ShocklessSatellite):
     label = "Using"
 
     def simulate(
-        self, model, macro, drivers, impacts, *, correlation=None, shocks=None, seed, stream
+        self, model, upper, drivers, impacts, *, correlation=None, shocks=None, seed, stream
     ) -> DriverPaths:
-        horizon = macro.paths.shape[1] - 1
-        paths = np.zeros((macro.paths.shape[0], horizon + 1, len(drivers)))
+        horizon = upper.macro.paths.shape[1] - 1
+        paths = np.zeros((upper.macro.paths.shape[0], horizon + 1, len(drivers)))
         if shocks is not None:
             paths[:, 1:, :] = shocks[:, :horizon, :]
         return DriverPaths(
@@ -180,5 +182,9 @@ def test_a_satellite_that_ignores_the_platform_shocks_is_a_finding():
 
 
 def test_a_satellite_written_before_the_shocks_argument_is_a_finding():
+    # The platform always passes shocks now, so a model without the parameter fails the call
+    # itself; the finding names the TypeError it raised.
     findings = _shock_findings(OldSignature())
-    assert len(findings) == 1 and "did not accept the platform shocks" in str(findings[0])
+    assert len(findings) == 1
+    assert findings[0].check == "simulate"
+    assert "shocks" in str(findings[0])

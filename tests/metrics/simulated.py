@@ -50,6 +50,7 @@ class _Loaded:
     months: list[date]
     last: np.ndarray
     sigma: np.ndarray
+    panel: np.ndarray = None
 
 
 class FakeMacro(MacroModel):
@@ -93,19 +94,71 @@ class FakeMacro(MacroModel):
             months=[date.fromisoformat(m) for m in meta["months"]],
             last=arrays["panel_y"][-1],
             sigma=arrays["panel_y"].std(axis=0) / 4,
+            panel=arrays["panel_y"],
         )
 
-    def simulate(self, model, plan: ScenarioPlan, *, draws: int, seed: int):
+    def constraint_law(self, model, plan, *, draws, seed):
+        """The exact law of the constraint functionals: a random walk is a gaussian.
+
+        y_t is the last value plus t independent steps of scale sigma, so a
+        functional's mean is the weighted last value and two functionals share the months
+        their horizons overlap.
+        """
+        if not plan.constraints:
+            return None
+        from mst.model_sdk.contracts import ConstraintLaw
+
+        index = {id_: k for k, id_ in enumerate(model.ids)}
+        m = len(plan.constraints)
+        means = np.zeros((draws, m))
+        covs = np.zeros((draws, m, m))
+        for c, constraint in enumerate(plan.constraints):
+            level = sum(
+                term.weight * model.last[index[term.variable]]
+                for term in constraint.terms
+            )
+            means[:, c] = level
+            for other, every in enumerate(plan.constraints):
+                spread = 0.0
+                for one in constraint.terms:
+                    for two in every.terms:
+                        if one.variable != two.variable:
+                            continue
+                        spread += (
+                            one.weight
+                            * two.weight
+                            * min(one.month, two.month)
+                            * model.sigma[index[one.variable]] ** 2
+                        )
+                covs[:, c, other] = spread
+        return ConstraintLaw(
+            means=means,
+            covs=covs,
+            log_weight=np.zeros(draws),
+            group=np.arange(draws),
+        )
+
+    def simulate(
+        self, model, plan: ScenarioPlan, *, draws: int, seed: int, inner: int | None = None
+    ):
         horizon = plan.horizon
+        inner = plan.inner if inner is None else inner
         rng = np.random.default_rng([seed, horizon])
-        steps = rng.normal(0, 1, size=(draws, horizon, len(model.ids))) * model.sigma
+        steps = rng.normal(0, 1, size=(draws * inner, horizon, len(model.ids))) * model.sigma
         paths = np.concatenate(
-            [np.tile(model.last, (draws, 1, 1)), model.last + np.cumsum(steps, axis=1)],
+            [
+                np.tile(model.last, (draws * inner, 1, 1)),
+                model.last + np.cumsum(steps, axis=1),
+            ],
             axis=1,
         )
         months = [shift(model.months[-1], k) for k in range(horizon + 1)]
         return MacroSimulation(
-            ids=model.ids, months=months, paths=paths, history=np.zeros((draws, 1, 2))
+            ids=model.ids,
+            months=months,
+            paths=paths,
+            history=np.zeros((draws * inner, 1, 2)),
+            group=np.arange(draws) if inner == 1 else np.repeat(np.arange(draws), inner),
         )
 
 
@@ -157,8 +210,18 @@ class FakeSatellite(SatelliteModel):
         return {"share_price": parts["share_price"].arrays["d"]}
 
     def simulate(
-        self, model, macro, drivers, impacts, *, correlation=None, seed: int, stream: int
+        self,
+        model,
+        upper,
+        drivers,
+        impacts,
+        *,
+        correlation=None,
+        shocks: np.ndarray,
+        seed: int,
+        stream: int,
     ) -> DriverPaths:
+        macro = upper.macro
         horizon = macro.paths.shape[1] - 1
         draws = macro.paths.shape[0]
         history = model["share_price"]

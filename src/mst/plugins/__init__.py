@@ -361,7 +361,11 @@ def _satellite_problems(plugin: Plugin, model) -> list[str]:
         problems.append(f"{plugin.plugin_id}: {where} quantities must be a tuple")
         quantities = ()
     if not quantities:
-        problems.append(f"{plugin.plugin_id}: {where} serves no quantity")
+        # A model that declares no quantity serves none by default: only an explicit
+        # assignment ``quantity=model_id`` reaches it. The reference model of the second
+        # level works this way — a level-2 quantity has no natural declarer.
+        if not isinstance(model, SatelliteModel):
+            problems.append(f"{plugin.plugin_id}: {where} serves no quantity")
     unknown = _unknown_quantities(quantities)
     if unknown:
         problems.append(

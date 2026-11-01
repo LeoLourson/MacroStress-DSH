@@ -117,7 +117,10 @@ def test_check_names_a_currency_the_models_cannot_price(workspace, positions):
 
 def test_check_names_an_infeasible_scenario(workspace, portfolio, versions):
     target = float(versions.data.y[-1, 0])
-    fixed = {"terms": [{"variable": "gl.brent", "month": 1, "weight": 1.0}]}
+    fixed = {
+        "terms": [{"variable": "gl.brent", "month": 1, "weight": 1.0}],
+        "basis": "assumption",
+    }
     scenario_tool.save(
         workspace.scenarios,
         "bad",
@@ -126,12 +129,16 @@ def test_check_names_an_infeasible_scenario(workspace, portfolio, versions):
             "horizon": 3,
             "macro": versions.macro,
             "satellites": versions.satellites,
+            "approved_by": "И. Иванов",
             "constraints": [
-                {**fixed, "low": target, "high": target},
-                {**fixed, "low": target + 1.0, "high": target + 1.0},
+                {**fixed, "value": target},
+                {**fixed, "value": target + 1.0},
             ],
         },
     )
     report = tool.check(workspace, portfolio, "bad")
     assert report["ok"] is False
-    assert any("cannot meet constraints 2" in problem for problem in report["problems"])
+    # Two disjoint bands on one functional: the candidate weights read an empty event, and
+    # the run refuses the scenario by lemma 2 — the driving-shock check would name the
+    # second constraint the same way.
+    assert any("contradicts the models" in problem for problem in report["problems"])

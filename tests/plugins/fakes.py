@@ -113,7 +113,9 @@ class DemoSatelliteModel(SatelliteModel):
     def load(self, parts):
         raise NotImplementedError
 
-    def simulate(self, model, macro, drivers, impacts, *, correlation=None, seed, stream):
+    def simulate(
+        self, model, macro, drivers, impacts, *, correlation=None, shocks=None, seed, stream
+    ):
         return DriverPaths(ids=list(drivers), paths=np.empty((0, 0, len(drivers))), flags={})
 
 
@@ -129,7 +131,7 @@ def model_plugin(**changes) -> Plugin:
         "demo": (),
         "macro": (DemoMacroModel(),),
         "satellites": (DemoSatelliteModel(),),
-        "model_sdk": ">=1.0,<2.0",
+        "model_sdk": ">=2.0,<3.0",
     }
     values.update(changes)
     return Plugin(**values)

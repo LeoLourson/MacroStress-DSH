@@ -32,6 +32,7 @@ def spec(versions, **changes):
         "horizon": 6,
         "macro": versions.macro,
         "satellites": versions.satellites,
+        "approved_by": "И. Иванов",
     }
     values.update(changes)
     return values
@@ -40,8 +41,8 @@ def spec(versions, **changes):
 def fixed(variable, month, value):
     return {
         "terms": [{"variable": variable, "month": month, "weight": 1.0}],
-        "low": value,
-        "high": value,
+        "value": value,
+        "basis": "assumption",
     }
 
 
@@ -51,8 +52,8 @@ def scenario(versions, **changes):
     def at(variable, month):
         return {
             "terms": [{"variable": variable, "month": month, "weight": 1.0}],
-            "low": 1.0,
-            "high": 1.0,
+            "value": 1.0,
+            "basis": "assumption",
         }
 
     changes.setdefault("constraints", [at("gl.brent", 2)])
@@ -78,7 +79,7 @@ def test_list_shows_every_scenario_and_names_a_broken_one(tmp_path, versions):
     assert [item["id"] for item in listed["broken"]] == ["broken"]
 
 
-def test_an_old_scenario_with_overlays_loads_as_impacts(tmp_path, versions):
+def test_an_old_scenario_with_overlays_is_listed_as_broken(tmp_path, versions):
     ws = store.Workspace(tmp_path)
     ws.scenarios.mkdir(parents=True)
     old = {
@@ -99,9 +100,8 @@ def test_an_old_scenario_with_overlays_loads_as_impacts(tmp_path, versions):
     }
     (ws.scenarios / "old.json").write_text(json.dumps(old), encoding="utf-8")
     listed = call(ws, "scenario", {"action": "list"}).data
-    assert [item["id"] for item in listed["scenarios"]] == ["old"] and not listed["broken"]
-    stored = call(ws, "scenario", {"action": "get", "id": "old"}).data["spec"]
-    assert stored["impacts"][0]["target"] == "price:alpha" and "overlays" not in stored
+    assert [item["id"] for item in listed["scenarios"]] == [] 
+    assert [item["id"] for item in listed["broken"]] == ["old"]
 
 
 def test_validate_accepts_a_scenario_the_versions_can_compute(tmp_path, versions):

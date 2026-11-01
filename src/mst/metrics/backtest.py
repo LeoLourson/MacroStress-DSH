@@ -25,9 +25,9 @@ beats the base run, split by the manual/llm mark. The wild cluster bootstrap wit
 Webb weights re-checks the paired intervals. Monte-Carlo error is separated from sampling
 error with ``--mc-bootstrap``. Episodes are split into tuning and validation halves by the
 plan's marks; the halves are reported apart and the final tables stay over all episodes. The
-driver whose simulated path leaves the range of its own training history carries an
-unverified tail; a version that records no training range is checked against its whole column
-and marked as a legacy part. ``--portfolio`` adds the Acerbi-Székely section: the portfolio's
+driver whose simulated path leaves the range of its own
+training history carries an unverified tail. ``--portfolio`` adds the Acerbi-Székely section:
+the portfolio's
 predictive losses on the episodes' conditional paths, its realized loss on the facts of the
 window, ``Z``, the episode and wild intervals and the 1 % trimming. The accept/reject verdict is
 spoken only in the ``decision`` block behind ``--against``: the per-quantity tables stay
@@ -50,12 +50,12 @@ from mst.macro.registry import REGISTRY_PATH as MACRO_REGISTRY_PATH
 from mst.macro.registry import Registry, load_registry
 from mst.macro.version import MacroVersion
 from mst.model_sdk.contracts import (
-    LinearConstraint,
     LinearTerm,
     ScenarioPlan,
 )
 from mst.model_sdk.version import MODEL_SDK_VERSION
 from mst.plugin_sdk.version import SDK_VERSION
+from mst.scenario.build import point_constraint
 
 from .baselines import (
     CONSTRAINT,
@@ -64,7 +64,9 @@ from .baselines import (
     WIDTH,
     band_problems,
     constraint_probabilities,
+    macro_domain,
     naive_annual,
+    quantity_domain,
     random_walk,
 )
 from .cells import (
@@ -251,10 +253,10 @@ def _episode(
         for k, value in enumerate(realized[:, i], start=1):
             if not np.isnan(value):
                 constraints.append(
-                    LinearConstraint(
-                        terms=(LinearTerm(variable=id_, month=k, weight=1.0),),
-                        low=float(value),
-                        high=float(value),
+                    point_constraint(
+                        (LinearTerm(variable=id_, month=k, weight=1.0),),
+                        float(value),
+                        macro,
                     )
                 )
     return Episode(
@@ -266,7 +268,7 @@ def _episode(
         scenario=ScenarioPlan(
             horizon=horizon,
             constraints=tuple(constraints),
-            driving_shocks=tuple(check.driving),
+            causes=tuple(check.driving),
         ),
         realized=realized,
         driving=list(check.driving),
@@ -463,8 +465,7 @@ def _attach_bundle(
     """Estimate the satellite bundle of the episode's macro version and simulate its drivers.
 
     The bundle is cached beside the episode's macro version, under the same backtest root, by
-    the digest of every input that shapes it (``_satellite_key``); the old pointer keyed by the
-    macro version alone is not read and is removed when met.
+    the digest of every input that shapes it (``_satellite_key``).
     """
     from mst import models as models_pkg
     from mst.drivers import bundle as satellite_bundle
@@ -476,9 +477,6 @@ def _attach_bundle(
     pointer = root / (
         f"satellites-{_satellite_key(episode, data, drivers, installed, driver_registry)}"
     )
-    legacy = root / f"satellites-{name}"
-    if legacy.exists():
-        legacy.unlink()
     if pointer.exists():
         found = pointer.read_text(encoding="utf-8").strip()
         if (root / "satellites" / found).is_dir():
@@ -525,14 +523,27 @@ def _report(
     cells: list[Cell] = []
     levels: dict[str, str] = {}
     unverified: set[str] = set()
-    legacy: set[str] = set()
     constraint_shares: dict[str, dict[int, float | None]] = {}
+    sensitivity: dict[str, dict] = {}
 
     for episode in episodes:
-        draws = episode.macro.plugin.simulate(
+        # Two runs of every episode: at R = theta, with no cause named — the run the
+        # uniformity of u and the CRPS read, the only law the canon's uniformity holds for —
+        # and with the causes the card's sources named, for the sensitivity of both to the
+        # choice of the causes.
+        plain_run = episode.macro.plugin.simulate(
+            episode.macro.model,
+            ScenarioPlan(
+                horizon=episode.horizon,
+                constraints=episode.scenario.constraints,
+            ),
+            draws=plan.draws,
+            seed=plan.seed,
+        )
+        driven = episode.macro.plugin.simulate(
             episode.macro.model, episode.scenario, draws=plan.draws, seed=plan.seed
         )
-        episode.macro_paths = draws
+        episode.macro_paths = driven
         base = episode.macro.plugin.simulate(
             episode.macro.model,
             ScenarioPlan(horizon=episode.horizon),
@@ -542,9 +553,17 @@ def _report(
         constraint_shares[episode.id] = constraint_probabilities(
             base.paths, base.ids, episode.scenario.constraints
         )
-        _macro_cells(episode, draws, base, cells, levels, registry, plan)
+        plain_cells: list[Cell] = []
+        driven_cells: list[Cell] = []
+        _macro_cells(episode, plain_run, base, plain_cells, levels, registry, plan)
+        _macro_cells(episode, driven, base, driven_cells, levels, registry, plan)
+        sensitivity[episode.id] = _cause_sensitivity(episode, plain_cells, driven_cells)
         if episode.bundle is not None and episode.driver_paths is not None:
-            _driver_cells(episode, cells, levels, unverified, legacy, plan)
+            plain_drivers = episode.bundle.simulate(
+                plain_run, episode.bundle.served(), (), seed=plan.seed
+            )
+            _driver_cells(episode, plain_drivers, plain_cells, levels, unverified, plan)
+        cells.extend(plain_cells)
 
     by_quantity: dict[str, list[Cell]] = {}
     for cell in cells:
@@ -555,7 +574,7 @@ def _report(
         row = score_cells(own)
         row["level"] = levels.get(quantity, "")
         row["unverified_tail"] = quantity in unverified
-        row["legacy_training_range"] = quantity in legacy
+        row["uniformity_run"] = "s_no_causes"
         row["admission"] = _quantity_rules(own)
         row["intervals"] = {
             "crps": _interval(row["months"], "crps", plan),
@@ -597,6 +616,19 @@ def _report(
     aggregate["rows"] = rows
     admission = _admission(cells)
     gate = _constraint_gate(constraint_shares)
+    rolling = {}
+    if plan.rolling is not None:
+        from .rolling import rolling_report
+
+        rolling = rolling_report(
+            plugin=plugin,
+            store=SeriesStore(store),
+            registry=registry,
+            root=root,
+            plan=plan,
+            known_on=known_on,
+            macro_of=_episode_macro,
+        )
     report = {
         "meta": _meta(
             episodes,
@@ -632,6 +664,25 @@ def _report(
         ),
         "target_level": target_level,
         "admission": admission,
+        "rolling": rolling,
+        "cause_sensitivity": {
+            "episodes": sensitivity,
+            "mean_difference": float(
+                np.mean(
+                    [
+                        row["difference"]
+                        for row in sensitivity.values()
+                        if row["difference"] is not None
+                    ]
+                )
+            )
+            if any(row["difference"] is not None for row in sensitivity.values())
+            else None,
+            "note": (
+                "the CRPS of every episode at R = theta and with the named causes; the "
+                "uniformity of u and the calibration read the run without named causes only"
+            ),
+        },
         "constraint_gate": gate,
         "admission_failed": admission["failed"] or gate["failed"],
         "problems": [],
@@ -646,6 +697,42 @@ def _report(
             episodes, plan, portfolio_id, store=store, known_on=known_on
         )
     return report
+
+
+def _cause_sensitivity(episode: Episode, plain: list[Cell], driven: list[Cell]) -> dict:
+    """How the scores move between the causes: the canon's check of the choice of D.
+
+    The CRPS of the episode's macro cells is averaged per run — the plain one at
+    R = theta and the one with the named causes — and the difference is the episode's
+    sensitivity; the mean over the episodes says how much the choice of the causes moves the
+    forecast at all.
+    """
+
+    def mean_of(found: list[Cell]) -> float | None:
+        values = [
+            _cell_crps(cell)
+            for cell in found
+            if not cell.constrained and np.isfinite(cell.fact) and cell.sigma > 0
+        ]
+        return float(np.mean(values)) if values else None
+
+    plain_mean, driven_mean = mean_of(plain), mean_of(driven)
+    return {
+        "crps_plain": plain_mean,
+        "crps_driven": driven_mean,
+        "difference": None
+        if plain_mean is None or driven_mean is None
+        else driven_mean - plain_mean,
+    }
+
+
+def _cell_crps(cell) -> float:
+    """The CRPS of one cell, unnormalised."""
+    from .cells import crps, finite_draws
+
+    if not len(finite_draws(cell.draws)):
+        return float("nan")
+    return float(crps(finite_draws(cell.draws), cell.fact))
 
 
 def _cell_rows(cells: list[Cell], levels: dict[str, str]) -> list[dict]:
@@ -714,7 +801,7 @@ def _macro_cells(
             continue
         levels[id_] = "macro"
         history = panel.y[:, j]
-        domain = _macro_domain(registry.variable(id_))
+        domain = macro_domain()
         spread = history_range(history)
         walk = random_walk(history, episode.horizon, draws=plan.draws, seed=plan.seed)
         scale = sigma_with_fallback(history, months, peers=peers)
@@ -743,27 +830,33 @@ def _macro_cells(
 
 
 def _pinned(constraints) -> set[tuple[str, int]]:
-    """The ``(variable, month)`` cells an exact single-term constraint fixes."""
+    """The ``(variable, month)`` cells a single-term constraint fixes.
+
+    A constraint of one term pins its cell when it comes from a point, or when its band is
+    narrower than the tolerance a point of the same terms would expand to: a narrow interval
+    of that scale carries no scoring information either. The mark decides for a point, since
+    ``value ± tau`` need not round back to a band of ``2 tau``.
+    """
     pinned = set()
     for constraint in constraints:
-        if constraint.low != constraint.high or len(constraint.terms) != 1:
+        if len(constraint.terms) != 1:
             continue
         term = constraint.terms[0]
-        if term.weight == 1.0:
+        if constraint.point or constraint.high - constraint.low <= 2 * constraint.tolerance:
             pinned.add((term.variable, term.month))
     return pinned
 
 
 def _driver_cells(
     episode: Episode,
+    paths,
     cells: list[Cell],
     levels: dict[str, str],
     unverified: set[str],
-    legacy: set[str],
     plan: Episodes,
 ) -> None:
     """The cells of the episode's served drivers, with the random walk and the naive forecast."""
-    bundle, paths = episode.bundle, episode.driver_paths
+    bundle = episode.bundle
     driver_registry = bundle.registry
     series_of = {driver.id: driver.series for driver in driver_registry.drivers}
     months = list(range(1, len(episode.months) + 1))
@@ -780,9 +873,11 @@ def _driver_cells(
     for k, driver in enumerate(paths.ids):
         quantity = quantity_of[driver]
         declared = driver_registry.quantity(quantity)
-        levels[driver] = f"driver/{quantity}"
+        levels[driver] = (
+            f"driver/{quantity}" if declared.level <= 1 else f"driver{declared.level}/{quantity}"
+        )
         own = own_of[driver]
-        domain = _model_domain(declared)
+        domain = quantity_domain(declared)
         spread = history_range(own)
         walk = random_walk(own, episode.horizon, draws=plan.draws, seed=plan.seed)
         naive = naive_annual(own, episode.horizon, draws=plan.draws, seed=plan.seed)
@@ -811,8 +906,6 @@ def _driver_cells(
         flags = paths.flags.get(driver, frozenset())
         if "outside_training_range" in flags:
             unverified.add(driver)
-        if "legacy_training_range" in flags:
-            legacy.add(driver)
 
 
 def _driver_fact(episode: Episode, series, month: date, declared):
@@ -940,9 +1033,10 @@ def _quantity_rules(cells: list[Cell]) -> dict:
 def _constraint_gate(shares: dict[str, dict[int, float | None]]) -> dict:
     """``pi_c > 1 %`` for every informative constraint, per episode.
 
-    A constraint reconstructed as an exact point (``low == high``) cannot be met by a
-    continuous draw: its probability is not applicable and is left out of the gate. The report
-    says how many constraints of each kind the gate saw.
+    A constraint that fixes a point — the facts of an episode, expanded to ``value ± tau`` —
+    would have its probability measure the tolerance rather than the scenario, so it is not
+    applicable and is left out of the gate. The report says how many constraints of each kind
+    the gate saw.
     """
     applicable = 0
     not_applicable = 0
@@ -963,7 +1057,7 @@ def _constraint_gate(shares: dict[str, dict[int, float | None]]) -> dict:
         "failed_constraints": failed,
         "failed": bool(failed),
         "note": (
-            "a fact-reconstructed episode fixes its constrained values exactly, so pi_c is "
+            "a fact-reconstructed episode fixes its constrained values as points, so pi_c is "
             "not applicable there and is excluded from the gate; a range constraint keeps it"
         ),
     }
@@ -1486,7 +1580,7 @@ def _meta(
             "is negative; the split by source is manual against llm",
             "realized loss: the portfolio valued on the facts at t = 0 and t = H; an episode "
             "without the fact at t = H is dropped by name",
-            "dist(P_s, P) = -log P(C) on the unconditional run (plan assumption 2)",
+            "dist(s) = E_P[-log P(S | R)] on the constraint law (docs/concept/formalization.md)",
         ],
         "macro_models": [
             {"model_id": model_id, "version": version}
@@ -1536,6 +1630,10 @@ def _git_commit() -> str | None:
         if not head.startswith("ref: "):
             return head[:40] or None
         ref = head[len("ref:"):].strip()
+        # A linked worktree keeps its HEAD apart and its refs in the common directory.
+        common = marker / "commondir"
+        if common.is_file():
+            marker = (marker / common.read_text(encoding="utf-8").strip()).resolve()
         try:
             return (marker / ref).read_text(encoding="utf-8").strip()[:40] or None
         except OSError:
@@ -1619,17 +1717,6 @@ def _print(report: dict) -> None:
         print(
             "\nNormalised scores cover only the cells with a finite positive sigma at the "
             f"episode's calculation date: {', '.join(hidden)}."
-        )
-    legacy = [
-        quantity
-        for quantity, row in report["quantities"].items()
-        if row["legacy_training_range"]
-    ]
-    if legacy:
-        print(
-            "\nThe version records no training range for "
-            f"{', '.join(legacy)}: the outside-range check used the whole column "
-            "(legacy part)."
         )
     if "decision" in report:
         _print_decision(report)

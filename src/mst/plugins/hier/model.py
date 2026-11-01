@@ -20,7 +20,6 @@ from mst.model_sdk import Check
 from mst.model_sdk.contracts import (
     AdditiveImpact,
     DriverPaths,
-    MacroSimulation,
     SatelliteEstimate,
     SatelliteEstimateContext,
     SatelliteModel,
@@ -132,8 +131,8 @@ class HierModel(SatelliteModel):
                 gamma=part.arrays["gamma"],
                 sigma=part.arrays["sigma"],
                 rows=np.array(part.meta["rows"], dtype=int),
-                train_low=_bounds(part.meta.get("train_low")),
-                train_high=_bounds(part.meta.get("train_high")),
+                train_low=_bounds(_required_bounds(part.meta, quantity, "train_low")),
+                train_high=_bounds(_required_bounds(part.meta, quantity, "train_high")),
             )
             checks[quantity] = {
                 int(node): Check(**row) for node, row in part.meta["checks"].items()
@@ -143,18 +142,18 @@ class HierModel(SatelliteModel):
     def simulate(
         self,
         model,
-        macro: MacroSimulation,
+        upper,
         drivers: list[str],
         impacts: list[AdditiveImpact],
         *,
         correlation=None,
-        shocks: np.ndarray | None = None,
+        shocks: np.ndarray,
         seed: int,
         stream: int,
     ) -> DriverPaths:
         return simulate_hier(
             model,
-            macro,
+            upper,
             drivers,
             impacts,
             correlation=correlation,
@@ -171,11 +170,19 @@ def _bounds_list(values: np.ndarray | None) -> list[float | None]:
     return [None if not np.isfinite(value) else float(value) for value in values]
 
 
-def _bounds(recorded: list | None) -> np.ndarray | None:
-    """Bounds read back from a part; ``None`` when the part recorded none (a legacy version)."""
-    if recorded is None:
-        return None
+def _bounds(recorded: list) -> np.ndarray:
+    """Bounds read back from a part; a node without a range stays ``NaN``."""
     return np.array([np.nan if value is None else value for value in recorded], dtype=float)
+
+
+def _required_bounds(meta: dict, quantity: str, key: str) -> list:
+    """The training bounds a part must record; a part without them is refused."""
+    if key not in meta:
+        raise KeyError(
+            f"the part of {quantity} records no {key}: the outside-range check cannot run "
+            "on it; re-estimate the bundle"
+        )
+    return meta[key]
 
 
 def _check_dict(item) -> dict:
