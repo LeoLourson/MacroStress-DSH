@@ -157,7 +157,16 @@ class FakeSatellite(SatelliteModel):
         return {"share_price": parts["share_price"].arrays["d"]}
 
     def simulate(
-        self, model, macro, drivers, impacts, *, correlation=None, seed: int, stream: int
+        self,
+        model,
+        macro,
+        drivers,
+        impacts,
+        *,
+        correlation=None,
+        shocks: np.ndarray,
+        seed: int,
+        stream: int,
     ) -> DriverPaths:
         horizon = macro.paths.shape[1] - 1
         draws = macro.paths.shape[0]

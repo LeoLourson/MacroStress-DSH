@@ -81,35 +81,22 @@ def read(root: Path, name: str) -> tuple[dict, dict]:
     return versions.read(Path(root) / "macro", name, "macro version")
 
 
-def _legacy_model(name: str, models: Mapping[str, MacroModel]) -> str:
-    """The only installed macro model, for a version whose meta does not name one.
-
-    Raises ``ValueError`` naming the version and the installed models when the choice is not
-    unique, so a pre-plugin version is never silently attributed to the wrong estimator.
-    """
-    if len(models) == 1:
-        (model_id,) = models
-        return model_id
-    raise ValueError(
-        f"macro version {name} does not name the model that estimated it (it predates plugin "
-        f"macro models), so it can only be read with exactly one installed macro model; "
-        f"installed: {', '.join(sorted(models)) or 'none'}"
-    )
-
-
 def load(root: Path, name: str, models: Mapping[str, MacroModel]) -> MacroVersion:
     """The version ``name`` loaded by the plugin that estimated it.
 
     ``models`` maps model ids to the installed macro models (``mst.plugins.registry().macro``).
-    A version estimated by a model that is not installed is refused with its name; a version
-    whose meta does not name its model (a pre-plugin version) is loaded by the only installed
-    macro model, and refused when there are none or several.
+    A version is estimated by a model that is not installed is refused with its name; a version
+    whose meta does not name its model at all is refused the same way: only the plugin that
+    estimated a version reads it back.
     """
     meta, arrays = read(root, name)
     model_id = meta.get("model")
     if model_id is None:
-        model_id = _legacy_model(name, models)
-    elif model_id not in models:
+        raise KeyError(
+            f"macro version {name} does not name the model that estimated it, so no installed "
+            "model can read it; re-estimate the version"
+        )
+    if model_id not in models:
         raise KeyError(
             f"macro version {name} was estimated by {model_id!r}, which is not "
             f"installed; installed: {', '.join(sorted(models)) or 'none'}"
@@ -147,7 +134,7 @@ def describe(root: Path, name: str) -> dict:
     identified, estimated = diagnostics.get("identified"), diagnostics.get("estimated")
     return {
         "version": name,
-        "model": meta.get("model") or "legacy",
+        "model": meta["model"],
         "as_of": meta.get("as_of"),
         "ids": meta.get("ids"),
         "months": meta.get("months"),
@@ -162,7 +149,7 @@ def _summary(folder: Path) -> dict:
     diagnostics = meta.get("diagnostics", {})
     return {
         "version": folder.name,
-        "model": meta.get("model") or "legacy",
+        "model": meta["model"],
         "as_of": meta.get("as_of"),
         "months": len(meta.get("months", [])),
         "shocks": meta.get("shocks"),

@@ -14,15 +14,13 @@ correlation matrix. A driver whose simulated path leaves the range of the histor
 estimated on — the convention is an array named ``<quantity>.d`` — is marked
 ``outside_training_range`` when at least one percent of the paths do. The range is the one the
 model recorded for the node in the part (``train_low`` and ``train_high``: the observed values
-inside the node's own estimation window); a part written before the bounds were recorded is
-read from the whole finite column and marked ``legacy_training_range``.
+inside the node's own estimation window); a node without a range is not checked.
 
-A version written before 0.2 records no model in its parts: ``load`` dispatches such a part to
-the only installed model that declares its quantity, and the legacy rows stay readable. The
-correlation matrix used to be imposed inside every model: when a bundle's quantities are
-served by several models, the residuals of drivers of different models were drawn
-independently, so a cross-model correlation measured by ``assemble`` was not applied to their
-joint paths. The platform now draws the shocks itself for a bundle of two or more models (see
+Every part names the model that estimated it, and ``load`` hands each plugin its own, so only
+the plugin that estimated a part reads it back. The correlation matrix used to be imposed
+inside every model: when a bundle's quantities are served by several models, the residuals of
+drivers of different models were drawn independently, so a cross-model correlation measured by
+``assemble`` was not applied to their joint paths. The platform draws the shocks itself (see
 ``simulate``), so that measured correlation reaches the joint paths.
 """
 
@@ -52,8 +50,6 @@ from .registry import Registry
 
 OUTSIDE_TRAINING = "outside_training_range"
 """At least one percent of the paths leave the range of the driver's own history."""
-LEGACY_TRAINING = "legacy_training_range"
-"""The part recorded no per-node training range: the whole history column was used instead."""
 IMPACT = "impact"
 """A direct impact of the scenario moves the path."""
 
@@ -116,16 +112,14 @@ class SatelliteBundle:
     ) -> DriverPaths:
         """The paths of ``drivers`` on ``macro``, in the model scale, by their own models.
 
-        A bundle of two or more models draws the joint shocks itself: one standard normal draw
+        The platform draws the joint shocks of every model itself: one standard normal draw
         per repetition from the stream ``[seed, 0, r]`` over every correlated driver of the
-        request, multiplied by the Cholesky factor of the full matrix ``assemble`` measured, so
-        the cross-model correlation reaches the joint paths. Each model receives its own slice
-        of those shocks, in the order of the drivers it was asked for. The platform draws
-        ``horizon + max(len(part["months"])) - 1`` rows: a model that starts from its last
-        observed month ``last >= 0`` needs ``horizon + len(its months) - 1 - last`` steps, which
-        does not exceed that count, and reads the first rows it needs. A bundle of one model
-        keeps the pre-1.1 path — ``shocks=None`` — and reproduces the same paths bit for bit at
-        the same seed.
+        request, multiplied by the Cholesky factor of the full matrix ``assemble`` measured,
+        so the cross-model correlation reaches the joint paths. Each model receives its own
+        slice of those shocks, in the order of the drivers it was asked for. The platform
+        draws ``horizon + max(len(part["months"])) - 1`` rows: a model that starts from its
+        last observed month ``last >= 0`` needs ``horizon + len(its months) - 1 - last``
+        steps, which does not exceed that count, and reads the first rows it needs.
         """
         impacts = list(impacts)
         served = set(self.served())
@@ -144,30 +138,21 @@ class SatelliteBundle:
         for driver in drivers:
             by_model.setdefault(self.quantity_model[self.node(driver)[0]], []).append(driver)
         draws, horizon = macro.paths.shape[0], macro.paths.shape[1] - 1
-        platform = (
-            self._platform_shocks(macro, drivers, by_model, horizon, seed)
-            if len(by_model) > 1
-            else None
-        )
+        platform = self._platform_shocks(macro, drivers, by_model, horizon, seed)
         paths = np.empty((draws, horizon + 1, len(drivers)))
         flags: dict[str, set[str]] = {driver: set() for driver in drivers}
-        # Streams start at 1: the pre-0.2 simulator seeded [seed, 1, repetition], so a
-        # one-model bundle reproduces the stored runs at the same seed. The platform's own
-        # stream is 0, so it never collides with a model's.
+        # Streams start at 1: the platform's own shock stream is 0, so a model's stream never
+        # collides with it.
         for stream, model_id in enumerate(sorted(by_model), start=1):
-            options = {
-                "correlation": (self.correlated, self.correlation),
-                "seed": seed,
-                "stream": stream,
-            }
-            if platform is not None:
-                options["shocks"] = platform[model_id]
             found = self.plugins[model_id].simulate(
                 self.models[model_id],
                 macro,
                 by_model[model_id],
                 [item for item in impacts if item.target in by_model[model_id]],
-                **options,
+                correlation=(self.correlated, self.correlation),
+                shocks=platform[model_id],
+                seed=seed,
+                stream=stream,
             )
             if sorted(found.ids) != sorted(by_model[model_id]):
                 raise ValueError(
@@ -322,16 +307,19 @@ def load(
 ) -> SatelliteBundle:
     """The bundle ``name`` loaded by the plugins that estimated its quantities.
 
-    A part of a version written before 0.2 names no model: it is dispatched to the only
-    installed model that declares its quantity, and the part gets the quantity it describes,
-    which the legacy meta did not record either.
+    A part that names no model is refused: every part names the model that estimated it.
     """
     meta, arrays = versions.read(Path(root) / "satellites", name, "satellite version")
     registry = Registry.model_validate(meta["registry"])
-    quantity_model = {
-        quantity: _recorded_model(name, quantity, part, models)
-        for quantity, part in meta["quantities"].items()
-    }
+    quantity_model = {}
+    for quantity, part in meta["quantities"].items():
+        recorded = part.get("model")
+        if recorded is None:
+            raise KeyError(
+                f"satellite version {name}: the part of {quantity} names no model, so no "
+                "installed model can read it; re-estimate the bundle"
+            )
+        quantity_model[quantity] = recorded
     missing = sorted(
         {model_id for model_id in quantity_model.values() if model_id not in models}
     )
@@ -348,7 +336,7 @@ def load(
             if key.startswith(quantity + ".")
         }
         parts_by_model.setdefault(quantity_model[quantity], {})[quantity] = SatellitePart(
-            meta=_part_meta(registry, quantity, part), arrays=own
+            meta=_part_meta(part), arrays=own
         )
     loaded = {
         model_id: models[model_id].load(parts)
@@ -373,35 +361,9 @@ def load(
     )
 
 
-def _recorded_model(
-    name: str, quantity: str, part: dict, models: Mapping[str, SatelliteModel]
-) -> str:
-    """The model a part records; a pre-0.2 part names none, so its only declarer is used."""
-    recorded = part.get("model")
-    if recorded is not None:
-        return recorded
-    declarers = sorted(
-        model_id
-        for model_id, model in models.items()
-        if quantity in getattr(model, "quantities", ())
-    )
-    if len(declarers) == 1:
-        return declarers[0]
-    raise KeyError(
-        f"satellite version {name}: the part of {quantity} names no model, which only a "
-        f"version from before 0.2 does; installed models declaring it: "
-        f"{', '.join(declarers) or 'none'}"
-    )
-
-
-def _part_meta(registry: Registry, quantity: str, part: dict) -> dict:
-    """The part meta with the quantity it describes, which a legacy part did not name."""
-    if "quantity" in part:
-        return part
-    return {
-        **part,
-        "quantity": registry.quantity(quantity).model_dump(mode="json", by_alias=True),
-    }
+def _part_meta(part: dict) -> dict:
+    """The part meta as the platform hands it to the model that estimated it."""
+    return part
 
 
 def catalogue(root: Path) -> list[dict]:
@@ -432,9 +394,7 @@ def describe(root: Path, name: str) -> dict:
         "version": name,
         "macro": meta["macro"],
         "as_of": meta["as_of"],
-        "models": {
-            q: part.get("model", "legacy") for q, part in meta["quantities"].items()
-        },
+        "models": {q: part["model"] for q, part in meta["quantities"].items()},
         "served": served,
         "rejected": rejected,
     }
@@ -449,9 +409,7 @@ def _summary(folder: Path) -> dict:
         "version": folder.name,
         "macro": meta["macro"],
         "as_of": meta["as_of"],
-        "models": sorted(
-            {part.get("model", "legacy") for part in meta["quantities"].values()}
-        ),
+        "models": sorted({part["model"] for part in meta["quantities"].values()}),
         "quantities": sorted(meta["quantities"]),
         "served": sum(1 for row in checks if row["served"]),
         "checked": len(checks),
@@ -472,25 +430,17 @@ def _training_range_flags(
     """``outside_training_range`` when one percent of the paths leave the trained range.
 
     The range is the one the part records for the node: the lowest and highest value the node
-    was observed at inside its own estimation window. A part written before the bounds were
-    recorded has none, so the whole finite column of the node is used instead and the driver
-    is marked ``legacy_training_range``: the range is then too wide, and the disclosure lets
-    the report say so rather than hide where the number came from.
+    was observed at inside its own estimation window. A node without a range — a part that
+    records ``None`` for it — is not checked.
     """
     quantity, node = bundle.node(driver)
     key = f"{quantity}.d"
     if key not in bundle.arrays:
         return set()
     low, high = _recorded_bounds(bundle.parts.get(quantity, {}), node)
-    flags: set[str] = set()
     if low is None or high is None:
-        column = bundle.arrays[key][:, node]
-        observed = column[np.isfinite(column)]
-        if not len(observed):
-            return set()
-        low, high = float(observed.min()), float(observed.max())
-        flags.add(LEGACY_TRAINING)
+        return set()
     outside = ((paths[:, 1:] < low) | (paths[:, 1:] > high)).any(axis=1)
     if outside.mean() >= 0.01:
-        flags.add(OUTSIDE_TRAINING)
-    return flags
+        return {OUTSIDE_TRAINING}
+    return set()

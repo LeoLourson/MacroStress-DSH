@@ -234,6 +234,7 @@ def test_a_scaffolded_satellite_model_starts_from_the_object_above(tmp_path):
         ["bond_spread:child"],
         [],
         correlation=None,
+        shocks=np.zeros((2, 2, 0)),
         seed=1,
         stream=0,
     )
@@ -278,6 +279,7 @@ def test_a_scaffolded_satellite_model_names_a_driver_without_any_history(tmp_pat
             ["bond_spread:child"],
             [],
             correlation=None,
+            shocks=np.zeros((2, 1, 0)),
             seed=1,
             stream=0,
         )

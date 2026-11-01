@@ -169,7 +169,7 @@ class {{class}}(SatelliteModel):
         impacts: list[AdditiveImpact],
         *,
         correlation=None,
-        shocks: np.ndarray | None = None,
+        shocks: np.ndarray,
         seed: int,
         stream: int,
     ) -> DriverPaths:
@@ -186,9 +186,10 @@ class {{class}}(SatelliteModel):
                 )
             plan.append((driver, part, node, source))
         # The drivers with history of their own are the columns of the platform's shocks, in
-        # the order of this argument; a driver without one keeps its independent noise.
+        # the order of this argument; a driver without one keeps its independent noise. The
+        # measured correlation of the bundle is already in them.
         own = [driver for driver, _, node, (above, _) in plan if above == node]
-        if shocks is not None and (
+        if (
             shocks.shape[0] != draws or shocks.shape[1] < horizon or shocks.shape[2] != len(own)
         ):
             raise ValueError(
@@ -211,8 +212,7 @@ class {{class}}(SatelliteModel):
                 z = np.column_stack([np.ones(draws), value, future[:, t]])
                 noise = (
                     rng.standard_normal(draws)
-                    if above != node or shocks is None
-                    else shocks[:, t - 1, own.index(driver)]
+                    if above != node else shocks[:, t - 1, own.index(driver)]
                 )
                 value = z @ coef + sigma * noise
                 paths[:, t, k] = value

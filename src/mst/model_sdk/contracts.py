@@ -243,11 +243,10 @@ class SatellitePart:
     was fitted on and the ``Check`` of every driver with one. The platform adds ``model`` — the id
     of the model that returned the part; a part that names another model is refused. A model that
     stores the drivers' own history conventionally names its array ``d`` inside the part (the
-    platform saves it as ``<quantity>.d``). It may also record the bounds a node was trained on
-    as ``train_low`` and ``train_high`` (a list per node, ``None`` where a node has no range);
-    the platform then marks the paths that leave those bounds, and reads a part without them —
-    a version written before the bounds were recorded — from the whole history column, marking
-    the driver ``legacy_training_range``.
+    platform saves it as ``<quantity>.d``). It records the bounds a node was trained on as
+    ``train_low`` and ``train_high`` (a list per node, ``None`` where a node has no range):
+    the platform marks the paths that leave those bounds, and a part without the bounds is
+    refused — the outside-range check cannot run on it.
     """
 
     meta: dict
@@ -363,26 +362,22 @@ class SatelliteModel(ABC):
         impacts: list[AdditiveImpact],
         *,
         correlation: tuple[list[str], np.ndarray] | None = None,
-        shocks: np.ndarray | None = None,
+        shocks: np.ndarray,
         seed: int,
         stream: int,
     ) -> DriverPaths:
         """The paths of ``drivers`` on ``macro``, with the impacts of the scenario added.
 
         ``correlation`` is the bundle's residual correlation: the driver ids it is measured on
-        and their matrix. ``shocks`` is passed only for a bundle of two or more models, and
-        ``None`` is equivalent to its absence: the platform then does not pass the argument at
-        all, and a model written before model SDK 1.1 keeps working as it did. When given, it
-        holds the standardized residuals the platform drew for this model's correlated drivers —
-        ``(R, steps, k)`` columns in the order of ``drivers``, counting only the drivers with a
-        history of their own; a driver without one stays on the model's own independent noise.
-        The model must use these columns as the residuals of those drivers and read the first
-        rows it needs, not all ``steps``: a bundle of two or more models draws the joint shocks
-        of all its drivers once, so the measured cross-model correlation reaches the joint
-        paths. Without them the model draws its own correlated residuals from ``correlation``,
-        as it always did. ``stream`` separates the random streams of the models of one bundle —
-        the posterior draw and the independent noise come from it, while the platform's shocks
-        come from its own stream.
+        and their matrix. ``shocks`` holds the standardized residuals the platform drew for
+        this model's correlated drivers — ``(R, steps, k)`` columns in the order of
+        ``drivers``, counting only the drivers with a history of their own; a driver without
+        one stays on the model's own independent noise. The model must use these columns as
+        the residuals of those drivers and read the first rows it needs, not all ``steps``:
+        the platform draws the joint shocks of all its drivers once, so the measured
+        cross-model correlation reaches the joint paths. ``stream`` separates the random
+        streams of the models of one bundle — the posterior draw and the independent noise
+        come from it, while the platform's shocks come from its own stream.
         """
 
     def describe(self) -> dict:

@@ -87,7 +87,7 @@ def test_driving_shocks_are_unique():
         Spec.model_validate(spec(driving_shocks=["ru.inflation", "ru.inflation"]))
 
 
-def test_the_old_overlays_field_is_read_as_impacts():
+def test_the_old_overlays_field_is_refused():
     old = {
         "driver": "price:alpha",
         "start": 1,
@@ -96,23 +96,8 @@ def test_the_old_overlays_field_is_read_as_impacts():
         "reason": "перебой поставок",
         "sources": ["S1/2020#1/1"],
     }
-    built = Spec.model_validate(spec(overlays=[old]))
-    assert built.impacts[0].target == "price:alpha"
-    stored = built.model_dump(mode="json")
-    assert stored["impacts"][0]["target"] == "price:alpha" and "overlays" not in stored
-
-
-def test_the_old_overlays_field_is_refused_next_to_impacts():
-    old = {
-        "driver": "price:alpha",
-        "start": 1,
-        "end": 6,
-        "delta": -10.0,
-        "reason": "перебой поставок",
-        "sources": ["S1/2020#1/1"],
-    }
-    with pytest.raises(ValidationError, match="both `overlays`"):
-        Spec.model_validate(spec(overlays=[old], impacts=[impact()]))
+    with pytest.raises(ValidationError, match="overlays"):
+        Spec.model_validate(spec(overlays=[old]))
 
 
 def test_the_contract_reads_the_fields_the_forecast_uses():

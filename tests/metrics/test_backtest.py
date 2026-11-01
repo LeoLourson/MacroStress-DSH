@@ -719,8 +719,8 @@ def test_the_satellites_score_the_served_drivers(workspace, tmp_path, monkeypatc
     assert row["naive_crps"] is not None
     assert row["baseline_crps"] is not None
     assert row["base_crps"] is None
-    # The fake part records no training range: the flag says the whole column was used.
-    assert row["legacy_training_range"] is True
+    # The fake part records no training range, so no range check runs on its paths.
+    assert row["unverified_tail"] is False
 
 
 def test_the_portfolio_tail_is_reported_with_its_horizon(workspace, tmp_path, monkeypatch, capsys):
@@ -873,9 +873,6 @@ def test_the_satellite_bundle_is_cached_by_its_own_inputs(workspace, tmp_path, m
     estimated = len(calls)
     # One bundle per episode: the episodes are estimated on different macro versions.
     assert estimated == 2
-    root = workspace["models"] / "backtest"
-    legacy = root / f"satellites-{first['meta']['macro_versions'][0]}"
-    legacy.write_text("stale\n", encoding="utf-8")
 
     _, second = run_episodes(
         workspace, corpus, tmp_path, name="second.json", drivers=catalog, satellites=True
@@ -885,8 +882,6 @@ def test_the_satellite_bundle_is_cached_by_its_own_inputs(workspace, tmp_path, m
     assert len(calls) == estimated
     assert first["meta"]["satellite_versions"] == second["meta"]["satellite_versions"]
     assert first["episodes"] == second["episodes"]
-    # The pointer keyed by the macro version alone is gone: the new key is the digest.
-    assert not legacy.exists()
 
 
 def test_the_satellite_key_covers_the_inputs_that_shape_the_bundle(

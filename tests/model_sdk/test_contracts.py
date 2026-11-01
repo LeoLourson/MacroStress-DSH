@@ -117,17 +117,17 @@ def test_the_version_contracts_name_the_required_keys():
     assert PART_META_REQUIRED == ("model", "months", "nodes", "driver", "checks", "rows")
 
 
-def test_the_shocks_argument_is_an_optional_keyword_of_a_satellite_simulate():
-    # Model SDK 1.1.0 adds it; the platform passes it only for a bundle of two or more models,
-    # so a model written before the release keeps working on a single-model bundle.
+def test_the_shocks_argument_is_a_required_keyword_of_a_satellite_simulate():
+    # The platform draws the joint shocks of every bundle, whatever its number of models, so
+    # a model cannot stay on its own draw.
     parameter = inspect.signature(SatelliteModel.simulate).parameters["shocks"]
     assert parameter.kind is inspect.Parameter.KEYWORD_ONLY
-    assert parameter.default is None
+    assert parameter.default is inspect.Parameter.empty
 
 
-def test_the_satellite_models_of_the_1_0_range_still_fit_the_1_1_sdk():
-    assert MODEL_SDK_VERSION == "1.1.0"
-    assert model_compatible(">=1.0,<2.0")
-    assert model_compatible(">=1.1,<2.0")
-    assert not model_compatible(">=1.0,<1.1")
-    assert not model_compatible(">=2.0")
+def test_the_plugin_ranges_are_checked_against_the_model_sdk_version():
+    assert MODEL_SDK_VERSION == "2.0.0"
+    assert model_compatible(">=2.0,<3.0")
+    assert model_compatible(">=2.0")
+    assert not model_compatible(">=1.0,<2.0")
+    assert not model_compatible(">=1.1,<2.0")

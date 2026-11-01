@@ -25,9 +25,8 @@ beats the base run, split by the manual/llm mark. The wild cluster bootstrap wit
 Webb weights re-checks the paired intervals. Monte-Carlo error is separated from sampling
 error with ``--mc-bootstrap``. Episodes are split into tuning and validation halves by the
 plan's marks; the halves are reported apart and the final tables stay over all episodes. The
-driver whose simulated path leaves the range of its own training history carries an
-unverified tail; a version that records no training range is checked against its whole column
-and marked as a legacy part. ``--portfolio`` adds the Acerbi-Székely section: the portfolio's
+driver whose simulated path leaves the range of its own
+training history carries an unverified tail. ``--portfolio`` adds the Acerbi-Székely section: the portfolio's
 predictive losses on the episodes' conditional paths, its realized loss on the facts of the
 window, ``Z``, the episode and wild intervals and the 1 % trimming. The accept/reject verdict is
 spoken only in the ``decision`` block behind ``--against``: the per-quantity tables stay
@@ -463,8 +462,7 @@ def _attach_bundle(
     """Estimate the satellite bundle of the episode's macro version and simulate its drivers.
 
     The bundle is cached beside the episode's macro version, under the same backtest root, by
-    the digest of every input that shapes it (``_satellite_key``); the old pointer keyed by the
-    macro version alone is not read and is removed when met.
+    the digest of every input that shapes it (``_satellite_key``).
     """
     from mst import models as models_pkg
     from mst.drivers import bundle as satellite_bundle
@@ -476,9 +474,6 @@ def _attach_bundle(
     pointer = root / (
         f"satellites-{_satellite_key(episode, data, drivers, installed, driver_registry)}"
     )
-    legacy = root / f"satellites-{name}"
-    if legacy.exists():
-        legacy.unlink()
     if pointer.exists():
         found = pointer.read_text(encoding="utf-8").strip()
         if (root / "satellites" / found).is_dir():
@@ -525,7 +520,6 @@ def _report(
     cells: list[Cell] = []
     levels: dict[str, str] = {}
     unverified: set[str] = set()
-    legacy: set[str] = set()
     constraint_shares: dict[str, dict[int, float | None]] = {}
 
     for episode in episodes:
@@ -544,7 +538,7 @@ def _report(
         )
         _macro_cells(episode, draws, base, cells, levels, registry, plan)
         if episode.bundle is not None and episode.driver_paths is not None:
-            _driver_cells(episode, cells, levels, unverified, legacy, plan)
+            _driver_cells(episode, cells, levels, unverified, plan)
 
     by_quantity: dict[str, list[Cell]] = {}
     for cell in cells:
@@ -555,7 +549,6 @@ def _report(
         row = score_cells(own)
         row["level"] = levels.get(quantity, "")
         row["unverified_tail"] = quantity in unverified
-        row["legacy_training_range"] = quantity in legacy
         row["admission"] = _quantity_rules(own)
         row["intervals"] = {
             "crps": _interval(row["months"], "crps", plan),
@@ -759,7 +752,6 @@ def _driver_cells(
     cells: list[Cell],
     levels: dict[str, str],
     unverified: set[str],
-    legacy: set[str],
     plan: Episodes,
 ) -> None:
     """The cells of the episode's served drivers, with the random walk and the naive forecast."""
@@ -811,8 +803,6 @@ def _driver_cells(
         flags = paths.flags.get(driver, frozenset())
         if "outside_training_range" in flags:
             unverified.add(driver)
-        if "legacy_training_range" in flags:
-            legacy.add(driver)
 
 
 def _driver_fact(episode: Episode, series, month: date, declared):
@@ -1619,17 +1609,6 @@ def _print(report: dict) -> None:
         print(
             "\nNormalised scores cover only the cells with a finite positive sigma at the "
             f"episode's calculation date: {', '.join(hidden)}."
-        )
-    legacy = [
-        quantity
-        for quantity, row in report["quantities"].items()
-        if row["legacy_training_range"]
-    ]
-    if legacy:
-        print(
-            "\nThe version records no training range for "
-            f"{', '.join(legacy)}: the outside-range check used the whole column "
-            "(legacy part)."
         )
     if "decision" in report:
         _print_decision(report)

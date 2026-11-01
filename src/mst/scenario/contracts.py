@@ -87,36 +87,6 @@ class Scenario(Contract):
     impacts: list[Impact] = []
     """The direct impacts ``O`` of the scenario, on the macro variables or on drivers."""
 
-    @model_validator(mode="before")
-    @classmethod
-    def old_overlays(cls, data: object) -> object:
-        """Read the pre-0.2 field ``overlays`` as ``impacts``, so the old files still load.
-
-        The old name is deprecated: a scenario that has ``impacts`` too is refused instead of
-        silently preferring one of the two, and every other field is validated as usual.
-        """
-        if not isinstance(data, dict) or "overlays" not in data:
-            return data
-        if "impacts" in data:
-            raise ValueError(
-                "the scenario names both `overlays` (deprecated) and `impacts`: keep `impacts`"
-            )
-        mapped = []
-        for item in data["overlays"] if isinstance(data["overlays"], list) else []:
-            if isinstance(item, dict) and "driver" in item:
-                if "target" in item:
-                    raise ValueError(
-                        "the old impact names both `driver` and `target`: keep `target`"
-                    )
-                driver = item["driver"]
-                item = {key: value for key, value in item.items() if key != "driver"} | {
-                    "target": driver
-                }
-            mapped.append(item)
-        return {key: value for key, value in data.items() if key != "overlays"} | {
-            "impacts": mapped
-        }
-
     @model_validator(mode="after")
     def within_horizon(self):
         months = [term.month for c in self.constraints for term in c.terms]

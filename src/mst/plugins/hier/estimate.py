@@ -177,12 +177,12 @@ class Fit:
     rows: np.ndarray
     """(N,) observations each node was estimated on; 0 at nodes without data."""
     train_low: np.ndarray | None = None
-    """(N,) the lowest observed value of every node inside its estimation window.
+    """(N,) the lowest observed value of every node inside its estimation window; ``None`` only
+    before ``fit`` fills it in.
 
     A node without a series of its own takes the bounds of the nearest object above it with
     data, as it takes the residual spread of that object when simulated; NaN when no object
-    above it was estimated on data. ``None`` marks a fit loaded from a version that recorded no
-    bounds (written before 0.3), which the platform then reads from the whole history column.
+    above it was estimated on data.
     """
     train_high: np.ndarray | None = None
     """(N,) the highest observed value of every node inside its estimation window."""

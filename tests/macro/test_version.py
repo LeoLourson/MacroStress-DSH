@@ -56,27 +56,15 @@ def test_a_version_names_the_model_that_estimated_it(tmp_path, estimated):
         load(tmp_path, name, {})
 
 
-def test_a_legacy_version_loads_with_the_only_installed_model(tmp_path, estimated):
+def test_a_version_that_names_no_model_is_refused(tmp_path, estimated):
     model, spec, panel = estimated
     estimate_ = parts(model, spec, panel, date(2010, 1, 1))
-    # Pre-plugin version: the meta has no "model" and the spec still has "seasonal".
+    # A version from before the plugin era: the meta has no "model" at all.
     meta = dict(estimate_.meta, spec={**estimate_.meta["spec"], "seasonal": ["ru.b"]})
     name = versions.save(tmp_path / "macro", meta, estimate_.arrays)
 
-    version = load(tmp_path, name, MACRO)
-
-    assert version.plugin is MODEL
-    assert np.array_equal(version.model.rotation, model.rotation)
-    assert np.array_equal(version.model.dof, model.dof)
-
-
-def test_a_legacy_version_with_several_models_is_refused_by_name(tmp_path, estimated):
-    model, spec, panel = estimated
-    estimate_ = parts(model, spec, panel, date(2010, 1, 1))
-    name = versions.save(tmp_path / "macro", estimate_.meta, estimate_.arrays)
-
-    with pytest.raises(ValueError, match=f"macro version {name} does not name the model"):
-        load(tmp_path, name, {"bvar.sv": MODEL, "other.model": MODEL})
+    with pytest.raises(KeyError, match=f"macro version {name} does not name the model"):
+        load(tmp_path, name, MACRO)
 
 
 def test_a_version_whose_spec_has_a_removed_key_still_loads(tmp_path, estimated):

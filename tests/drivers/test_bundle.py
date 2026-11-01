@@ -92,7 +92,7 @@ class FakeSatellite(SatelliteModel):
         impacts,
         *,
         correlation=None,
-        shocks=None,
+        shocks: np.ndarray,
         seed: int,
         stream: int,
     ) -> DriverPaths:
@@ -203,7 +203,7 @@ def test_a_bundle_holds_one_model_per_quantity_and_loads_back(tmp_path):
     assert np.allclose(np.diag(bundle.correlation), 1.0)
 
 
-def test_load_dispatches_a_legacy_bundle_to_its_only_declarer(tmp_path):
+def test_a_part_that_names_no_model_is_refused(tmp_path):
     from mst import versions
 
     registry = registry_of("price")
@@ -212,26 +212,19 @@ def test_load_dispatches_a_legacy_bundle_to_its_only_declarer(tmp_path):
     meta, arrays = satellite_bundle.assemble(
         registry, "macro-sha", AS_OF, {"one.a": estimate}
     )
-    # A version from before 0.2: no model or quantity in its part, written by versions.save
-    # because the contract of the new bundle.save rightly refuses such a part.
-    legacy = {
+    anonymous = {
         **meta,
         "quantities": {
             quantity: {
-                key: value
-                for key, value in part.items()
-                if key not in ("model", "quantity")
+                key: value for key, value in part.items() if key not in ("model",)
             }
             for quantity, part in meta["quantities"].items()
         },
     }
-    name = versions.save(tmp_path / "satellites", legacy, arrays)
+    name = versions.save(tmp_path / "satellites", anonymous, arrays)
 
-    bundle = satellite_bundle.load(tmp_path, name, {"one.a": one})
-
-    assert bundle.quantity_model == {"price": "one.a"}
-    assert bundle.models == {"one.a": {"price": "a"}}
-    assert satellite_bundle.catalogue(tmp_path)[0]["models"] == ["legacy"]
+    with pytest.raises(KeyError, match="the part of price names no model"):
+        satellite_bundle.load(tmp_path, name, {"one.a": one})
 
 
 def test_simulate_dispatches_each_quantity_to_its_own_model(tmp_path):
@@ -246,11 +239,11 @@ def test_simulate_dispatches_each_quantity_to_its_own_model(tmp_path):
     )
 
     # Each model simulated its own drivers, with its own stream and its own impacts; the
-    # streams follow the alphabetical order of the model ids and start at 1, as the
-    # pre-plugin simulator numbered them.
+    # streams follow the alphabetical order of the model ids and start at 1, above the
+    # platform's own stream 0.
     assert one.calls == [(("price:sector",), 1, ())]
     assert two.calls == [(("spread:sector",), 2, ("spread:sector",))]
-    # A bundle of two models gets the platform's joint shocks, one column per model here.
+    # The platform draws the joint shocks of every model, one column per model here.
     rows = 2 + len(simulated.panel(24).months) - 1
     assert one.shocks_seen[0].shape == (3, rows, 1)
     assert two.shocks_seen[0].shape == (3, rows, 1)
@@ -258,11 +251,8 @@ def test_simulate_dispatches_each_quantity_to_its_own_model(tmp_path):
     assert found.paths[0, 0, 0] == ord("b") + 2
     assert found.paths[0, 0, 1] == ord("a") + 1
     assert np.all(found.paths[:, 1:3, 0] == ord("b") + 2 + 5)
-    # The fake's paths sit far outside its all-zero history, so the range flag is set too; the
-    # fake records no training bounds, so the fallback to the whole column is marked legacy.
-    assert found.flags["spread:sector"] == frozenset(
-        {"impact", "outside_training_range", "legacy_training_range"}
-    )
+    # The fake records no training bounds, so no range check runs and no flag is set.
+    assert found.flags["spread:sector"] == frozenset({"impact"})
 
 
 def test_a_driver_the_check_rejected_is_not_simulated(tmp_path):
@@ -366,12 +356,11 @@ class TrainingSatellite(FakeSatellite):
 
     The column runs from -500 to 500, while the node is recorded as trained on ``low .. high``:
     the platform must check paths against the recorded window, not against the whole column.
-    ``record=False`` writes the part as a version from before the bounds were recorded.
     """
 
-    def __init__(self, *, low=1.0, high=2.0, value=100.0, record=True):
+    def __init__(self, *, low=1.0, high=2.0, value=100.0):
         super().__init__("range.a", quantities=("price",))
-        self.low, self.high, self.value, self.record = low, high, value, record
+        self.low, self.high, self.value = low, high, value
 
     def estimate(self, context):
         estimate = super().estimate(context)
@@ -380,12 +369,13 @@ class TrainingSatellite(FakeSatellite):
         part.arrays["d"] = np.concatenate(
             [[-500.0], np.full(months - 2, 50.0), [500.0]]
         )[:, None]
-        if self.record:
-            part.meta["train_low"] = [self.low]
-            part.meta["train_high"] = [self.high]
+        part.meta["train_low"] = [self.low]
+        part.meta["train_high"] = [self.high]
         return estimate
 
-    def simulate(self, model, macro, drivers, impacts, *, correlation=None, seed, stream):
+    def simulate(
+        self, model, macro, drivers, impacts, *, correlation=None, shocks=None, seed, stream
+    ):
         paths = np.full(
             (macro.paths.shape[0], macro.paths.shape[1], len(drivers)), self.value
         )
@@ -418,18 +408,6 @@ def test_a_path_above_the_whole_column_is_flagged_too(tmp_path):
 def test_a_path_inside_the_recorded_window_is_not_flagged(tmp_path):
     found = _range_flags(tmp_path, TrainingSatellite(value=1.5))
     assert found == frozenset()
-
-
-def test_a_part_without_bounds_reads_the_whole_column_and_is_marked_legacy(tmp_path):
-    # 100 is below the column max of 500, so a legacy part sees no exit — but it must say that
-    # the range it used was the whole column, not the window the node was estimated on.
-    found = _range_flags(tmp_path, TrainingSatellite(value=100.0, record=False))
-    assert found == frozenset({"legacy_training_range"})
-
-
-def test_a_legacy_part_above_the_whole_column_is_flagged_and_marked(tmp_path):
-    found = _range_flags(tmp_path, TrainingSatellite(value=1000.0, record=False))
-    assert found == frozenset({"outside_training_range", "legacy_training_range"})
 
 
 def two_model_registry() -> Registry:
@@ -474,8 +452,8 @@ def correlated_residuals(months: int, matrix: np.ndarray, seed: int = 3) -> list
 class ShockSatellite(SatelliteModel):
     """A satellite whose paths are the platform's shocks, month by month.
 
-    Without shocks it draws its own noise from the model stream; ``received`` records what the
-    platform passed (``None`` when it passed nothing), so a test can tell the two paths apart.
+    ``received`` records what the platform passed, so a test can check the shape and the
+    columns every model got.
     """
 
     version = "0.1.0"
@@ -527,11 +505,7 @@ class ShockSatellite(SatelliteModel):
         self.received.append(shocks)
         draws, horizon = macro.paths.shape[0], macro.paths.shape[1] - 1
         paths = np.zeros((draws, horizon + 1, len(drivers)))
-        if shocks is not None:
-            paths[:, 1:, :] = shocks[:, :horizon, :]
-        else:
-            rng = np.random.default_rng([seed, stream])
-            paths[:, 1:, :] = rng.standard_normal((draws, horizon, len(drivers)))
+        paths[:, 1:, :] = shocks[:, :horizon, :]
         return DriverPaths(
             ids=list(drivers),
             paths=paths,
@@ -578,7 +552,7 @@ def test_the_platform_draws_the_cross_model_shocks_once(tmp_path):
     assert observed[1, 2] == pytest.approx(0.2, abs=0.05)
 
 
-def test_a_one_model_bundle_keeps_the_old_path_without_shocks(tmp_path):
+def test_a_one_model_bundle_gets_the_platform_shocks_too(tmp_path):
     residuals = dict(zip(["qa:x"], correlated_residuals(24, np.eye(1)), strict=True))
     model = ShockSatellite("one.a", ("qa",), ("qa:x",), residuals)
     bundle = _bundle_of(tmp_path, [model], two_model_registry())
@@ -586,13 +560,11 @@ def test_a_one_model_bundle_keeps_the_old_path_without_shocks(tmp_path):
 
     found = bundle.simulate(macro, ["qa:x"], seed=7)
 
-    # The single-model path passes no shocks argument at all, so a model written before model
-    # SDK 1.1 keeps working; on the same seed the model reproduces its own paths bit for bit.
-    assert model.received == [None]
-    direct = model.simulate(
-        bundle.models[model.model_id], macro, ["qa:x"], [], seed=7, stream=1
-    )
-    assert np.array_equal(found.paths, direct.paths)
+    # The platform draws the joint shocks whatever the number of models, so the measured
+    # correlation reaches the paths of a one-model bundle the same way.
+    assert model.received[0] is not None
+    assert model.received[0].shape == (5, 4 + 24 - 1, 1)
+    assert np.array_equal(found.paths[:, 1:, 0], model.received[0][:, :4, 0])
 
 
 def test_a_correlation_matrix_that_is_not_positive_definite_is_refused(tmp_path):
