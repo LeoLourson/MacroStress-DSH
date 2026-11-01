@@ -32,11 +32,15 @@ from mst.model_sdk.contracts import (
     LATENT_CANDIDATES,
     ConstraintLaw,
     MacroSimulation,
+    ScenarioPlan,
 )
-from mst.scenario.contracts import Scenario
 
 from .estimate import Posterior
 from .var import iterate, responses
+
+#: The name of the volatility path as one coordinate of ``omega``: the hidden coordinate the
+#: BVAR declares, which a scenario names among its causes to keep it out of ``R``.
+VOLATILITY_PATH = "volatility_path"
 
 Simulation = MacroSimulation
 """The simulation of the BVAR, in the platform's shared shape."""
@@ -62,7 +66,7 @@ class _Plan:
     driving: np.ndarray  # column indices of the driving shocks
 
 
-def _plan(model: Posterior, scenario: Scenario) -> _Plan:
+def _plan(model: Posterior, scenario: ScenarioPlan) -> _Plan:
     if model.rotation is None:
         raise ValueError("the posterior is not identified; run mst.plugins.bvar.identify first")
     index = {id_: i for i, id_ in enumerate(model.ids)}
@@ -75,11 +79,12 @@ def _plan(model: Posterior, scenario: Scenario) -> _Plan:
             else:
                 row.append((index[term.variable], term.month, term.weight))
         terms.append(row)
-    unknown = [s for s in scenario.driving_shocks if s not in model.shocks]
-    problems += [f"unknown shock {s}" for s in unknown]
+    known = model.shocks + [VOLATILITY_PATH]
+    unknown = [s for s in scenario.causes if s not in known]
+    problems += [f"unknown cause {s}: the model knows {', '.join(known)}" for s in unknown]
     if problems:
         raise ValueError("; ".join(problems))
-    driving = [model.shocks.index(s) for s in scenario.driving_shocks]
+    driving = [model.shocks.index(s) for s in scenario.causes if s in model.shocks]
     return _Plan(
         horizon=scenario.horizon,
         terms=terms,
@@ -149,7 +154,7 @@ def _level(plan: _Plan, mean: np.ndarray) -> np.ndarray:
 
 def constraint_law(
     model: Posterior,
-    scenario: Scenario,
+    scenario: ScenarioPlan,
     *,
     draws: int,
     seed: int,
@@ -170,23 +175,28 @@ def constraint_law(
     if not plan.terms:
         return None
     n = len(model.ids)
+    # The law reads the causes themselves, without the fill ``_plan`` gives the imposition:
+    # a shock the causes do not name belongs to ``R`` and is drawn into the mean.
     driving = np.zeros(n, dtype=bool)
-    driving[plan.driving] = True
-    # ``_plan`` fills the driving shocks with the whole J set when the scenario names none,
-    # but the law reads the causes themselves: unnamed means R = theta and the volatility
-    # path is a hidden coordinate, named means it belongs to R.
-    named = bool(scenario.driving_shocks)
+    driving[[model.shocks.index(s) for s in scenario.causes if s in model.shocks]] = True
+    # The volatility path belongs to ``R`` only when other causes are named without it:
+    # then the repetition draws the path and one row reports the law given it. Unnamed
+    # causes — or ``volatility_path`` itself among them — leave the path a hidden coordinate,
+    # and every group carries its candidates.
+    named = bool(scenario.causes) and VOLATILITY_PATH not in scenario.causes
     means, covs, log_weights, groups = [], [], [], []
     for r in range(draws):
         draw = int(np.random.default_rng([seed, r, 0]).integers(model.draws))
+        free = (
+            np.random.default_rng([seed, r, 2])
+            .standard_normal((plan.horizon, int((~driving).sum())))
+            .reshape(-1)
+            if scenario.causes
+            else None
+        )
         if named:
             rep = _repetition(model, plan.horizon, np.random.default_rng([seed, r, 1]), draw)
-            eps_free = (
-                np.random.default_rng([seed, r, 2])
-                .standard_normal((plan.horizon, int((~driving).sum())))
-                .reshape(-1)
-            )
-            mean, cov = _law_row(plan, rep, driving, eps_free)
+            mean, cov = _law_row(plan, rep, driving, free)
             means.append(mean)
             covs.append(cov)
             log_weights.append(0.0)
@@ -195,7 +205,7 @@ def constraint_law(
         rng_volatility = np.random.default_rng([seed, r, 1])
         for _ in range(candidates):
             rep = _repetition(model, plan.horizon, rng_volatility, draw)
-            mean, cov = _law_row(plan, rep, driving, None)
+            mean, cov = _law_row(plan, rep, driving, free)
             means.append(mean)
             covs.append(cov)
             log_weights.append(0.0)
@@ -233,7 +243,7 @@ def _law_row(plan: _Plan, rep: _Repetition, driving: np.ndarray, eps_free):
 
 
 def simulate(
-    model: Posterior, scenario: Scenario, *, draws: int, seed: int, sweeps: int = SWEEPS
+    model: Posterior, scenario: ScenarioPlan, *, draws: int, seed: int, sweeps: int = SWEEPS
 ) -> Simulation:
     """Steps 1-3 of section 7: ``draws`` paths of the macro variables under the scenario.
 

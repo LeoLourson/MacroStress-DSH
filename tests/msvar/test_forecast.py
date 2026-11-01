@@ -40,7 +40,7 @@ def model():
     return identify(posterior, SIGNS, sign_lag=2, tries=5000, seed=3)
 
 
-def plan(constraints=(), shocks=(), horizon=6) -> ScenarioPlan:
+def plan(constraints=(), causes=(), horizon=6, regime_event=None) -> ScenarioPlan:
     return ScenarioPlan(
         horizon=horizon,
         constraints=tuple(
@@ -54,7 +54,8 @@ def plan(constraints=(), shocks=(), horizon=6) -> ScenarioPlan:
             )
             for row, low, high in constraints
         ),
-        driving_shocks=tuple(shocks),
+        causes=tuple(causes),
+        regime_event=regime_event,
     )
 
 
@@ -121,38 +122,62 @@ def test_a_repeated_constraint_is_redundant_and_still_holds(model):
 
 
 def test_same_seed_repeats_the_paths_bit_for_bit(model):
-    chosen = plan([value("ru.c", 2, 5.0, 6.0)], shocks=["ru.t"])
+    chosen = plan([value("ru.c", 2, 5.0, 6.0)], causes=["ru.t"])
     first = simulate(model, chosen, draws=20, seed=5).paths
     assert np.array_equal(first, simulate(model, chosen, draws=20, seed=5).paths)
 
 
 def test_a_russian_shock_cannot_move_a_global_variable(model):
-    chosen = plan([value("ru.b", 1, 1.0), value("gl.a", 2, 1.0)], shocks=["ru.t"])
+    chosen = plan([value("ru.b", 1, 1.0), value("gl.a", 2, 1.0)], causes=["ru.t"])
     with pytest.raises(InfeasibleScenario, match="constraints 2 ") as caught:
         simulate(model, chosen, draws=5, seed=0)
     assert caught.value.constraints == [1]
 
 
 def test_one_shock_cannot_fix_two_variables_in_its_impact_month(model):
-    chosen = plan([value("ru.b", 1, 1.0), value("ru.c", 1, 1.0)], shocks=["ru.t"], horizon=1)
+    chosen = plan([value("ru.b", 1, 1.0), value("ru.c", 1, 1.0)], causes=["ru.t"], horizon=1)
     with pytest.raises(InfeasibleScenario):
         simulate(model, chosen, draws=5, seed=0)
 
 
-def test_unknown_names_are_refused(model):
-    with pytest.raises(ValueError, match="unknown shock ru.nope"):
-        simulate(model, plan([value("ru.b", 1, 1.0)], shocks=["ru.nope"]), draws=1, seed=0)
+def test_unknown_causes_are_refused(model):
+    with pytest.raises(ValueError, match="unknown cause ru.nope"):
+        simulate(model, plan([value("ru.b", 1, 1.0)], causes=["ru.nope"]), draws=1, seed=0)
 
 
-def test_conflicting_regime_elements_are_refused(model):
-    chosen = plan([value("ru.b", 1, 1.0)], shocks=["regime.stress", "regime.calm"])
-    with pytest.raises(ValueError, match="conflicting regime elements"):
-        simulate(model, chosen, draws=1, seed=0)
+def test_an_unknown_regime_event_is_refused(model):
+    with pytest.raises(ValueError, match="unknown regime element regime.nope"):
+        simulate(
+            model,
+            plan([value("ru.b", 1, 1.0)], regime_event="regime.nope"),
+            draws=1,
+            seed=0,
+        )
 
 
-def test_an_unknown_regime_element_is_refused(model):
-    with pytest.raises(ValueError, match="unknown shock regime.nope"):
-        simulate(model, plan([value("ru.b", 1, 1.0)], shocks=["regime.nope"]), draws=1, seed=0)
+def test_a_regime_event_without_the_regime_among_its_causes_is_refused(model):
+    # The event fixes the regime, so its law cannot stay as it was: the regime path has to
+    # be named as a cause, or no cause at all (lemma 2 of the canon).
+    with pytest.raises(ValueError, match="needs regime_path among its causes"):
+        simulate(
+            model,
+            plan([value("ru.b", 1, 1.0)], causes=["ru.t"], regime_event="regime.stress"),
+            draws=1,
+            seed=0,
+        )
+    # With the regime path among the causes, or with no causes at all, the plan is sound.
+    simulate(
+        model,
+        plan([value("ru.b", 1, 1.0)], causes=["regime_path"], regime_event="regime.stress"),
+        draws=1,
+        seed=0,
+    )
+    simulate(
+        model,
+        plan([value("ru.b", 1, 1.0)], regime_event="regime.stress"),
+        draws=1,
+        seed=0,
+    )
 
 
 def test_the_regime_event_holds_the_paths_in_the_named_regime(model):
@@ -160,7 +185,7 @@ def test_the_regime_event_holds_the_paths_in_the_named_regime(model):
     horizon = 4
     run = simulate(
         pinned,
-        plan(shocks=["regime.stress"], horizon=horizon),
+        plan(horizon=horizon, regime_event="regime.stress"),
         draws=400,
         seed=2,
     )
@@ -210,7 +235,7 @@ def test_with_named_shocks_the_law_has_one_row_per_group(model):
     half = np.full((2, 2), 0.5)
     pinned = one_draw(model, transition=half, states=np.zeros((1, model.states.shape[1]), int))
     found = constraint_law(
-        pinned, plan([value("ru.b", 3, 0.0, 1.0)], shocks=["ru.t"]), draws=5, seed=0
+        pinned, plan([value("ru.b", 3, 0.0, 1.0)], causes=["ru.t"]), draws=5, seed=0
     )
     assert len(found.group) == 5
     assert set(found.group.tolist()) == set(range(5))
@@ -224,7 +249,7 @@ def test_the_regime_event_costs_the_log_of_the_path_prior(model):
     pinned = one_draw(model, transition=np.eye(2), states=np.zeros((1, model.states.shape[1]), int))
     horizon = 4
     found = constraint_law(
-        pinned, plan(shocks=["regime.stress"], horizon=horizon), draws=1, seed=0
+        pinned, plan(horizon=horizon, regime_event="regime.stress"), draws=1, seed=0
     )
     assert found.means.shape == (1, 0) and found.covs.shape == (1, 0, 0)
     prior = 1.0
@@ -244,7 +269,7 @@ def test_a_regime_event_with_conditions_prices_the_box_at_the_regime(model):
     # The forced regime row carries the path prior and the box probability under that
     # regime: P(S | R) = pi_theta(k,..,k) * P(box | theta, k..k).
     pinned = one_draw(model, transition=np.eye(2), states=np.zeros((1, model.states.shape[1]), int))
-    chosen = plan([value("ru.b", 2, 5.0, 6.0)], shocks=["regime.stress"])
+    chosen = plan([value("ru.b", 2, 5.0, 6.0)], regime_event="regime.stress")
     found = constraint_law(pinned, chosen, draws=1, seed=0)
     assert found.means.shape == (1, 1)
     distance, _, _ = price_of_law(

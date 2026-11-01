@@ -149,10 +149,10 @@ class {{class}}(MacroModel):
         n = len(model.ids)
         driving = np.zeros(n, dtype=bool)
         index = {shock: k for k, shock in enumerate(model.ids)}
-        unknown = [shock for shock in plan.driving_shocks if shock not in index]
+        unknown = [shock for shock in plan.causes if shock not in index]
         if unknown:
             raise ValueError(f"unknown shock {', '.join(unknown)}")
-        for shock in plan.driving_shocks:
+        for shock in plan.causes:
             driving[index[shock]] = True
         paths = np.empty((draws, horizon + 1, n))
         months = [_shift_month(model.last_month, k) for k in range(horizon + 1)]

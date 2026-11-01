@@ -30,7 +30,7 @@ def model(request):
     return identify(posterior, SHOCKS, sign_lag=2, tries=5000, seed=3)
 
 
-def scenario(constraints, shocks=(), horizon=6):
+def scenario(constraints, causes=(), horizon=6):
     return ScenarioPlan(
         horizon=horizon,
         constraints=tuple(
@@ -44,7 +44,7 @@ def scenario(constraints, shocks=(), horizon=6):
             )
             for row in constraints
         ),
-        driving_shocks=tuple(shocks),
+        causes=tuple(causes),
     )
 
 
@@ -100,27 +100,27 @@ def test_a_repeated_constraint_is_redundant_and_still_holds(model):
 
 
 def test_same_seed_repeats_the_paths_bit_for_bit(model):
-    chosen = scenario([value("ru.c", 2, 5.0, 6.0)], shocks=["ru.t"])
+    chosen = scenario([value("ru.c", 2, 5.0, 6.0)], causes=["ru.t"])
     first = simulate(model, chosen, draws=20, seed=5).paths
     assert np.array_equal(first, simulate(model, chosen, draws=20, seed=5).paths)
 
 
 def test_a_russian_shock_cannot_move_a_global_variable(model):
-    chosen = scenario([value("ru.b", 1, 1.0), value("gl.a", 2, 1.0)], shocks=["ru.t"])
+    chosen = scenario([value("ru.b", 1, 1.0), value("gl.a", 2, 1.0)], causes=["ru.t"])
     with pytest.raises(InfeasibleScenario, match="constraints 2 ") as caught:
         simulate(model, chosen, draws=5, seed=0)
     assert caught.value.constraints == [1]
 
 
 def test_one_shock_cannot_fix_two_variables_in_its_impact_month(model):
-    chosen = scenario([value("ru.b", 1, 1.0), value("ru.c", 1, 1.0)], shocks=["ru.t"], horizon=1)
+    chosen = scenario([value("ru.b", 1, 1.0), value("ru.c", 1, 1.0)], causes=["ru.t"], horizon=1)
     with pytest.raises(InfeasibleScenario):
         simulate(model, chosen, draws=5, seed=0)
 
 
 def test_unknown_names_are_refused(model):
-    with pytest.raises(ValueError, match="unknown shock ru.nope"):
-        simulate(model, scenario([value("ru.b", 1, 1.0)], shocks=["ru.nope"]), draws=1, seed=0)
+    with pytest.raises(ValueError, match="unknown cause ru.nope"):
+        simulate(model, scenario([value("ru.b", 1, 1.0)], causes=["ru.nope"]), draws=1, seed=0)
 
 
 def test_the_law_of_one_gaussian_draw_matches_the_analytic_value(model):
@@ -162,7 +162,7 @@ def test_the_law_of_one_gaussian_draw_matches_the_analytic_value(model):
                 {"terms": [{"variable": "ru.c", "month": 2, "weight": 1.0}],
                  "low": low[1], "high": high[1]},
             ],
-            shocks=["ru.t", "gl.s"],
+            causes=["ru.t", "gl.s"],
         ),
         draws=4,
         seed=0,
@@ -199,7 +199,7 @@ def test_without_causes_the_law_carries_volatility_candidates(model):
 def test_with_named_causes_the_law_has_one_row_per_group(model):
     found = constraint_law(
         model,
-        scenario([value("ru.b", 2, 0.0, 1.0)], shocks=["ru.t"]),
+        scenario([value("ru.b", 2, 0.0, 1.0)], causes=["ru.t"]),
         draws=5,
         seed=0,
     )

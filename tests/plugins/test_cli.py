@@ -330,7 +330,7 @@ def _plan():
                 high=18.0,
             ),
         ),
-        driving_shocks=("ru.key_rate",),
+        causes=("ru.key_rate",),
     )
 
 

@@ -50,14 +50,27 @@ from .var import iterate
 __all__ = ["InfeasibleScenario", "constraint_law", "simulate"]
 
 
+#: The name of the regime path as one coordinate of ``omega``: the hidden coordinate the
+#: MS-VAR declares, which a scenario names among its causes to explain the event through
+#: the regime.
+REGIME_PATH = "regime_path"
+
+
 @dataclass(frozen=True)
 class _Plan:
     horizon: int
     terms: list[list[tuple[int, int, float]]]  # per constraint: (variable, month, weight)
     low: np.ndarray
     high: np.ndarray
-    driving: np.ndarray  # column indices of the driving economic shocks
+    driving: np.ndarray  # column indices of the economic shocks named as causes
     regime: int | None  # the regime element of the event, fixed over the horizon
+    regime_cause: bool  # the regime path is named as a cause
+
+    @property
+    def regime_in_r(self) -> bool:
+        """Whether the regime path belongs to ``R``: a cause is missing, so the law of the
+        path stays as it was."""
+        return not self.regime_cause
 
 
 def _plan(model: Posterior, plan: ScenarioPlan) -> _Plan:
@@ -73,22 +86,32 @@ def _plan(model: Posterior, plan: ScenarioPlan) -> _Plan:
             else:
                 row.append((index[term.variable], term.month, term.weight))
         terms.append(row)
-    regimes = [s for s in plan.driving_shocks if s in model.regime_ids]
-    if len(set(regimes)) > 1:
-        problems.append(f"conflicting regime elements {', '.join(regimes)}")
-    known = model.shocks + model.regime_ids
-    unknown = [s for s in plan.driving_shocks if s not in known]
-    problems += [f"unknown shock {s}" for s in unknown]
+    known = model.shocks + [REGIME_PATH]
+    unknown = [s for s in plan.causes if s not in known]
+    problems += [f"unknown cause {s}: the model knows {', '.join(known)}" for s in unknown]
+    regime = None
+    if plan.regime_event is not None:
+        if plan.regime_event not in model.regime_ids:
+            problems.append(f"unknown regime element {plan.regime_event}")
+        else:
+            regime = model.regime_ids.index(plan.regime_event)
+        if plan.causes and REGIME_PATH not in plan.causes:
+            problems.append(
+                f"the regime event {plan.regime_event} needs {REGIME_PATH} among its causes, "
+                "or no causes at all: the event fixes the regime, so its law cannot stay "
+                "as it was (lemma 2 of the canon)"
+            )
     if problems:
         raise ValueError("; ".join(problems))
-    driving = [model.shocks.index(s) for s in plan.driving_shocks if s in model.shocks]
+    driving = [model.shocks.index(s) for s in plan.causes if s in model.shocks]
     return _Plan(
         horizon=plan.horizon,
         terms=terms,
         low=np.array([c.low for c in plan.constraints]),
         high=np.array([c.high for c in plan.constraints]),
         driving=np.array(driving or range(len(model.shocks)), dtype=int),
-        regime=model.regime_ids.index(regimes[0]) if regimes else None,
+        regime=regime,
+        regime_cause=REGIME_PATH in plan.causes,
     )
 
 
@@ -230,10 +253,11 @@ def constraint_law(
     n = len(model.ids)
     driving = np.zeros(n, dtype=bool)
     driving[chosen.driving] = True
-    # ``_plan`` fills the driving shocks with the whole J set when the scenario names none,
-    # but the law reads the causes themselves: unnamed means R = theta and the regime path
-    # is a hidden coordinate, named means it belongs to R.
-    named = bool(plan.driving_shocks)
+    # The regime path belongs to ``R`` only when other causes are named without it: then the
+    # repetition draws the path and one row reports the law given it. Unnamed causes — or
+    # ``regime_path`` itself among them — leave the path a hidden coordinate, and every
+    # group carries its candidates.
+    named = bool(plan.causes) and chosen.regime_in_r
     means, covs, log_weights, groups = [], [], [], []
     for r in range(draws):
         rng_theta = np.random.default_rng([seed, r, 0])

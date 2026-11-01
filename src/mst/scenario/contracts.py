@@ -1,11 +1,16 @@
-"""The scenario of a stress test: narrative, constraints, driving shocks and impacts.
+"""The scenario of a stress test: narrative, constraints, causes, impacts and approval.
 
-``Scenario`` is the scenario (N, C, D, O) of docs/concept/scenario-formalization.md, section 3; the
-bounds of a constraint are in the model scale ``y = g(X)`` of each variable. Variable and
-shock names are checked against the registry by ``mst.macro.registry.Registry.check``.
+``Scenario`` is the scenario ``(N, m, O, D, C)`` of docs/concept/formalization.md, section 3:
+the narrative with its sources, the model versions, the direct impacts, the causes the
+scenario names among the coordinates of ``omega`` beyond the parameters, and the conditions.
+The bounds of a constraint are in the model scale ``y = g(X)`` of each variable; a point is a
+``value`` the platform expands to ``value ± tau``. Variable names are checked against the
+registry by ``mst.macro.registry.Registry.check``; cause names — shocks and the hidden
+coordinates the macro model declares — against the macro version by
+``mst.scenario.build.validate``, and a scenario is not computed until a human has approved it.
 """
 
-from typing import Annotated
+from typing import Annotated, Literal
 
 from pydantic import Field, model_validator
 
@@ -13,6 +18,7 @@ from ..contracts import Contract, Horizon, Identifier, Number
 
 #: A month of the scenario horizon, 1..H; month 0 is the calculation date.
 Month = Annotated[int, Field(strict=True, ge=1, le=360)]
+
 
 
 class Term(Contract):
@@ -42,6 +48,8 @@ class Constraint(Contract):
     low: Number | None = None
     high: Number | None = None
     value: Number | None = None
+    basis: list[Identifier] | Literal["assumption"] = Field(min_length=1)
+    """The corpus fragments behind the condition, or ``assumption`` when it is the author's."""
 
     @model_validator(mode="after")
     def well_formed(self):
@@ -78,7 +86,8 @@ class Impact(Contract):
     ``<quantity>:<object>`` of a level above, in the model scale of its level. The impact of
     a level is applied before the levels below it are simulated, so an impact on a macro
     variable reaches every satellite; an impact on a driver moves that driver alone. Every
-    impact carries its reason and the corpus sources it rests on.
+    impact carries its reason and what it rests on: the corpus fragments it cites, or the
+    word ``assumption`` when it is the author's own.
     """
 
     target: Identifier
@@ -86,7 +95,7 @@ class Impact(Contract):
     end: Month
     delta: Number
     reason: Identifier
-    sources: list[Identifier] = Field(min_length=1)
+    basis: list[Identifier] | Literal["assumption"] = Field(min_length=1)
 
     @property
     def on_driver(self) -> bool:
@@ -105,10 +114,19 @@ class Scenario(Contract):
     sources: list[Identifier] = []
     horizon: Horizon
     constraints: list[Constraint] = []
-    #: Shocks that cause the constrained paths; empty means any shock may.
-    driving_shocks: list[Identifier] = []
+    #: The causes ``D``: coordinates of ``omega`` beyond the parameters that the scenario
+    #: holds responsible for the event — shock names and the hidden coordinates the macro
+    #: model declares (a regime path, a volatility path). Empty means every coordinate
+    #: except the parameters.
+    causes: list[Identifier] = []
+    #: The regime element the event asserts, fixed over the whole horizon; ``None`` when the
+    #: event does not fix a regime. Naming a regime as a cause is a different thing: it says
+    #: the scenario explains the event through the regime, without fixing it.
+    regime_event: Identifier | None = None
     impacts: list[Impact] = []
     """The direct impacts ``O`` of the scenario, on the macro variables or on drivers."""
+    approved_by: str | None = None
+    """Who approved the scenario; the canon has a human assert it before it is computed."""
 
     @model_validator(mode="after")
     def within_horizon(self):
@@ -118,8 +136,8 @@ class Scenario(Contract):
             if month > self.horizon:
                 raise ValueError(f"month {month} is beyond the horizon of {self.horizon}")
         seen = set()
-        for shock in self.driving_shocks:
-            if shock in seen:
-                raise ValueError(f"{shock} is named twice")
-            seen.add(shock)
+        for cause in self.causes:
+            if cause in seen:
+                raise ValueError(f"{cause} is named twice")
+            seen.add(cause)
         return self

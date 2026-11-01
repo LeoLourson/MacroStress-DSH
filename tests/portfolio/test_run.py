@@ -78,6 +78,7 @@ def test_the_report_of_a_constrained_scenario_carries_the_price(workspace, portf
                 {
                     "terms": [{"variable": "gl.brent", "month": 1, "weight": 1.0}],
                     "value": target,
+                    "basis": "assumption",
                 }
             ],
         },

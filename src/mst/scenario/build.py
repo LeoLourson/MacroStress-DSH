@@ -144,7 +144,8 @@ def plan_of(spec: Spec, macro: MacroVersion) -> ScenarioPlan:
     return ScenarioPlan(
         horizon=spec.horizon,
         constraints=tuple(constraints),
-        driving_shocks=tuple(spec.driving_shocks),
+        causes=tuple(spec.causes),
+        regime_event=spec.regime_event,
     )
 
 
@@ -194,7 +195,7 @@ def dist_of(
     of ``-log P(S | R)`` over the groups, so a price with a large error is seen as such.
     """
     plan = plan_with_impacts(spec, macro)
-    if not plan.constraints and not plan.driving_shocks:
+    if not plan.constraints and not plan.causes and plan.regime_event is None:
         return None
     law = macro.plugin.constraint_law(macro.model, plan, draws=draws, seed=seed)
     if law is None:
@@ -209,7 +210,7 @@ def dist_of(
         distance=distance,
         log_probability=log_probability,
         standard_error=standard_error,
-        causes=tuple(spec.driving_shocks),
+        causes=tuple(spec.causes),
         tolerances=tuple(
             constraint.tolerance for constraint in plan.constraints if constraint.point
         ),
@@ -294,11 +295,29 @@ def validate(
         load_registry().check(spec)
     except ValueError as error:
         problems.append(str(error))
+    allowed = tuple(macro.shocks) + tuple(macro.latents)
     problems += [
-        f"unknown shock {shock}: the macro version knows {', '.join(macro.shocks)}"
-        for shock in spec.driving_shocks
-        if shock not in macro.shocks
+        f"unknown cause {cause}: the macro version knows {', '.join(allowed) or 'none'}"
+        for cause in spec.causes
+        if cause not in allowed
     ]
+    if spec.regime_event is not None:
+        if spec.regime_event not in macro.shocks:
+            problems.append(
+                f"unknown regime event {spec.regime_event}: the macro version knows "
+                f"{', '.join(macro.shocks)}"
+            )
+        elif spec.causes and not (set(macro.latents) & set(spec.causes)):
+            problems.append(
+                f"the regime event {spec.regime_event} needs a hidden coordinate "
+                f"({', '.join(macro.latents) or 'none declared'}) among its causes, or no "
+                "causes at all: the event fixes the regime, so its law cannot stay as it "
+                "was (lemma 2 of the canon)"
+            )
+    if not spec.approved_by:
+        problems.append(
+            "the scenario names no approver: a human asserts it before it is computed"
+        )
     problems += _impact_problems(spec, macro, satellites)
     problems += _version_problems(macro, satellites)
     if spec.constraints:
@@ -310,8 +329,11 @@ def validate(
             problems.append(str(error))
     if corpus is not None:
         cited = list(spec.sources) + [
-            source for impact in spec.impacts for source in impact.sources
+            source
+            for impact in spec.impacts
+            for source in (impact.basis if impact.basis != "assumption" else ())
         ]
+
         missing = sources_missing(corpus / "index", cited, as_of)
         if missing:
             problems.append(f"no corpus fragment {', '.join(missing)} visible on {as_of}")

@@ -29,6 +29,7 @@ def workspace(tmp_path, versions):
             "horizon": 3,
             "macro": versions.macro,
             "satellites": versions.satellites,
+            "approved_by": "И. Иванов",
         },
     )
     return ws

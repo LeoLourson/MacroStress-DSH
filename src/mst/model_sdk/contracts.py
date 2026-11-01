@@ -78,16 +78,21 @@ class LinearConstraint:
 
 @dataclass(frozen=True)
 class ScenarioPlan:
-    """What a macro model simulates under: the horizon, the constraints and the driving shocks.
+    """What a macro model simulates under: the horizon, the constraints and the causes.
 
-    ``constraints`` are in the model scale ``y = g(X)`` of each variable; ``driving_shocks``
-    names the shocks of the model's own ``J`` set that are held responsible for them, an empty
-    tuple leaving every shock free.
+    ``constraints`` are in the model scale ``y = g(X)`` of each variable; ``causes`` names the
+    coordinates of ``omega`` beyond the parameters that the scenario holds responsible for the
+    event — shocks of the model's own ``J`` set and the hidden coordinates the model declares
+    in ``latents``. An empty tuple means every coordinate except the parameters, so the law of
+    ``R`` the price conditions on is the parameters alone. ``regime_event`` names the regime
+    element the event itself asserts, fixed over the horizon — a cause named ``regime_path``
+    explains the event through the regime instead, without fixing it.
     """
 
     horizon: int
     constraints: tuple[LinearConstraint, ...] = ()
-    driving_shocks: tuple[str, ...] = ()
+    causes: tuple[str, ...] = ()
+    regime_event: str | None = None
 
 
 @dataclass(frozen=True)
@@ -305,6 +310,12 @@ class MacroModel(ABC):
     version: str
     label: str
     variables: tuple[str, ...] = ()
+    latents: tuple[str, ...] = ()
+    """The hidden coordinates of ``omega`` beyond the parameters and the shocks: a regime
+    path, a volatility path — anything the constraints reweight but no gaussian draw
+    reaches. A scenario names them among its causes to keep them out of ``R``, and the
+    model draws their candidates (``LATENT_CANDIDATES``) when the price and the imposition
+    need them. A model without such coordinates declares none."""
 
     @abstractmethod
     def estimate(self, context: MacroEstimateContext) -> MacroEstimate:

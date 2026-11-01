@@ -24,7 +24,7 @@ from mst.model_sdk import (
 )
 
 
-def test_a_plan_holds_constraints_and_driving_shocks():
+def test_a_plan_holds_constraints_and_causes():
     plan = ScenarioPlan(
         horizon=3,
         constraints=(
@@ -34,10 +34,10 @@ def test_a_plan_holds_constraints_and_driving_shocks():
                 high=21.0,
             ),
         ),
-        driving_shocks=("ru.rate_hike",),
+        causes=("ru.rate_hike",),
     )
     assert plan.constraints[0].terms[0].variable == "ru.key_rate"
-    assert plan.driving_shocks == ("ru.rate_hike",)
+    assert plan.causes == ("ru.rate_hike",)
     assert ScenarioPlan(horizon=1).constraints == ()
 
 

@@ -4,8 +4,8 @@ The economics lives in ``estimate``, ``sv``, ``var``, ``identify`` and ``forecas
 module is the adapter to the model SDK. ``estimate`` builds the panel known on the calculation
 date, draws the posterior, identifies the shocks of the sign table and returns the metadata
 and arrays of the version. ``load`` rebuilds the posterior of a saved version. ``simulate``
-and ``constraint_law`` convert the platform's neutral plan into the scenario contract the
-forecast module works with.
+and ``constraint_law`` hand the platform's neutral ``ScenarioPlan`` to the forecast module
+as it is.
 """
 
 from datetime import date
@@ -21,7 +21,6 @@ from mst.model_sdk.contracts import (
     MacroSimulation,
     ScenarioPlan,
 )
-from mst.scenario.contracts import Scenario
 
 from .estimate import Posterior, estimate
 from .forecast import constraint_law as constraint_law_bvar
@@ -52,33 +51,12 @@ def parts(model: Posterior, spec: Spec, panel, as_of: date) -> MacroEstimate:
     return MacroEstimate(meta=meta, arrays=arrays)
 
 
-def to_scenario(plan: ScenarioPlan) -> Scenario:
-    """The platform's neutral plan as the scenario contract the forecast module reads."""
-    return Scenario.model_validate(
-        {
-            "narrative": "plan",
-            "horizon": plan.horizon,
-            "constraints": [
-                {
-                    "terms": [
-                        {"variable": term.variable, "month": term.month, "weight": term.weight}
-                        for term in constraint.terms
-                    ],
-                    "low": constraint.low,
-                    "high": constraint.high,
-                }
-                for constraint in plan.constraints
-            ],
-            "driving_shocks": list(plan.driving_shocks),
-        }
-    )
-
-
 class BvarModel(MacroModel):
     """The BVAR with stochastic volatility, sign restrictions and Student tails."""
 
     model_id = "bvar.sv"
     version = "0.1.0"
+    latents = ("volatility_path",)
     label = "BVAR со стохастической волатильностью"
     variables: tuple[str, ...] = ()
     description = (
@@ -129,9 +107,9 @@ class BvarModel(MacroModel):
         )
 
     def simulate(self, model, plan: ScenarioPlan, *, draws: int, seed: int) -> MacroSimulation:
-        return simulate_bvar(model, to_scenario(plan), draws=draws, seed=seed)
+        return simulate_bvar(model, plan, draws=draws, seed=seed)
 
     def constraint_law(
         self, model, plan: ScenarioPlan, *, draws: int, seed: int
     ) -> ConstraintLaw | None:
-        return constraint_law_bvar(model, to_scenario(plan), draws=draws, seed=seed)
+        return constraint_law_bvar(model, plan, draws=draws, seed=seed)

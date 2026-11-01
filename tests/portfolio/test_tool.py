@@ -117,7 +117,10 @@ def test_check_names_a_currency_the_models_cannot_price(workspace, positions):
 
 def test_check_names_an_infeasible_scenario(workspace, portfolio, versions):
     target = float(versions.data.y[-1, 0])
-    fixed = {"terms": [{"variable": "gl.brent", "month": 1, "weight": 1.0}]}
+    fixed = {
+        "terms": [{"variable": "gl.brent", "month": 1, "weight": 1.0}],
+        "basis": "assumption",
+    }
     scenario_tool.save(
         workspace.scenarios,
         "bad",
@@ -126,6 +129,7 @@ def test_check_names_an_infeasible_scenario(workspace, portfolio, versions):
             "horizon": 3,
             "macro": versions.macro,
             "satellites": versions.satellites,
+            "approved_by": "И. Иванов",
             "constraints": [
                 {**fixed, "value": target},
                 {**fixed, "value": target + 1.0},

@@ -24,6 +24,7 @@ def scenario(versions, **changes) -> Spec:
         "horizon": HORIZON,
         "macro": versions.macro,
         "satellites": versions.satellites,
+        "approved_by": "И. Иванов",
     }
     values.update(changes)
     return Spec.model_validate(values)
@@ -33,6 +34,7 @@ def fixed(variable: str, month: int, value: float) -> dict:
     return {
         "terms": [{"variable": variable, "month": month, "weight": 1.0}],
         "value": value,
+        "basis": "assumption",
     }
 
 
@@ -41,6 +43,7 @@ def interval(variable: str, month: int, low: float, high: float) -> dict:
         "terms": [{"variable": variable, "month": month, "weight": 1.0}],
         "low": low,
         "high": high,
+        "basis": "assumption",
     }
 
 
@@ -51,6 +54,7 @@ def change(variable: str, month: int, other: int, value: float) -> dict:
             {"variable": variable, "month": other, "weight": -1.0},
         ],
         "value": value,
+        "basis": "assumption",
     }
 
 
@@ -94,7 +98,7 @@ def test_an_impact_on_a_constrained_variable_meets_the_constraint(versions):
     # the shifted trajectory F(omega, O) = G_0 + o_0: the target is met by the final path.
     registry = load_registry()
     target = float(versions.data.y[-1, 0] + 5.0)
-    impact = Impact(target="gl.brent", start=2, end=2, delta=2.0, reason="r", sources=["s"])
+    impact = Impact(target="gl.brent", start=2, end=2, delta=2.0, reason="r", basis=["s"])
     spec = scenario(versions, constraints=[fixed("gl.brent", 2, target)], impacts=[impact])
     report = validate(spec, versions.loaded, versions.satellite, as_of=versions.data.months[-1])
     assert report == {"ok": True, "problems": []}
@@ -157,7 +161,7 @@ def test_named_causes_cost_no_less_than_unnamed(versions):
     spec = scenario(versions, constraints=[interval("gl.brent", 2, 0.0, 1.0)])
     unnamed = dist_of(spec, versions.loaded, draws=200, seed=SEED)
     named = dist_of(
-        scenario(versions, constraints=spec.constraints, driving_shocks=["gl.oil"]),
+        scenario(versions, constraints=spec.constraints, causes=["gl.oil"]),
         versions.loaded,
         draws=200,
         seed=SEED,
@@ -210,7 +214,7 @@ def test_the_price_reads_the_impact_shifted_bounds(versions):
     # The impact moves the constrained variable, so the plan the model solves — and the price
     # with it — reads the box with the impact taken out: the same constraint with the impact
     # prices the event the paths actually carry, not the unshifted one.
-    impact = Impact(target="gl.brent", start=1, end=3, delta=10.0, reason="шок", sources=["s"])
+    impact = Impact(target="gl.brent", start=1, end=3, delta=10.0, reason="шок", basis=["s"])
     plain = scenario(versions, constraints=[interval("gl.brent", 2, 1.0, 3.0)])
     shifted = scenario(
         versions, constraints=plain.constraints, impacts=[impact]
@@ -231,7 +235,7 @@ def test_a_wide_box_gives_a_price_near_zero(versions):
 
 def test_driver_paths_are_in_the_drivers_own_units_and_carry_impacts(versions):
     impact = Impact(
-        target="price:alpha", start=2, end=3, delta=10.0, reason="перебой", sources=["S1#1/1"]
+        target="price:alpha", start=2, end=3, delta=10.0, reason="перебой", basis=["S1#1/1"]
     )
     plain = paths_of(versions, scenario(versions))
     with_impact = paths_of(versions, scenario(versions, impacts=[impact]))
@@ -248,7 +252,7 @@ def test_driver_paths_are_in_the_drivers_own_units_and_carry_impacts(versions):
 def test_an_impact_on_a_macro_variable_reaches_the_drivers(versions):
     # A rise of the oil price in the model scale moves the drivers that read it — the
     # impact enters level 0 before the satellites see the paths.
-    impact = Impact(target="gl.brent", start=1, end=3, delta=2.0, reason="шок", sources=["S1#1/1"])
+    impact = Impact(target="gl.brent", start=1, end=3, delta=2.0, reason="шок", basis=["S1#1/1"])
     plain = paths_of(versions, scenario(versions))
     with_impact = paths_of(versions, scenario(versions, impacts=[impact]))
     macro_k = with_impact.ids.index("gl.brent")
@@ -266,13 +270,13 @@ def test_an_impact_on_a_macro_variable_reaches_the_drivers(versions):
 
 
 def test_an_impact_on_a_driver_the_satellites_do_not_know_is_refused(versions):
-    impact = Impact(target="price:nowhere", start=1, end=2, delta=1.0, reason="r", sources=["s"])
+    impact = Impact(target="price:nowhere", start=1, end=2, delta=1.0, reason="r", basis=["s"])
     with pytest.raises(ValueError, match="knows no such driver"):
         paths_of(versions, scenario(versions, impacts=[impact]))
 
 
 def test_an_impact_on_a_variable_the_macro_version_lacks_is_refused(versions):
-    impact = Impact(target="ru.nowhere", start=1, end=2, delta=1.0, reason="r", sources=["s"])
+    impact = Impact(target="ru.nowhere", start=1, end=2, delta=1.0, reason="r", basis=["s"])
     report = validate(
         scenario(versions, impacts=[impact]),
         versions.loaded,
@@ -291,7 +295,7 @@ def test_an_impact_on_a_rejected_driver_names_the_reason(versions):
     rejected = dict(versions.satellite.checks[quantity])
     rejected[node] = replace(rejected[node], served=False, reason="not more accurate")
     satellite = replace(versions.satellite, checks={quantity: rejected})
-    impact = Impact(target="price:alpha", start=1, end=2, delta=1.0, reason="r", sources=["s"])
+    impact = Impact(target="price:alpha", start=1, end=2, delta=1.0, reason="r", basis=["s"])
     with pytest.raises(ValueError, match="not more accurate"):
         build(
             scenario(versions, impacts=[impact]),
@@ -308,26 +312,36 @@ def test_validate_accepts_a_scenario_the_model_can_compute(versions):
     assert report == {"ok": True, "problems": []}
 
 
+def test_validate_names_a_scenario_without_an_approver(versions):
+    spec = scenario(versions, constraints=[fixed("gl.brent", 2, 1.0)], approved_by="")
+    report = validate(spec, versions.loaded, versions.satellite, as_of=versions.data.months[-1])
+    assert report["ok"] is False
+    assert "names no approver" in "; ".join(report["problems"])
+
+
 def test_validate_names_every_unknown_variable_and_shock(versions):
     spec = scenario(
         versions,
         constraints=[fixed("gl.nowhere", 2, 1.0), fixed("ru.nowhere", 3, 1.0)],
-        driving_shocks=["ru.nosuch"],
+        causes=["ru.nosuch"],
+        approved_by=None,
     )
     report = validate(spec, versions.loaded, versions.satellite, as_of=versions.data.months[-1])
     problems = "; ".join(report["problems"])
     assert report["ok"] is False
     assert "unknown variable gl.nowhere" in problems
     assert "unknown variable ru.nowhere" in problems
-    assert "unknown shock ru.nosuch" in problems
+    assert "unknown cause ru.nosuch" in problems
+    # The scenario names no approver: that is a problem of its own.
+    assert "names no approver" in problems
 
 
-def test_a_constraint_the_driving_shocks_cannot_move_is_refused_by_name(versions):
+def test_a_constraint_the_causes_cannot_move_is_refused_by_name(versions):
     # The second constraint cannot move anything the first does not: one shock, one direction.
     spec = scenario(
         versions,
         constraints=[fixed("gl.brent", 1, 1.0), fixed("gl.brent", 1, 2.0)],
-        driving_shocks=["gl.oil"],
+        causes=["gl.oil"],
     )
     with pytest.raises(InfeasibleScenario, match="cannot meet constraints 2"):
         paths_of(versions, spec)
@@ -341,7 +355,7 @@ def test_validate_names_an_impact_on_a_rejected_driver(versions):
     rejected = dict(versions.satellite.checks[quantity])
     rejected[node] = replace(rejected[node], served=False, reason="not more accurate")
     satellite = replace(versions.satellite, checks={quantity: rejected})
-    impact = Impact(target="price:alpha", start=1, end=2, delta=1.0, reason="r", sources=["s"])
+    impact = Impact(target="price:alpha", start=1, end=2, delta=1.0, reason="r", basis=["s"])
     report = validate(
         scenario(versions, impacts=[impact]),
         versions.loaded,
@@ -386,9 +400,10 @@ def test_validate_checks_that_the_cited_fragments_are_visible_on_the_day(version
     )
     assert report["ok"] is False and "S1/2020#1/1" in report["problems"][0]
 
-    # The fragments an impact cites are checked the same way as the scenario's own sources.
+    # The fragments an impact cites are checked the same way as the scenario's own sources;
+    # an impact resting on an assumption cites nothing and is not checked.
     impact = Impact(
-        target="price:alpha", start=1, end=2, delta=1.0, reason="r", sources=["S1/2020#1/1"]
+        target="price:alpha", start=1, end=2, delta=1.0, reason="r", basis=["S1/2020#1/1"]
     )
     report = validate(
         scenario(versions, impacts=[impact]),

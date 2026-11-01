@@ -42,7 +42,7 @@ def plan() -> ScenarioPlan:
                 high=6.0,
             ),
         ),
-        driving_shocks=("ru.t",),
+        causes=("ru.t",),
     )
 
 

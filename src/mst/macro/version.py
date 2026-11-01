@@ -57,6 +57,11 @@ class MacroVersion:
     def shocks(self) -> list[str]:
         return list(self.meta["shocks"])
 
+    @property
+    def latents(self) -> tuple[str, ...]:
+        """The hidden coordinates the model declares beyond the parameters and the shocks."""
+        return tuple(getattr(self.plugin, "latents", ()))
+
 
 def save(model_id: str, meta: dict, arrays: dict, root: Path) -> str:
     """Write a version of ``model_id`` unless it exists; returns its hash.

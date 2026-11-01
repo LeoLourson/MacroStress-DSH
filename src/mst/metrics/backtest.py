@@ -266,7 +266,7 @@ def _episode(
         scenario=ScenarioPlan(
             horizon=horizon,
             constraints=tuple(constraints),
-            driving_shocks=tuple(check.driving),
+            causes=tuple(check.driving),
         ),
         realized=realized,
         driving=list(check.driving),

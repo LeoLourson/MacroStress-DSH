@@ -90,7 +90,7 @@ flowchart TB
 
 Воздействия $O$ описаны в разделе 6.3.
 
-**Реализация.** Контракт — `mst.scenario.contracts.Scenario`: `narrative`, `sources`, `horizon`, `constraints`, `driving_shocks`, `impacts`. Ограничение задаётся списком слагаемых `terms` (переменная, месяц, вес) и границами `low`, `high` в шкале модели $y=g(X)$. Сценарий хранится в workspace файлом `scenarios/<id>.json`, а `scenario(action="validate")` называет каждую невыполнимую связку до расчёта. Поле `overlays` с ключом `driver` — устаревший алиас: старый файл читается как `impacts` с `target`, а файл с обоими полями отвергается.
+**Реализация.** Контракт — `mst.scenario.contracts.Scenario`: `narrative`, `sources`, `horizon`, `constraints`, `causes`, `regime_event`, `impacts`, `approved_by`. Ограничение задаётся списком слагаемых `terms` (переменная, месяц, вес), границами `low < high` в шкале модели $y=g(X)$ или точным значением `value` (платформа расширяет его до отрезка), и пометкой `basis` — источники корпуса или слово `assumption`. Сценарий хранится в workspace файлом `scenarios/<id>.json`, а `scenario(action="validate")` называет каждую невыполнимую связку до расчёта; сценарий без утвердившего не считается.
 
 ## 4. Макромодель
 

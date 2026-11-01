@@ -32,6 +32,7 @@ def spec(versions, **changes):
         "horizon": 6,
         "macro": versions.macro,
         "satellites": versions.satellites,
+        "approved_by": "И. Иванов",
     }
     values.update(changes)
     return values
@@ -41,6 +42,7 @@ def fixed(variable, month, value):
     return {
         "terms": [{"variable": variable, "month": month, "weight": 1.0}],
         "value": value,
+        "basis": "assumption",
     }
 
 
@@ -51,6 +53,7 @@ def scenario(versions, **changes):
         return {
             "terms": [{"variable": variable, "month": month, "weight": 1.0}],
             "value": 1.0,
+            "basis": "assumption",
         }
 
     changes.setdefault("constraints", [at("gl.brent", 2)])
