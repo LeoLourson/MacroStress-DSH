@@ -14,7 +14,7 @@ from scipy.stats import norm
 
 from mst.model_sdk.conditional import log_box_probabilities, log_box_probability
 from mst.model_sdk.contracts import ConstraintLaw
-from mst.model_sdk.dist import price_of_law
+from mst.model_sdk.dist import PRICE_ERROR_LIMIT, price_estimated, price_of_law
 
 
 def law(means, covs, log_weight=None, group=None) -> ConstraintLaw:
@@ -234,3 +234,19 @@ class TestPriceOfLaw:
     def test_a_law_without_groups_is_refused(self):
         with pytest.raises(ValueError, match="has no price"):
             price(law([], []), np.array([0.0]), np.array([1.0]))
+
+
+def test_price_estimated_reads_the_boundary_of_the_error():
+    # The price is estimated while its standard error does not exceed ten percent of it —
+    # the boundary itself still counts — and neither an infinite nor a missing price is an
+    # estimate.
+    assert PRICE_ERROR_LIMIT == 0.10
+    assert price_estimated(10.0, 0.99) is True
+    assert price_estimated(10.0, 1.0) is True
+    assert price_estimated(10.0, 1.01) is False
+    assert price_estimated(0.0, 0.0) is True
+    assert price_estimated(0.0, 1e-12) is False
+    assert price_estimated(float("inf"), 0.0) is False
+    assert price_estimated(float("inf"), float("inf")) is False
+    assert price_estimated(10.0, float("nan")) is False
+    assert price_estimated(float("nan"), 0.0) is False

@@ -7,6 +7,11 @@ scenarios is fixed by its versions ``m``, its impacts ``O`` and its causes ``D``
 conditions' width moves with the parameter ``c`` — because a free ``O`` would cost nothing
 and the bound on the price would bound nothing.
 
+A point whose price carries an error above a tenth of it is not an estimate
+(``mst.model_sdk.dist.price_estimated``): noise would otherwise set the bound on the price,
+so the search treats such a point as one that does not qualify, and the answer never rests
+on one. When nothing qualifies, the answer is ``None``, as it is for an empty set.
+
 ``Family`` carries the builder ``c -> Spec``; ``width_family`` is the natural one: every
 condition of a scenario narrows or widens around its midpoint by the same factor. The search
 walks a grid of ``c`` and refines around the boundary with bisection: the streams of stage 4
@@ -17,6 +22,7 @@ refinements finds the boundary the report states.
 from collections.abc import Callable
 from dataclasses import dataclass
 
+from ..model_sdk.dist import price_estimated
 from .build import build as build_paths
 from .build import tolerance_of
 from .spec import Spec
@@ -95,11 +101,17 @@ def width_family(spec: Spec, macro) -> Family:
 
 @dataclass(frozen=True)
 class Point:
-    """One evaluated scenario of the family: its width, its price and its outcome."""
+    """One evaluated scenario of the family: its width, its price and its outcome.
+
+    ``estimated`` is the canon's ten-percent rule on the price: a point whose error exceeds
+    a tenth of its price is treated as a point that does not qualify, so no answer rests on
+    noise. A point with no price at all has nothing to estimate and carries the default.
+    """
 
     c: float
     dist: float | None
     rho: float | None
+    estimated: bool = True
 
 
 def evaluate(
@@ -109,7 +121,9 @@ def evaluate(
 
     ``rho`` is the expected shortfall of the portfolio loss at 95 % — the tail the canon's
     example names — on the paths of the scenario; ``dist`` is the scenario's price, absent
-    when the scenario carries nothing to price.
+    when the scenario carries nothing to price. ``estimated`` reads the canon's rule: a
+    price whose standard error exceeds a tenth of it is not an estimate, and the search
+    will not bound anything on it.
     """
     from ..engine.run import run as calculate
     from ..metrics.es import es_block
@@ -128,7 +142,12 @@ def evaluate(
     losses = losses_of(batch.results)
     rho = float(es_block(losses, seed=seed)["es95"]) if losses.size else None
     dist = None if paths.dist is None else float(paths.dist.distance)
-    return Point(c=float("nan"), dist=dist, rho=rho)
+    estimated = (
+        True
+        if dist is None
+        else price_estimated(dist, float(paths.dist.standard_error))
+    )
+    return Point(c=float("nan"), dist=dist, rho=rho, estimated=estimated)
 
 
 def sup_rho(
@@ -151,12 +170,17 @@ def sup_rho(
     points = _walk(
         family, macro, satellites, positions, draws=draws, seed=seed, grid=grid
     )
-    affordable = [point for point in points if point.dist is not None and point.dist <= kappa]
+    affordable = [
+        point
+        for point in points
+        if point.dist is not None and point.estimated and point.dist <= kappa
+    ]
     if not affordable:
         return {"kappa": kappa, "answer": None, "points": _rows(points)}
     best = max(affordable, key=lambda point: (point.rho is not None, point.rho))
     # Refine towards the boundary: the price falls as the conditions widen, so the affordable
-    # region sits at the large-c end of the grid and the boundary is its smallest c.
+    # region sits at the large-c end of the grid and the boundary is its smallest c. A point
+    # whose price is not estimated does not open the affordable region: it is noise.
     edge = min(point.c for point in affordable)
     below = [point.c for point in points if point.c < edge]
     low, high = (max(below) if below else None), edge
@@ -166,7 +190,7 @@ def sup_rho(
         middle = (low + high) / 2
         point = _evaluate(family, middle, macro, satellites, positions, draws, seed)
         points.append(point)
-        if point.dist is not None and point.dist <= kappa:
+        if point.dist is not None and point.estimated and point.dist <= kappa:
             high = middle
             if point.rho is not None and (best.rho is None or point.rho >= best.rho):
                 best = point
@@ -174,7 +198,9 @@ def sup_rho(
             low = middle
     return {
         "kappa": kappa,
-        "answer": None if best.rho is None else {"c": best.c, "rho": best.rho, "dist": best.dist},
+        "answer": None
+        if best.rho is None
+        else {"c": best.c, "rho": best.rho, "dist": best.dist, "estimated": best.estimated},
         "points": _rows(points),
     }
 
@@ -194,12 +220,17 @@ def inf_dist(
     points = _walk(
         family, macro, satellites, positions, draws=draws, seed=seed, grid=grid
     )
-    reached = [point for point in points if point.rho is not None and point.rho >= level]
+    reached = [
+        point
+        for point in points
+        if point.rho is not None and point.estimated and point.rho >= level
+    ]
     if not reached:
         return {"level": level, "answer": None, "points": _rows(points)}
     best = min(reached, key=lambda point: point.dist)
     # The loss falls as the conditions widen and the price with it: refine towards the
-    # boundary where rho stops reaching the level.
+    # boundary where rho stops reaching the level. A point whose price is not estimated
+    # does not count as reaching: the cheapest price must be an estimate, not noise.
     ordered = sorted(reached, key=lambda point: point.c)
     low, high = _bracket(ordered, points)
     for _ in range(REFINEMENTS):
@@ -208,7 +239,7 @@ def inf_dist(
         middle = (low + high) / 2
         point = _evaluate(family, middle, macro, satellites, positions, draws, seed)
         points.append(point)
-        if point.rho is not None and point.rho >= level:
+        if point.rho is not None and point.estimated and point.rho >= level:
             low = middle
             if point.dist is not None and (best.dist is None or point.dist <= best.dist):
                 best = point
@@ -216,7 +247,9 @@ def inf_dist(
             high = middle
     return {
         "level": level,
-        "answer": None if best.dist is None else {"c": best.c, "rho": best.rho, "dist": best.dist},
+        "answer": None
+        if best.dist is None
+        else {"c": best.c, "rho": best.rho, "dist": best.dist, "estimated": best.estimated},
         "points": _rows(points),
     }
 
@@ -235,11 +268,13 @@ def _walk(family, macro, satellites, positions, *, draws, seed, grid):
 
 
 def _evaluate(family, c, macro, satellites, positions, draws, seed) -> Point:
-    """One point of the family, carrying its own ``c``."""
+    """One point of the family, carrying its own ``c`` and estimated mark."""
     point = evaluate(
         family.build(c), macro, satellites, positions, draws=draws, seed=seed
     )
-    return Point(c=float(c), dist=point.dist, rho=point.rho)
+    return Point(
+        c=float(c), dist=point.dist, rho=point.rho, estimated=point.estimated
+    )
 
 
 def _bracket(inside, points):
@@ -256,6 +291,7 @@ def _rows(points) -> list[dict]:
             "c": point.c,
             "dist": point.dist,
             "rho": point.rho,
+            "estimated": point.estimated,
         }
         for point in sorted(points, key=lambda point: point.c)
     ]

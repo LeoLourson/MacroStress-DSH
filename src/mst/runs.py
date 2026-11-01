@@ -687,15 +687,19 @@ def _dist_meta(found) -> dict | None:
     The definition is the canon's: ``dist(s) = KL(P_s || P) = E_P[-log P(S | R)]``, the sum
     of the support price and the price of the tilt (docs/concept/formalization.md). The
     standard error reads the spread over the groups; an infinite distance is passed as is,
-    with the message naming the contradiction.
+    with the message naming the contradiction. ``estimated`` applies the canon's
+    ten-percent rule: a price whose error exceeds a tenth of it is not an estimate.
     """
     if found is None:
         return None
+    from .model_sdk.dist import price_estimated
+
     return {
         "definition": "dist(s) = KL(P_s || P) (docs/concept/formalization.md, sections 4-5)",
         "distance": float(found.distance),
         "log_probability": float(found.log_probability),
         "standard_error": float(found.standard_error),
+        "estimated": price_estimated(found.distance, found.standard_error),
         "causes": list(found.causes),
         "tolerances": list(found.tolerances),
         "by_level": {str(level): float(price) for level, price in sorted(found.by_level.items())},

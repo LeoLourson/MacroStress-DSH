@@ -41,6 +41,23 @@ box probability over 4096 draws before the logarithm is taken."""
 DIST_STREAM = 15
 """The stream of the GHK draws inside a run's seed, away from the model's own streams."""
 
+PRICE_ERROR_LIMIT = 0.10
+"""A price whose standard error exceeds this share of it is treated as not estimated."""
+
+
+def price_estimated(distance: float, standard_error: float) -> bool:
+    """Whether a price with this error reads as an estimate (the canon, section 7).
+
+    The price is a mean over values of ``R`` and its error is the spread over the groups;
+    when the error exceeds ``PRICE_ERROR_LIMIT`` of the estimate, noise would set the bound
+    the price is used for, so the report shows the number only with the mark ``not
+    estimated``. A price that is not finite — infinite or missing — is not an estimate
+    either; a price of exactly zero with no error is (nothing to price was kept).
+    """
+    if not (np.isfinite(distance) and np.isfinite(standard_error)):
+        return False
+    return bool(standard_error <= PRICE_ERROR_LIMIT * distance)
+
 
 class ContradictsModels(ValueError):
     """Some group of the law gives the event no probability: the scenario cannot be imposed."""

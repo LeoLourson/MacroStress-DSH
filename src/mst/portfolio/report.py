@@ -24,6 +24,7 @@ import numpy as np
 
 from ..engine.status import worst
 from ..metrics.es import es_block
+from ..model_sdk.dist import price_estimated
 
 DEFAULT_COVERAGE_LIMIT = 0.05
 """Uncovered value above this share turns the portfolio's status into ``incomplete``."""
@@ -39,7 +40,8 @@ def dist(found) -> dict | None:
 
     An infinite distance — the event has no probability at some value of ``R`` — is passed
     as is, with the message the estimate attached, beside the standard error and the causes
-    the scenario names.
+    the scenario names. ``estimated`` is the canon's ten-percent rule: a price whose error
+    exceeds a tenth of it is shown, but only with the mark that it is not an estimate.
     """
     if found is None:
         return None
@@ -47,6 +49,7 @@ def dist(found) -> dict | None:
         "distance": float(found.distance),
         "log_probability": float(found.log_probability),
         "standard_error": float(found.standard_error),
+        "estimated": price_estimated(found.distance, found.standard_error),
         "causes": list(found.causes),
         "tolerances": list(found.tolerances),
         "by_level": {str(level): float(price) for level, price in sorted(found.by_level.items())},
@@ -129,6 +132,9 @@ def build(
             flags.append("portfolio_incomplete")
     if not_admitted:
         flags.append("not_admitted")
+    price_block = dist(dist_found)
+    if price_block is not None and not price_block["estimated"]:
+        flags.append("price_not_estimated")
     if any(
         flag.startswith(f"{OUTSIDE_TRAINING}:")
         for result in results
@@ -148,7 +154,7 @@ def build(
         "losses_by_month": None if monthly is None else path_block(monthly, months, seed=seed),
         "comparison": comparison,
         "admission": admission,
-        "dist": dist(dist_found),
+        "dist": price_block,
         "coverage": {
             "share": share,
             "limit": coverage_limit,

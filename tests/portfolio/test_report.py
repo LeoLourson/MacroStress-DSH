@@ -68,6 +68,7 @@ def test_the_price_of_the_scenario_stands_beside_the_loss():
         "distance": 2.659,
         "log_probability": -3.1,
         "standard_error": 0.2,
+        "estimated": True,
         "causes": ["ru.monetary"],
         "tolerances": [0.4],
         "by_level": {"0": 2.0, "2": 0.659},
@@ -76,9 +77,25 @@ def test_the_price_of_the_scenario_stands_beside_the_loss():
     assert build(portfolio(equity()), batch(equity()).results)["dist"] is None
 
 
+def test_a_price_with_a_large_error_is_not_estimated_but_stays_visible():
+    # The canon's ten-percent rule: the number stays in the report, marked as not an
+    # estimate, and the flag says so without touching the status.
+    noisy = Dist(distance=2.0, log_probability=-3.0, standard_error=0.5)
+    report = build(portfolio(equity()), batch(equity()).results, dist_found=noisy)
+    assert report["dist"]["estimated"] is False
+    assert report["dist"]["distance"] == 2.0
+    assert "price_not_estimated" in report["flags"]
+    assert report["status"] == "ok"
+    calm = Dist(distance=2.0, log_probability=-3.0, standard_error=0.1)
+    quiet = build(portfolio(equity()), batch(equity()).results, dist_found=calm)
+    assert quiet["dist"]["estimated"] is True
+    assert "price_not_estimated" not in quiet["flags"]
+
+
 def test_an_infinite_price_is_passed_as_is_with_its_message():
     # At some value of R the event has no probability: the report names the contradiction
-    # instead of passing a bare infinity.
+    # instead of passing a bare infinity. Such a price is not an estimate either, and the
+    # flag says so while the status stays what the positions make it.
     found = Dist(
         distance=float("inf"),
         log_probability=float("-inf"),
@@ -88,6 +105,8 @@ def test_an_infinite_price_is_passed_as_is_with_its_message():
     )
     report = build(portfolio(equity()), batch(equity()).results, dist_found=found)
     assert report["dist"]["distance"] == float("inf")
+    assert report["dist"]["estimated"] is False
+    assert "price_not_estimated" in report["flags"]
     assert "contradicts the models" in report["dist"]["message"]
 
 
