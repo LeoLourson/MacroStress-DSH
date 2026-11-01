@@ -22,9 +22,22 @@ Month = Annotated[int, Field(strict=True, ge=1, le=360)]
 
 
 class Term(Contract):
+    """One summand of a condition: ``weight * y[variable, month]``.
+
+    The variable is a macro variable of level 0 or a driver ``<quantity>:<object>`` of a
+    level above — the canon lets a condition speak about any level (section 3), and the
+    platform routes it accordingly: the macro model meets the level-0 terms, and the terms
+    of the levels above are carried by the weights of the overlay.
+    """
+
     variable: Identifier
     month: Month
     weight: Number
+
+    @property
+    def on_driver(self) -> bool:
+        """Whether the term reads a driver of a level above the macro variables."""
+        return ":" in self.variable
 
     @model_validator(mode="after")
     def non_zero(self):

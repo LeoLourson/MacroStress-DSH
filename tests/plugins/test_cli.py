@@ -169,11 +169,49 @@ def test_a_scaffolded_macro_model_starts_from_the_last_known_value(tmp_path):
     )
     assert np.array_equal(loaded.last, np.array([3.0, 11.0, 100.0]))
 
-    from mst.model_sdk import ScenarioPlan
+    from mst.model_sdk import LinearConstraint, LinearTerm, ScenarioPlan
 
     simulation = model.simulate(loaded, ScenarioPlan(horizon=2), draws=3, seed=1)
     assert simulation.paths.shape == (3, 3, 3)
     assert np.all(np.isfinite(simulation.paths))
+
+    # With no cause named the scaffolded model is its sample of paths: the condition
+    # weighs the sample and the survivors carry the run — the canon's section 8.
+    wide = ScenarioPlan(
+        horizon=2,
+        constraints=(
+            LinearConstraint(
+                terms=(LinearTerm(variable="gl.brent", month=2, weight=1.0),),
+                low=-1e6,
+                high=1e6,
+            ),
+        ),
+    )
+    everything = model.simulate(loaded, wide, draws=200, seed=2)
+    assert np.all(np.isfinite(everything.paths))
+
+    from mst.model_sdk import overlay as sample_overlay
+
+    narrow = ScenarioPlan(
+        horizon=2,
+        constraints=(
+            LinearConstraint(
+                terms=(LinearTerm(variable="gl.brent", month=2, weight=1.0),),
+                low=4.0,
+                high=5.0,
+            ),
+        ),
+    )
+    unconstrained = model.simulate(
+        loaded, ScenarioPlan(horizon=2), draws=2000, seed=3
+    ).paths[:, 2, 0]
+    narrowed = model.simulate(loaded, narrow, draws=500, seed=4)
+    # The survivors sit inside the condition and the spread of the sample carries over.
+    assert np.all(
+        (narrowed.paths[:, 2, 0] >= 4.0) & (narrowed.paths[:, 2, 0] <= 5.0)
+    )
+    share = float(np.mean((unconstrained >= 4.0) & (unconstrained <= 5.0)))
+    assert share > 0.02  # the price is finite: -log of the share
 
 
 def test_a_scaffolded_macro_model_names_a_variable_without_observations(tmp_path):

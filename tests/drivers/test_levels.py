@@ -177,20 +177,30 @@ class WalkMacro(MacroModel):
     def load(self, meta, arrays):
         return meta | {"panel_y": arrays["panel_y"]}
 
-    def simulate(self, model, plan: ScenarioPlan, *, draws: int, seed: int):
+    def simulate(
+        self, model, plan: ScenarioPlan, *, draws: int, seed: int, inner: int | None = None
+    ):
+        inner = plan.inner if inner is None else inner
         rng = np.random.default_rng([seed, plan.horizon])
         last = model["panel_y"][-1]
         p = 3
-        steps = rng.normal(0, 0.3, size=(draws, plan.horizon, len(model["ids"])))
+        steps = rng.normal(
+            0, 0.3, size=(draws * inner, plan.horizon, len(model["ids"]))
+        )
         paths = np.concatenate(
-            [np.tile(last, (draws, 1, 1)), last + np.cumsum(steps, axis=1)], axis=1
+            [np.tile(last, (draws * inner, 1, 1)), last + np.cumsum(steps, axis=1)],
+            axis=1,
         )
         months = [shift(date.fromisoformat(model["months"][-1]), k) for k in range(plan.horizon + 1)]
+        group = (
+            np.arange(draws) if inner == 1 else np.repeat(np.arange(draws), inner)
+        )
         return MacroSimulation(
             ids=list(model["ids"]),
             months=months,
             paths=paths,
-            history=np.repeat(model["panel_y"][None, -p:], draws, axis=0),
+            history=np.repeat(model["panel_y"][None, -p:], draws * inner, axis=0),
+            group=group,
         )
 
 
@@ -465,3 +475,129 @@ def test_a_bundle_of_one_level_matches_its_model_called_directly(estimated):
         stream=1,
     )
     assert np.array_equal(found.paths, direct.paths)
+
+
+def bundle_name_of(root):
+    """The hash of the satellite bundle the fixture estimated — the newest one."""
+    from mst.drivers import bundle as satellite_bundle
+
+    return satellite_bundle.catalogue(root)[0]["version"]
+
+
+class TestDriverConditions:
+    """The conditions on the quantities of the levels above, carried by the overlay."""
+
+    def _spec(self, data, root, name, **changes):
+        from mst.scenario.spec import Spec
+
+        values = {
+            "narrative": "экспозиция",
+            "horizon": 4,
+            "macro": name,
+            "satellites": bundle_name_of(root),
+            "approved_by": "И. Иванов",
+        }
+        values.update(changes)
+        return Spec.model_validate(values)
+
+    def test_a_condition_on_the_second_level_keeps_only_the_survivors(self, estimated):
+        from mst.scenario.build import build
+
+        data, macro, name, bundle, root = estimated
+        macro = macro_version.load(root, name, {"levels.macro": macro})
+        # The exposure of sber in month 1 is asked into a band the regression reaches for
+        # some draws of the causes and not for others: the survivors carry the run, the
+        # macro paths and the driver paths resampled together.
+        plain = build(
+            self._spec(data, root, name, inner=4), macro, bundle, draws=6, seed=3
+        )
+        column = plain.drivers.paths[:, 1, plain.drivers.ids.index("exposure:sber")]
+        low, high = float(np.percentile(column, 25)), float(np.percentile(column, 75))
+        constrained = build(
+            self._spec(
+                data,
+                root,
+                name,
+                inner=4,
+                constraints=[
+                    {
+                        "terms": [
+                            {"variable": "exposure:sber", "month": 1, "weight": 1.0}
+                        ],
+                        "low": low,
+                        "high": high,
+                        "basis": "assumption",
+                    }
+                ],
+            ),
+            macro,
+            bundle,
+            draws=6,
+            seed=3,
+        )
+        moved = constrained.drivers.paths[
+            :, 1, constrained.drivers.ids.index("exposure:sber")
+        ]
+        assert np.all((moved >= low - 1e-9) & (moved <= high + 1e-9))
+        # The price carries the level above its own share and the level split names it.
+        assert constrained.dist is not None
+        assert constrained.dist.by_level and 2 in constrained.dist.by_level
+        assert constrained.dist.by_level[2] > 0
+
+    def test_a_group_without_a_survivor_contradicts_the_models(self, estimated):
+        from mst.model_sdk.dist import ContradictsModels
+        from mst.scenario.build import build
+
+        data, macro, name, bundle, root = estimated
+        macro = macro_version.load(root, name, {"levels.macro": macro})
+        with pytest.raises(ContradictsModels, match="contradicts the models"):
+            build(
+                self._spec(
+                    data,
+                    root,
+                    name,
+                    inner=4,
+                    constraints=[
+                        {
+                            "terms": [
+                                {"variable": "exposure:sber", "month": 1, "weight": 1.0}
+                            ],
+                            "low": 1e6,
+                            "high": 1e7,
+                            "basis": "assumption",
+                        }
+                    ],
+                ),
+                macro,
+                bundle,
+                draws=4,
+                seed=3,
+            )
+
+    def test_a_driver_condition_needs_inner_draws(self, estimated):
+        from mst.scenario.build import build
+
+        data, macro, name, bundle, root = estimated
+        macro = macro_version.load(root, name, {"levels.macro": macro})
+        with pytest.raises(ValueError, match="inner >= 2"):
+            build(
+                self._spec(
+                    data,
+                    root,
+                    name,
+                    constraints=[
+                        {
+                            "terms": [
+                                {"variable": "exposure:sber", "month": 1, "weight": 1.0}
+                            ],
+                            "low": 0.0,
+                            "high": 1.0,
+                            "basis": "assumption",
+                        }
+                    ],
+                ),
+                macro,
+                bundle,
+                draws=4,
+                seed=3,
+            )

@@ -178,6 +178,10 @@ class Dist:
     standard_error: float
     causes: tuple[str, ...] = ()
     tolerances: tuple[float, ...] = ()
+    by_level: dict[int, float] = field(default_factory=dict)
+    """The price split by the level of the conditioned quantity, at ``R = theta``: the level
+    the scenario moves furthest from its base model. Empty when there is nothing to split —
+    no conditions below the macro level, or a price no law measured."""
     message: str | None = None
 
 

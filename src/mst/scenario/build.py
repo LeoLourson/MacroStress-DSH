@@ -36,6 +36,7 @@ from ..macro.version import MacroVersion
 from ..metrics.cells import typical_movement
 from ..model_sdk import dist as dist_sdk
 from ..model_sdk.conditional import InfeasibleScenario
+from ..model_sdk.dist import ContradictsModels
 from ..model_sdk.contracts import (
     AdditiveImpact,
     Dist,
@@ -127,14 +128,18 @@ def _panel_movement(macro: MacroVersion) -> float:
 
 
 def plan_of(spec: Spec, macro: MacroVersion) -> ScenarioPlan:
-    """The scenario's constraints and driving shocks as the macro model reads them.
+    """The scenario's macro conditions and driving shocks as the macro model reads them.
 
     A constraint that fixes a value exactly arrives as ``value`` and leaves as the interval
     ``value ± tau`` with the point mark, so the model always sees strict bounds and the gates
-    can tell a point from a range.
+    can tell a point from a range. A constraint with a term on a driver — a quantity of a
+    level above — never reaches the macro model: the overlay carries it, because the macro
+    model does not know the driver's law.
     """
     constraints = []
     for constraint in spec.constraints:
+        if any(term.on_driver for term in constraint.terms):
+            continue
         terms = tuple(
             LinearTerm(variable=term.variable, month=term.month, weight=term.weight)
             for term in constraint.terms
@@ -158,6 +163,44 @@ def plan_of(spec: Spec, macro: MacroVersion) -> ScenarioPlan:
         regime_event=spec.regime_event,
         inner=spec.inner,
     )
+
+
+def driver_constraints(spec: Spec, macro: MacroVersion) -> tuple[LinearConstraint, ...]:
+    """The scenario's conditions on the quantities of the levels above the macro variables.
+
+    A mixed condition — macro terms and driver terms together — is refused: the macro part is
+    met by the macro model and the driver part by the overlay, and a condition split between
+    two imposers is not a condition at all. The bounds follow the same tolerance rule as the
+    macro ones.
+    """
+    rows = []
+    for constraint in spec.constraints:
+        on_driver = any(term.on_driver for term in constraint.terms)
+        on_macro = any(not term.on_driver for term in constraint.terms)
+        if on_driver and on_macro:
+            raise ValueError(
+                "a condition mixes macro variables and drivers: split it, the macro model "
+                "meets one part and the overlay the other"
+            )
+        if not on_driver:
+            continue
+        terms = tuple(
+            LinearTerm(variable=term.variable, month=term.month, weight=term.weight)
+            for term in constraint.terms
+        )
+        if constraint.value is None:
+            rows.append(
+                LinearConstraint(
+                    terms=terms,
+                    low=constraint.low,
+                    high=constraint.high,
+                    point=False,
+                    tolerance=tolerance_of(terms, macro),
+                )
+            )
+        else:
+            rows.append(point_constraint(terms, constraint.value, macro))
+    return tuple(rows)
 
 
 def plan_with_impacts(spec: Spec, macro: MacroVersion) -> ScenarioPlan:
@@ -290,6 +333,42 @@ def build(
         )
     elif tilt is not None:
         found = replace(found, distance=found.distance + tilt.price)
+    # The conditions on the quantities of the levels above ride the overlay: the support
+    # ones zero the paths that break them inside their group of R, and the moment ones tilt
+    # the same weights. A group without a surviving path contradicts the models.
+    below = _below_levels(spec, macro, satellites, drivers, simulation, seed)
+    if below is not None:
+        tilt_price, picked, by_level, ess = below
+        simulation = MacroSimulation(
+            ids=simulation.ids,
+            months=simulation.months,
+            paths=simulation.paths[picked],
+            history=None if simulation.history is None else simulation.history[picked],
+            diagnostics=simulation.diagnostics,
+            group=simulation.group[picked] if simulation.group is not None else None,
+        )
+        own = own[picked]
+        drivers = DriverPaths(
+            ids=drivers.ids,
+            paths=drivers.paths[picked],
+            flags=drivers.flags,
+        )
+        if found is None:
+            # No macro condition to price: the levels above carry the whole price.
+            found = Dist(
+                distance=tilt_price or 0.0,
+                log_probability=0.0,
+                standard_error=0.0,
+                causes=tuple(spec.causes),
+                by_level=by_level,
+            )
+        else:
+            if tilt_price is not None:
+                found = replace(found, distance=found.distance + tilt_price)
+            found = replace(found, by_level=by_level)
+    checks = _checks(spec, plan, simulation, tilt)
+    if below is not None and below[3] is not None:
+        checks["effective_size"] = below[3]
     return Paths(
         months=simulation.months,
         ids=simulation.ids,
@@ -297,10 +376,161 @@ def build(
         drivers=_own_units(satellites, drivers),
         dist=found,
         effective_size=None if tilt is None else tilt.effective_size,
-        checks=_checks(spec, plan, simulation, tilt),
+        checks=checks,
         seed=seed,
         draws=draws,
     )
+
+
+def _names_drivers(spec: Spec) -> bool:
+    """Whether any condition of the scenario reads a quantity of a level above."""
+    terms = [term for element in (*spec.constraints, *spec.expectations) for term in element.terms]
+    terms += [term for condition in spec.probabilities for term in condition.terms]
+    return any(term.on_driver for term in terms)
+
+
+def _driver_condition_problems(spec: Spec, macro, satellites) -> list[str]:
+    """What keeps the conditions on the quantities above from being carried."""
+    problems = []
+    served = set(satellites.served())
+    terms = [term for element in (*spec.constraints, *spec.expectations) for term in element.terms]
+    terms += [term for condition in spec.probabilities for term in condition.terms]
+    for term in terms:
+        if not term.on_driver:
+            continue
+        if term.variable not in served:
+            problems.append(
+                f"the condition names {term.variable}, which the satellites do not serve"
+            )
+    if spec.inner < 2:
+        problems.append(
+            "the conditions on the quantities of the levels above need inner >= 2: a "
+            "single draw of the causes per value of R leaves the overlay nothing to "
+            "reweight"
+        )
+    return problems
+
+
+def _below_levels(
+    spec: Spec,
+    macro: MacroVersion,
+    satellites: SatelliteBundle,
+    drivers: DriverPaths,
+    simulation: MacroSimulation,
+    seed: int,
+):
+    """``(tilt price, picked rows, price by level, effective size)`` of the driver conditions.
+
+    The support conditions on drivers zero the paths that break them inside every group of
+    ``R`` — a group without a survivor contradicts the models, the case lemma 2 names — and
+    the expectation conditions on drivers tilt the same weights. Both resample the macro and
+    the driver paths together, the rows being one draw of the whole system. The price of the
+    levels above is the mean of ``-log`` of the surviving share over the groups, reported by
+    the level of the conditioned quantity; the macro level keeps its own price beside it.
+    """
+    constraints = driver_constraints(spec, macro)
+    expectations = [
+        expectation
+        for expectation in spec.expectations
+        if any(term.on_driver for term in expectation.terms)
+    ]
+    probabilities = [
+        condition
+        for condition in spec.probabilities
+        if any(term.on_driver for term in condition.terms)
+    ]
+    if not constraints and not expectations and not probabilities:
+        return None
+    if simulation.group is None:
+        group = np.arange(simulation.paths.shape[0])
+    else:
+        group = simulation.group
+    if constraints and np.all(np.bincount(group) == 1):
+        raise ValueError(
+            "the conditions on the quantities of the levels above need inner >= 2: a "
+            "single draw of the causes per value of R leaves the overlay nothing to "
+            "reweight, and every broken path would read as a contradiction"
+        )
+    inside = np.ones(simulation.paths.shape[0], dtype=bool)
+    for constraint in constraints:
+        value = _functional(constraint, drivers.paths, drivers.ids)
+        inside &= (constraint.low <= value) & (value <= constraint.high)
+    for g in np.unique(group):
+        if not inside[group == g].any():
+            raise ContradictsModels()
+    weights = inside.astype(float)
+    values, lows, highs = [], [], []
+    for expectation in expectations:
+        value = np.zeros(simulation.paths.shape[0])
+        for term in expectation.terms:
+            value += term.weight * _term_of(term, drivers.paths, drivers.ids)
+        values.append(value)
+        lows.append(expectation.low if expectation.low is not None else -np.inf)
+        highs.append(expectation.high if expectation.high is not None else np.inf)
+    for condition in probabilities:
+        value = np.zeros(simulation.paths.shape[0])
+        for term in condition.terms:
+            value += term.weight * _term_of(term, drivers.paths, drivers.ids)
+        values.append((value >= condition.low) & (value <= condition.high))
+        lows.append(condition.at_least)
+        highs.append(np.inf)
+    tilt_price = None
+    ess = None
+    if values:
+        tilt = overlay.solve_lambda(
+            np.column_stack(values) * weights[:, None] if False else np.column_stack(values),
+            group,
+            np.array(lows),
+            np.array(highs),
+        )
+        if not tilt.feasible:
+            raise ValueError(
+                "the conditions on the means of the drivers cannot be met: no tilt of the "
+                "causes brings them inside their bounds on this sample"
+            )
+        weights = weights * tilt.weights
+        tilt_price = tilt.price
+        ess = tilt.effective_size
+    # The price of the levels above: the mean of -log of the surviving share per group,
+    # by the level of the conditioned quantity.
+    by_level: dict[int, float] = {}
+    groups = np.unique(group)
+    for g in groups:
+        # The surviving share of the group: what the conditions of the levels above leave
+        # of the draws of the causes at this value of R.
+        share = inside[group == g].mean()
+        for constraint in constraints:
+            level = _level_of_term(satellites, constraint.terms[0].variable)
+            by_level[level] = by_level.get(level, 0.0) - np.log(max(share, 1e-300)) / len(
+                groups
+            )
+    picked = overlay.resample(
+        weights, group, np.random.default_rng([seed, OVERLAY_STREAM, 1])
+    )
+    return tilt_price, picked, by_level, ess
+
+
+def _functional(constraint, paths: np.ndarray, ids: list[str]) -> np.ndarray:
+    """The value of a condition's functional on every path."""
+    value = np.zeros(paths.shape[0])
+    for term in constraint.terms:
+        value += term.weight * _term_of(term, paths, ids)
+    return value
+
+
+def _term_of(term, paths: np.ndarray, ids: list[str]) -> np.ndarray:
+    """The paths of one driver term, in the model scale the conditions read."""
+    if term.variable not in ids:
+        raise ValueError(
+            f"the condition names {term.variable}, which the run does not simulate"
+        )
+    return paths[:, term.month, ids.index(term.variable)]
+
+
+def _level_of_term(satellites: SatelliteBundle, driver: str) -> int:
+    """The level of the quantity a driver belongs to."""
+    quantity, _ = driver.split(":", 1)
+    return satellites.registry.quantity(quantity).level
 
 
 def _tilted(
@@ -433,6 +663,8 @@ def validate(
         problems.append(
             "the scenario names no approver: a human asserts it before it is computed"
         )
+    if _names_drivers(spec):
+        problems += _driver_condition_problems(spec, macro, satellites)
     problems += _impact_problems(spec, macro, satellites)
     problems += _version_problems(macro, satellites)
     if spec.constraints:

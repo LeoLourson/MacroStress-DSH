@@ -138,17 +138,27 @@ class FakeMacro(MacroModel):
             group=np.arange(draws),
         )
 
-    def simulate(self, model, plan: ScenarioPlan, *, draws: int, seed: int):
+    def simulate(
+        self, model, plan: ScenarioPlan, *, draws: int, seed: int, inner: int | None = None
+    ):
         horizon = plan.horizon
+        inner = plan.inner if inner is None else inner
         rng = np.random.default_rng([seed, horizon])
-        steps = rng.normal(0, 1, size=(draws, horizon, len(model.ids))) * model.sigma
+        steps = rng.normal(0, 1, size=(draws * inner, horizon, len(model.ids))) * model.sigma
         paths = np.concatenate(
-            [np.tile(model.last, (draws, 1, 1)), model.last + np.cumsum(steps, axis=1)],
+            [
+                np.tile(model.last, (draws * inner, 1, 1)),
+                model.last + np.cumsum(steps, axis=1),
+            ],
             axis=1,
         )
         months = [shift(model.months[-1], k) for k in range(horizon + 1)]
         return MacroSimulation(
-            ids=model.ids, months=months, paths=paths, history=np.zeros((draws, 1, 2))
+            ids=model.ids,
+            months=months,
+            paths=paths,
+            history=np.zeros((draws * inner, 1, 2)),
+            group=np.arange(draws) if inner == 1 else np.repeat(np.arange(draws), inner),
         )
 
 

@@ -14,6 +14,7 @@ import numpy as np
 
 from mst.macro.panel import Panel, build_panel
 from mst.macro.registry import load_registry as load_variables
+from mst.model_sdk import overlay as sample_overlay
 from mst.model_sdk.conditional import InfeasibleScenario, dependent_rows, draw_driving
 from mst.model_sdk.contracts import (
     MacroEstimate,
@@ -159,7 +160,9 @@ class {{class}}(MacroModel):
         for r in range(draws):
             rng = np.random.default_rng([seed, r])
             eps = rng.standard_normal((horizon, n))
-            if plan.constraints:
+            if plan.constraints and driving.any():
+                # Named causes: the driving shocks are truncated on the conditions, the
+                # shared machinery of every linear-gaussian model.
                 z = _loadings(plan.constraints, model, horizon)
                 z_all = z.reshape(len(plan.constraints), -1)
                 z_driving = z[:, :, driving].reshape(len(plan.constraints), -1)
@@ -178,6 +181,16 @@ class {{class}}(MacroModel):
                 eps[:, driving] = drawn.reshape(horizon, driving.sum())
             steps = eps @ model.chol.T + model.drift
             paths[r] = np.vstack([model.last, model.last + np.cumsum(steps, axis=0)])
+        if plan.constraints and not driving.any():
+            # No cause named: the parameters are all the model carries, R is constant, and
+            # the model is its sample of paths — the canon's section 8. The conditions
+            # weigh the sample, the survivors carry the run, and the price is the logarithm
+            # of the surviving share.
+            found = sample_overlay.reweight(paths, model.ids, plan.constraints)
+            if found.survivors == 0:
+                raise InfeasibleScenario(list(range(len(plan.constraints))))
+            picked = sample_overlay.resample(found.weights, np.random.default_rng([seed, 1]))
+            paths = paths[picked]
         return MacroSimulation(
             ids=model.ids, months=months, paths=paths, history=np.tile(model.last, (draws, 1, 1))
         )
