@@ -28,7 +28,10 @@ from ..metrics.es import es_block
 DEFAULT_COVERAGE_LIMIT = 0.05
 """Uncovered value above this share turns the portfolio's status into ``incomplete``."""
 
-PortfolioStatus = Literal["ok", "needs_review", "incomplete"]
+#: The mark of a position's path outside the range the satellite was trained on.
+OUTSIDE_TRAINING = "outside_training_range"
+
+PortfolioStatus = Literal["ok", "needs_review", "incomplete", "not_admitted"]
 
 
 def dist(found) -> dict | None:
@@ -62,6 +65,8 @@ def build(
     monthly: np.ndarray | None = None,
     months: list[str] | None = None,
     comparison: dict | None = None,
+    admission: dict | None = None,
+    rare_constraints: list[int] | None = None,
 ) -> dict:
     """The report of ``results`` against the portfolio that produced them.
 
@@ -70,6 +75,9 @@ def build(
     the path and the value over the whole path beside the one at the end of the horizon.
     ``comparison`` is the same losses against the empty scenario ``s_0`` on the shared random
     numbers: the shift of the centre apart from the change of width, each with its interval.
+    ``admission`` is the verdict of the calculation on its paths: a report that is not
+    admitted keeps its numbers but reads them as diagnostics, not as an estimate of losses.
+    ``rare_constraints`` numbers the conditions whose base probability is below the threshold.
     """
     included = [result for result in results if result.status != "invalid"]
     excluded = [
@@ -100,15 +108,34 @@ def build(
     incomplete = bool(unknown) or (
         bool(excluded) and (share is None or 1.0 - share > coverage_limit)
     )
+    not_admitted = bool(admission) and not admission["admitted"]
     position_status = worst(*(result.status for result in included))
     status: PortfolioStatus = (
-        "incomplete"
+        "not_admitted"
+        if not_admitted
+        else "incomplete"
         if incomplete
         else "needs_review"
         if excluded or position_status == "needs_review"
         else "ok"
     )
     losses = losses_of(results)
+    # A position's path outside its training range marks the whole tail unverified: losses
+    # add up over the positions within one path, so one unverified tail is enough.
+    flags = [f"exposure_unknown:{position}" for position in unknown]
+    if excluded:
+        flags.append("portfolio_exclusions")
+        if share is None or 1.0 - share > coverage_limit:
+            flags.append("portfolio_incomplete")
+    if not_admitted:
+        flags.append("not_admitted")
+    if any(
+        flag.startswith(f"{OUTSIDE_TRAINING}:")
+        for result in results
+        for flag in result.flags
+    ):
+        flags.append("tail_unverified")
+    flags += [f"constraint_rare:{number}" for number in (rare_constraints or [])]
     return {
         "portfolio": {
             "name": portfolio.name,
@@ -120,6 +147,7 @@ def build(
         "loss": _loss(losses, seed=seed, horizon=horizon),
         "losses_by_month": None if monthly is None else path_block(monthly, months, seed=seed),
         "comparison": comparison,
+        "admission": admission,
         "dist": dist(dist_found),
         "coverage": {
             "share": share,

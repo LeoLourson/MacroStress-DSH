@@ -69,9 +69,12 @@ def driver(meta, drivers, name):
 
 def test_a_run_writes_meta_paths_results_and_changes(workspace):
     run_id, summary = start(workspace)
-    assert summary["status"] == "ok" and summary["positions"] == len(POSITIONS)
+    # The fixture's usdrub band leaves the admissible domain: the run is not admitted,
+    # and the numbers it still writes are the same as before.
+    assert summary["status"] == "not_admitted" and summary["positions"] == len(POSITIONS)
     meta, macro, drivers, changes = arrays(workspace, run_id)
-    assert meta["status"] == "ok"
+    assert meta["status"] == "not_admitted"
+    assert meta["admission"]["admitted"] is False
     assert meta["scenario"] == "oil" and meta["seed"] == 11 and meta["draws"] == 5
     assert meta["horizon"] == 3 and len(meta["months"]) == 4
     assert macro.shape == (5, 4, 3) and drivers.shape == (5, 4, 5)
@@ -168,7 +171,9 @@ def test_the_same_request_gives_the_same_numbers(workspace):
 def test_a_position_without_a_served_driver_is_invalid_in_the_files(workspace):
     positions = [dict(POSITIONS[0], codes={"secid": "NOWHERE"})]
     run_id, summary = start(workspace, REQUEST | {"positions": positions})
-    assert summary["status"] == "invalid"
+    # A positions-only run carries no report: the admission decides the status, and
+    # the invalid position stays visible in the results with its reason.
+    assert summary["status"] == "not_admitted"
     stored = runs.result(workspace, run_id)
     item = stored["positions"][0]
     assert item["status"] == "invalid"
@@ -208,7 +213,7 @@ def test_the_catalogue_names_every_run(workspace):
     run_id, _ = start(workspace)
     found = runs.catalogue(workspace)["runs"]
     assert [item["id"] for item in found] == [run_id]
-    assert found[0]["status"] == "ok" and found[0]["positions"] == len(POSITIONS)
+    assert found[0]["status"] == "not_admitted" and found[0]["positions"] == len(POSITIONS)
 
 
 def test_a_request_needs_a_scenario_its_draws_and_its_seed(workspace):
@@ -345,6 +350,66 @@ def test_a_scenario_without_conditions_and_impacts_has_no_comparison(
     assert report["comparison"] is None
 
 
+def test_the_admission_limit_is_strict_and_weighs_every_quantity_equally():
+    from mst.metrics.baselines import DOMAIN, WIDTH
+    from mst.runs import ADMISSION_LIMIT, _admission
+
+    assert ADMISSION_LIMIT == 0.05
+    below = {"paths": {"macro/ru.key_rate": {DOMAIN: 0.0499, WIDTH: 0.0}}}
+    at = {"paths": {"macro/ru.key_rate": {DOMAIN: 0.05, WIDTH: 0.0}}}
+    assert _admission(below)["admitted"] is True
+    assert _admission(at)["admitted"] is False
+
+    mixed = {
+        "paths": {
+            "macro/a": {DOMAIN: 0.0, WIDTH: 0.2},
+            "driver/d:x": {DOMAIN: 0.1, WIDTH: 0.0},
+        }
+    }
+    found = _admission(mixed)
+    assert found["shares"] == {DOMAIN: 0.05, WIDTH: 0.1}
+    assert found["admitted"] is False
+    assert found["broken"] == [
+        {"condition": WIDTH, "quantity": "macro/a", "share": 0.2},
+        {"condition": DOMAIN, "quantity": "driver/d:x", "share": 0.1},
+    ]
+    # Without paths to check there is nothing broken, and no refusal either.
+    empty = _admission(None)
+    assert empty["admitted"] is True and empty["broken"] == []
+
+
+def test_a_run_whose_bands_leave_the_domain_is_not_admitted_and_keeps_its_numbers(
+    workspace, portfolio, shock_pair
+):
+    # The fixture's usdrub band leaves the admissible domain in every month, so the
+    # calculation is not admitted: the status says so, the meta names the quantity, and the
+    # numbers stay for diagnostics.
+    report, _, folder = _report_of(workspace, "plain", portfolio)
+    meta = runs.meta(workspace, folder.name)
+    assert report["status"] == "not_admitted"
+    assert "not_admitted" in report["flags"]
+    assert meta["status"] == "not_admitted"
+    assert meta["admission"]["admitted"] is False
+    assert meta["admission"]["limit"] == 0.05
+    quantities = [row["quantity"] for row in meta["admission"]["broken"]]
+    assert "macro/ru.usdrub" in quantities
+    assert report["loss"] is not None and report["losses_by_month"] is not None
+
+
+def test_a_positions_run_without_a_portfolio_carries_the_admission_in_its_meta(
+    workspace, shock_pair
+):
+    run_id = runs.new_id()
+    runs.begin(
+        workspace, run_id, {"scenario": "plain", "draws": 5, "seed": 11, "positions": POSITIONS}
+    )
+    summary = runs.execute(workspace, run_id)
+    meta = runs.meta(workspace, run_id)
+    assert meta["admission"]["admitted"] is False
+    assert meta["status"] == "not_admitted"
+    assert summary["status"] == "not_admitted"
+
+
 def test_the_contributions_carry_the_interval_of_the_same_function(
     workspace, portfolio, shock_pair
 ):
@@ -421,7 +486,7 @@ def test_the_run_tool_starts_a_job_and_reports_its_result(workspace):
     wait(workspace, started["job"])
     assert jobs.status(workspace, started["job"])["exit_code"] == 0
     status = call(workspace, "run", {"action": "status", "id": started["run"]}).data
-    assert status["meta"]["status"] == "ok"
+    assert status["meta"]["status"] == "not_admitted"
     assert status["job"]["exit_code"] == 0
     stored = call(workspace, "run", {"action": "result", "id": started["run"]}).data
     assert len(stored["positions"]) == len(POSITIONS)

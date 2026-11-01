@@ -48,12 +48,14 @@ def test_a_portfolio_run_writes_its_report(workspace, portfolio):
     assert report["loss"] is not None
     assert report["loss"]["p05"] <= report["loss"]["p50"] <= report["loss"]["p95"]
     assert report["loss"]["es95"] >= report["loss"]["p95"]
-    assert report["status"] == "ok" and report["coverage"]["share"] == 1.0
+    # The fixture's usdrub band leaves the admissible domain, so the calculation is
+    # not admitted even with every position calculated: the canon keeps the numbers.
+    assert report["status"] == "not_admitted" and report["coverage"]["share"] == 1.0
     assert report["portfolio"] == {"name": "Демо", "base_currency": "RUB", "positions": 4}
     assert len(report["positions"]) == 4
     assert stored["run"]["portfolio"] == portfolio
-    assert stored["run"]["status"] == "ok"
-    assert summary["status"] == "ok"
+    assert stored["run"]["status"] == "not_admitted"
+    assert summary["status"] == "not_admitted"
 
 
 def test_two_runs_of_one_portfolio_give_the_same_numbers(workspace, portfolio):
@@ -164,11 +166,14 @@ def test_a_portfolio_with_an_unknown_code_is_incomplete_with_its_reason(workspac
     run_id, _ = start(workspace, REQUEST | {"portfolio": "typo"})
     stored = runs.result(workspace, run_id)
     report = stored["summary"]
-    assert report["status"] == "incomplete"
+    # Nothing was calculated, but the paths were still checked: the admission wins over
+    # the incomplete coverage, and the coverage flags stay beside it.
+    assert report["status"] == "not_admitted"
+    assert "portfolio_incomplete" in report["flags"]
     assert report["loss"] is None
     reason = report["coverage"]["excluded"][0]["reason"]
     assert "share_price" in reason and "secid NOWHERE" in reason
-    assert stored["run"]["status"] == "incomplete"
+    assert stored["run"]["status"] == "not_admitted"
 
 
 def test_a_request_names_one_source_of_positions():

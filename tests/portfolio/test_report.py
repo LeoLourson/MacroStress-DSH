@@ -181,3 +181,49 @@ def test_path_block_refuses_months_that_do_not_match_the_losses():
         path_block(monthly, MONTHS[:2], seed=1)
     with pytest.raises(ValueError, match="no repetition"):
         path_block(np.zeros((0, 3)), MONTHS, seed=1)
+
+
+NOT_ADMITTED = {
+    "admitted": False,
+    "limit": 0.05,
+    "shares": {"band_outside_domain": 0.0, "band_wider_than_history": 0.2},
+    "broken": [
+        {"condition": "band_wider_than_history", "quantity": "driver/price:alpha", "share": 0.2}
+    ],
+}
+
+
+def test_a_report_that_is_not_admitted_names_the_quantity_and_keeps_the_loss():
+    report = build(
+        portfolio(equity()), batch(equity()).results, admission=NOT_ADMITTED
+    )
+    assert report["status"] == "not_admitted"
+    assert report["admission"] == NOT_ADMITTED
+    assert "not_admitted" in report["flags"]
+    assert report["loss"] is not None  # the numbers stay, for diagnostics
+    # An admitted calculation changes nothing.
+    admitted = {**NOT_ADMITTED, "admitted": True}
+    plain = build(portfolio(equity()), batch(equity()).results, admission=admitted)
+    assert plain["status"] == "ok" and "not_admitted" not in plain["flags"]
+
+
+def test_not_admitted_wins_over_incomplete_and_needs_review():
+    good, broken = equity(), equity(id="gbp", currency="GBP", notional=40.0)
+    excluded = build(
+        portfolio(good, broken), batch(good, broken).results, admission=NOT_ADMITTED
+    )
+    assert excluded["status"] == "not_admitted"
+    assert "portfolio_incomplete" in excluded["flags"]  # the coverage flags stay
+    review = batch(equity()).results[0].model_copy(update={"status": "needs_review"})
+    flagged = build(portfolio(equity()), [review], admission=NOT_ADMITTED)
+    assert flagged["status"] == "not_admitted"
+
+
+def test_an_unverified_tail_and_a_rare_condition_flag_the_report_without_changing_it():
+    flagged = batch(equity()).results[0].model_copy(
+        update={"flags": ["outside_training_range:share_price:sber"]}
+    )
+    report = build(portfolio(equity()), [flagged], rare_constraints=[2])
+    assert report["status"] == "ok"
+    assert "tail_unverified" in report["flags"]
+    assert "constraint_rare:2" in report["flags"]

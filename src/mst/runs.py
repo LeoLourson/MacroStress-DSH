@@ -7,14 +7,17 @@ and the reason of a position that was not calculated, and ``changes.npz`` with t
 of each repetition. The conditional forecast of the target indicators — the quantiles of every
 target driver by month, in its own unit — is written to ``forecast.json``: a run answers both
 the distribution of the indicators and the portfolio on them. A run of a portfolio also writes
-``summary.json`` — its loss at P5, P50 and P95, the severity ``delta`` of the scenario and the
-platform's ``dist(P_s, P)`` beside it; the run's ``meta.json`` records the definition of
-``dist`` (the plan's assumption) and the way its probability was estimated.
+``summary.json`` — its loss at P5, P50 and P95, the loss by month and over the path, the
+comparison with ``s_0``, the severity ``delta`` of the scenario and the platform's
+``dist(P_s, P)`` beside it; ``path_losses.npz`` keeps the monthly losses as the array
+``losses``. The run's ``meta.json`` records the definition of ``dist`` (the plan's assumption)
+and the way its probability was estimated.
 
 A run is a job: the tool writes the request and starts ``python -m mst.runs <id>``; the job builds
 the paths from the scenario and writes the rest. Repeating a request with the same seed gives the
-same numbers. The status of a run is the report's for a portfolio run — ``ok``, ``needs_review``
-or ``incomplete`` — and the batch's otherwise: ``ok``, ``needs_review`` or ``invalid``.
+same numbers. The status of a run is the report's for a portfolio run — ``ok``, ``needs_review``,
+``incomplete`` or ``not_admitted`` — and the batch's otherwise: ``ok``, ``needs_review``,
+``invalid`` or ``not_admitted`` when the calculation is not admitted.
 """
 
 import argparse
@@ -33,6 +36,7 @@ from .contracts import Contract, Currency, Identifier, Seed
 from .drivers import bundle as satellite_bundle
 from .engine import run as calculate_run
 from .macro import version as macro_version
+from .metrics.baselines import DOMAIN, WIDTH
 from .metrics.es import paired_difference
 from .plugin_sdk import FixedPaths, Position
 from .portfolio import report as portfolio_report
@@ -43,6 +47,9 @@ from .scenario.spec import Spec
 
 ID = re.compile(r"^[0-9]{8}T[0-9]{6}-[0-9a-f]{4}$")
 """A run's id is also the name of its folder: the job's timestamp and four hex digits."""
+
+ADMISSION_LIMIT = 0.05
+"""The share of broken cells of month and quantity a calculation is still admitted with."""
 
 
 class RunRequest(Contract):
@@ -396,6 +403,9 @@ def _write(
 ) -> dict:
     """The paths, the results of every position, the report and the meta that names them."""
     months = [month.isoformat() for month in paths.months]
+    # The checks come before the report: the admission of the calculation decides its status.
+    admission = _admission(checks)
+    rare = _rare_constraints(checks)
     # A position that was not calculated has no column: NaN stands in, so nobody reads a zero
     # profit where there is no number at all.
     changes = np.full((paths.draws, len(batch.results)), np.nan)
@@ -422,6 +432,8 @@ def _write(
             monthly=monthly,
             months=months[1:],
             comparison=comparison,
+            admission=admission,
+            rare_constraints=rare,
         )
         if portfolio is not None
         else None
@@ -458,6 +470,7 @@ def _write(
         "dist": _dist_meta(paths.dist),
         "basis": _basis(spec),
         "checks": checks,
+        "admission": admission,
         "git_commit": _git_commit(),
         "data": {"series": str(workspace.series)} if workspace is not None else None,
         "models": {
@@ -470,10 +483,58 @@ def _write(
         "position_ids": [result.position_id for result in batch.results],
         "positions": len(batch.results),
         "targets": forecast_rows["targets"],
-        "status": summary["status"] if summary is not None else batch.status,
+        "status": (
+            summary["status"]
+            if summary is not None
+            else "not_admitted"
+            if not admission["admitted"]
+            else batch.status
+        ),
     }
     store.write_json(directory / "meta.json", written)
     return written
+
+
+def _admission(checks: dict | None) -> dict:
+    """The admission of a calculation from the checks of its paths (the canon, section 7).
+
+    A calculation is admitted while fewer than ``ADMISSION_LIMIT`` of the cells of month and
+    quantity break each condition separately. ``shares`` weighs every quantity of
+    ``checks["paths"]`` equally — macro variables and drivers together — and every quantity
+    covers the same months, so the mean of a condition's shares is the share of its cells.
+    ``broken`` names every quantity with a positive share, worst first; the numbers stay in
+    the report for diagnostics either way, an inadmissible calculation is not deleted.
+    """
+    quantities = (checks or {}).get("paths") or {}
+    shares = {}
+    for condition in (DOMAIN, WIDTH):
+        values = [float(row.get(condition, 0.0)) for row in quantities.values()]
+        shares[condition] = float(np.mean(values)) if values else 0.0
+    broken = [
+        {"condition": condition, "quantity": quantity, "share": float(row.get(condition, 0.0))}
+        for quantity, row in quantities.items()
+        for condition in (DOMAIN, WIDTH)
+        if row.get(condition, 0.0) > 0.0
+    ]
+    broken.sort(key=lambda item: (-item["share"], item["quantity"]))
+    return {
+        "admitted": all(share < ADMISSION_LIMIT for share in shares.values()),
+        "limit": ADMISSION_LIMIT,
+        "shares": shares,
+        "broken": broken,
+    }
+
+
+def _rare_constraints(checks: dict | None) -> list[int]:
+    """The numbers of the conditions whose base probability sits below the threshold."""
+    if not checks or "constraint_probabilities" not in checks:
+        return []
+    threshold = checks.get("constraint_threshold", 0.0)
+    return [
+        int(number)
+        for number, share in checks["constraint_probabilities"].items()
+        if share is not None and share < threshold
+    ]
 
 
 def _now() -> str:
