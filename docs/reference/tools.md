@@ -1,6 +1,6 @@
 # Инструменты и команды
 
-Общая схема — [../concept/system-scheme.md](../concept/system-scheme.md); ниже — справочник
+Общая схема — [../concept/formalization.md](../concept/formalization.md); ниже — справочник
 по вызовам и командам.
 
 ## MCP-инструменты

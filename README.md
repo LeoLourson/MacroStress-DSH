@@ -89,7 +89,7 @@ Once a client is connected, it sees seven tools. Long operations start jobs: a t
 
 The documentation is in Russian.
 
-- [docs/concept/system-scheme.md](docs/concept/system-scheme.md) — the general scheme: levels, the
+- [docs/concept/formalization.md](docs/concept/formalization.md) — the general scheme: levels, the
   scenario $(N, D, C, O)$, the conditional forecast, and the quality metrics;
 - [docs/concept/scenario-formalization.md](docs/concept/scenario-formalization.md) — the method and
   what the code implements;

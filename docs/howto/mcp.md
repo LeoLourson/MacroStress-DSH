@@ -3,7 +3,7 @@
 MacroStress — stdio MCP-сервер. Его умеет подключать любой клиент, говорящий на Model Context
 Protocol: Claude Desktop, Claude Code, Cursor или плагин DeepSeek Harness из `dsh/`. Инструменты
 везде одни и те же; плагин DSH добавляет поверх скиллы и раздел промпта. Общая схема системы —
-[../concept/system-scheme.md](../concept/system-scheme.md).
+[../concept/formalization.md](../concept/formalization.md).
 
 Серверу принадлежит один каталог на диске — workspace. Ряды, версии моделей, индекс корпуса,
 сценарии, портфели и прогоны лежат там обычными файлами, поэтому прогон воспроизводится из
