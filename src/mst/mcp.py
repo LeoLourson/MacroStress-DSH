@@ -129,9 +129,42 @@ def build(ws: store.Workspace) -> FastMCP:
             return scenario_tool.get(ws.scenarios, _need(id, "id"))
         if action == "save":
             return scenario_tool.save(ws.scenarios, _need(id, "id"), _need(spec, "spec"))
+        if action == "reverse":
+            from mst import plugins as _plugins
+            from mst.scenario.reverse import inf_dist, sup_rho, width_family
+
+            loaded = scenario_tool.load(ws.scenarios, _need(id, "id"))
+            installed = _plugins.registry()
+            macro = macro_version.load(ws.models, loaded.macro, installed.macro)
+            satellites = satellite_bundle.load(
+                ws.models, loaded.satellites, installed.satellites
+            )
+            found = portfolio_tool.load(ws.portfolios, _need(portfolio, "portfolio"))
+            family = width_family(loaded)
+            if kappa is not None:
+                return sup_rho(
+                    family,
+                    kappa,
+                    macro=macro,
+                    satellites=satellites,
+                    positions=found.positions,
+                    draws=_need(draws, "draws"),
+                    seed=_need(seed, "seed"),
+                )
+            return inf_dist(
+                family,
+                _need(level, "level"),
+                macro=macro,
+                satellites=satellites,
+                positions=found.positions,
+                draws=_need(draws, "draws"),
+                seed=_need(seed, "seed"),
+            )
         if action == "validate":
             return scenario_tool.validate(ws.scenarios, _need(id, "id"), ws.models, _indexed(ws))
-        raise ValueError(f"scenario: unknown action {action!r}, try list, get, save, validate")
+        raise ValueError(
+            f"scenario: unknown action {action!r}, try list, get, save, reverse, validate"
+        )
 
     @server.tool
     def run(
