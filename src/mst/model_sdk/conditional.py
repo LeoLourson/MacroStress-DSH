@@ -29,6 +29,9 @@ RANK_TOLERANCE = 1e-9
 already fix, by less than this share of what all shocks move it."""
 DEGENERATE = 1e-14
 """A coordinate whose variance is this share of the largest one is read as fixed."""
+SETTLED = 3e-6
+"""A coordinate whose Cholesky pivot is this share of its row is fixed by the earlier ones: the
+box either holds there or has no probability at all, and the jitter must not read as a tail."""
 
 
 class InfeasibleScenario(ValueError):
@@ -245,7 +248,6 @@ def log_box_probabilities(
     for start in range(0, count, chunk):
         stop = min(start + chunk, count)
         block = slice(start, stop)
-        rows = stop - start
         variance = np.diagonal(covs[block], axis1=1, axis2=2)
         scale = variance.max(axis=1)
         fixed = variance <= (DEGENERATE * np.maximum(scale, np.finfo(float).tiny))[:, None]
@@ -293,6 +295,22 @@ def _cholesky(cov, scale: float):
         return np.linalg.cholesky(cov + jitter * np.eye(cov.shape[-1]))
 
 
+def _truncated_step(a, b, share) -> tuple[np.ndarray, np.ndarray]:
+    """``(z, log(Phi(b) - Phi(a)))``: one GHK step, accurate in both tails.
+
+    ``log_ndtr`` is close to zero above the mean and loses every digit there, so an interval
+    above zero is computed on its mirror image ``[-b, -a]`` and the draw is mirrored back.
+    """
+    mirrored = a > 0
+    low = np.where(mirrored, -b, a)
+    high = np.where(mirrored, -a, b)
+    log_low, log_high = log_ndtr(low), log_ndtr(high)
+    log_target = np.logaddexp(log_low + np.log1p(-share), log_high + np.log(share))
+    z = np.clip(ndtri_exp(log_target), low, high)
+    log_mass = log_high + np.log(-np.expm1(np.minimum(log_low - log_high, 0.0)))
+    return np.where(mirrored, -z, z), log_mass
+
+
 def _ghk_row(factor, low, high, rng, samples: int) -> np.ndarray:
     """``(samples,)`` log weights of one GHK pass over a single law.
 
@@ -304,14 +322,15 @@ def _ghk_row(factor, low, high, rng, samples: int) -> np.ndarray:
     log_weights = np.zeros(samples)
     with np.errstate(divide="ignore"):
         for i in range(m):
-            partial = z[:, :i] @ factor[i, :i] if i else 0.0
+            partial = z[:, :i] @ factor[i, :i] if i else np.zeros(samples)
             a = (low[i] - partial) / factor[i, i]
             b = (high[i] - partial) / factor[i, i]
-            la, lb = log_ndtr(a), log_ndtr(b)
-            share = rng.random(samples)
-            log_target = np.logaddexp(la + np.log1p(-share), lb + np.log(share))
-            z[:, i] = np.clip(ndtri_exp(log_target), a, b)
-            log_weights = log_weights + lb + np.log1p(-np.exp(np.minimum(la - lb, 0.0)))
+            step, log_mass = _truncated_step(a, b, rng.random(samples))
+            if factor[i, i] <= SETTLED * np.linalg.norm(factor[i, : i + 1]):
+                inside = (low[i] <= partial) & (partial <= high[i])
+                step, log_mass = np.zeros(samples), np.where(inside, 0.0, -np.inf)
+            z[:, i] = step
+            log_weights = log_weights + log_mass
     return log_weights
 
 
@@ -333,9 +352,12 @@ def _ghk_batch(factors, low, high, rng, samples: int) -> np.ndarray:
                 partial = np.zeros((rows, samples))
             a = (low[:, i][:, None] - partial) / factors[:, i, i][:, None]
             b = (high[:, i][:, None] - partial) / factors[:, i, i][:, None]
-            la, lb = log_ndtr(a), log_ndtr(b)
-            share = rng.random((rows, samples))
-            log_target = np.logaddexp(la + np.log1p(-share), lb + np.log(share))
-            z[:, :, i] = np.clip(ndtri_exp(log_target), a, b)
-            log_weights += lb + np.log1p(-np.exp(np.minimum(la - lb, 0.0)))
+            step, log_mass = _truncated_step(a, b, rng.random((rows, samples)))
+            settled = factors[:, i, i] <= SETTLED * np.linalg.norm(factors[:, i, : i + 1], axis=1)
+            if settled.any():
+                inside = (low[:, i][:, None] <= partial) & (partial <= high[:, i][:, None])
+                step = np.where(settled[:, None], 0.0, step)
+                log_mass = np.where(settled[:, None], np.where(inside, 0.0, -np.inf), log_mass)
+            z[:, :, i] = step
+            log_weights += log_mass
     return log_weights

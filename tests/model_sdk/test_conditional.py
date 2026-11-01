@@ -102,3 +102,48 @@ def test_draw_driving_meets_exact_and_interval_rows():
     eps = draw_driving(z, low, high, rng, sweeps=10)
     assert np.allclose(eps @ z[0].T, 2.0, atol=1e-9)
     assert np.all((eps @ z[1].T >= -1.0 - 1e-9) & (eps @ z[1].T <= 1.0 + 1e-9))
+
+
+@pytest.mark.parametrize("edge", [4.0, 9.0, 20.0])
+def test_the_box_probability_is_the_same_in_both_tails(edge):
+    from mst.model_sdk.conditional import log_box_probabilities, log_box_probability
+
+    rng = np.random.default_rng(1)
+    exact = stats.norm.logsf(edge)
+    mean, cov = np.zeros(1), np.eye(1)
+    upper = log_box_probability(mean, cov, np.array([edge]), np.array([np.inf]), rng, 8)
+    lower = log_box_probability(mean, cov, np.array([-np.inf]), np.array([-edge]), rng, 8)
+    assert upper == pytest.approx(exact, rel=1e-9)
+    assert lower == pytest.approx(exact, rel=1e-9)
+    batch = log_box_probabilities(
+        mean[None], cov[None], np.array([edge]), np.array([np.inf]), rng, 8
+    )
+    assert batch[0] == pytest.approx(exact, rel=1e-9)
+
+
+def test_two_disjoint_bands_of_one_functional_have_no_probability():
+    from mst.model_sdk.conditional import log_box_probabilities, log_box_probability
+
+    cov = np.ones((2, 2))
+    low, high = np.array([0.0, 2.0]), np.array([1.0, 3.0])
+    rng = np.random.default_rng(1)
+    assert log_box_probability(np.zeros(2), cov, low, high, rng, 16) == -np.inf
+    found = log_box_probabilities(np.zeros((1, 2)), cov[None], low, high, rng, 16)
+    assert found[0] == -np.inf
+    # Two copies that overlap keep the probability of their intersection.
+    same = log_box_probability(
+        np.zeros(2), cov, np.array([0.0, 0.5]), np.array([1.0, 3.0]), rng, 4000
+    )
+    assert same == pytest.approx(np.log(stats.norm.cdf(1.0) - stats.norm.cdf(0.5)), abs=0.02)
+
+
+def test_the_box_probability_in_the_upper_tail_of_two_coordinates():
+    from mst.model_sdk.conditional import log_box_probability
+
+    # Independent coordinates: the probability of the corner is the product of the tails, and
+    # a draw of the first coordinate lost to rounding would break the second step.
+    found = log_box_probability(
+        np.zeros(2), np.eye(2), np.array([9.0, 9.0]), np.array([np.inf, np.inf]),
+        np.random.default_rng(1), 16,
+    )
+    assert found == pytest.approx(2 * stats.norm.logsf(9.0), rel=1e-9)
