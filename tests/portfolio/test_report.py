@@ -6,9 +6,10 @@ import numpy as np
 import pytest
 
 from mst.engine import run
+from mst.metrics.es import es_block
 from mst.model_sdk.contracts import Dist
 from mst.plugin_sdk import Position
-from mst.portfolio.report import build
+from mst.portfolio.report import build, path_block
 from mst.portfolio.spec import Portfolio
 from tests.engine import simulated
 from tests.engine.fixed import fan, paths
@@ -128,3 +129,55 @@ def test_es95_is_the_mean_of_the_worst_five_percent():
     result = batch(equity(), paths_=replace(paths_, drivers=falling)).results[0]
     losses = np.sort(-np.asarray(result.value_change))
     assert result.metrics["equity.loss"].quantiles.es95 == pytest.approx(losses[-5:].mean())
+
+
+MONTHS = ["2027-01", "2027-02", "2027-03"]
+
+
+def test_path_block_reports_every_month_and_the_maximum_over_the_path():
+    monthly = np.array(
+        [
+            [1.0, 5.0, 2.0],
+            [2.0, 6.0, 3.0],
+            [0.0, 1.0, 4.0],
+            [3.0, 2.0, 5.0],
+        ]
+    )
+    block = path_block(monthly, MONTHS, seed=7)
+    assert [row["month"] for row in block["by_month"]] == MONTHS
+    for t, row in enumerate(block["by_month"]):
+        p05, p50, p95 = np.percentile(monthly[:, t], [5, 50, 95])
+        assert row["p05"] == pytest.approx(float(p05))
+        assert row["p50"] == pytest.approx(float(p50))
+        assert row["p95"] == pytest.approx(float(p95))
+        assert row["es95"] >= row["p95"]
+        assert set(row) == {"month", "p05", "p50", "p95", "es95"}
+    worst = monthly.max(axis=1)
+    tail = es_block(worst, seed=7)
+    assert block["path"]["p95"] == pytest.approx(float(np.percentile(worst, 95)))
+    assert block["path"]["es95"] == pytest.approx(max(tail["es95"], np.percentile(worst, 95)))
+    assert block["path"]["es95_interval"] == pytest.approx(tail["interval"])
+    assert block["path"]["es95"] >= max(row["es95"] for row in block["by_month"])
+    assert set(block["path"]) == {"p05", "p50", "p95", "es95", "es95_interval"}
+
+
+def test_the_row_of_a_month_sums_losses_inside_a_draw():
+    # The row is the quantile of the sum over the positions within one draw, not the sum of
+    # the positions' own quantiles: the difference is diversification.
+    first = np.tile(np.array([[1.0], [2.0], [3.0], [4.0]]), (1, 3))
+    second = np.tile(np.array([[40.0], [10.0], [30.0], [20.0]]), (1, 3))
+    block = path_block(first + second, MONTHS, seed=1)
+    row = block["by_month"][0]
+    within = first[:, 0] + second[:, 0]
+    assert row["p95"] == pytest.approx(float(np.percentile(within, 95)))
+    assert row["p95"] != pytest.approx(
+        float(np.percentile(first[:, 0], 95)) + float(np.percentile(second[:, 0], 95))
+    )
+
+
+def test_path_block_refuses_months_that_do_not_match_the_losses():
+    monthly = np.zeros((4, 3))
+    with pytest.raises(ValueError, match="not .4, 2."):
+        path_block(monthly, MONTHS[:2], seed=1)
+    with pytest.raises(ValueError, match="no repetition"):
+        path_block(np.zeros((0, 3)), MONTHS, seed=1)

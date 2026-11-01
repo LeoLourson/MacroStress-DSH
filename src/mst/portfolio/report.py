@@ -5,6 +5,12 @@ positions' own P95 is descriptive statistics and is never reported as the portfo
 position that was not calculated does not quietly disappear: it is excluded with its reason, and
 the report states the share of the value the numbers cover.
 
+The loss is a functional tied to a moment of the path, as the canon asks (section 6): beside
+the value at the end of the horizon the report carries ``losses_by_month`` — ``rho_t`` for
+every month — and the value over the whole path, ``rho_max``, the block of the maximum of the
+monthly losses. An impact that ends before the horizon shows in its months alone, and the
+maximum sees what the end of the horizon has damped.
+
 The price of the scenario — ``dist(s) = E_P[-log P(S | R)]`` of the canon
 (``mst.model_sdk.dist``) — stands beside the loss: the mean of ``-log P(S | R)`` over the law
 of ``R``, with its standard error and the causes the scenario names. An infinite distance is
@@ -53,8 +59,15 @@ def build(
     seed: int = 0,
     horizon: str | None = None,
     coverage_limit: float = DEFAULT_COVERAGE_LIMIT,
+    monthly: np.ndarray | None = None,
+    months: list[str] | None = None,
 ) -> dict:
-    """The report of ``results`` against the portfolio that produced them."""
+    """The report of ``results`` against the portfolio that produced them.
+
+    ``monthly`` is the portfolio loss by months ``1 .. H`` — with ``months`` their labels —
+    which becomes ``losses_by_month``: the risk functionals of the canon tied to a moment of
+    the path and the value over the whole path beside the one at the end of the horizon.
+    """
     included = [result for result in results if result.status != "invalid"]
     excluded = [
         {
@@ -102,6 +115,7 @@ def build(
         "status": status,
         "flags": flags,
         "loss": _loss(losses, seed=seed, horizon=horizon),
+        "losses_by_month": None if monthly is None else path_block(monthly, months, seed=seed),
         "dist": dist(dist_found),
         "coverage": {
             "share": share,
@@ -132,6 +146,33 @@ def losses_of(results) -> np.ndarray:
     return -np.sum(
         [np.asarray(result.value_change, dtype=float) for result in included], axis=0
     )
+
+
+def path_block(monthly: np.ndarray, months: list[str], seed: int) -> dict:
+    """The loss by month and over the whole path: ``rho_t`` for every month and ``rho_max``.
+
+    ``monthly`` is ``(R, H)``, the portfolio loss by months ``1 .. H`` — losses summed within
+    a draw, the quantiles taken after. Every row of ``by_month`` reuses the loss block without
+    the interval fields; ``path`` is the same block on ``monthly.max(axis=1)``, the maximum
+    of the loss over the horizon, with its interval.
+    """
+    values = np.asarray(monthly, dtype=float)
+    draws = values.shape[0] if values.ndim == 2 else 0
+    if values.ndim != 2 or values.shape[1] != len(months) or not len(months):
+        raise ValueError(
+            f"the losses by month are {values.shape}, not ({draws}, {len(months)})"
+        )
+    if values.shape[0] == 0:
+        raise ValueError("the losses by month carry no repetition")
+    rows = []
+    for month, column in zip(months, values.T, strict=True):
+        block = _loss(column, seed=seed)
+        rows.append({key: block[key] for key in ("p05", "p50", "p95", "es95")} | {"month": month})
+    worst = _loss(values.max(axis=1), seed=seed)
+    return {
+        "by_month": rows,
+        "path": {key: worst[key] for key in ("p05", "p50", "p95", "es95", "es95_interval")},
+    }
 
 
 def loss_block(results, *, seed: int = 0, horizon: str | None = None) -> dict | None:

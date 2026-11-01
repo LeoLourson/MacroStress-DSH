@@ -159,17 +159,32 @@ def execute(ws: store.Workspace, run_id: str) -> dict:
         positions = portfolio.positions if portfolio is not None else request.positions
         base_currency = portfolio.base_currency if portfolio is not None else request.base_currency
 
-        def valued(found) -> object:
+        def engine_on(fixed: FixedPaths) -> object:
             return calculate_run(
                 positions,
-                readable(found),
+                fixed,
                 drivers=satellites.registry,
                 served=satellites.served(),
                 base_currency=base_currency,
                 as_of=macro.as_of,
             )
 
+        def valued(found) -> object:
+            return engine_on(readable(found))
+
         batch = valued(paths)
+        # The loss by every month of the horizon: the same positions valued on the paths cut
+        # at t, so a model reading the end of the horizon sees month t — the canon's Delta_t.
+        # A run without a portfolio writes no report, so it carries no monthly losses.
+        monthly = None
+        if portfolio is not None and portfolio_report.losses_of(batch.results).size:
+            base = readable(paths)
+            monthly = np.column_stack(
+                [
+                    portfolio_report.losses_of(engine_on(base.up_to(t)).results)
+                    for t in range(1, len(paths.months))
+                ]
+            )
         contributions = None
         if request.contributions:
             full = portfolio_report.loss_block(
@@ -213,6 +228,7 @@ def execute(ws: store.Workspace, run_id: str) -> dict:
             s0_forecast=forecast(empty, request.targets),
             checks=_checks(spec, macro, paths, empty, satellites),
             contributions=contributions,
+            monthly=monthly,
             workspace=ws,
         )
     except BaseException as error:
@@ -333,6 +349,7 @@ def _write(
     s0_forecast: dict | None = None,
     checks: dict | None = None,
     contributions: list | None = None,
+    monthly: np.ndarray | None = None,
     workspace: store.Workspace | None = None,
 ) -> dict:
     """The paths, the results of every position, the report and the meta that names them."""
@@ -360,12 +377,16 @@ def _write(
             dist_found=paths.dist,
             seed=paths.seed,
             horizon=paths.months[-1].isoformat(),
+            monthly=monthly,
+            months=months[1:],
         )
         if portfolio is not None
         else None
     )
     if summary is not None:
         store.write_json(directory / "summary.json", summary)
+    if monthly is not None:
+        np.savez(directory / "path_losses.npz", losses=monthly)
     store.write_json(
         directory / "forecast.json", forecast_rows | {"s0": s0_forecast}
     )

@@ -111,6 +111,27 @@ class FixedPaths:
     def flags(self, driver: str) -> frozenset[str]:
         return self.driver_flags.get(driver, frozenset())
 
+    def up_to(self, month: int) -> "FixedPaths":
+        """The same paths cut at ``month``: months ``0 .. month`` of every variable and driver.
+
+        The flags, the start and the seed stay as they are. A position model reads the end of
+        the horizon as ``path[:, -1]``, so on the cut paths it values the month ``month`` —
+        the loss by that month, the canon's ``Delta_t`` the report measures by month.
+        """
+        if not 0 <= month <= self.horizon:
+            raise ValueError(f"the paths run to month {self.horizon}, not {month}")
+        return FixedPaths(
+            macros={
+                name: np.asarray(path)[:, : month + 1] for name, path in self.macros.items()
+            },
+            drivers={
+                name: np.asarray(path)[:, : month + 1] for name, path in self.drivers.items()
+            },
+            driver_flags=dict(self.driver_flags),
+            start=self.start,
+            seed=self.seed,
+        )
+
     def _any(self) -> np.ndarray:
         """Any one path: every path of the set has the same shape."""
         return next(iter({**self.macros, **self.drivers}.values()))

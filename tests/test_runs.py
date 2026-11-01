@@ -11,6 +11,9 @@ from fastmcp import Client
 
 from mst import jobs, runs
 from mst.mcp import build
+from mst.plugin_sdk import FixedPaths
+from mst.portfolio import tool as portfolio_tool
+from mst.scenario import tool as scenario_tool
 
 POSITIONS = [
     {
@@ -212,6 +215,103 @@ def test_a_request_needs_a_scenario_its_draws_and_its_seed(workspace):
     for missing in ("scenario", "draws", "seed", "positions"):
         with pytest.raises(ValueError):
             runs.begin(workspace, runs.new_id(), {k: v for k, v in REQUEST.items() if k != missing})
+
+
+@pytest.fixture
+def portfolio(workspace):
+    """The saved portfolio ``demo`` of the workspace."""
+    portfolio_tool.save(workspace.portfolios, "demo", {"name": "Демо", "positions": POSITIONS})
+    return "demo"
+
+
+@pytest.fixture
+def shock_pair(workspace):
+    """Two scenarios of horizon 6: one with an impact on months 2..3, one without it."""
+    spec = scenario_tool.get(workspace.scenarios, "oil")["spec"]
+    common = {
+        "narrative": "перебой",
+        "horizon": 6,
+        "macro": spec["macro"],
+        "satellites": spec["satellites"],
+        "approved_by": "И. Иванов",
+    }
+    scenario_tool.save(workspace.scenarios, "plain", common)
+    scenario_tool.save(
+        workspace.scenarios,
+        "shock",
+        common
+        | {
+            "impacts": [
+                {
+                    "target": "share_price:sber",
+                    "start": 2,
+                    "values": [-10.0, -10.0],
+                    "reason": "r",
+                    "basis": "assumption",
+                }
+            ]
+        },
+    )
+    return "plain", "shock"
+
+
+def _report_of(ws, scenario, portfolio):
+    """The report of one run and its saved ``path_losses.npz`` array."""
+    run_id = runs.new_id()
+    runs.begin(ws, run_id, {"scenario": scenario, "draws": 5, "seed": 11, "portfolio": portfolio})
+    runs.execute(ws, run_id)
+    stored = runs.result(ws, run_id)
+    with np.load(runs.folder(ws, run_id) / "path_losses.npz") as saved:
+        return stored["summary"], saved["losses"]
+
+
+def test_the_last_month_of_losses_by_month_equals_the_loss(workspace, portfolio, shock_pair):
+    report, monthly = _report_of(workspace, "plain", portfolio)
+    block = report["losses_by_month"]
+    assert monthly.shape == (5, 6)
+    assert len(block["by_month"]) == 6
+    last = block["by_month"][-1]
+    assert last["month"] == report["loss"]["horizon_month"]
+    for key in ("p05", "p50", "p95", "es95"):
+        assert last[key] == report["loss"][key]
+    # The value over the path is the block of the maximum, an ES at least as heavy as any month.
+    assert block["path"]["es95"] >= max(row["es95"] for row in block["by_month"])
+
+
+def test_an_impact_that_ends_before_the_horizon_shows_in_its_months_alone(
+    workspace, portfolio, shock_pair
+):
+    plain, shock = shock_pair
+    plain_report, _ = _report_of(workspace, plain, portfolio)
+    shock_report, _ = _report_of(workspace, shock, portfolio)
+    plain_rows = plain_report["losses_by_month"]["by_month"]
+    shock_rows = shock_report["losses_by_month"]["by_month"]
+    for key in ("p05", "p50", "p95", "es95"):
+        # Months 2..3 carry the impact; months 1 and 4..6 do not.
+        assert shock_rows[1][key] != plain_rows[1][key]
+        assert shock_rows[2][key] != plain_rows[2][key]
+        for t in (0, 3, 4, 5):
+            assert shock_rows[t][key] == plain_rows[t][key]
+        # The end of the horizon sees nothing of an impact that vanished at month 3.
+        assert shock_report["loss"][key] == plain_report["loss"][key]
+
+
+def test_the_paths_cut_at_a_month_keep_the_start_flags_and_seed():
+    paths = FixedPaths(
+        macros={"gl.brent": np.arange(14.0).reshape(2, 7)},
+        drivers={"price:alpha": np.ones((2, 7))},
+        driver_flags={"price:alpha": frozenset({"impact"})},
+        start=date(2026, 9, 1),
+        seed=11,
+    )
+    cut = paths.up_to(3)
+    assert cut.horizon == 3 and cut.draws == 2
+    assert np.array_equal(cut.macro("gl.brent"), paths.macro("gl.brent")[:, :4])
+    assert np.array_equal(cut.driver("price:alpha"), np.ones((2, 4)))
+    assert cut.flags("price:alpha") == frozenset({"impact"})
+    assert cut.start == date(2026, 9, 1) and cut.seed == 11
+    with pytest.raises(ValueError, match="run to month 6"):
+        paths.up_to(7)
 
 
 def call(ws, name, arguments):
