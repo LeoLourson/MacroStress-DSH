@@ -4,7 +4,7 @@ Audience: the engineer (a coding agent) who implements this. Every change below 
 
 ## Goal
 
-The canon is [docs/concept/formalization.md](../concept/formalization.md). It now requires things the code does not do:
+The canon is [docs/concept/formalization.en.md](../concept/formalization.en.md). It now requires things the code does not do:
 
 | Canon requires | Code today |
 |---|---|
@@ -239,7 +239,7 @@ If `validate` or the price reports that the causes cannot reach the event, set `
 
 Portfolio `fifth-test`, `draws=2048`, `seed=20261029`, one after another: `fifth-base`, the 11 scenarios of the check, and the new one, 13 calculations. Runs take 2–6 minutes each; the old runs stay.
 
-Write `docs/plans/canon-alignment-results.md`, in Russian, one table row per calculation: scenario, run id, status, `admission.shares`, P5/P50/P95 and ES95 at the horizon and over the path, `dist`, its error, `estimated`, `one_sided`, the flags. Below it, the checks of Acceptance with the observed numbers. Do not interpret beyond these checks. Commit this file.
+Write `docs/plans/canon-alignment-results.en.md`, in English (a `.md` file under `docs` needs an English twin, and this report does not need two languages), one table row per calculation: scenario, run id, status, `admission.shares`, P5/P50/P95 and ES95 at the horizon and over the path, `dist`, its error, `estimated`, `one_sided`, the flags. Below it, the checks of Acceptance with the observed numbers. Do not interpret beyond these checks. Commit this file.
 
 ## Acceptance
 
