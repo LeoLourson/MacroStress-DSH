@@ -190,7 +190,6 @@ def test_a_scaffolded_macro_model_starts_from_the_last_known_value(tmp_path):
     everything = model.simulate(loaded, wide, draws=200, seed=2)
     assert np.all(np.isfinite(everything.paths))
 
-    from mst.model_sdk import overlay as sample_overlay
 
     narrow = ScenarioPlan(
         horizon=2,
@@ -283,12 +282,11 @@ def test_a_scaffolded_satellite_model_starts_from_the_object_above(tmp_path):
 
 
 def test_a_scaffolded_satellite_model_names_a_driver_without_any_history(tmp_path):
-    from mst.model_sdk.contracts import UpperPaths
-
     import numpy as np
 
     from mst.drivers.registry import load_registry
     from mst.model_sdk import SatellitePart
+    from mst.model_sdk.contracts import UpperPaths
 
     target = plugin.new("arlink", kind="satellite", quantity="bond_spread", dest=tmp_path)
     model = next(iter(plugin.load(target).satellites))

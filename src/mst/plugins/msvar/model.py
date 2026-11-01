@@ -11,8 +11,6 @@ shock does, so the plugin never sees the scenario contracts.
 
 from datetime import date
 
-import numpy as np
-
 from mst.macro.panel import build_panel
 from mst.model_sdk.contracts import (
     ConstraintLaw,

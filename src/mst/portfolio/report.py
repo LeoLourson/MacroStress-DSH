@@ -18,7 +18,6 @@ import numpy as np
 
 from ..engine.status import worst
 from ..metrics.es import es_block
-from ..plugin_sdk import expected_shortfall
 
 DEFAULT_COVERAGE_LIMIT = 0.05
 """Uncovered value above this share turns the portfolio's status into ``incomplete``."""
@@ -102,7 +101,6 @@ def build(
         "status": status,
         "flags": flags,
         "loss": _loss(losses, seed=seed, horizon=horizon),
-        "dist": dist(dist_found),
         "dist": dist(dist_found),
         "coverage": {
             "share": share,

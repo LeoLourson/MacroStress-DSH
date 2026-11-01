@@ -278,7 +278,9 @@ class RefLevel2Model(SatelliteModel):
                         for k, node in enumerate(nodes)
                     ],
                     "rows": rows.tolist(),
-                    "inputs": {node: [list(column) for column in own] for node, own in inputs.items()},
+                    "inputs": {
+                        node: [list(column) for column in own] for node, own in inputs.items()
+                    },
                     "train_low": [
                         float(np.nanmin(d[:, k])) if rows[k] else None
                         for k in range(len(nodes))

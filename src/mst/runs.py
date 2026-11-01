@@ -460,14 +460,10 @@ def _checks(spec: Spec, macro, paths, empty, satellites) -> dict:
     from .macro.registry import load_registry as load_macro_registry
     from .metrics.baselines import (
         CONSTRAINT_THRESHOLD,
-        DOMAIN,
-        WIDTH,
-        band_problems,
         constraint_probabilities,
         macro_domain,
         quantity_domain,
     )
-    from .metrics.cells import history_range
 
     checks: dict = {}
     registry = load_macro_registry()

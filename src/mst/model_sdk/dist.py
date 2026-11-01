@@ -15,7 +15,8 @@ mixes the rows of every group into
 
 .. math::
 
-    \\mathrm{dist} = -\\frac{1}{K} \\sum_g \\log \\Big( \\frac{1}{n_g} \\sum_{i \\in g} e^{\\log w_i} P_i \\Big),
+    \\mathrm{dist} = -\\frac{1}{K} \\sum_g \\log \\Big( \\frac{1}{n_g}
+    \\sum_{i \\in g} e^{\\log w_i} P_i \\Big),
 
 with ``P_i`` the gaussian box probability of row ``i`` by the GHK sampler
 (``mst.model_sdk.conditional``) and ``e^{log w_i}`` the importance weight of the row inside

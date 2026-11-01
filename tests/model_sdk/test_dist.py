@@ -12,7 +12,7 @@ import numpy as np
 import pytest
 from scipy.stats import norm
 
-from mst.model_sdk.conditional import log_box_probability, log_box_probabilities
+from mst.model_sdk.conditional import log_box_probabilities, log_box_probability
 from mst.model_sdk.contracts import ConstraintLaw
 from mst.model_sdk.dist import price_of_law
 
