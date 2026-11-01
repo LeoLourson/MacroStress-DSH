@@ -14,12 +14,11 @@ make the price and the loss smooth in ``c`` up to the Monte-Carlo error, so a ha
 refinements finds the boundary the report states.
 """
 
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Callable
-
-import numpy as np
 
 from .build import build as build_paths
+from .build import tolerance_of
 from .spec import Spec
 
 GRID = (0.05, 0.1, 0.2, 0.35, 0.5, 0.75, 1.0, 1.5, 2.5, 4.0)
@@ -59,19 +58,24 @@ class Family:
         return variants
 
 
-def width_family(spec: Spec) -> Family:
-    """The family of a scenario: every condition narrows and widens around its midpoint."""
+def width_family(spec: Spec, macro) -> Family:
+    """The family of a scenario: every support condition narrows and widens around its midpoint.
+
+    A point ``value`` is the interval ``value ± tau`` the platform expands it to, so ``c = 1``
+    is the scenario itself whatever its conditions. The conditions on means and probabilities
+    stay put: they carry their own price, and the family moves the event alone.
+    """
 
     def build(c: float) -> Spec:
         constraints = []
         for constraint in spec.constraints:
-            terms = constraint.terms
             if constraint.value is not None:
+                half = c * tolerance_of(constraint.terms, macro)
                 constraints.append(
                     constraint.model_copy(
                         update={
-                            "low": constraint.value - c * abs(constraint.value),
-                            "high": constraint.value + c * abs(constraint.value),
+                            "low": constraint.value - half,
+                            "high": constraint.value + half,
                             "value": None,
                         }
                     )
@@ -98,7 +102,9 @@ class Point:
     rho: float | None
 
 
-def evaluate(spec: Spec, macro, satellites, positions, *, draws: int, seed: int, base_currency="RUB") -> Point:
+def evaluate(
+    spec: Spec, macro, satellites, positions, *, draws: int, seed: int, base_currency="RUB"
+) -> Point:
     """``(dist, rho)`` of one scenario: the price and the loss the reverse problem trades.
 
     ``rho`` is the expected shortfall of the portfolio loss at 95 % — the tail the canon's
@@ -106,9 +112,9 @@ def evaluate(spec: Spec, macro, satellites, positions, *, draws: int, seed: int,
     when the scenario carries nothing to price.
     """
     from ..engine.run import run as calculate
+    from ..metrics.es import es_block
     from ..portfolio.report import losses_of
     from ..runs import readable
-    from ..metrics.es import es_block
 
     paths = build_paths(spec, macro, satellites, draws=draws, seed=seed)
     batch = calculate(
@@ -138,9 +144,9 @@ def sup_rho(
 ) -> dict:
     """The worst ``rho`` among the family's scenarios priced at ``kappa`` or less.
 
-    The coarse grid is evaluated first, then the boundary — the largest ``c``-neighbourhood
-    where the price stays under ``kappa`` — is bisected. The answer names the point and the
-    whole path of the search, so the reader sees the trade the price allows.
+    The coarse grid is evaluated first, then the boundary — the narrowest conditions whose
+    price stays under ``kappa`` — is bisected. The answer names the point and the whole path
+    of the search, so the reader sees the trade the price allows.
     """
     points = _walk(
         family, macro, satellites, positions, draws=draws, seed=seed, grid=grid
@@ -149,21 +155,23 @@ def sup_rho(
     if not affordable:
         return {"kappa": kappa, "answer": None, "points": _rows(points)}
     best = max(affordable, key=lambda point: (point.rho is not None, point.rho))
-    # Refine towards the boundary: the price grows as the conditions narrow, so the
-    # affordable region sits at the small-c end of the grid.
-    low, high = _bracket(affordable, points)
+    # Refine towards the boundary: the price falls as the conditions widen, so the affordable
+    # region sits at the large-c end of the grid and the boundary is its smallest c.
+    edge = min(point.c for point in affordable)
+    below = [point.c for point in points if point.c < edge]
+    low, high = (max(below) if below else None), edge
     for _ in range(REFINEMENTS):
-        if high is None:
+        if low is None:
             break
         middle = (low + high) / 2
         point = _evaluate(family, middle, macro, satellites, positions, draws, seed)
         points.append(point)
         if point.dist is not None and point.dist <= kappa:
-            low = middle
+            high = middle
             if point.rho is not None and (best.rho is None or point.rho >= best.rho):
                 best = point
         else:
-            high = middle
+            low = middle
     return {
         "kappa": kappa,
         "answer": None if best.rho is None else {"c": best.c, "rho": best.rho, "dist": best.dist},

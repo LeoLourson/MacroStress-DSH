@@ -115,13 +115,20 @@ def build(ws: store.Workspace) -> FastMCP:
         action: str,
         id: str | None = None,
         spec: dict[str, Any] | None = None,
+        portfolio: str | None = None,
+        kappa: float | None = None,
+        level: float | None = None,
+        draws: int | None = None,
+        seed: int | None = None,
     ) -> dict:
-        """Stored scenarios. Actions: list, get, save, validate.
+        """Stored scenarios. Actions: list, get, save, validate, reverse.
 
         ``save`` checks the contract and writes ``scenarios/<id>.json``; ``validate`` loads the
         macro and satellite versions the file names and names every problem that keeps the
         scenario from being computed, including corpus fragments not visible on the
-        calculation day when the index exists.
+        calculation day when the index exists. ``reverse`` searches the scenario's family on
+        ``portfolio``: the worst loss under the price ``kappa``, or the lowest price whose loss
+        reaches ``level``.
         """
         if action == "list":
             return scenario_tool.catalogue(ws.scenarios)
@@ -140,7 +147,7 @@ def build(ws: store.Workspace) -> FastMCP:
                 ws.models, loaded.satellites, installed.satellites
             )
             found = portfolio_tool.load(ws.portfolios, _need(portfolio, "portfolio"))
-            family = width_family(loaded)
+            family = width_family(loaded, macro)
             if kappa is not None:
                 return sup_rho(
                     family,

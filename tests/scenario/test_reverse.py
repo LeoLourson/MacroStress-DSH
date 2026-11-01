@@ -9,7 +9,7 @@ on the price would bound nothing.
 
 import pytest
 
-from mst.scenario.reverse import Family, inf_dist, sup_rho, width_family
+from mst.scenario.reverse import Family, width_family
 
 
 class _Known:
@@ -87,6 +87,21 @@ def test_sup_rho_finds_the_boundary_of_a_linear_family(monkeypatch):
     assert found["answer"]["rho"] == pytest.approx(8.5, abs=0.2)
 
 
+def test_sup_rho_refines_a_boundary_between_the_grid_points(monkeypatch):
+    from mst.scenario import reverse
+
+    known = _Known(price=(4.0, 2.0), loss=(10.0, 3.0))
+    _patch_evaluate(monkeypatch, known)
+    found = reverse.sup_rho(
+        _family_of(known), 3.4, macro=None, satellites=None, positions=[], draws=1, seed=1
+    )
+    # 4 - 2c <= 3.4 stops at c = 0.3, between the grid points 0.2 and 0.35; five bisections of
+    # that step come within 0.005 of it, and the loss is the largest the price allows.
+    assert 0.3 <= found["answer"]["c"] <= 0.305
+    assert found["answer"]["dist"] <= 3.4
+    assert found["answer"]["rho"] == pytest.approx(9.1, abs=0.02)
+
+
 def test_inf_dist_finds_the_boundary_of_a_linear_family(monkeypatch):
     from mst.scenario import reverse
 
@@ -118,7 +133,7 @@ def test_the_price_of_the_fixture_does_not_fall_as_the_conditions_narrow(version
     from mst.scenario.build import dist_of
 
     spec = _spec_of(versions)
-    family = width_family(spec)
+    family = width_family(spec, versions.loaded)
     prices = [
         dist_of(family.build(c), versions.loaded, draws=60, seed=5).distance
         for c in (4.0, 1.0, 0.35)
@@ -176,3 +191,29 @@ def _spec_of(versions):
             ],
         }
     )
+
+
+def test_a_point_of_the_family_is_its_tolerance_at_one_whatever_its_value(versions):
+    from mst.scenario.build import tolerance_of
+
+    spec = _spec_of(versions)
+    point = spec.constraints[0].model_copy(update={"low": None, "high": None, "value": 0.0})
+    family = width_family(spec.model_copy(update={"constraints": [point]}), versions.loaded)
+    tau = tolerance_of(point.terms, versions.loaded)
+    own = family.build(1.0).constraints[0]
+    assert (own.low, own.high) == pytest.approx((-tau, tau))
+    narrow = family.build(0.5).constraints[0]
+    assert (narrow.low, narrow.high) == pytest.approx((-tau / 2, tau / 2))
+
+
+def test_the_command_line_reads_the_reverse_form_it_documents(tmp_path):
+    from mst.scenario.__main__ import main
+
+    # The arguments parse: the unknown scenario fails later, not with a usage error.
+    with pytest.raises((OSError, KeyError, ValueError)):
+        main(
+            [
+                "reverse", "nowhere", "--workspace", str(tmp_path), "--portfolio", "p",
+                "--draws", "2", "--seed", "1", "--kappa", "1.0",
+            ]
+        )

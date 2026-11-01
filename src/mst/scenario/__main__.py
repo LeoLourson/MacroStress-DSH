@@ -28,6 +28,7 @@ def main(argv: list[str] | None = None) -> int:
     from mst.scenario.reverse import inf_dist, sup_rho, width_family
 
     parser = argparse.ArgumentParser(prog="mst.scenario", description=__doc__.split("\n\n")[0])
+    parser.add_argument("command", choices=["reverse"])
     parser.add_argument("scenario", help="the scenario id whose family is searched")
     parser.add_argument("--workspace", required=True, type=Path)
     parser.add_argument("--portfolio", required=True, help="the portfolio whose loss is rho")
@@ -44,7 +45,7 @@ def main(argv: list[str] | None = None) -> int:
     macro = macro_version.load(ws.models, spec.macro, installed.macro)
     satellites = satellite_bundle.load(ws.models, spec.satellites, installed.satellites)
     portfolio = portfolio_tool.load(ws.portfolios, args.portfolio)
-    family = width_family(spec)
+    family = width_family(spec, macro)
     if args.kappa is not None:
         found = sup_rho(
             family,

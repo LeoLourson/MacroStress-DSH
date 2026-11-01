@@ -96,3 +96,19 @@ def test_jobs_without_an_id_is_refused(tmp_path):
         assert "id is required" in str(error)
     else:
         raise AssertionError("status without an id must not be accepted")
+
+
+def test_the_scenario_tool_takes_the_arguments_of_the_reverse_search(workspace):
+    try:
+        call(
+            workspace,
+            "scenario",
+            {
+                "action": "reverse", "id": "oil", "portfolio": "nowhere",
+                "kappa": 1.0, "draws": 2, "seed": 1,
+            },
+        )
+    except Exception as error:
+        assert "nowhere" in str(error)
+    else:
+        raise AssertionError("the portfolio of the search does not exist")

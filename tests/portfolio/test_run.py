@@ -192,3 +192,37 @@ def test_the_run_tool_starts_a_portfolio_run(workspace, portfolio):
     assert jobs.status(workspace, started["job"])["exit_code"] == 0
     stored = call(workspace, "run", {"action": "result", "id": started["run"]}).data
     assert stored["summary"]["loss"] is not None
+
+
+def test_the_reverse_search_answers_through_the_tool_on_real_positions(
+    workspace, portfolio, versions
+):
+    scenario_tool.save(
+        workspace.scenarios,
+        "band",
+        {
+            "narrative": "нефть",
+            "horizon": 3,
+            "macro": versions.macro,
+            "satellites": versions.satellites,
+            "approved_by": "И. Иванов",
+            "constraints": [
+                {
+                    "terms": [{"variable": "gl.brent", "month": 2, "weight": 1.0}],
+                    "low": 1.0,
+                    "high": 5.0,
+                    "basis": "assumption",
+                }
+            ],
+        },
+    )
+    arguments = {"action": "reverse", "id": "band", "portfolio": portfolio, "draws": 8, "seed": 3}
+    found = call(workspace, "scenario", arguments | {"kappa": 50.0}).data
+    assert found["answer"] is not None
+    assert found["answer"]["dist"] <= 50.0
+    assert np.isfinite(found["answer"]["rho"])
+    assert len(found["points"]) >= 10
+    cheapest = call(
+        workspace, "scenario", arguments | {"level": found["answer"]["rho"] - 1e-9}
+    ).data
+    assert cheapest["answer"]["dist"] <= found["answer"]["dist"] + 1e-9
