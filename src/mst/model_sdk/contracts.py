@@ -93,6 +93,10 @@ class ScenarioPlan:
     constraints: tuple[LinearConstraint, ...] = ()
     causes: tuple[str, ...] = ()
     regime_event: str | None = None
+    inner: int = 1
+    """How many values of the causes the model draws per value of ``R``: the conditions on
+    means and probabilities reweight them inside their group, so a plan that carries such
+    conditions asks for more than one."""
 
 
 @dataclass(frozen=True)
@@ -127,6 +131,10 @@ class MacroSimulation:
     paths: np.ndarray
     history: np.ndarray | None = None
     diagnostics: dict = field(default_factory=dict)
+    group: np.ndarray | None = None
+    """``(R,)`` which value of ``R`` every path belongs to: the paths of one group share
+    their parameters and everything else the causes do not name, and the conditions on
+    means reweight them inside it. ``None`` when every path is its own group."""
 
 
 @dataclass(frozen=True)

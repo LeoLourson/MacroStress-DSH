@@ -425,6 +425,7 @@ def simulate(
     seed: int,
     sweeps: int = SWEEPS,
     candidates: int = LATENT_CANDIDATES,
+    inner: int | None = None,
 ) -> MacroSimulation:
     """``draws`` paths of the macro variables under the scenario, one regime path each.
 
@@ -435,9 +436,14 @@ def simulate(
     outside ``R``: then it is a hidden coordinate, and ``candidates`` of its paths are
     weighted by the probability each gives the constraint box before one is picked.
 
+    A plan with ``inner`` above one asks for that many draws of the causes per value of
+    ``R`` — what the conditions on means reweight — with the hidden coordinate chosen once
+    per group by the support box: the tilt then reweights the draws of the causes.
+
     Raises ``InfeasibleScenario`` naming the constraints the driving shocks cannot meet.
     """
     chosen = _plan(model, plan)
+    inner = plan.inner if inner is None else inner
     n, horizon = len(model.ids), chosen.horizon
     # The shocks the causes name are conditioned; with no cause named every shock is, and
     # with only a hidden coordinate named none is — the latent selection carries the event.
@@ -446,8 +452,9 @@ def simulate(
         driving[:] = True
     else:
         driving[[model.shocks.index(s) for s in plan.causes if s in model.shocks]] = True
-    paths = np.empty((draws, horizon + 1, n))
-    history = np.empty((draws, model.lags_count, n))
+    paths = np.empty((draws * inner, horizon + 1, n))
+    history = np.empty((draws * inner, model.lags_count, n))
+    group = np.repeat(np.arange(draws), inner)
     ess: list[float] = []
     cache: dict = {}
     for r in range(draws):
@@ -465,39 +472,45 @@ def simulate(
         )
         if size is not None:
             ess.append(size)
-        eps = np.zeros((horizon, n))
-        if free is not None:
-            eps[:, ~driving] = free
-        if chosen.terms and driving.any():
-            z = _loadings(chosen, rep)
+        z = _loadings(chosen, rep) if chosen.terms and driving.any() else None
+        if z is not None:
             z_all = z.reshape(len(z), -1)
             z_d = z[:, :, driving].reshape(len(z), -1)
             bad = dependent_rows(z_d, z_all)
             if bad:
                 raise InfeasibleScenario(bad)
-            offset = _level(chosen, rep.mean) + np.einsum(
-                "csj,sj->c", z[:, :, ~driving], eps[:, ~driving]
-            )
-            drawn = draw_driving(
-                z_d,
-                chosen.low - offset,
-                chosen.high - offset,
-                np.random.default_rng([seed, r, 3]),
-                sweeps,
-                every=z_all,
-            )
-            eps[:, driving] = drawn.reshape(horizon, driving.sum())
-        elif not driving.any() and chosen.terms:
-            # Only a hidden coordinate is a cause: the drawn R shocks carry the event with
-            # the picked candidate, and no shock is touched.
-            eps = free
-        elif not driving.any():
-            # Nothing to meet: every shock is drawn freely from its own stream.
-            eps = np.random.default_rng([seed, r, 3]).standard_normal((horizon, n))
-        shocks = np.einsum("tij,tj->ti", rep.impacts, eps)
-        future = iterate(rep.history, rep.lags, rep.intercept, shocks)
-        paths[r] = np.vstack([rep.history[-1], future])
-        history[r] = rep.history
+        rng_driving = np.random.default_rng([seed, r, 3])
+        for j in range(inner):
+            eps = np.zeros((horizon, n))
+            if free is not None:
+                eps[:, ~driving] = free
+            if z is not None:
+                offset = _level(chosen, rep.mean) + np.einsum(
+                    "csj,sj->c", z[:, :, ~driving], eps[:, ~driving]
+                )
+                drawn = draw_driving(
+                    z_d,
+                    chosen.low - offset,
+                    chosen.high - offset,
+                    rng_driving,
+                    sweeps,
+                    every=z_all,
+                )
+                eps[:, driving] = drawn.reshape(horizon, driving.sum())
+            elif chosen.terms and not driving.any():
+                # Only a hidden coordinate is a cause: the drawn R shocks carry the event
+                # with the picked candidate, and no shock is touched.
+                eps = free
+            else:
+                # Nothing to meet: the causes are drawn freely from their own stream, the
+                # rest of the shocks already sits in place from theirs.
+                eps[:, driving] = rng_driving.standard_normal(
+                    (horizon, int(driving.sum()))
+                )
+            shocks = np.einsum("tij,tj->ti", rep.impacts, eps)
+            future = iterate(rep.history, rep.lags, rep.intercept, shocks)
+            paths[r * inner + j] = np.vstack([rep.history[-1], future])
+            history[r * inner + j] = rep.history
     last = model.months[-1]
     return MacroSimulation(
         ids=model.ids,
@@ -505,6 +518,7 @@ def simulate(
         paths=paths,
         history=history,
         diagnostics=_ess_summary(ess, candidates),
+        group=group,
     )
 
 

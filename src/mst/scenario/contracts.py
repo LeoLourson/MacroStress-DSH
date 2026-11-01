@@ -14,7 +14,7 @@ from typing import Annotated, Literal
 
 from pydantic import Field, model_validator
 
-from ..contracts import Contract, Horizon, Identifier, Number
+from ..contracts import Contract, Horizon, Identifier, Number, Probability
 
 #: A month of the scenario horizon, 1..H; month 0 is the calculation date.
 Month = Annotated[int, Field(strict=True, ge=1, le=360)]
@@ -79,6 +79,62 @@ class Constraint(Contract):
         return self.value is not None
 
 
+class Expectation(Contract):
+    """``low <= E_Q(sum(weight * y[variable, month])) <= high``: a condition on the mean.
+
+    One side may be left open (``None``): a condition with only ``low`` asks the mean of the
+    functional to reach it, and the imposition tilts the causes toward it. The functional is
+    measured on the final paths, impacts included, in the model scale of its variables.
+    """
+
+    terms: list[Term] = Field(min_length=1)
+    low: Number | None = None
+    high: Number | None = None
+    basis: list[Identifier] | Literal["assumption"] = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def one_side_at_least(self):
+        if self.low is None and self.high is None:
+            raise ValueError("an expectation needs low, high, or both")
+        if self.low is not None and self.high is not None and self.low >= self.high:
+            raise ValueError("Require low < high")
+        seen = set()
+        for term in self.terms:
+            key = (term.variable, term.month)
+            if key in seen:
+                raise ValueError(f"{term.variable} in month {term.month} appears twice")
+            seen.add(key)
+        return self
+
+
+class ProbabilityCondition(Contract):
+    """``Q(B) >= at_least``: the probability of an event that is a box on the paths.
+
+    The event ``B`` is the interval condition ``low <= sum(weight * y) <= high`` — a point
+    has no probability under a continuous law, so the value form a constraint uses is not
+    offered here. Under the imposition the tilt raises the share of paths inside the box
+    until the condition holds.
+    """
+
+    terms: list[Term] = Field(min_length=1)
+    low: Number
+    high: Number
+    at_least: Probability
+    basis: list[Identifier] | Literal["assumption"] = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def well_formed(self):
+        if self.low >= self.high:
+            raise ValueError("Require low < high")
+        seen = set()
+        for term in self.terms:
+            key = (term.variable, term.month)
+            if key in seen:
+                raise ValueError(f"{term.variable} in month {term.month} appears twice")
+            seen.add(key)
+        return self
+
+
 class Impact(Contract):
     """A direct impact ``o_l``: ``delta`` added to ``target`` in months ``start..end``.
 
@@ -125,6 +181,14 @@ class Scenario(Contract):
     regime_event: Identifier | None = None
     impacts: list[Impact] = []
     """The direct impacts ``O`` of the scenario, on the macro variables or on drivers."""
+    expectations: list[Expectation] = []
+    """The conditions on the means of functionals: ``C`` beyond the support conditions."""
+    probabilities: list[ProbabilityCondition] = []
+    """The conditions on the probabilities of events: ``Q(B) >= at_least``."""
+    inner: int = Field(default=1, strict=True, ge=1, le=64)
+    """How many values of the causes the run draws per value of ``R``: the conditions on
+    means and probabilities reweight them inside their group, so a scenario with such
+    conditions needs more than one to have anything to reweight."""
     approved_by: str | None = None
     """Who approved the scenario; the canon has a human assert it before it is computed."""
 
@@ -132,6 +196,8 @@ class Scenario(Contract):
     def within_horizon(self):
         months = [term.month for c in self.constraints for term in c.terms]
         months += [impact.end for impact in self.impacts]
+        months += [term.month for c in self.expectations for term in c.terms]
+        months += [term.month for condition in self.probabilities for term in condition.terms]
         for month in months:
             if month > self.horizon:
                 raise ValueError(f"month {month} is beyond the horizon of {self.horizon}")

@@ -233,6 +233,84 @@ def test_a_wide_box_gives_a_price_near_zero(versions):
     ).distance
 
 
+def test_an_expectation_condition_tilts_the_paths_and_prices_them(versions):
+    # The mean of the oil price in month 2 is asked to sit above its unconditional level:
+    # the tilt raises it there, the price carries the tilt beside the support price, and
+    # the checks report the mean and the effective size. The bounds live in the model
+    # scale, like every condition's.
+    registry = load_registry()
+    plain = paths_of(versions, scenario(versions))
+    level = float(np.mean(registry.variable("gl.brent").to_model(plain.macro[:, 2, 0])))
+    target = level + 1.0
+    spec = scenario(
+        versions,
+        inner=8,
+        expectations=[
+            {
+                "terms": [{"variable": "gl.brent", "month": 2, "weight": 1.0}],
+                "low": target,
+                "basis": "assumption",
+            }
+        ],
+    )
+    tilted = paths_of(versions, spec)
+    moved = float(
+        np.mean(registry.variable("gl.brent").to_model(tilted.macro[:, 2, 0]))
+    )
+    assert moved == pytest.approx(target, abs=0.15)
+    assert tilted.effective_size < tilted.draws * spec.inner
+    assert tilted.checks["means"][0]["active"] is True
+    assert tilted.dist is not None and tilted.dist.distance > 0
+    # Without the condition there is no tilt to report.
+    assert plain.effective_size is None and plain.checks == {}
+
+
+def test_a_probability_condition_raises_the_share_of_the_event(versions):
+    registry = load_registry()
+    plain = paths_of(versions, scenario(versions))
+    column = registry.variable("gl.brent").to_model(plain.macro[:, 2, 0])
+    low, high = np.percentile(column, [10, 60])
+    spec = scenario(
+        versions,
+        inner=8,
+        probabilities=[
+            {
+                "terms": [{"variable": "gl.brent", "month": 2, "weight": 1.0}],
+                "low": float(low),
+                "high": float(high),
+                "at_least": 0.9,
+                "basis": "assumption",
+            }
+        ],
+    )
+    tilted = paths_of(versions, spec)
+    moved = registry.variable("gl.brent").to_model(tilted.macro[:, 2, 0])
+    inside = np.mean((moved >= low) & (moved <= high))
+    assert inside >= 0.88
+    assert tilted.checks["effective_size"] > 0
+
+
+def test_an_expectation_no_tilt_can_meet_is_refused(versions):
+    registry = load_registry()
+    plain = paths_of(versions, scenario(versions))
+    highest = float(
+        registry.variable("gl.brent").to_model(plain.macro[:, 2, 0]).max()
+    )
+    spec = scenario(
+        versions,
+        inner=4,
+        expectations=[
+            {
+                "terms": [{"variable": "gl.brent", "month": 2, "weight": 1.0}],
+                "low": highest + 10.0,
+                "basis": "assumption",
+            }
+        ],
+    )
+    with pytest.raises(ValueError, match="cannot be met"):
+        paths_of(versions, spec)
+
+
 def test_driver_paths_are_in_the_drivers_own_units_and_carry_impacts(versions):
     impact = Impact(
         target="price:alpha", start=2, end=3, delta=10.0, reason="перебой", basis=["S1#1/1"]

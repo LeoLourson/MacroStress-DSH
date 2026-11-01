@@ -259,6 +259,7 @@ def simulate(
     seed: int,
     sweeps: int = SWEEPS,
     candidates: int = LATENT_CANDIDATES,
+    inner: int | None = None,
 ) -> Simulation:
     """``draws`` paths of the macro variables under the scenario.
 
@@ -271,9 +272,14 @@ def simulate(
     box before one is picked, so a tail event prices the volatility it needs instead of
     riding the moderate path a single draw happens to pick.
 
+    A plan with ``inner`` above one asks for that many draws of the causes per value of
+    ``R`` — what the conditions on means reweight — with the volatility path chosen once
+    per group by the support box: the tilt then reweights the draws of the causes.
+
     Raises ``InfeasibleScenario`` naming the constraints the driving shocks cannot meet.
     """
     plan = _plan(model, scenario)
+    inner = scenario.inner if inner is None else inner
     n, horizon = len(model.ids), plan.horizon
     # The shocks the causes name are conditioned; with no cause named every shock is, and
     # with only a hidden coordinate named none is — the latent selection carries the event.
@@ -283,8 +289,9 @@ def simulate(
     else:
         driving[[model.shocks.index(s) for s in scenario.causes if s in model.shocks]] = True
     hidden = not scenario.causes or VOLATILITY_PATH in scenario.causes
-    paths = np.empty((draws, horizon + 1, n))
-    history = np.empty((draws, model.lags_count, n))
+    paths = np.empty((draws * inner, horizon + 1, n))
+    history = np.empty((draws * inner, model.lags_count, n))
+    group = np.repeat(np.arange(draws), inner)
     ess: list[float] = []
     for r in range(draws):
         draw = int(np.random.default_rng([seed, r, 0]).integers(model.draws))
@@ -340,34 +347,42 @@ def simulate(
             picked, size = pick_latent(log_probabilities, rng_volatility)
             ess.append(size)
             rep = reps[picked]
-        eps = np.zeros((horizon, n))
-        if free is not None:
-            eps[:, ~driving] = free
-        if plan.terms:
+        z = None
+        if plan.terms and driving.any():
             z = _loadings(plan, rep)
             z_all = z.reshape(len(z), -1)
             z_d = z[:, :, driving].reshape(len(z), -1)
             bad = dependent_rows(z_d, z_all)
             if bad:
                 raise InfeasibleScenario(bad)
-            offset = _level(plan, rep.mean) + np.einsum(
-                "csj,sj->c", z[:, :, ~driving], eps[:, ~driving]
-            )
-            drawn = draw_driving(
-                z_d,
-                plan.low - offset,
-                plan.high - offset,
-                np.random.default_rng([seed, r, 3]),
-                sweeps,
-                every=z_all,
-            )
-            eps[:, driving] = drawn.reshape(horizon, driving.sum())
-        else:
-            eps = np.random.default_rng([seed, r, 3]).standard_normal((horizon, n))
-        shocks = np.einsum("tij,tj->ti", rep.impacts, eps)
-        future = iterate(rep.history, rep.lags, rep.intercept, shocks)
-        paths[r] = np.vstack([rep.history[-1], future])
-        history[r] = rep.history
+        rng_driving = np.random.default_rng([seed, r, 3])
+        for j in range(inner):
+            eps = np.zeros((horizon, n))
+            if free is not None:
+                eps[:, ~driving] = free
+            if z is not None:
+                offset = _level(plan, rep.mean) + np.einsum(
+                    "csj,sj->c", z[:, :, ~driving], eps[:, ~driving]
+                )
+                drawn = draw_driving(
+                    z_d,
+                    plan.low - offset,
+                    plan.high - offset,
+                    rng_driving,
+                    sweeps,
+                    every=z_all,
+                )
+                eps[:, driving] = drawn.reshape(horizon, driving.sum())
+            else:
+                # Nothing to meet: the causes are drawn freely from their own stream, the
+                # rest of the shocks already sits in place from theirs.
+                eps[:, driving] = rng_driving.standard_normal(
+                    (horizon, int(driving.sum()))
+                )
+            shocks = np.einsum("tij,tj->ti", rep.impacts, eps)
+            future = iterate(rep.history, rep.lags, rep.intercept, shocks)
+            paths[r * inner + j] = np.vstack([rep.history[-1], future])
+            history[r * inner + j] = rep.history
     last = model.months[-1]
     diagnostics = {}
     if ess:
@@ -386,4 +401,5 @@ def simulate(
         paths=paths,
         history=history,
         diagnostics=diagnostics,
+        group=group,
     )

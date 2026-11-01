@@ -45,8 +45,13 @@ from ..model_sdk.contracts import (
     MacroSimulation,
     ScenarioPlan,
 )
+from . import overlay
 from .contracts import Impact
 from .spec import Spec
+
+
+#: The stream of the overlay's resampling draw, away from the model's own streams.
+OVERLAY_STREAM = 4
 
 
 @dataclass(frozen=True)
@@ -62,6 +67,11 @@ class Paths:
     drivers: DriverPaths
     """``(R, H + 1, k)`` in each driver's own unit, with the flags of every path."""
     dist: Dist | None
+    effective_size: float | None
+    """How many paths carry the weight of the conditions on means: ``None`` without them."""
+    checks: dict
+    """What the sample says about the imposed conditions: the share of paths inside the
+    event and the means against their bounds."""
     seed: int
     draws: int
 
@@ -146,6 +156,7 @@ def plan_of(spec: Spec, macro: MacroVersion) -> ScenarioPlan:
         constraints=tuple(constraints),
         causes=tuple(spec.causes),
         regime_event=spec.regime_event,
+        inner=spec.inner,
     )
 
 
@@ -233,9 +244,10 @@ def build(
 ) -> Paths:
     """The paths of ``spec`` from its macro version and the satellites of that version.
 
-    Raises ``InfeasibleScenario`` when the driving shocks cannot meet the constraints, and
-    ``ValueError`` naming an impact on a macro variable the version lacks or on a driver the
-    satellites do not serve.
+    Raises ``InfeasibleScenario`` when the driving shocks cannot meet the constraints,
+    ``ValueError`` when the conditions on means cannot be met by any tilt of the causes,
+    and ``ValueError`` naming an impact on a macro variable the version lacks or on a
+    driver the satellites do not serve.
     """
     problems = _impact_problems(spec, macro, satellites)
     if problems:
@@ -245,6 +257,7 @@ def build(
         macro.model, plan_with_impacts(spec, macro), draws=draws, seed=seed
     )
     simulation = _with_macro_impacts(simulation, spec.impacts)
+    tilt, simulation = _tilted(spec, plan, simulation, seed=seed)
     registry = load_registry()
     own = np.stack(
         [
@@ -265,15 +278,117 @@ def build(
         ],
         seed=seed,
     )
+    found = dist_of(spec, macro, draws=draws, seed=seed)
+    if tilt is not None and found is None:
+        # No support conditions: the event is everything, its price is zero and the tilt
+        # carries the whole price of the scenario.
+        found = Dist(
+            distance=tilt.price,
+            log_probability=0.0,
+            standard_error=0.0,
+            causes=tuple(spec.causes),
+        )
+    elif tilt is not None:
+        found = replace(found, distance=found.distance + tilt.price)
     return Paths(
         months=simulation.months,
         ids=simulation.ids,
         macro=own,
         drivers=_own_units(satellites, drivers),
-        dist=dist_of(spec, macro, draws=draws, seed=seed),
+        dist=found,
+        effective_size=None if tilt is None else tilt.effective_size,
+        checks=_checks(spec, plan, simulation, tilt),
         seed=seed,
         draws=draws,
     )
+
+
+def _tilted(
+    spec: Spec, plan: ScenarioPlan, simulation: MacroSimulation, *, seed: int
+):
+    """``(tilt, simulation)``: the conditions on means and probabilities imposed on the paths.
+
+    The functionals are measured on the final paths — impacts included, model scale — and
+    the tilt reweights the draws of the causes inside every group of ``R``. The weights
+    then turn into a plain sample by systematic resampling inside the groups, so the
+    percentiles, the scores and the position engine read equal weights again; the
+    effective size and the checks tell what the weights did. The hidden coordinates are
+    chosen by the support box once per group, and the tilt reweights the draws of the
+    causes — the approximation the overlay lives with.
+    """
+    if not spec.expectations and not spec.probabilities:
+        return None, simulation
+    index = {id_: k for k, id_ in enumerate(simulation.ids)}
+    values, lows, highs = [], [], []
+    for expectation in spec.expectations:
+        value = np.zeros(simulation.paths.shape[0])
+        for term in expectation.terms:
+            value += term.weight * simulation.paths[:, term.month, index[term.variable]]
+        values.append(value)
+        lows.append(expectation.low if expectation.low is not None else -np.inf)
+        highs.append(expectation.high if expectation.high is not None else np.inf)
+    for condition in spec.probabilities:
+        value = np.zeros(simulation.paths.shape[0])
+        for term in condition.terms:
+            value += term.weight * simulation.paths[:, term.month, index[term.variable]]
+        values.append((value >= condition.low) & (value <= condition.high))
+        lows.append(condition.at_least)
+        highs.append(np.inf)
+    group = (
+        simulation.group
+        if simulation.group is not None
+        else np.arange(simulation.paths.shape[0])
+    )
+    tilt = overlay.solve_lambda(
+        np.column_stack(values), group, np.array(lows), np.array(highs)
+    )
+    if not tilt.feasible:
+        raise ValueError(
+            "the conditions on means cannot be met: no tilt of the causes brings them "
+            "inside their bounds on this sample"
+        )
+    picked = overlay.resample(
+        tilt.weights, group, np.random.default_rng([seed, OVERLAY_STREAM])
+    )
+    resampled = MacroSimulation(
+        ids=simulation.ids,
+        months=simulation.months,
+        paths=simulation.paths[picked],
+        history=None if simulation.history is None else simulation.history[picked],
+        diagnostics=simulation.diagnostics,
+        group=group[picked],
+    )
+    return tilt, resampled
+
+
+def _checks(spec: Spec, plan: ScenarioPlan, simulation: MacroSimulation, tilt) -> dict:
+    """What the sample says about the imposed conditions (the canon, section 7).
+
+    The share of paths inside the support event, the means of the conditioned functionals
+    against their bounds, and the multipliers against the theorem: a positive one rests on
+    the lower bound, a negative one on the upper, and the effective size says how many
+    paths carry the tilt.
+    """
+    checks: dict = {}
+    if plan.constraints:
+        index = {id_: k for k, id_ in enumerate(simulation.ids)}
+        inside = np.ones(simulation.paths.shape[0], dtype=bool)
+        for constraint in plan.constraints:
+            value = np.zeros(simulation.paths.shape[0])
+            for term in constraint.terms:
+                value += term.weight * simulation.paths[:, term.month, index[term.variable]]
+            inside &= (constraint.low <= value) & (value <= constraint.high)
+        checks["support_share"] = float(inside.mean())
+    if tilt is not None:
+        checks["means"] = [
+            {
+                "mean": float(mean),
+                "active": bool(active),
+            }
+            for mean, active in zip(tilt.means, tilt.active, strict=True)
+        ]
+        checks["effective_size"] = tilt.effective_size
+    return checks
 
 
 def validate(
