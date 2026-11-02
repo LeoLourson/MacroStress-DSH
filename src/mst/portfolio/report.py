@@ -5,6 +5,12 @@ positions' own P95 is descriptive statistics and is never reported as the portfo
 position that was not calculated does not quietly disappear: it is excluded with its reason, and
 the report states the share of the value the numbers cover.
 
+The loss is a functional tied to a moment of the path, as the canon asks (section 6): beside
+the value at the end of the horizon the report carries ``losses_by_month`` — ``rho_t`` for
+every month — and the value over the whole path, ``rho_max``, the block of the maximum of the
+monthly losses. An impact that ends before the horizon shows in its months alone, and the
+maximum sees what the end of the horizon has damped.
+
 The price of the scenario — ``dist(s) = E_P[-log P(S | R)]`` of the canon
 (``mst.model_sdk.dist``) — stands beside the loss: the mean of ``-log P(S | R)`` over the law
 of ``R``, with its standard error and the causes the scenario names. An infinite distance is
@@ -18,11 +24,15 @@ import numpy as np
 
 from ..engine.status import worst
 from ..metrics.es import es_block
+from ..model_sdk.dist import price_estimated
 
 DEFAULT_COVERAGE_LIMIT = 0.05
 """Uncovered value above this share turns the portfolio's status into ``incomplete``."""
 
-PortfolioStatus = Literal["ok", "needs_review", "incomplete"]
+#: The mark of a position's path outside the range the satellite was trained on.
+OUTSIDE_TRAINING = "outside_training_range"
+
+PortfolioStatus = Literal["ok", "needs_review", "incomplete", "not_admitted"]
 
 
 def dist(found) -> dict | None:
@@ -30,17 +40,32 @@ def dist(found) -> dict | None:
 
     An infinite distance — the event has no probability at some value of ``R`` — is passed
     as is, with the message the estimate attached, beside the standard error and the causes
-    the scenario names.
+    the scenario names. ``estimated`` is the canon's ten-percent rule: a price whose error
+    exceeds a tenth of it is shown, but only with the mark that it is not an estimate.
+    ``one_sided`` is the price of the event with every interval condition opened to a ray —
+    what scenarios of unequal boxes are compared by — with the coordinates that were
+    dropped and its own mark.
     """
     if found is None:
         return None
+    side = found.one_sided
     return {
         "distance": float(found.distance),
         "log_probability": float(found.log_probability),
         "standard_error": float(found.standard_error),
+        "estimated": price_estimated(found.distance, found.standard_error),
         "causes": list(found.causes),
         "tolerances": list(found.tolerances),
         "by_level": {str(level): float(price) for level, price in sorted(found.by_level.items())},
+        "one_sided": None
+        if side is None
+        else {
+            "distance": float(side.distance),
+            "log_probability": float(side.log_probability),
+            "standard_error": float(side.standard_error),
+            "estimated": price_estimated(side.distance, side.standard_error),
+            "dropped": list(side.dropped),
+        },
         "message": found.message,
     }
 
@@ -53,8 +78,23 @@ def build(
     seed: int = 0,
     horizon: str | None = None,
     coverage_limit: float = DEFAULT_COVERAGE_LIMIT,
+    monthly: np.ndarray | None = None,
+    months: list[str] | None = None,
+    comparison: dict | None = None,
+    admission: dict | None = None,
+    rare_constraints: list[int] | None = None,
 ) -> dict:
-    """The report of ``results`` against the portfolio that produced them."""
+    """The report of ``results`` against the portfolio that produced them.
+
+    ``monthly`` is the portfolio loss by months ``1 .. H`` — with ``months`` their labels —
+    which becomes ``losses_by_month``: the risk functionals of the canon tied to a moment of
+    the path and the value over the whole path beside the one at the end of the horizon.
+    ``comparison`` is the same losses against the empty scenario ``s_0`` on the shared random
+    numbers: the shift of the centre apart from the change of width, each with its interval.
+    ``admission`` is the verdict of the calculation on its paths: a report that is not
+    admitted keeps its numbers but reads them as diagnostics, not as an estimate of losses.
+    ``rare_constraints`` numbers the conditions whose base probability is below the threshold.
+    """
     included = [result for result in results if result.status != "invalid"]
     excluded = [
         {
@@ -84,15 +124,38 @@ def build(
     incomplete = bool(unknown) or (
         bool(excluded) and (share is None or 1.0 - share > coverage_limit)
     )
+    not_admitted = bool(admission) and not admission["admitted"]
     position_status = worst(*(result.status for result in included))
     status: PortfolioStatus = (
-        "incomplete"
+        "not_admitted"
+        if not_admitted
+        else "incomplete"
         if incomplete
         else "needs_review"
         if excluded or position_status == "needs_review"
         else "ok"
     )
     losses = losses_of(results)
+    # A position's path outside its training range marks the whole tail unverified: losses
+    # add up over the positions within one path, so one unverified tail is enough.
+    if not_admitted:
+        flags.append("not_admitted")
+    price_block = dist(dist_found)
+    if price_block is not None and (
+        not price_block["estimated"]
+        or (
+            price_block["one_sided"] is not None
+            and not price_block["one_sided"]["estimated"]
+        )
+    ):
+        flags.append("price_not_estimated")
+    if any(
+        flag.startswith(f"{OUTSIDE_TRAINING}:")
+        for result in results
+        for flag in result.flags
+    ):
+        flags.append("tail_unverified")
+    flags += [f"constraint_rare:{number}" for number in (rare_constraints or [])]
     return {
         "portfolio": {
             "name": portfolio.name,
@@ -102,7 +165,10 @@ def build(
         "status": status,
         "flags": flags,
         "loss": _loss(losses, seed=seed, horizon=horizon),
-        "dist": dist(dist_found),
+        "losses_by_month": None if monthly is None else path_block(monthly, months, seed=seed),
+        "comparison": comparison,
+        "admission": admission,
+        "dist": price_block,
         "coverage": {
             "share": share,
             "limit": coverage_limit,
@@ -132,6 +198,33 @@ def losses_of(results) -> np.ndarray:
     return -np.sum(
         [np.asarray(result.value_change, dtype=float) for result in included], axis=0
     )
+
+
+def path_block(monthly: np.ndarray, months: list[str], seed: int) -> dict:
+    """The loss by month and over the whole path: ``rho_t`` for every month and ``rho_max``.
+
+    ``monthly`` is ``(R, H)``, the portfolio loss by months ``1 .. H`` — losses summed within
+    a draw, the quantiles taken after. Every row of ``by_month`` reuses the loss block without
+    the interval fields; ``path`` is the same block on ``monthly.max(axis=1)``, the maximum
+    of the loss over the horizon, with its interval.
+    """
+    values = np.asarray(monthly, dtype=float)
+    draws = values.shape[0] if values.ndim == 2 else 0
+    if values.ndim != 2 or values.shape[1] != len(months) or not len(months):
+        raise ValueError(
+            f"the losses by month are {values.shape}, not ({draws}, {len(months)})"
+        )
+    if values.shape[0] == 0:
+        raise ValueError("the losses by month carry no repetition")
+    rows = []
+    for month, column in zip(months, values.T, strict=True):
+        block = _loss(column, seed=seed)
+        rows.append({key: block[key] for key in ("p05", "p50", "p95", "es95")} | {"month": month})
+    worst = _loss(values.max(axis=1), seed=seed)
+    return {
+        "by_month": rows,
+        "path": {key: worst[key] for key in ("p05", "p50", "p95", "es95", "es95_interval")},
+    }
 
 
 def loss_block(results, *, seed: int = 0, horizon: str | None = None) -> dict | None:

@@ -129,6 +129,62 @@ def test_no_affordable_scenario_answers_none(monkeypatch):
     assert found["points"]
 
 
+def test_the_cheapest_point_of_a_large_error_is_not_chosen(monkeypatch):
+    # The cheapest scenarios of the family carry a price whose error is too large: they are
+    # treated as points that do not reach the level, so the answer rests on the estimated
+    # boundary and names its own mark.
+    from mst.scenario import reverse
+    from mst.scenario.reverse import Point
+
+    def evaluate(spec, macro, satellites, positions, *, draws, seed, base_currency="RUB"):
+        c = spec.constraints[0].high
+        return Point(
+            c=c,
+            dist=4.0 - 2.0 * c,
+            rho=10.0 - 3.0 * c,
+            estimated=c <= 0.45,  # the widest, and so the cheapest, points are noise
+        )
+
+    monkeypatch.setattr(reverse, "evaluate", evaluate)
+    found = reverse.inf_dist(
+        _family_of(None), 8.5, macro=None, satellites=None, positions=[], draws=1, seed=1
+    )
+    # rho >= 8.5 holds up to c = 0.5, but only the points up to 0.45 are estimated: the
+    # answer stops at the estimated boundary, with the price 4 - 2 * 0.45.
+    assert found["answer"]["c"] == pytest.approx(0.45, abs=0.02)
+    assert found["answer"]["dist"] == pytest.approx(3.1, abs=0.06)
+    assert found["answer"]["estimated"] is True
+    assert any(row["estimated"] is False for row in found["points"])
+
+
+def test_the_worst_point_of_a_large_error_is_not_chosen(monkeypatch):
+    # The narrow, expensive scenarios carry the largest losses and a price that is noise:
+    # they do not open the affordable region, and the worst outcome is read on the
+    # estimated points alone.
+    from mst.scenario import reverse
+    from mst.scenario.reverse import Point
+
+    def evaluate(spec, macro, satellites, positions, *, draws, seed, base_currency="RUB"):
+        c = spec.constraints[0].high
+        return Point(
+            c=c,
+            dist=4.0 - 2.0 * c,
+            rho=10.0 - 3.0 * c,
+            estimated=c > 0.75,  # the narrowest, and so the dearest, points are noise
+        )
+
+    monkeypatch.setattr(reverse, "evaluate", evaluate)
+    found = reverse.sup_rho(
+        _family_of(None), 3.0, macro=None, satellites=None, positions=[], draws=1, seed=1
+    )
+    # Without the rule the answer would sit at c = 0.5 with rho = 8.5; the estimated
+    # boundary opens at 0.75, and the worst outcome there is rho = 10 - 3 * 0.75.
+    assert found["answer"]["c"] == pytest.approx(0.75, abs=0.02)
+    assert found["answer"]["rho"] == pytest.approx(7.75, abs=0.06)
+    assert found["answer"]["estimated"] is True
+    assert found["answer"]["dist"] <= 3.0
+
+
 def test_the_price_of_the_fixture_does_not_fall_as_the_conditions_narrow(versions):
     from mst.scenario.build import dist_of
 
@@ -150,7 +206,9 @@ def test_a_family_whose_impacts_move_is_refused(versions):
         return spec.model_copy(
             update={
                 "impacts": [
-                    spec.impacts[0].model_copy(update={"delta": spec.impacts[0].delta * c})
+                    spec.impacts[0].model_copy(
+                        update={"values": [value * c for value in spec.impacts[0].values]}
+                    )
                 ]
             }
         )
@@ -183,8 +241,7 @@ def _spec_of(versions):
                 {
                     "target": "gl.brent",
                     "start": 1,
-                    "end": 3,
-                    "delta": 1.0,
+                    "values": [1.0, 1.0, 1.0],
                     "reason": "шок",
                     "basis": "assumption",
                 }

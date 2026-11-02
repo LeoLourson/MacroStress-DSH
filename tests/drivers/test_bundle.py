@@ -111,7 +111,7 @@ class FakeSatellite(SatelliteModel):
         flags: dict[str, frozenset[str]] = {driver: frozenset() for driver in drivers}
         for impact in impacts:
             k = drivers.index(impact.target)
-            paths[:, impact.start : impact.end + 1, k] += impact.delta
+            paths[:, impact.start : impact.end + 1, k] += np.asarray(impact.values)
             flags[impact.target] = frozenset({"impact"})
         return DriverPaths(ids=list(drivers), paths=paths, flags=flags)
 
@@ -234,7 +234,7 @@ def test_simulate_dispatches_each_quantity_to_its_own_model(tmp_path):
     two = FakeSatellite("two.b", quantities=("spread",))
     bundle = _bundle_of(tmp_path, [one, two], registry)
 
-    impacts = [AdditiveImpact(target="spread:sector", start=1, end=2, delta=5.0)]
+    impacts = [AdditiveImpact(target="spread:sector", start=1, values=(5.0, 5.0))]
     found = bundle.simulate(
         macro_simulation(), ["spread:sector", "price:sector"], impacts, seed=3
     )

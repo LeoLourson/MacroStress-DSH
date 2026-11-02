@@ -70,6 +70,7 @@ id = "ru.spread_aa"
 label = "спред корпоративных облигаций группы AA к G-кривой"
 unit = "п. п."
 transform = "identity"
+negative = true
 source = "индексы MOEX: RUCBICPBBB до 2020-12, RUCBCPAANS с 2021-01 (сшивка, скачок уровня)"
 
 [[variables]]
@@ -77,6 +78,7 @@ id = "ru.spread_a"
 label = "спред корпоративных облигаций группы A к G-кривой"
 unit = "п. п."
 transform = "identity"
+negative = true
 source = "индексы MOEX: RUCBICPBB до 2020-12, RUCBCPANS с 2021-01 (сшивка, скачок уровня)"
 
 [[variables]]
@@ -84,6 +86,7 @@ id = "ru.spread_bbb"
 label = "спред корпоративных облигаций группы BBB к G-кривой"
 unit = "п. п."
 transform = "identity"
+negative = true
 source = "индексы MOEX: RUCBICPB до 2020-12, RUCBCPBBBNS с 2021-01 (сшивка, скачок уровня)"
 
 [[variables]]

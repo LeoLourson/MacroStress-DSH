@@ -380,13 +380,13 @@ def test_an_impact_on_the_first_level_reaches_the_second_and_not_back(estimated)
     lower = bundle.simulate(
         simulation,
         drivers,
-        [AdditiveImpact(target="price:sector", start=1, end=4, delta=3.0)],
+        [AdditiveImpact(target="price:sector", start=1, values=(3.0,) * 4)],
         seed=7,
     )
     upper = bundle.simulate(
         simulation,
         drivers,
-        [AdditiveImpact(target="exposure:sber", start=1, end=4, delta=3.0)],
+        [AdditiveImpact(target="exposure:sber", start=1, values=(3.0,) * 4)],
         seed=7,
     )
     # o^1 moves the price, and through G^2 the exposure reads the moved price; o^2 moves the
@@ -595,6 +595,21 @@ class TestDriverConditions:
         # The price enters the total, and a repeated condition removes no further path.
         assert single.distance > 0
         assert single.distance == pytest.approx(single.by_level[2])
+        # The error is measured on the overlay's price, not taken for nought.
+        assert single.standard_error > 0
+        # A price with conditions on drivers has no one-sided price: dist+ reads only the law
+        # of the macro conditions, and would pass for the price of the whole event.
+        macro_id = macro.panel.ids[0]
+        mixed = priced(
+            condition,
+            {
+                "terms": [{"variable": macro_id, "month": 1, "weight": 1.0}],
+                "low": -1e6,
+                "high": 1e6,
+                "basis": "assumption",
+            },
+        )
+        assert mixed.one_sided is None
         assert twice.distance == pytest.approx(single.distance)
 
     def test_a_driver_expectation_tilts_the_survivors_and_is_priced(self, estimated):

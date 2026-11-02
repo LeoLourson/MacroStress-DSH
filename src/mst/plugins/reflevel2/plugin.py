@@ -7,7 +7,7 @@ from .model import MODEL
 plugin = Plugin(
     plugin_id="reflevel2",
     version="0.1.0",
-    model_sdk=">=2.0,<3.0",
+    model_sdk=">=3.0,<4.0",
     label="Эталонная регрессия второго уровня",
     description=(
         "Регрессия величины второго уровня на величины уровней выше: x^2 = beta' g(x^{<2}) "

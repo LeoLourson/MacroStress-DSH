@@ -18,6 +18,15 @@ def normal_sample(draws: int = 4000, groups: int = 20, seed: int = 1):
     return values, np.repeat(np.arange(groups), draws // groups)
 
 
+def test_the_price_of_a_tilt_carries_its_error_over_the_groups():
+    values, group = normal_sample()
+    found = solve_lambda(values, group, np.array([1.0]), np.array([np.inf]))
+    assert np.mean(found.by_group) == pytest.approx(found.price)
+    count = len(found.by_group)
+    assert found.standard_error == pytest.approx(np.std(found.by_group, ddof=1) / np.sqrt(count))
+    assert found.standard_error > 0
+
+
 def test_a_normal_shift_matches_the_closed_form():
     # The tilt e^{lam x} of a standard normal has mean lam and price lam^2 / 2.
     values, group = normal_sample()

@@ -40,6 +40,8 @@ class Variable(Contract):
     source: Identifier
     seasonal: bool = False
     """The series is stored with its calendar pattern, which the panel build removes."""
+    negative: bool = False
+    """A value below nought is admissible: the admission rule sets no lower boundary."""
 
     @property
     def block(self) -> Block:

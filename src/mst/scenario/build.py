@@ -38,11 +38,13 @@ from ..model_sdk import dist as dist_sdk
 from ..model_sdk.conditional import InfeasibleScenario
 from ..model_sdk.contracts import (
     AdditiveImpact,
+    ConstraintLaw,
     Dist,
     DriverPaths,
     LinearConstraint,
     LinearTerm,
     MacroSimulation,
+    OneSided,
     ScenarioPlan,
 )
 from ..model_sdk.dist import ContradictsModels
@@ -228,10 +230,10 @@ def plan_with_impacts(spec: Spec, macro: MacroVersion) -> ScenarioPlan:
 def _impact_shift(constraint: LinearConstraint, impacts: list[Impact]) -> float:
     """``w'o_0``: what the level-0 impacts add to the left side of one constraint."""
     return sum(
-        term.weight * impact.delta
+        term.weight * impact.value_at(term.month)
         for impact in impacts
         for term in constraint.terms
-        if term.variable == impact.target and impact.start <= term.month <= impact.end
+        if term.variable == impact.target
     )
 
 
@@ -247,6 +249,12 @@ def dist_of(
     model does not measure the law. An event some value of ``R`` cannot reach gives an
     infinite distance with the message naming lemma 2; the standard error reads the spread
     of ``-log P(S | R)`` over the groups, so a price with a large error is seen as such.
+
+    Beside the price stands the one-sided price ``dist+(s)`` — the event with every
+    interval condition replaced by a ray, which the width of the interval does not enter —
+    when there are support conditions and no conditions on means or probabilities: those
+    carry no interval to open, and the one-sided price of a mixture is not defined on them.
+    Nor is it defined with conditions on drivers: the law here reads the macro ones alone.
     """
     plan = plan_with_impacts(spec, macro)
     if not plan.constraints and not plan.causes and plan.regime_event is None:
@@ -260,6 +268,9 @@ def dist_of(
     distance, log_probability, standard_error = dist_sdk.price_of_law(
         law, low, high, rng=rng
     )
+    one_sided = (
+        None if _names_drivers(spec) else _one_sided_of(spec, plan, law, low, high, seed=seed)
+    )
     return Dist(
         distance=distance,
         log_probability=log_probability,
@@ -268,12 +279,49 @@ def dist_of(
         tolerances=tuple(
             constraint.tolerance for constraint in plan.constraints if constraint.point
         ),
+        one_sided=one_sided,
         message=(
             "the event has no probability at some value of R: the scenario contradicts "
             "the models (lemma 2 of the canon)"
             if not np.isfinite(distance)
             else None
         ),
+    )
+
+
+def _one_sided_of(spec: Spec, plan: ScenarioPlan, law: ConstraintLaw, low, high, *, seed: int):
+    """``dist+(s)``: the price of the event with every interval condition opened to a ray.
+
+    The medians of the law's coordinates — weighted over its rows, one draw set per row —
+    decide the side: an interval below the median opens downwards, above it upwards, and
+    one that holds the median is dropped, because the one-sided event does not restrict
+    that coordinate at all. The sliced law and the ray bounds go through the same
+    ``price_of_law`` on a stream of their own; with nothing kept the price is zero.
+    """
+    if not plan.constraints or spec.expectations or spec.probabilities:
+        return None
+    rng = np.random.default_rng([seed, dist_sdk.ONE_SIDED_STREAM])
+    medians = dist_sdk.median_of_law(law, rng)
+    side_low, side_high, kept = dist_sdk.one_sided_box(low, high, medians)
+    dropped = tuple(
+        int(k) + 1 for k in range(len(low)) if k not in set(kept.tolist())
+    )
+    if not len(kept):
+        return OneSided(distance=0.0, log_probability=0.0, standard_error=0.0, dropped=dropped)
+    sliced = ConstraintLaw(
+        means=law.means[:, kept],
+        covs=law.covs[:, kept][:, :, kept],
+        log_weight=law.log_weight,
+        group=law.group,
+    )
+    distance, log_probability, standard_error = dist_sdk.price_of_law(
+        sliced, side_low, side_high, rng=rng
+    )
+    return OneSided(
+        distance=distance,
+        log_probability=log_probability,
+        standard_error=standard_error,
+        dropped=dropped,
     )
 
 
@@ -314,7 +362,7 @@ def build(
         _drivers(satellites, spec, macro),
         [
             AdditiveImpact(
-                target=impact.target, start=impact.start, end=impact.end, delta=impact.delta
+                target=impact.target, start=impact.start, values=tuple(impact.values)
             )
             for impact in spec.impacts
             if impact.on_driver
@@ -328,17 +376,22 @@ def build(
         found = Dist(
             distance=tilt.price,
             log_probability=0.0,
-            standard_error=0.0,
+            standard_error=tilt.standard_error,
             causes=tuple(spec.causes),
         )
     elif tilt is not None:
-        found = replace(found, distance=found.distance + tilt.price)
+        # The parts are read as independent: their common draws of R are not modelled.
+        found = replace(
+            found,
+            distance=found.distance + tilt.price,
+            standard_error=float(np.hypot(found.standard_error, tilt.standard_error)),
+        )
     # The conditions on the quantities of the levels above ride the overlay: the support
     # ones zero the paths that break them inside their group of R, and the moment ones tilt
     # the same weights. A group without a surviving path contradicts the models.
     below = _below_levels(spec, macro, satellites, drivers, simulation, seed)
     if below is not None:
-        price, picked, by_level, ess = below
+        price, error, picked, by_level, ess = below
         simulation = MacroSimulation(
             ids=simulation.ids,
             months=simulation.months,
@@ -358,17 +411,20 @@ def build(
             found = Dist(
                 distance=price,
                 log_probability=0.0,
-                standard_error=0.0,
+                standard_error=error,
                 causes=tuple(spec.causes),
                 by_level=by_level,
             )
         else:
             found = replace(
-                found, distance=found.distance + price, by_level={0: found.distance, **by_level}
+                found,
+                distance=found.distance + price,
+                standard_error=float(np.hypot(found.standard_error, error)),
+                by_level={0: found.distance, **by_level},
             )
     checks = _checks(spec, plan, simulation, tilt)
-    if below is not None and below[3] is not None:
-        checks["effective_size"] = below[3]
+    if below is not None and below[4] is not None:
+        checks["effective_size"] = below[4]
     return Paths(
         months=simulation.months,
         ids=simulation.ids,
@@ -431,7 +487,7 @@ def _below_levels(
     simulation: MacroSimulation,
     seed: int,
 ):
-    """``(price, picked rows, price by level, effective size)`` of the driver conditions.
+    """``(price, its error, picked rows, price by level, effective size)`` of the conditions.
 
     The support conditions on drivers zero the paths that break them inside every group of
     ``R`` — a group without a survivor contradicts the models, the case lemma 2 names — and
@@ -464,6 +520,7 @@ def _below_levels(
     groups = np.unique(group)
     inside = np.ones(simulation.paths.shape[0], dtype=bool)
     by_level: dict[int, float] = {}
+    terms = np.zeros(len(groups))
     levels = {_level_of_term(satellites, c.terms[0].variable) for c in constraints}
     for level in sorted(levels):
         survivors = inside.copy()
@@ -473,11 +530,13 @@ def _below_levels(
             value = _functional(constraint, drivers.paths, drivers.ids)
             inside &= (constraint.low <= value) & (value <= constraint.high)
         lost = 0.0
-        for g in groups:
+        for position, g in enumerate(groups):
             kept = inside[group == g].sum()
             if not kept:
                 raise ContradictsModels()
-            lost -= np.log(kept / survivors[group == g].sum())
+            share = np.log(kept / survivors[group == g].sum())
+            lost -= share
+            terms[position] -= share
         by_level[level] = float(lost / len(groups))
     price = sum(by_level.values())
     weights = inside.astype(float)
@@ -505,11 +564,12 @@ def _below_levels(
         )
         by_level[deepest] = by_level.get(deepest, 0.0) + tilt.price
         price += tilt.price
+        terms += tilt.by_group
         ess = tilt.effective_size
     picked = overlay.resample(
         weights, group, np.random.default_rng([seed, OVERLAY_STREAM, 1])
     )
-    return price, picked, by_level, ess
+    return price, overlay.error_over_groups(terms), picked, by_level, ess
 
 
 def _moment_conditions(chosen, term_paths, rows: int):
@@ -770,6 +830,13 @@ def _labels(spec: Spec) -> dict:
         warnings.append(
             "no condition: Q = P, so the price is zero and says nothing about the impacts"
         )
+    for impact in spec.impacts:
+        if impact.end < spec.horizon:
+            warnings.append(
+                f"impact on {impact.target} ends at month {impact.end}, before the horizon "
+                f"of {spec.horizon}: the loss at the end of the horizon does not see it, "
+                "and losses_by_month of the report shows it in its own months"
+            )
     return {
         "labels": {
             "event": stated,
@@ -794,6 +861,11 @@ def _impact_problems(spec: Spec, macro: MacroVersion, satellites: SatelliteBundl
     served = set(satellites.served())
     problems = []
     for impact in spec.impacts:
+        if impact.end > spec.horizon:
+            problems.append(
+                f"impact on {impact.target}: its path ends at month {impact.end}, beyond the "
+                f"horizon of {spec.horizon}"
+            )
         if not impact.on_driver:
             if impact.target not in macro.ids:
                 problems.append(
@@ -826,7 +898,7 @@ def _with_macro_impacts(simulation: MacroSimulation, impacts: list[Impact]) -> M
     paths = simulation.paths.copy()
     for impact in of_macro:
         k = simulation.ids.index(impact.target)
-        paths[:, impact.start : impact.end + 1, k] += impact.delta
+        paths[:, impact.start : impact.end + 1, k] += np.asarray(impact.values)
     return replace(simulation, paths=paths)
 
 

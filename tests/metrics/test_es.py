@@ -18,6 +18,7 @@ from mst.macro.panel import Panel
 from mst.metrics.es import (
     conditional_paths,
     contributions,
+    paired_difference,
     portfolio_exclusions,
     portfolio_losses,
     portfolio_run,
@@ -244,6 +245,49 @@ def test_value_at_risk_is_the_quantile_of_the_losses():
     assert value_at_risk(grid, level=0.9) == pytest.approx(90.0)
     with pytest.raises(ValueError, match="no repetition"):
         value_at_risk(np.empty(0))
+
+
+def test_paired_difference_separates_the_shift_of_the_centre_from_the_change_of_width():
+    rng = np.random.default_rng(4)
+    centre = rng.standard_normal(400)
+    narrow = centre + 10.0 + 0.1 * rng.standard_normal(400)
+    wide = centre + 10.0 + 2.0 * rng.standard_normal(400)
+    found = paired_difference(narrow, wide, seed=5)
+    # The same centre: the difference of medians is near zero with an interval around it.
+    assert abs(found["centre"]["value"]) < 0.2
+    low, high = found["centre"]["interval"]
+    assert low <= found["centre"]["value"] <= high
+    # The first sample is the narrower one, so the difference of widths is below zero.
+    assert found["width"]["value"] < -1.0
+    assert found["width"]["interval"][1] < 0.0
+    assert found["p95"]["value"] < 0.0
+    assert set(found) == {"centre", "width", "p95", "es95"}
+    for block in found.values():
+        assert set(block) == {"value", "interval"} and len(block["interval"]) == 2
+
+
+def test_paired_difference_is_deterministic_and_refuses_mismatched_samples():
+    first = np.random.default_rng(9).standard_normal(60)
+    second = np.random.default_rng(10).standard_normal(60)
+    assert paired_difference(first, second, seed=2) == paired_difference(first, second, seed=2)
+    assert paired_difference(first, second, seed=2) != paired_difference(first, second, seed=3)
+    with pytest.raises(ValueError, match="two samples"):
+        paired_difference(first, second[:10], seed=2)
+    with pytest.raises(ValueError, match="two samples"):
+        paired_difference(np.empty(0), second, seed=2)
+
+
+def test_paired_difference_of_a_pure_shift_matches_it():
+    # The two samples differ by a constant: the centre, P95 and ES95 move by it exactly and
+    # the width does not move at all, while the paired resampling keeps every interval tight.
+    first = np.random.default_rng(6).standard_normal(500)
+    found = paired_difference(first, first - 3.0, seed=7)
+    for name in ("centre", "p95", "es95"):
+        assert found[name]["value"] == pytest.approx(3.0, abs=1e-9)
+        assert found[name]["interval"][0] == pytest.approx(3.0, abs=1e-9)
+        assert found[name]["interval"][1] == pytest.approx(3.0, abs=1e-9)
+    assert found["width"]["value"] == pytest.approx(0.0, abs=1e-9)
+    assert found["width"]["interval"][0] == pytest.approx(0.0, abs=1e-9)
 
 
 def test_bad_terms_are_refused_by_name():

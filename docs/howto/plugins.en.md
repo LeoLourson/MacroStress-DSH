@@ -43,7 +43,7 @@ The platform draws the joint shocks of a level itself: for repetition $r$ of lev
 
 A version carries `meta["model"]`, the id of the model that estimated it; only this plugin reads the version back, so the format of meta and arrays (other than the mandatory contract keys) is the model's business. The mandatory keys are: for a macro version `as_of`, `ids`, `months`, `shocks` and the panel (`panel_y`, `panel_approximate`); for a part of a quantity `months`, `nodes`, `driver`, `rows` (the number of months each node was estimated on) and `checks`. The platform writes the key `model` of a part itself: a part naming another model is rejected, so the provenance of a version cannot be forged.
 
-Model SDK 2.0 supports $L>1$: a quantity declares its `level`, the bundle draws the levels in ascending order, and a satellite of level $l$ reads the levels below its own through `UpperPaths`. The reference is the plugin `reflevel2`; the steps are in the section "How to add a level" of [../../src/mst/model_sdk/README.en.md](../../src/mst/model_sdk/README.en.md).
+Model SDK 3.0 carries the impacts as paths: an `AdditiveImpact` names its `target`, its `start` month and its `values` — `values[k]` is added in month `start + k`, a constant shift is a repeated value, and `value_at(month)` reads single months. Model SDK 3.0 also supports $L>1$: a quantity declares its `level`, the bundle draws the levels in ascending order, and a satellite of level $l$ reads the levels below its own through `UpperPaths`. The reference is the plugin `reflevel2`; the steps are in the section "How to add a level" of [../../src/mst/model_sdk/README.en.md](../../src/mst/model_sdk/README.en.md).
 
 ## 2. Declaration
 

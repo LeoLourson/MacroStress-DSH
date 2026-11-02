@@ -13,7 +13,7 @@ from mst.drivers.registry import Quantity
 from mst.macro.panel import months_between, seasonal_profile, shift
 from mst.macro.registry import load_registry
 from mst.metrics import backtest as runner
-from mst.metrics.baselines import DOMAIN, WIDTH
+from mst.metrics.baselines import DOMAIN, WIDTH, macro_domain, quantity_domain
 from mst.metrics.cells import Cell
 from mst.metrics.episodes import calculation_date, load_episodes
 
@@ -428,9 +428,12 @@ def test_an_episode_scores_the_same_alone_and_with_others(workspace, tmp_path, m
     assert cells_of(alone)["ru.key_rate"]
 
 
-def test_the_default_macro_domain_rejects_a_band_below_zero():
+def test_the_macro_domain_bounds_rates_and_leaves_spreads_and_logs_open():
     registry = load_registry()
-    assert runner._macro_domain(registry.variable("ru.key_rate")) == (0.0, np.inf)
+    assert macro_domain(registry.variable("ru.key_rate")) == (0.0, np.inf)
+    # A spread has been below zero in the history, and 100 ln X is any real number.
+    assert macro_domain(registry.variable("ru.spread_aa")) is None
+    assert macro_domain(registry.variable("ru.usdrub")) is None
     cell = Cell(
         "e",
         1,
@@ -439,7 +442,7 @@ def test_the_default_macro_domain_rejects_a_band_below_zero():
         np.array([-10.0, -2.0, 0.0, 1.0]),
         sigma=1.0,
         history_range=100.0,
-        domain=runner._macro_domain(registry.variable("ru.key_rate")),
+        domain=macro_domain(registry.variable("ru.key_rate")),
     )
     admission = runner._admission([cell])
     assert admission["rules"][DOMAIN]["cells"] == 1
@@ -453,17 +456,19 @@ def test_the_driver_domain_maps_the_natural_endpoints():
             id="q", label="q", unit="u", regressors=["ru.cpi"], lags=1, **fields
         )
 
-    assert runner._model_domain(quantity(transform="log100")) == (0.0, np.inf)
-    assert runner._model_domain(quantity(transform="log100", domain=[0.0, 1e6]))[0] == 0.0
-    assert runner._model_domain(quantity(transform="log100", domain=[0.0, 1e6]))[1] == (
+    # A price of 0.05 is 100 ln 0.05 = -300 in the model scale: only a price of nought is
+    # out of bounds, and it maps to minus infinity.
+    assert quantity_domain(quantity(transform="log100")) is None
+    assert quantity_domain(quantity(transform="log100", domain=[0.0, 1e6]))[0] == -np.inf
+    assert quantity_domain(quantity(transform="log100", domain=[0.0, 1e6]))[1] == (
         pytest.approx(100 * np.log(1e6))
     )
     # A logit declared on [0, 1] is unbounded in the model scale, not silently "no gate".
-    assert runner._model_domain(quantity(transform="logit", domain=[0.0, 1.0])) is None
-    low, high = runner._model_domain(quantity(transform="logit", domain=[0.01, 0.99]))
+    assert quantity_domain(quantity(transform="logit", domain=[0.0, 1.0])) is None
+    low, high = quantity_domain(quantity(transform="logit", domain=[0.01, 0.99]))
     assert low == pytest.approx(np.log(0.01 / 0.99))
     assert high == pytest.approx(np.log(0.99 / 0.01))
-    assert runner._model_domain(quantity(transform="identity", domain=[0.0, 100.0])) == (
+    assert quantity_domain(quantity(transform="identity", domain=[0.0, 100.0])) == (
         0.0,
         100.0,
     )

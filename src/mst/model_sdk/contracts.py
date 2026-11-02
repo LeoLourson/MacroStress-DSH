@@ -19,6 +19,7 @@ Nothing here imports ``mst.scenario``, ``mst.runs`` or ``mst.plugins``: the neut
 so a model plugin never sees the platform's orchestration.
 """
 
+import math
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from datetime import date
@@ -101,17 +102,38 @@ class ScenarioPlan:
 
 @dataclass(frozen=True)
 class AdditiveImpact:
-    """A direct impact ``o_l``: ``delta`` added to ``target`` in months ``start .. end``.
+    """A direct impact ``o_l``: a path of values added to ``target`` from month ``start``.
 
     ``target`` is a macro variable or a driver ``<quantity>:<object>``, in the model scale of
-    the level it belongs to. The platform applies the impacts of the level before the levels
-    below it are simulated, so an impact on the macro variables reaches every satellite.
+    the level it belongs to. ``values[k]`` is added in month ``start + k``, and a month the
+    path does not touch gets zero — an impact has no dynamics of its own, so its aftereffects
+    are written as nonzero values after the event and a constant shift as a repeated value.
+    The platform applies the impacts of the level before the levels below it are simulated,
+    so an impact on the macro variables reaches every satellite.
     """
 
     target: str
     start: int
-    end: int
-    delta: float
+    """The first month the impact touches."""
+    values: tuple[float, ...]
+    """``values[k]`` is added in month ``start + k``; at least one finite value."""
+
+    def __post_init__(self):
+        if not self.values:
+            raise ValueError("an impact needs at least one value")
+        if not all(math.isfinite(value) for value in self.values):
+            raise ValueError("the values of an impact must be finite numbers")
+
+    @property
+    def end(self) -> int:
+        """The last month the path touches: ``start + len(values) - 1``."""
+        return self.start + len(self.values) - 1
+
+    def value_at(self, month: int) -> float:
+        """The value added in ``month``; ``0.0`` outside ``start .. end``."""
+        if self.start <= month <= self.end:
+            return float(self.values[month - self.start])
+        return 0.0
 
 
 @dataclass(frozen=True)
@@ -158,6 +180,25 @@ class ConstraintLaw:
 
 
 @dataclass(frozen=True)
+class OneSided:
+    """The one-sided price ``dist+(s)`` of the canon (section 5): the price of the event ``A+``.
+
+    Every interval condition on the support becomes a ray — an interval below the median of
+    its functional opens downwards from its upper bound, one above the median opens upwards
+    from its lower bound — and a condition whose interval contains the median is dropped.
+    ``A+`` holds ``A``, so ``dist+(s) <= dist(s)`` under a condition on the support, and the
+    width of the interval does not enter ``dist+(s)``: events of unequal boxes are compared
+    by it. ``dropped`` numbers the conditions that were dropped, from one; with nothing kept the
+    distance, the log probability and the error are zero, and the price is estimated.
+    """
+
+    distance: float
+    log_probability: float
+    standard_error: float
+    dropped: tuple[int, ...] = ()
+
+
+@dataclass(frozen=True)
 class Dist:
     """The price of a scenario: ``dist(s) = KL(P_s || P) = E_P[-log P(S | R)]``.
 
@@ -182,6 +223,11 @@ class Dist:
     """The price split by the level of the conditioned quantity, at ``R = theta``: the level
     the scenario moves furthest from its base model. Empty when there is nothing to split —
     no conditions below the macro level, or a price no law measured."""
+    one_sided: OneSided | None = None
+    """The one-sided price ``dist+(s)`` beside the price: the event with every interval
+    condition replaced by a ray, so the width of the intervals does not enter it. ``None``
+    when there is nothing to one-side — no support conditions, or conditions on means and
+    probabilities, which carry no interval to open."""
     message: str | None = None
 
 

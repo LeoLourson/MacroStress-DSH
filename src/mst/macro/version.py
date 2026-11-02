@@ -251,7 +251,7 @@ def _summary(folder: Path) -> dict:
     diagnostics = meta.get("diagnostics", {})
     return {
         "version": folder.name,
-        "model": meta["model"],
+        "model": meta.get("model"),
         "as_of": meta.get("as_of"),
         "months": len(meta.get("months", [])),
         "shocks": meta.get("shocks"),

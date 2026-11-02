@@ -131,7 +131,7 @@ def model_plugin(**changes) -> Plugin:
         "demo": (),
         "macro": (DemoMacroModel(),),
         "satellites": (DemoSatelliteModel(),),
-        "model_sdk": ">=2.0,<3.0",
+        "model_sdk": ">=3.0,<4.0",
     }
     values.update(changes)
     return Plugin(**values)

@@ -7,14 +7,17 @@ and the reason of a position that was not calculated, and ``changes.npz`` with t
 of each repetition. The conditional forecast of the target indicators — the quantiles of every
 target driver by month, in its own unit — is written to ``forecast.json``: a run answers both
 the distribution of the indicators and the portfolio on them. A run of a portfolio also writes
-``summary.json`` — its loss at P5, P50 and P95, the severity ``delta`` of the scenario and the
-platform's ``dist(P_s, P)`` beside it; the run's ``meta.json`` records the definition of
-``dist`` (the plan's assumption) and the way its probability was estimated.
+``summary.json`` — its loss at P5, P50 and P95, the loss by month and over the path, the
+comparison with ``s_0``, the severity ``delta`` of the scenario and the platform's
+``dist(P_s, P)`` beside it; ``path_losses.npz`` keeps the monthly losses as the array
+``losses``. The run's ``meta.json`` records the definition of ``dist`` (the plan's assumption)
+and the way its probability was estimated.
 
 A run is a job: the tool writes the request and starts ``python -m mst.runs <id>``; the job builds
 the paths from the scenario and writes the rest. Repeating a request with the same seed gives the
-same numbers. The status of a run is the report's for a portfolio run — ``ok``, ``needs_review``
-or ``incomplete`` — and the batch's otherwise: ``ok``, ``needs_review`` or ``invalid``.
+same numbers. The status of a run is the report's for a portfolio run — ``ok``, ``needs_review``,
+``incomplete`` or ``not_admitted`` — and the batch's otherwise: ``ok``, ``needs_review``,
+``invalid`` or ``not_admitted`` when the calculation is not admitted.
 """
 
 import argparse
@@ -33,6 +36,8 @@ from .contracts import Contract, Currency, Identifier, Seed
 from .drivers import bundle as satellite_bundle
 from .engine import run as calculate_run
 from .macro import version as macro_version
+from .metrics.baselines import DOMAIN, WIDTH
+from .metrics.es import paired_difference
 from .plugin_sdk import FixedPaths, Position
 from .portfolio import report as portfolio_report
 from .portfolio import tool as portfolio_tool
@@ -42,6 +47,9 @@ from .scenario.spec import Spec
 
 ID = re.compile(r"^[0-9]{8}T[0-9]{6}-[0-9a-f]{4}$")
 """A run's id is also the name of its folder: the job's timestamp and four hex digits."""
+
+ADMISSION_LIMIT = 0.05
+"""The share of broken cells of month and quantity a calculation is still admitted with."""
 
 
 class RunRequest(Contract):
@@ -159,17 +167,64 @@ def execute(ws: store.Workspace, run_id: str) -> dict:
         positions = portfolio.positions if portfolio is not None else request.positions
         base_currency = portfolio.base_currency if portfolio is not None else request.base_currency
 
-        def valued(found) -> object:
+        def engine_on(fixed: FixedPaths) -> object:
             return calculate_run(
                 positions,
-                readable(found),
+                fixed,
                 drivers=satellites.registry,
                 served=satellites.served(),
                 base_currency=base_currency,
                 as_of=macro.as_of,
             )
 
+        def valued(found) -> object:
+            return engine_on(readable(found))
+
         batch = valued(paths)
+        losses = portfolio_report.losses_of(batch.results)
+        # The loss by every month of the horizon: the same positions valued on the paths cut
+        # at t, so a model reading the end of the horizon sees month t — the canon's Delta_t.
+        # A run without a portfolio writes no report, so it carries no monthly losses.
+        monthly = None
+        if portfolio is not None and losses.size:
+            base = readable(paths)
+            monthly = np.column_stack(
+                [
+                    portfolio_report.losses_of(engine_on(base.up_to(t)).results)
+                    for t in range(1, len(paths.months))
+                ]
+            )
+        # The comparison with s_0: the same numbers against the empty scenario, which keeps
+        # the versions, the horizon and the seed and drops every condition and impact. The
+        # pairing of the bootstrap holds on the shared random numbers of the two runs.
+        comparison = None
+        if (
+            portfolio is not None
+            and (
+                spec.constraints
+                or spec.impacts
+                or spec.expectations
+                or spec.probabilities
+                or spec.regime_event
+            )
+            and losses.size
+        ):
+            empty_batch = valued(empty)
+            empty_losses = portfolio_report.losses_of(empty_batch.results)
+            if empty_losses.size:
+                comparison = {"loss": paired_difference(losses, empty_losses, seed=request.seed)}
+                if monthly is not None:
+                    empty_monthly = np.column_stack(
+                        [
+                            portfolio_report.losses_of(
+                                engine_on(readable(empty).up_to(t)).results
+                            )
+                            for t in range(1, len(paths.months))
+                        ]
+                    )
+                    comparison["path"] = paired_difference(
+                        monthly.max(axis=1), empty_monthly.max(axis=1), seed=request.seed
+                    )
         contributions = None
         if request.contributions:
             full = portfolio_report.loss_block(
@@ -180,11 +235,13 @@ def execute(ws: store.Workspace, run_id: str) -> dict:
                 variant_paths = scenario_build.build(
                     variant, macro, satellites, draws=request.draws, seed=request.seed
                 )
+                variant_batch = valued(variant_paths)
                 found = portfolio_report.loss_block(
-                    valued(variant_paths).results,
+                    variant_batch.results,
                     seed=request.seed,
                     horizon=variant_paths.months[-1].isoformat(),
                 )
+                variant_losses = portfolio_report.losses_of(variant_batch.results)
                 contributions.append(
                     {
                         "element": name,
@@ -192,10 +249,15 @@ def execute(ws: store.Workspace, run_id: str) -> dict:
                         "difference": None
                         if found is None or full is None
                         else {
-                            key: found[key] - full[key]
+                            key: full[key] - found[key]
                             for key in ("p05", "p50", "p95", "es95")
                             if found.get(key) is not None and full.get(key) is not None
                         },
+                        "interval": (
+                            paired_difference(losses, variant_losses, seed=request.seed)
+                            if variant_losses.size and losses.size
+                            else None
+                        ),
                     }
                 )
         written = _write(
@@ -213,6 +275,8 @@ def execute(ws: store.Workspace, run_id: str) -> dict:
             s0_forecast=forecast(empty, request.targets),
             checks=_checks(spec, macro, paths, empty, satellites),
             contributions=contributions,
+            monthly=monthly,
+            comparison=comparison,
             workspace=ws,
         )
     except BaseException as error:
@@ -333,10 +397,15 @@ def _write(
     s0_forecast: dict | None = None,
     checks: dict | None = None,
     contributions: list | None = None,
+    monthly: np.ndarray | None = None,
+    comparison: dict | None = None,
     workspace: store.Workspace | None = None,
 ) -> dict:
     """The paths, the results of every position, the report and the meta that names them."""
     months = [month.isoformat() for month in paths.months]
+    # The checks come before the report: the admission of the calculation decides its status.
+    admission = _admission(checks)
+    rare = _rare_constraints(checks)
     # A position that was not calculated has no column: NaN stands in, so nobody reads a zero
     # profit where there is no number at all.
     changes = np.full((paths.draws, len(batch.results)), np.nan)
@@ -360,12 +429,19 @@ def _write(
             dist_found=paths.dist,
             seed=paths.seed,
             horizon=paths.months[-1].isoformat(),
+            monthly=monthly,
+            months=months[1:],
+            comparison=comparison,
+            admission=admission,
+            rare_constraints=rare,
         )
         if portfolio is not None
         else None
     )
     if summary is not None:
         store.write_json(directory / "summary.json", summary)
+    if monthly is not None:
+        np.savez(directory / "path_losses.npz", losses=monthly)
     store.write_json(
         directory / "forecast.json", forecast_rows | {"s0": s0_forecast}
     )
@@ -394,6 +470,7 @@ def _write(
         "dist": _dist_meta(paths.dist),
         "basis": _basis(spec),
         "checks": checks,
+        "admission": admission,
         "git_commit": _git_commit(),
         "data": {"series": str(workspace.series)} if workspace is not None else None,
         "models": {
@@ -406,10 +483,58 @@ def _write(
         "position_ids": [result.position_id for result in batch.results],
         "positions": len(batch.results),
         "targets": forecast_rows["targets"],
-        "status": summary["status"] if summary is not None else batch.status,
+        "status": (
+            summary["status"]
+            if summary is not None
+            else "not_admitted"
+            if not admission["admitted"]
+            else batch.status
+        ),
     }
     store.write_json(directory / "meta.json", written)
     return written
+
+
+def _admission(checks: dict | None) -> dict:
+    """The admission of a calculation from the checks of its paths (the canon, section 7).
+
+    A calculation is admitted while fewer than ``ADMISSION_LIMIT`` of the cells of month and
+    quantity break each condition separately. ``shares`` weighs every quantity of
+    ``checks["paths"]`` equally — macro variables and drivers together — and every quantity
+    covers the same months, so the mean of a condition's shares is the share of its cells.
+    ``broken`` names every quantity with a positive share, worst first; the numbers stay in
+    the report for diagnostics either way, an inadmissible calculation is not deleted.
+    """
+    quantities = (checks or {}).get("paths") or {}
+    shares = {}
+    for condition in (DOMAIN, WIDTH):
+        values = [float(row.get(condition, 0.0)) for row in quantities.values()]
+        shares[condition] = float(np.mean(values)) if values else 0.0
+    broken = [
+        {"condition": condition, "quantity": quantity, "share": float(row.get(condition, 0.0))}
+        for quantity, row in quantities.items()
+        for condition in (DOMAIN, WIDTH)
+        if row.get(condition, 0.0) > 0.0
+    ]
+    broken.sort(key=lambda item: (-item["share"], item["quantity"]))
+    return {
+        "admitted": all(share < ADMISSION_LIMIT for share in shares.values()),
+        "limit": ADMISSION_LIMIT,
+        "shares": shares,
+        "broken": broken,
+    }
+
+
+def _rare_constraints(checks: dict | None) -> list[int]:
+    """The numbers, from one, of the conditions whose base probability is below the threshold."""
+    if not checks or "constraint_probabilities" not in checks:
+        return []
+    threshold = checks.get("constraint_threshold", 0.0)
+    return [
+        int(number) + 1
+        for number, share in checks["constraint_probabilities"].items()
+        if share is not None and share < threshold
+    ]
 
 
 def _now() -> str:
@@ -456,7 +581,7 @@ def _checks(spec: Spec, macro, paths, empty, satellites) -> dict:
     history has ever seen. The shares are over the horizon months: a month whose band leaves
     the admissible domain or grows wider than the history counts against its variable.
     """
-    from .drivers.registry import from_model
+    from .drivers.registry import path_to_model
     from .macro.registry import load_registry as load_macro_registry
     from .metrics.baselines import (
         CONSTRAINT_THRESHOLD,
@@ -479,15 +604,19 @@ def _checks(spec: Spec, macro, paths, empty, satellites) -> dict:
     panel = {id_: macro.panel.y[:, j] for j, id_ in enumerate(macro.panel.ids)}
     for k, id_ in enumerate(paths.ids):
         fan[f"macro/{id_}"] = _fan_problems(
-            scenario_scale[:, 1:, k], panel.get(id_), macro_domain()
+            scenario_scale[:, 1:, k], panel.get(id_), macro_domain(registry.variable(id_))
         )
     for k, driver in enumerate(paths.drivers.ids):
         quantity, node = satellites.node(driver)
         declared = satellites.registry.quantity(quantity)
         own = satellites.arrays.get(f"{quantity}.d")
         column = own[:, node] if own is not None else np.array([])
+        # The run's driver paths are in each driver's own unit; the history the band is
+        # compared with — and the domain — are in the model scale, so the paths come back
+        # before the comparison. ``from_model`` here would exponentiate a ``log100`` price
+        # twice and read every high-priced share as wider than history.
         fan[f"driver/{driver}"] = _fan_problems(
-            from_model(declared.transform, paths.drivers.paths[:, 1:, k]),
+            path_to_model(declared.transform, paths.drivers.paths[:, 1:, k]),
             column,
             quantity_domain(declared),
         )
@@ -497,9 +626,11 @@ def _checks(spec: Spec, macro, paths, empty, satellites) -> dict:
 
 def _macro_model_scale(registry, paths) -> np.ndarray:
     """The macro paths of a run back in the model scale every condition reads."""
+    from .drivers.registry import path_to_model
+
     return np.stack(
         [
-            registry.variable(id_).to_model(paths.macro[..., k])
+            path_to_model(registry.variable(id_).transform, paths.macro[..., k])
             for k, id_ in enumerate(paths.ids)
         ],
         axis=-1,
@@ -558,18 +689,34 @@ def _dist_meta(found) -> dict | None:
     The definition is the canon's: ``dist(s) = KL(P_s || P) = E_P[-log P(S | R)]``, the sum
     of the support price and the price of the tilt (docs/concept/formalization.md). The
     standard error reads the spread over the groups; an infinite distance is passed as is,
-    with the message naming the contradiction.
+    with the message naming the contradiction. ``estimated`` applies the canon's
+    ten-percent rule: a price whose error exceeds a tenth of it is not an estimate.
+    ``one_sided`` is the price of the event with every interval condition opened to a ray,
+    with the dropped coordinates and its own mark.
     """
     if found is None:
         return None
+    from .model_sdk.dist import price_estimated
+
+    side = found.one_sided
     return {
         "definition": "dist(s) = KL(P_s || P) (docs/concept/formalization.md, sections 4-5)",
         "distance": float(found.distance),
         "log_probability": float(found.log_probability),
         "standard_error": float(found.standard_error),
+        "estimated": price_estimated(found.distance, found.standard_error),
         "causes": list(found.causes),
         "tolerances": list(found.tolerances),
         "by_level": {str(level): float(price) for level, price in sorted(found.by_level.items())},
+        "one_sided": None
+        if side is None
+        else {
+            "distance": float(side.distance),
+            "log_probability": float(side.log_probability),
+            "standard_error": float(side.standard_error),
+            "estimated": price_estimated(side.distance, side.standard_error),
+            "dropped": list(side.dropped),
+        },
         "message": found.message,
     }
 

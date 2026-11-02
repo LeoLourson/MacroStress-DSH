@@ -9,7 +9,7 @@ MODEL = MSVarModel()
 plugin = Plugin(
     plugin_id="msvar",
     version="0.1.0",
-    model_sdk=">=2.0,<3.0",
+    model_sdk=">=3.0,<4.0",
     label="MS-VAR с марковскими переключениями",
     description=(
         "Макромодель уровня 0: векторная авторегрессия, у которой константа, лаговые "

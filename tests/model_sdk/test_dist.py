@@ -14,7 +14,14 @@ from scipy.stats import norm
 
 from mst.model_sdk.conditional import log_box_probabilities, log_box_probability
 from mst.model_sdk.contracts import ConstraintLaw
-from mst.model_sdk.dist import price_of_law
+from mst.model_sdk.dist import (
+    ONE_SIDED_STREAM,
+    PRICE_ERROR_LIMIT,
+    median_of_law,
+    one_sided_box,
+    price_estimated,
+    price_of_law,
+)
 
 
 def law(means, covs, log_weight=None, group=None) -> ConstraintLaw:
@@ -234,3 +241,66 @@ class TestPriceOfLaw:
     def test_a_law_without_groups_is_refused(self):
         with pytest.raises(ValueError, match="has no price"):
             price(law([], []), np.array([0.0]), np.array([1.0]))
+
+
+def test_price_estimated_reads_the_boundary_of_the_error():
+    # The price is estimated while its standard error does not exceed ten percent of it —
+    # the boundary itself still counts — and neither an infinite nor a missing price is an
+    # estimate.
+    assert PRICE_ERROR_LIMIT == 0.10
+    assert price_estimated(10.0, 0.99) is True
+    assert price_estimated(10.0, 1.0) is True
+    assert price_estimated(10.0, 1.01) is False
+    assert price_estimated(0.0, 0.0) is True
+    assert price_estimated(0.0, 1e-12) is False
+    assert price_estimated(float("inf"), 0.0) is False
+    assert price_estimated(float("inf"), float("inf")) is False
+    assert price_estimated(10.0, float("nan")) is False
+    assert price_estimated(float("nan"), 0.0) is False
+
+
+def test_the_one_sided_price_of_a_gaussian_coordinate_is_minus_log_phi():
+    # One coordinate, one known mean: the median of the law is that mean, the box below it
+    # opens into the ray (-inf, high], and the price of the ray is -log Phi of the
+    # standardised bound. The infinite bound enters the sampler as it is — one dimension
+    # is exact, so the check also confirms the sampler takes infinite bounds.
+    mu, sigma = 0.3, 1.2
+    rows = 8
+    means = np.full((rows, 1), mu)
+    covs = np.tile(np.array([[sigma**2]]), (rows, 1, 1))
+    rng = np.random.default_rng([5, ONE_SIDED_STREAM])
+    medians = median_of_law(law(means, covs), rng)
+    assert medians == pytest.approx(mu, abs=0.2)
+    low, high = np.array([mu - 4 * sigma]), np.array([mu - sigma])
+    side_low, side_high, kept = one_sided_box(low, high, medians)
+    assert kept.tolist() == [0]
+    assert side_low[0] == float("-inf") and side_high[0] == high[0]
+    distance, log_probability, _ = price_of_law(
+        law(means, covs), side_low, side_high, rng=rng
+    )
+    assert distance == pytest.approx(-float(norm.logcdf((high[0] - mu) / sigma)), rel=0.01)
+    assert log_probability == pytest.approx(float(norm.logcdf((high[0] - mu) / sigma)), rel=0.01)
+
+
+def test_the_weighted_median_follows_the_importance_weights():
+    # Two rows at opposite means: the row that carries the weight sets the median, the row
+    # with a vanishing weight moves it barely.
+    means = np.array([[-2.0], [6.0]])
+    covs = np.tile(np.array([[0.01]]), (2, 1, 1))
+    weighted = law(means, covs, log_weight=np.array([0.0, -100.0]))
+    rng = np.random.default_rng([1, ONE_SIDED_STREAM])
+    assert median_of_law(weighted, rng) == pytest.approx(-2.0, abs=0.5)
+    flipped = law(means, covs, log_weight=np.array([-100.0, 0.0]))
+    assert median_of_law(flipped, rng) == pytest.approx(6.0, abs=0.5)
+
+
+def test_one_sided_box_opens_each_side_and_drops_the_median_inside():
+    medians = np.array([0.0, 0.0, 0.0])
+    low = np.array([-4.0, 1.0, -1.0])
+    high = np.array([-2.0, 3.0, 1.0])
+    side_low, side_high, kept = one_sided_box(low, high, medians)
+    # The first interval sits below the median: the ray down from its upper bound. The
+    # second sits above it: the ray up from its lower bound. The third holds it: dropped.
+    assert kept.tolist() == [0, 1]
+    assert side_low[0] == float("-inf") and side_high[0] == -2.0
+    assert side_low[1] == 1.0 and side_high[1] == float("inf")

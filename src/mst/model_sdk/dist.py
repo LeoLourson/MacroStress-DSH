@@ -41,6 +41,78 @@ box probability over 4096 draws before the logarithm is taken."""
 DIST_STREAM = 15
 """The stream of the GHK draws inside a run's seed, away from the model's own streams."""
 
+ONE_SIDED_STREAM = 16
+"""The stream of the median draws and the GHK draws of the one-sided price, apart from
+the two-sided price's own stream."""
+
+PRICE_ERROR_LIMIT = 0.10
+"""A price whose standard error exceeds this share of it is treated as not estimated."""
+
+
+def price_estimated(distance: float, standard_error: float) -> bool:
+    """Whether a price with this error reads as an estimate (the canon, section 7).
+
+    The price is a mean over values of ``R`` and its error is the spread over the groups;
+    when the error exceeds ``PRICE_ERROR_LIMIT`` of the estimate, noise would set the bound
+    the price is used for, so the report shows the number only with the mark ``not
+    estimated``. A price that is not finite — infinite or missing — is not an estimate
+    either; a price of exactly zero with no error is (nothing to price was kept).
+    """
+    if not (np.isfinite(distance) and np.isfinite(standard_error)):
+        return False
+    return bool(standard_error <= PRICE_ERROR_LIMIT * distance)
+
+
+def median_of_law(law: ConstraintLaw, rng, samples: int = GHK_SAMPLES) -> np.ndarray:
+    """The median of every coordinate of the law's mixture of rows, one draw set per row.
+
+    For each coordinate, ``samples`` draws from the marginal normal of every row, each draw
+    carrying its row's importance weight ``e**log_weight``; the weighted median of the draws
+    is the median of the mixture. The medians are of the unshifted functionals — the
+    plan's bounds already have the level-0 impacts taken out, so the medians and the bounds
+    stand on the same footing.
+    """
+    means = np.asarray(law.means, dtype=float)
+    covs = np.asarray(law.covs, dtype=float)
+    log_weight = np.asarray(law.log_weight, dtype=float)
+    rows, m = means.shape
+    if rows == 0 or m == 0:
+        return np.zeros(m)
+    share = np.exp(log_weight - log_weight.max())
+    spread = np.sqrt(np.clip(np.diagonal(covs, axis1=1, axis2=2), 0.0, None))
+    draws = means[:, None, :] + spread[:, None, :] * rng.standard_normal((rows, samples, m))
+    weights = np.repeat(share, samples)
+    medians = np.empty(m)
+    for coordinate in range(m):
+        values = draws[:, :, coordinate].ravel()
+        order = np.argsort(values)
+        cumulative = np.cumsum(weights[order])
+        medians[coordinate] = values[order][
+            np.searchsorted(cumulative, 0.5 * cumulative[-1])
+        ]
+    return medians
+
+
+def one_sided_box(low, high, medians) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """The rays of the one-sided event ``A+``: ``(low, high, kept)`` of the kept coordinates.
+
+    An interval below the median of its functional — ``high < median`` — becomes the ray
+    down from its upper bound ``(-inf, high)``; an interval above the median — ``low >
+    median`` — becomes the ray up from its lower bound ``(low, +inf)``; a coordinate whose
+    interval contains the median is dropped, and its number lands in the caller's dropped
+    list. The width of the interval does not enter the rays, which is what lets events of
+    unequal boxes be compared.
+    """
+    low = np.asarray(low, dtype=float)
+    high = np.asarray(high, dtype=float)
+    medians = np.asarray(medians, dtype=float)
+    below = high < medians
+    above = low > medians
+    kept = np.flatnonzero(below | above)
+    side_low = np.where(below, -np.inf, low)[kept]
+    side_high = np.where(below, high, np.inf)[kept]
+    return side_low, side_high, kept
+
 
 class ContradictsModels(ValueError):
     """Some group of the law gives the event no probability: the scenario cannot be imposed."""

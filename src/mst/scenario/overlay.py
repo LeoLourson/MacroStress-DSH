@@ -51,6 +51,10 @@ class Tilt:
     """``(N,)`` the weight of every path inside its group, summing to one per group."""
     price: float
     """``KL(Q* || P_s)``: the price of the moment conditions on top of the support ones."""
+    by_group: np.ndarray
+    """``(G,)`` the same divergence inside every group of ``R``; ``price`` is their mean."""
+    standard_error: float
+    """The spread of ``by_group`` over the groups, as the support price reports it."""
     effective_size: float
     """``(sum w)^2 / sum w^2`` over all paths: how many carry the tilted law."""
     means: np.ndarray
@@ -206,13 +210,34 @@ def _means(weights: np.ndarray, values: np.ndarray, group: np.ndarray) -> np.nda
     return found
 
 
+def error_over_groups(terms: np.ndarray) -> float:
+    """The standard error of a mean of ``terms``, one per value of ``R``."""
+    return float(np.std(terms, ddof=1) / np.sqrt(len(terms))) if len(terms) > 1 else 0.0
+
+
+def _by_group(weights: np.ndarray, group: np.ndarray) -> np.ndarray:
+    """``KL`` of the weights against equal ones inside every group."""
+    counts = np.bincount(group)
+    positive = weights > 0
+    terms = np.zeros(len(counts))
+    np.add.at(
+        terms,
+        group[positive],
+        weights[positive] * np.log(weights[positive] * counts[group[positive]]),
+    )
+    return terms
+
+
 def _tilt(lam, weights, price, values, group, feasible, active) -> Tilt:
     weights = np.asarray(weights, dtype=float)
     effective = float(weights.sum() ** 2 / np.sum(weights**2))
+    by_group = _by_group(weights, group)
     return Tilt(
         lam=np.asarray(lam, dtype=float),
         weights=weights,
         price=float(price),
+        by_group=by_group,
+        standard_error=error_over_groups(by_group) if np.isfinite(price) else float("inf"),
         effective_size=effective,
         means=_means(weights, values, group),
         feasible=bool(feasible),

@@ -6,6 +6,37 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## Unreleased
 
+- **The scenario file format changes: impacts are paths.** `{start, end, delta}` is replaced
+  by `{start, values: [...]}`: `values[k]` is added in month `start + k`, a constant shift is
+  a repeated value, a gap inside the path is a written zero, and aftereffects are nonzero
+  values after the event. Old files with `end` and `delta` are refused by the contract: the
+  program has almost no versions, there is nothing to migrate, the files are rewritten by
+  hand. The model SDK version is 3.0.0, the plugin ranges `>=3.0,<4.0`.
+- **Admission of a calculation.** A calculation where at least 5 % of the cells of month and
+  quantity on its paths break an admission condition (the band outside the admissible domain
+  or wider than the history) gets the status `not_admitted` with the broken conditions and
+  quantities named; the numbers stay for diagnostics. The report carries `admission` and the
+  flags `not_admitted`, `tail_unverified`, `constraint_rare:<number>`. The driver admission
+  checks are brought to the model scale: the band and the history are compared in one scale
+  (a `log100` price used to be exponentiated twice).
+- **Risk functionals by month and over the whole path.** The report carries
+  `losses_by_month`: a row per month and the block of the maximum of the loss over the
+  horizon; the monthly array is written to `path_losses.npz`. The loss at the end of the
+  horizon is no longer the only number.
+- **Comparison with $s_0$.** `comparison` in the report: the shift of the centre of the law
+  apart from the change of width $p_{95}-p_5$, each with an interval; the contributions of
+  conditions and impacts get an `interval` from the same function.
+- **A price with a large error is not estimated.** `dist.estimated` — the canon's
+  ten-percent rule; the flag `price_not_estimated`; the reverse problem never rests on such
+  a point.
+- **The one-sided price.** `dist.one_sided` — the price of the event with every interval
+  condition replaced by a ray: the width of the interval does not enter it, and events of
+  unequal boxes are compared by it.
+- **Miscellaneous.** `model(kind="macro", action="list")` reports a version without a
+  `model` field with `null`; `validate` warns about an impact that ends before the horizon;
+  the guides (`run-report`, `scenario-from-corpus`) and the reference pages follow the new
+  format.
+
 - **The way of working is now in the server, not in the harness.** Any MCP client gets instructions on connecting, the `guide` tool with the guides and the prompt `scenario_from_event`. Only the DSH plugin saw this before. The guides live in `src/mst/guides`, and `dsh/skills` is their copy under a test.
 - **The scenario guide is rewritten by the canon:** the event, the calendar, conditions, impacts, causes, labels and human approval.
 - **The guides and the plugin's system prompt section are in English:** the model reads them, and English costs fewer tokens. The model answers in the language of the user.

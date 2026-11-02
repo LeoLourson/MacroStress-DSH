@@ -41,10 +41,12 @@ def test_a_plan_holds_constraints_and_causes():
     assert ScenarioPlan(horizon=1).constraints == ()
 
 
-def test_an_impact_names_its_target_months_and_delta():
-    impact = AdditiveImpact(target="share_price:sber", start=1, end=6, delta=-10.0)
+def test_an_impact_names_its_target_start_and_values():
+    impact = AdditiveImpact(target="share_price:sber", start=1, values=(-10.0,) * 6)
     assert impact.target == "share_price:sber"
-    assert (impact.start, impact.end, impact.delta) == (1, 6, -10.0)
+    assert (impact.start, impact.end) == (1, 6)
+    assert impact.value_at(1) == -10.0 and impact.value_at(6) == -10.0
+    assert impact.value_at(0) == 0.0 and impact.value_at(7) == 0.0
 
 
 def test_a_macro_simulation_carries_its_history():
@@ -126,8 +128,8 @@ def test_the_shocks_argument_is_a_required_keyword_of_a_satellite_simulate():
 
 
 def test_the_plugin_ranges_are_checked_against_the_model_sdk_version():
-    assert MODEL_SDK_VERSION == "2.0.0"
-    assert model_compatible(">=2.0,<3.0")
-    assert model_compatible(">=2.0")
-    assert not model_compatible(">=1.0,<2.0")
-    assert not model_compatible(">=1.1,<2.0")
+    assert MODEL_SDK_VERSION == "3.0.0"
+    assert model_compatible(">=3.0,<4.0")
+    assert model_compatible(">=3.0")
+    assert not model_compatible(">=2.0,<3.0")
+    assert not model_compatible(">=2.1,<3.0")

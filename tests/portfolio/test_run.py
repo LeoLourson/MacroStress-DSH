@@ -154,7 +154,7 @@ def test_the_contribution_of_one_condition_is_the_difference_with_the_empty(
     empty_loss = runs.result(workspace, empty[0])["summary"]["loss"]
     full_loss = stored["summary"]["loss"]
     assert rows[0]["difference"]["es95"] == pytest.approx(
-        empty_loss["es95"] - full_loss["es95"], abs=1e-6
+        full_loss["es95"] - empty_loss["es95"], abs=1e-6
     )
 
 
@@ -165,6 +165,7 @@ def test_a_portfolio_with_an_unknown_code_is_incomplete_with_its_reason(workspac
     stored = runs.result(workspace, run_id)
     report = stored["summary"]
     assert report["status"] == "incomplete"
+    assert "portfolio_incomplete" in report["flags"]
     assert report["loss"] is None
     reason = report["coverage"]["excluded"][0]["reason"]
     assert "share_price" in reason and "secid NOWHERE" in reason

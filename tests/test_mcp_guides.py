@@ -98,7 +98,7 @@ def test_validate_reports_the_marks_and_what_stays_without_support(workspace, ve
     bare = scenario_tool.Spec.model_validate(spec)
     assert any("records no event" in warning for warning in _labels(bare)["warnings"])
 
-    impact = {"target": "gl.brent", "start": 1, "end": 1, "delta": 1.0, "reason": "r"}
+    impact = {"target": "gl.brent", "start": 1, "values": [1.0], "reason": "r"}
     moved = scenario_tool.Spec.model_validate(
         {**spec, "impacts": [{**impact, "basis": "assumption"}]}
     )
@@ -129,7 +129,7 @@ def test_a_word_in_a_list_is_still_the_word(versions, word):
             "satellites": versions.satellites,
             "impacts": [
                 {
-                    "target": "gl.brent", "start": 1, "end": 1, "delta": 1.0, "reason": "r",
+                    "target": "gl.brent", "start": 1, "values": [1.0], "reason": "r",
                     "basis": [word],
                 }
             ],
@@ -183,7 +183,7 @@ def test_validate_says_where_an_impact_does_not_go(workspace, versions):
         "narrative": "нефть", "horizon": 3, "macro": versions.macro,
         "satellites": versions.satellites,
     }
-    impact = {"start": 1, "end": 1, "delta": 1.0, "reason": "r", "basis": "assumption"}
+    impact = {"start": 1, "values": [1.0], "reason": "r", "basis": "assumption"}
     moved = scenario_tool.Spec.model_validate(
         {**spec, "impacts": [{**impact, "target": read}, {**impact, "target": "ru.nowhere"}]}
     )

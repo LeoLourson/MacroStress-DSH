@@ -23,13 +23,15 @@ DOMAIN = "band_outside_domain"
 WIDTH = "band_wider_than_history"
 
 
-def macro_domain() -> tuple[float, float]:
-    """The admissible range of a macro variable in the model scale.
+def macro_domain(variable) -> tuple[float, float] | None:
+    """The admissible range of a macro variable in the model scale; None when unbounded.
 
-    Nought is the conservative lower boundary for every registered variable: rates, spreads
-    and unemployment are non-negative, and a ``log100`` price, index, volume or rate above one
-    maps above nought. The upper side is unbounded.
+    Rates and unemployment are non-negative. A ``log100`` value is ``100 ln X``, any real
+    number for a positive ``X``, and a variable registered as ``negative`` has been below
+    nought in its history. The upper side is unbounded.
     """
+    if variable.transform == "log100" or variable.negative:
+        return None
     return (0.0, float("inf"))
 
 
@@ -37,9 +39,10 @@ def quantity_domain(declared) -> tuple[float, float] | None:
     """The admissible range of a driver quantity in the model scale; None when unbounded.
 
     A declared domain is mapped through the transform, its natural endpoints becoming the
-    natural boundaries instead of disabling the check: ``log100`` keeps ``(0, +inf)`` and the
-    ``logit`` maps 0 and 1 to ``-inf`` and ``+inf``. Without a declared domain ``log100`` keeps
-    the positive half-line and the other transforms are unbounded.
+    natural boundaries instead of disabling the check: both ``log100`` and the ``logit`` map
+    a boundary they never reach to an infinity, so ``log100`` sends a price of 0 to ``-inf``
+    rather than requiring a price above one. Without a declared domain every transform is
+    unbounded.
     """
     declared_domain = declared.domain
     if declared_domain is not None and len(declared_domain) == 2:
@@ -48,8 +51,6 @@ def quantity_domain(declared) -> tuple[float, float] | None:
         if low == -float("inf") and high == float("inf"):
             return None
         return (low, high)
-    if declared.transform == "log100":
-        return (0.0, float("inf"))
     return None
 
 
@@ -63,7 +64,7 @@ def _endpoint(transform: str, value: float) -> float:
         return float(np.log(value / (1.0 - value)))
     if transform == "log100":
         if value <= 0.0:
-            return 0.0
+            return -float("inf")
         return 100.0 * float(np.log(value))
     return value
 CONSTRAINT = "constraint_probability_below_one_percent"

@@ -96,15 +96,18 @@ def test_point_constraints_hold_within_the_tolerance_in_every_path(versions):
 
 def test_an_impact_on_a_constrained_variable_meets_the_constraint(versions):
     # The impact is added after the model has drawn the paths, so the constraint C must hold on
-    # the shifted trajectory F(omega, O) = G_0 + o_0: the target is met by the final path.
+    # the shifted trajectory F(omega, O) = G_0 + o_0: the target is met by the final path. The
+    # impact varies by month, so the shift the plan reads is the value of that month alone.
     registry = load_registry()
     target = float(versions.data.y[-1, 0] + 5.0)
-    impact = Impact(target="gl.brent", start=2, end=2, delta=2.0, reason="r", basis=["s"])
-    spec = scenario(versions, constraints=[fixed("gl.brent", 2, target)], impacts=[impact])
+    impact = Impact(
+        target="gl.brent", start=2, values=[2.0, 1.0], reason="r", basis=["s"]
+    )
+    spec = scenario(versions, constraints=[fixed("gl.brent", 3, target)], impacts=[impact])
     report = validate(spec, versions.loaded, versions.satellite, as_of=versions.data.months[-1])
     assert report["ok"] is True and report["problems"] == []
     paths = paths_of(versions, spec)
-    moved = registry.variable("gl.brent").to_model(paths.macro[:, 2, 0])
+    moved = registry.variable("gl.brent").to_model(paths.macro[:, 3, 0])
     (constraint,) = plan_of(spec, versions.loaded).constraints
     assert np.all(np.abs(moved - target) <= constraint.tolerance + 1e-9)
 
@@ -237,7 +240,9 @@ def test_the_price_reads_the_impact_shifted_bounds(versions):
     # The impact moves the constrained variable, so the plan the model solves — and the price
     # with it — reads the box with the impact taken out: the same constraint with the impact
     # prices the event the paths actually carry, not the unshifted one.
-    impact = Impact(target="gl.brent", start=1, end=3, delta=10.0, reason="шок", basis=["s"])
+    impact = Impact(
+        target="gl.brent", start=1, values=[10.0, 10.0, 10.0], reason="шок", basis=["s"]
+    )
     plain = scenario(versions, constraints=[interval("gl.brent", 2, 1.0, 3.0)])
     shifted = scenario(
         versions, constraints=plain.constraints, impacts=[impact]
@@ -245,6 +250,68 @@ def test_the_price_reads_the_impact_shifted_bounds(versions):
     found_plain = dist_of(plain, versions.loaded, draws=100, seed=SEED)
     found_shifted = dist_of(shifted, versions.loaded, draws=100, seed=SEED)
     assert found_shifted.distance > found_plain.distance + 0.5
+
+
+def test_narrowing_an_interval_raises_the_price_and_not_the_one_sided_price(versions):
+    # Both boxes share their upper bound and sit below the median of the functional, so
+    # they open into the same ray: the price grows with the narrowing, the one-sided price
+    # of the ray does not.
+    wide = scenario(versions, constraints=[interval("gl.brent", 2, -6.0, -2.0)])
+    narrow = scenario(versions, constraints=[interval("gl.brent", 2, -4.0, -2.0)])
+    found_wide = dist_of(wide, versions.loaded, draws=200, seed=SEED)
+    found_narrow = dist_of(narrow, versions.loaded, draws=200, seed=SEED)
+    assert found_narrow.distance > found_wide.distance
+    assert found_wide.one_sided is not None and found_narrow.one_sided is not None
+    assert found_wide.one_sided.dropped == () and found_narrow.one_sided.dropped == ()
+    assert found_narrow.one_sided.distance == pytest.approx(
+        found_wide.one_sided.distance, abs=0.15
+    )
+    assert found_narrow.one_sided.distance <= found_narrow.distance + 2 * (
+        found_narrow.standard_error + found_narrow.one_sided.standard_error
+    )
+
+
+def test_an_interval_that_holds_the_median_is_dropped_from_the_one_sided_event(versions):
+    # A box that holds the median of the functional: the price is the box's, the one-sided
+    # event holds nothing of it, so the one-sided price is zero with the coordinate named.
+    spec = scenario(versions, constraints=[interval("gl.brent", 2, 1.0, 8.0)])
+    found = dist_of(spec, versions.loaded, draws=200, seed=SEED)
+    assert found.distance > 0.0
+    assert found.one_sided is not None
+    assert found.one_sided.dropped == (1,)
+    assert found.one_sided.distance == 0.0
+    assert found.one_sided.log_probability == 0.0
+    assert found.one_sided.standard_error == 0.0
+
+
+def test_the_one_sided_price_is_at_most_the_price(versions):
+    # A+ holds A, so the price of the ray is below the price of the box, within the error
+    # of the two estimates.
+    spec = scenario(versions, constraints=[interval("gl.brent", 2, 1.0, 3.0)])
+    found = dist_of(spec, versions.loaded, draws=200, seed=SEED)
+    assert found.one_sided is not None
+    assert found.one_sided.distance <= found.distance + 2 * (
+        found.standard_error + found.one_sided.standard_error
+    )
+
+
+def test_a_scenario_of_conditions_on_means_has_no_one_sided_price(versions):
+    # Conditions on means and probabilities carry no interval to open into a ray, so the
+    # one-sided price is absent even beside a support condition.
+    spec = scenario(
+        versions,
+        inner=4,
+        constraints=[interval("gl.brent", 2, 1.0, 3.0)],
+        expectations=[
+            {
+                "terms": [{"variable": "gl.brent", "month": 2, "weight": 1.0}],
+                "low": 1.0,
+                "basis": "assumption",
+            }
+        ],
+    )
+    found = dist_of(spec, versions.loaded, draws=200, seed=SEED)
+    assert found is not None and found.one_sided is None
 
 
 def test_a_wide_box_gives_a_price_near_zero(versions):
@@ -292,7 +359,9 @@ def test_a_macro_impact_keeps_the_groups_the_tilt_runs_in(versions):
     # The impact rebuilds the paths; the groups of R must survive it, or every path becomes its
     # own group and no tilt can move anything.
     registry = load_registry()
-    impact = Impact(target="gl.brent", start=1, end=3, delta=1.0, reason="шок", basis=["S1#1/1"])
+    impact = Impact(
+        target="gl.brent", start=1, values=[1.0, 1.0, 1.0], reason="шок", basis=["S1#1/1"]
+    )
     plain = paths_of(versions, scenario(versions, impacts=[impact]))
     level = float(np.mean(registry.variable("gl.brent").to_model(plain.macro[:, 2, 0])))
     spec = scenario(
@@ -360,7 +429,7 @@ def test_an_expectation_no_tilt_can_meet_is_refused(versions):
 
 def test_driver_paths_are_in_the_drivers_own_units_and_carry_impacts(versions):
     impact = Impact(
-        target="price:alpha", start=2, end=3, delta=10.0, reason="перебой", basis=["S1#1/1"]
+        target="price:alpha", start=2, values=[10.0, 10.0], reason="перебой", basis=["S1#1/1"]
     )
     plain = paths_of(versions, scenario(versions))
     with_impact = paths_of(versions, scenario(versions, impacts=[impact]))
@@ -377,7 +446,9 @@ def test_driver_paths_are_in_the_drivers_own_units_and_carry_impacts(versions):
 def test_an_impact_on_a_macro_variable_reaches_the_drivers(versions):
     # A rise of the oil price in the model scale moves the drivers that read it — the
     # impact enters level 0 before the satellites see the paths.
-    impact = Impact(target="gl.brent", start=1, end=3, delta=2.0, reason="шок", basis=["S1#1/1"])
+    impact = Impact(
+        target="gl.brent", start=1, values=[2.0, 2.0, 2.0], reason="шок", basis=["S1#1/1"]
+    )
     plain = paths_of(versions, scenario(versions))
     with_impact = paths_of(versions, scenario(versions, impacts=[impact]))
     macro_k = with_impact.ids.index("gl.brent")
@@ -395,13 +466,13 @@ def test_an_impact_on_a_macro_variable_reaches_the_drivers(versions):
 
 
 def test_an_impact_on_a_driver_the_satellites_do_not_know_is_refused(versions):
-    impact = Impact(target="price:nowhere", start=1, end=2, delta=1.0, reason="r", basis=["s"])
+    impact = Impact(target="price:nowhere", start=1, values=[1.0, 1.0], reason="r", basis=["s"])
     with pytest.raises(ValueError, match="knows no such driver"):
         paths_of(versions, scenario(versions, impacts=[impact]))
 
 
 def test_an_impact_on_a_variable_the_macro_version_lacks_is_refused(versions):
-    impact = Impact(target="ru.nowhere", start=1, end=2, delta=1.0, reason="r", basis=["s"])
+    impact = Impact(target="ru.nowhere", start=1, values=[1.0, 1.0], reason="r", basis=["s"])
     report = validate(
         scenario(versions, impacts=[impact]),
         versions.loaded,
@@ -415,12 +486,67 @@ def test_an_impact_on_a_variable_the_macro_version_lacks_is_refused(versions):
         paths_of(versions, scenario(versions, impacts=[impact]))
 
 
+def test_a_decaying_path_on_a_driver_lands_on_exactly_those_months(versions):
+    impact = Impact(
+        target="price:alpha", start=2, values=[4.0, 2.0, 1.0], reason="r", basis=["s"]
+    )
+    plain = paths_of(versions, scenario(versions))
+    with_impact = paths_of(versions, scenario(versions, impacts=[impact]))
+    k = with_impact.drivers.ids.index("price:alpha")
+    difference = with_impact.drivers.paths[:, :, k] - plain.drivers.paths[:, :, k]
+    assert np.allclose(difference[:, 2], 4.0)
+    assert np.allclose(difference[:, 3], 2.0)
+    assert np.allclose(difference[:, 4], 1.0)
+    assert np.allclose(difference[:, [0, 1, 5, 6]], 0.0)
+    assert IMPACT in with_impact.drivers.flags["price:alpha"]
+
+
+def test_a_decaying_path_on_a_macro_variable_lands_on_exactly_those_months(versions):
+    impact = Impact(target="gl.brent", start=2, values=[2.0, 1.0], reason="r", basis=["s"])
+    plain = paths_of(versions, scenario(versions))
+    with_impact = paths_of(versions, scenario(versions, impacts=[impact]))
+    macro_k = with_impact.ids.index("gl.brent")
+    # Brent is log100 in the model scale: a shift of 2 is a ratio of exp(0.02) in own units.
+    ratio = with_impact.macro[:, :, macro_k] / plain.macro[:, :, macro_k]
+    assert np.allclose(ratio[:, 2], np.exp(2.0 / 100))
+    assert np.allclose(ratio[:, 3], np.exp(1.0 / 100))
+    assert np.allclose(ratio[:, [0, 1, 4, 5, 6]], 1.0)
+
+
+def test_two_overlapping_impacts_add_up(versions):
+    first = Impact(target="price:alpha", start=1, values=[3.0, 3.0], reason="r", basis=["s"])
+    second = Impact(
+        target="price:alpha", start=2, values=[4.0, 4.0, 4.0], reason="r", basis=["s"]
+    )
+    plain = paths_of(versions, scenario(versions))
+    both = paths_of(versions, scenario(versions, impacts=[first, second]))
+    k = both.drivers.ids.index("price:alpha")
+    difference = both.drivers.paths[:, :, k] - plain.drivers.paths[:, :, k]
+    assert np.allclose(difference[:, 1], 3.0)
+    assert np.allclose(difference[:, 2], 7.0)
+    assert np.allclose(difference[:, 3], 4.0)
+    assert np.allclose(difference[:, 4], 4.0)
+    assert np.allclose(difference[:, [0, 5, 6]], 0.0)
+
+
+def test_an_impact_path_past_the_horizon_is_refused_by_name(versions):
+    # A spec built by hand can carry an impact whose path outlives the horizon, as the family
+    # of the reverse problem does; validate and build name the target.
+    impact = Impact(target="price:alpha", start=2, values=[1.0] * 4, reason="r", basis=["s"])
+    spec = scenario(versions, impacts=[impact]).model_copy(update={"horizon": 3})
+    report = validate(spec, versions.loaded, versions.satellite, as_of=versions.data.months[-1])
+    assert report["ok"] is False
+    assert any("price:alpha" in problem for problem in report["problems"])
+    with pytest.raises(ValueError, match="price:alpha"):
+        paths_of(versions, spec)
+
+
 def test_an_impact_on_a_rejected_driver_names_the_reason(versions):
     quantity, node = versions.satellite.node("price:alpha")
     rejected = dict(versions.satellite.checks[quantity])
     rejected[node] = replace(rejected[node], served=False, reason="not more accurate")
     satellite = replace(versions.satellite, checks={quantity: rejected})
-    impact = Impact(target="price:alpha", start=1, end=2, delta=1.0, reason="r", basis=["s"])
+    impact = Impact(target="price:alpha", start=1, values=[1.0, 1.0], reason="r", basis=["s"])
     with pytest.raises(ValueError, match="not more accurate"):
         build(
             scenario(versions, impacts=[impact]),
@@ -480,7 +606,7 @@ def test_validate_names_an_impact_on_a_rejected_driver(versions):
     rejected = dict(versions.satellite.checks[quantity])
     rejected[node] = replace(rejected[node], served=False, reason="not more accurate")
     satellite = replace(versions.satellite, checks={quantity: rejected})
-    impact = Impact(target="price:alpha", start=1, end=2, delta=1.0, reason="r", basis=["s"])
+    impact = Impact(target="price:alpha", start=1, values=[1.0, 1.0], reason="r", basis=["s"])
     report = validate(
         scenario(versions, impacts=[impact]),
         versions.loaded,
@@ -528,7 +654,7 @@ def test_validate_checks_that_the_cited_fragments_are_visible_on_the_day(version
     # The fragments an impact cites are checked the same way as the scenario's own sources;
     # an impact resting on an assumption cites nothing and is not checked.
     impact = Impact(
-        target="price:alpha", start=1, end=2, delta=1.0, reason="r", basis=["S1/2020#1/1"]
+        target="price:alpha", start=1, values=[1.0, 1.0], reason="r", basis=["S1/2020#1/1"]
     )
     report = validate(
         scenario(versions, impacts=[impact]),
