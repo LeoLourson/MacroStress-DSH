@@ -3,9 +3,9 @@
 ``equal_weight`` pools scored backtest cells by the equal-weight rule: first the mean
 across episodes inside a quantity at a month, then the mean with equal weights — one per
 quantity, not per cell — across the quantities of a level at that month, then the mean across
-the horizons of the level. The columns are the model, its baseline, base-run and naive
-comparisons and the paired differences against the baseline and the base run; every level
-aggregate carries counters of the rows behind it.
+the horizons of the level. The columns are the model, its baseline, base-run, naive and
+conditional-walk comparisons and the paired differences against the baseline, the base run and
+the conditional walk; every level aggregate carries counters of the rows behind it.
 
 ``utility_by_episode`` splits the paired improvement over the base run by the source of the
 scenario markup, ``manual`` against ``llm``: the share of episodes whose mean
@@ -20,8 +20,17 @@ from collections.abc import Mapping, Sequence
 
 import numpy as np
 
-COLUMNS = ("model", "baseline", "base", "naive", "diff_vs_baseline", "diff_vs_base")
-"""The aggregate columns: four scored comparisons and two paired differences."""
+COLUMNS = (
+    "model",
+    "baseline",
+    "base",
+    "naive",
+    "conditional",
+    "diff_vs_baseline",
+    "diff_vs_base",
+    "diff_vs_conditional",
+)
+"""The aggregate columns: five scored comparisons and three paired differences."""
 SOURCES = ("manual", "llm")
 """The two kinds of scenario markup that ``utility_by_episode`` compares."""
 MC_STREAM = 13
@@ -31,20 +40,25 @@ BOOTSTRAP_STREAM = 17
 
 
 def _row_values(row: Mapping[str, object]) -> dict[str, float | None]:
-    """The six aggregate columns of one scored row, its paired differences included."""
+    """The aggregate columns of one scored row, its paired differences included."""
     model = row.get("normalized")
     baseline = row.get("baseline_normalized")
     base = row.get("base_normalized")
     naive = row.get("naive_normalized")
+    conditional = row.get("conditional_normalized")
     return {
         "model": None if model is None else float(model),
         "baseline": None if baseline is None else float(baseline),
         "base": None if base is None else float(base),
         "naive": None if naive is None else float(naive),
+        "conditional": None if conditional is None else float(conditional),
         "diff_vs_baseline": (
             None if model is None or baseline is None else float(model) - float(baseline)
         ),
         "diff_vs_base": None if model is None or base is None else float(model) - float(base),
+        "diff_vs_conditional": (
+            None if model is None or conditional is None else float(model) - float(conditional)
+        ),
     }
 
 

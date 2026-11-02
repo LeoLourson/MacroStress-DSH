@@ -68,7 +68,7 @@ Order: start after `plans/canon-alignment.md` is merged, because that plan chang
 | G3 | Base, macro cells: band wider than history | below 5 % |
 | G4 | Each of the 12 scenarios, macro cells: both shares | below 5 % |
 | G5 | Each of the 12 scenarios: largest portfolio gain | below 10 times the notional |
-| G6 | Backtest on the canon's rule, on target indicators and the checking half of episodes | CRPS not worse than the current version by more than two standard errors, and the coverage shares consistent with 0.05, 0.45, 0.45, 0.05 |
+| G6 | The rolling check on the checking half of the date grid, unconditional forecast | Relative CRPS not worse than the current version by more than two standard errors, and the coverage shares consistent with 0.05, 0.45, 0.45, 0.05 |
 
 G6 is the guard: a model that is tame only because it no longer predicts anything fails it. Sharpness is compared only when coverage agrees, as the canon says.
 
@@ -129,9 +129,9 @@ Add to `spec.toml` of both, and to `minnesota` and the coefficient steps of `est
 
 Test simulated data with a known posterior: the dummy-augmented regression equals the closed form.
 
-Candidates: `tightness` in `{0.05, 0.1, 0.2}`, and `mu = delta` in `{1, 5}`, with the present prior as the reference. That gives 6 candidates per model. Select on the **tuning half of the episodes** only, by the backtest's aggregate CRPS at the macro level. Then evaluate the winner on the checking half for G6.
+Candidates: `tightness` in `{0.05, 0.1, 0.2}`, and `mu = delta` in `{1, 5}`, with the present prior as the reference. That gives 6 candidates per model. Select on the **tuning half of the date grid** only, by the relative CRPS of the unconditional forecast against the random walk. Then evaluate the winner on the checking half for G6.
 
-Use the existing backtest command (`python -m mst.metrics backtest <model> --as-of 2026-10-29 ... --against <report>`). Do not add a tuning method beyond this grid.
+Use the rolling command (`python -m mst.metrics rolling <model> --as-of 2026-10-29 ... --against <report>`), and report the conditional forecast of the episodes beside it (`python -m mst.metrics backtest`). Do not add a tuning method beyond this grid.
 
 Record in the results: for each candidate the CRPS, coverage, survival share, median $\rho$, G2, G3.
 

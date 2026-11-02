@@ -15,6 +15,13 @@ with the same number of draws as the model, from the history known at the episod
 date. The naive forecast of a target month ``T + t`` is the value a year earlier, ``y[T + t -
 12]``, carried by ``t`` monthly drifts; the two must not be confused with the unconditional run
 of the model itself, which is the other comparison of the scheme.
+
+The conditional walk is the benchmark of a conditional forecast: the walk also regresses the
+monthly change of the quantity on the changes of the variables the scenario fixes, and reads
+their realized path, so it knows what the model knows and has only the links of the history
+to add. Both walks start from the last known value of the quantity, however many months before
+the first month of the horizon it lies, and read a floor of the registry the way the model's
+reported paths do.
 """
 
 import numpy as np
@@ -109,7 +116,13 @@ def constraint_probabilities(
 
 
 def random_walk(
-    history: np.ndarray, horizon: int, *, draws: int, seed: int, months: int = 1
+    history: np.ndarray,
+    horizon: int,
+    *,
+    draws: int,
+    seed: int,
+    months: int = 1,
+    lower: float | None = None,
 ) -> np.ndarray:
     """A random walk with drift: the last value plus the trend and the noise of the changes.
 
@@ -117,6 +130,8 @@ def random_walk(
     come from the changes between months exactly ``months`` apart on the calendar grid, so a
     gap does not join distant observations — a pair counts only when both of its ends are
     known, and fewer than three pairs leave the walk NaN. ``months`` is the step of the walk.
+    A history that ends in NaN walks through its unknown months, so the first month of the
+    horizon is as many steps ahead as it really is. ``lower`` is the floor of the quantity.
     """
     y = np.asarray(history, dtype=float)
     changes = y[months:] - y[:-months]
@@ -124,13 +139,59 @@ def random_walk(
     if len(changes) < 3:
         return np.full((draws, horizon), np.nan)
     drift, noise = float(np.mean(changes)) / months, float(np.std(changes)) / np.sqrt(months)
-    known = y[np.isfinite(y)]
+    seen = np.flatnonzero(np.isfinite(y))
+    gap = len(y) - 1 - int(seen[-1])
     rng = np.random.default_rng(seed)
-    steps = rng.normal(drift, noise, size=(draws, horizon))
+    steps = rng.normal(drift, noise, size=(draws, horizon + gap))
     if months > 1:
         # A year's move spread over its months, so every horizon month has a draw.
-        steps = np.repeat(steps / months, months, axis=1)[:, :horizon]
-    return known[-1] + np.cumsum(steps, axis=1)
+        steps = np.repeat(steps / months, months, axis=1)[:, : horizon + gap]
+    return _floored(y[seen[-1]] + np.cumsum(steps, axis=1)[:, gap:], lower)
+
+
+def conditional_walk(
+    history: np.ndarray,
+    given_history: np.ndarray,
+    given_path: np.ndarray,
+    *,
+    draws: int,
+    seed: int,
+    lower: float | None = None,
+) -> np.ndarray:
+    """The walk that knows the scenario: ``dy = a + b' dc + e``, on the history known then.
+
+    ``history`` is ``(T,)``, ``given_history`` ``(T, k)`` the fixed variables over the same
+    months and ``given_path`` ``(H, k)`` their realized path, NaN where unknown. The regression
+    runs on the months with every change known, and needs three more of them than it has
+    coefficients, or the walk is NaN. The path of the quantity adds up the fitted changes and
+    gaussian noise of the residual spread; an unknown change of a fixed variable reads its mean.
+    """
+    y = np.asarray(history, dtype=float)
+    given = np.vstack([np.asarray(given_history, dtype=float), np.asarray(given_path, dtype=float)])
+    horizon = len(given_path)
+    changes = given[1:] - given[:-1]
+    target = y[1:] - y[:-1]
+    usable = np.isfinite(target) & np.isfinite(changes[: len(target)]).all(axis=1)
+    columns = given.shape[1] + 1
+    seen = np.flatnonzero(np.isfinite(y))
+    if usable.sum() < columns + 3 or not len(seen):
+        return np.full((draws, horizon), np.nan)
+    known = changes[: len(target)][usable]
+    design = np.column_stack([np.ones(len(known)), known])
+    coefficients, *_ = np.linalg.lstsq(design, target[usable], rcond=None)
+    residuals = target[usable] - design @ coefficients
+    noise = float(np.sqrt(residuals @ residuals / (len(known) - columns)))
+    start = int(seen[-1])
+    ahead = np.where(np.isfinite(changes[start:]), changes[start:], known.mean(axis=0))
+    fitted = coefficients[0] + ahead @ coefficients[1:]
+    rng = np.random.default_rng(seed)
+    steps = fitted + rng.normal(0.0, noise, size=(draws, len(fitted)))
+    return _floored(y[start] + np.cumsum(steps, axis=1)[:, -horizon:], lower)
+
+
+def _floored(paths: np.ndarray, lower: float | None) -> np.ndarray:
+    """The paths read through the floor of the quantity; ``None`` leaves them as they are."""
+    return paths if lower is None else np.maximum(paths, lower)
 
 
 def naive_annual(

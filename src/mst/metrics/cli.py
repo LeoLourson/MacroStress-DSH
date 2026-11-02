@@ -4,7 +4,14 @@
 
   python -m mst.metrics backtest [MODEL_ID] --as-of DATE --store DIR --models DIR --corpus FILE
       [--drivers FILE] [--satellites] [--only ID ...] [--details FILE] [--against REPORT.json]
-      [--portfolio ID] [--mc-bootstrap]
+      [--portfolio ID] [--mc-bootstrap] [--no-rolling]
+  python -m mst.metrics rolling [MODEL_ID] --as-of DATE --store DIR --models DIR
+      [--dates YYYY-MM-DD ...] [--half tuning|validation] [--details FILE] [--against REPORT.json]
+
+``rolling`` judges the forecast itself: on a grid of dates nobody selected, the unconditional
+forecast of the model estimated on that date against the random walk, in relative CRPS, with
+the calibration and a block-bootstrap interval. ``--dates`` fills the cache of the versions date
+by date, in parallel processes; ``--against`` names the incumbent report for the decision.
 
 ``backtest`` estimates the macro model (the named one, or the only one installed) on the day
 before every episode of ``episodes.toml`` starts, builds the scenario from what actually
@@ -31,6 +38,7 @@ from pathlib import Path
 
 def main(argv: list[str] | None = None) -> int:
     from .backtest import run
+    from .rolling import run as run_rolling
 
     parser = argparse.ArgumentParser(prog="mst.metrics", description=__doc__.split("\n\n")[0])
     commands = parser.add_subparsers(dest="command", required=True)
@@ -63,11 +71,36 @@ def main(argv: list[str] | None = None) -> int:
         default="macro",
         help="the level whose aggregate the decision and the utility read (macro by default)",
     )
+    check.add_argument(
+        "--no-rolling", action="store_true", help="leave out the rolling check of the plan"
+    )
+    grid = commands.add_parser("rolling", help="the forecast quality over a grid of dates")
+    grid.add_argument("model_id", nargs="?", help="the macro model id; the only one installed")
+    grid.add_argument("--as-of", type=date.fromisoformat, required=True)
+    grid.add_argument("--store", type=Path, required=True)
+    grid.add_argument("--models", type=Path, required=True)
+    grid.add_argument(
+        "--dates", nargs="+", type=date.fromisoformat, help="only these dates of the grid"
+    )
+    grid.add_argument("--half", choices=("tuning", "validation"), help="only this half of the grid")
+    grid.add_argument("--details", type=Path, help="write the full report as JSON here")
+    grid.add_argument("--against", type=Path, help="the incumbent's rolling report as JSON")
     args = parser.parse_args(argv)
 
     if hasattr(sys.stdout, "reconfigure"):
         # Russian labels survive a Windows pipe.
         sys.stdout.reconfigure(encoding="utf-8")
+    if args.command == "rolling":
+        return run_rolling(
+            store=args.store,
+            models=args.models,
+            as_of=args.as_of,
+            macro_id=args.model_id,
+            dates=args.dates,
+            half=args.half,
+            details=args.details,
+            against=args.against,
+        )
     return run(
         store=args.store,
         models=args.models,
@@ -82,6 +115,7 @@ def main(argv: list[str] | None = None) -> int:
         portfolio=args.portfolio,
         mc_bootstrap=args.mc_bootstrap,
         target_level=args.target_level,
+        rolling=not args.no_rolling,
     )
 
 

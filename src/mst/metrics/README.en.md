@@ -1,14 +1,24 @@
 # mst.metrics
 
-A check of models on historical episodes. Models are rolled back to a date before the start of a past event and, on the data known only by that date, predict what happened. The forecast is compared with the fact for each quantity and each month of the horizon, so you see where exactly a model errs, beyond "fine on average".
+A check of models on history. Models are rolled back to a past date and, on the data known only by that date, predict what happened. The forecast is compared with the fact for each quantity and each month of the horizon, so you see where exactly a model errs, beyond "fine on average".
 
 What is compared and by what rules is described in the [general scheme of the system](../../../docs/concept/formalization.en.md), section "Quality metrics". This page covers how it works in code and how to read the report.
 
 ```powershell
+python -m mst.metrics rolling [MODEL_ID] --as-of DATE --store DIR --models DIR \
+  [--dates YYYY-MM-DD ...] [--half tuning|validation] [--details FILE] [--against REPORT.json]
 python -m mst.metrics backtest [MODEL_ID] --as-of DATE --store DIR --models DIR --corpus FILE \
   [--drivers FILE] [--satellites] [--only ID ...] [--details FILE] \
-  [--against REPORT.json] [--target-level LEVEL] [--portfolio ID] [--mc-bootstrap]
+  [--against REPORT.json] [--target-level LEVEL] [--portfolio ID] [--mc-bootstrap] [--no-rolling]
 ```
+
+## Two questions and two checks
+
+`rolling` judges the forecast itself. On a grid of dates nobody selected (`[rolling]` in [episodes.toml](episodes.toml)), the model is estimated again and gives its unconditional forecast. Its score is the relative CRPS (`quality.py`): the mean CRPS of the model over the mean CRPS of the random walk on the same cells; below one the model wins. The ratios are averaged in logarithms, with equal weights over the quantities at a month and then over the months. There is no division by $\sigma_q(t)$ here: the key rate rarely moves, so its median change is close to zero, and one of its cells weighs as much as dozens of others in the normalized CRPS. The windows of neighbouring dates overlap, so the interval uses moving blocks as long as a window. On this sample the coverage shares 0.05, 0.45, 0.45, 0.05 mean something, since it holds both crises and quiet months. Parameters are chosen on the dates before `validation_from`, and the verdict of `--against` is read on the dates after it.
+
+The episodes answer another question: what the model does when the shock is known. They are selected with hindsight and their windows overlap, so their coverage shares and intervals understate the error and do not prove quality on their own. The benchmark of the conditional forecast is the conditional walk, which knows the same path of the fixed variables; the plain walk does not know it, so a win over it says little.
+
+Both checks are limited by the data: the series of the store start in 2012-01, the publication date of the macro series is approximate (`approximate`), and their history is already revised. The first dates where a series has too few values to estimate the model are named in the report and skipped.
 
 ## Words the report needs
 
@@ -101,6 +111,7 @@ Coverage and sharpness are reference information, not a goal.
 | `episodes.py`, `episodes.toml` | Episodes: variables, shocks, window, exclusions; the half `half` and the scenario source `source` of each; the calculation date is the day before the start; the rolling grid and the event family |
 | `backtest.py` | The calculation: model versions, cells, checks of admission and conditions, intervals (by episodes and wild), the aggregate with splits, value, halves, the verdict `--against`, the tail `--portfolio`, reproducibility metadata |
 | `rolling.py`, `block.py` | The rolling check over the dates of history: the uniformity at $s_0$, the logarithmic score of $P(S)$ against the historical frequency, the block bootstrap |
+| `quality.py` | The relative CRPS: the ratio to a benchmark in logarithms, equal weights, an interval by moving blocks, the paired comparison of two versions |
 | `cli.py`, `__main__.py` | The command `python -m mst.metrics` |
 
 Tests are in [../../../tests/metrics](../../../tests/metrics/README.en.md).
