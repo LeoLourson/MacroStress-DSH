@@ -155,7 +155,8 @@ def _grid(plugin, store, registry, root, plan, known_on, macro_of, *, only=None)
 
     A date with too little history for any model is named in ``skipped``. A date with enough
     data where the model gives no version is named in ``refused``: scoring only the dates a
-    model survives would hide its failures. The versions are kept only for the price: on a long grid they are heavy.
+    model survives would hide its failures. The versions are kept only for the price: on a
+    long grid they are heavy.
     """
     from mst.macro.panel import shift
     from mst.model_sdk.contracts import ScenarioPlan
