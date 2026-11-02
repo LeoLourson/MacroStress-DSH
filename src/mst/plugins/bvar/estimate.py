@@ -120,9 +120,11 @@ def _observation_rows(
     that a no-change forecast of variable ``i`` alone is good at the beginning of the
     sample — the average of the first ``p`` observations over ``mu`` sits in its own-lag
     regressors and, alone, in its response — and the last row states it for every variable
-    at once over ``delta``, the full average in every lag column and every response. A
-    larger hyperparameter loosens the pull; ``None`` turns the rows off. Where the first
-    ``p`` months hold no value of a variable, its first observed value stands in.
+    at once over ``delta``, the full average in every lag column and every response and
+    ``1 / delta`` in the constant column, so the row states ``c + sum(A) ybar = ybar``, which
+    a stationary system with mean ``ybar`` meets too. A larger hyperparameter loosens the
+    pull; ``None`` turns the rows off. Where the first ``p`` months hold no value of a
+    variable, its first observed value stands in.
     """
     if mu is None and delta is None:
         return None
@@ -142,6 +144,7 @@ def _observation_rows(
             regressors.append(row_x)
     if delta is not None:
         row_y, row_x = np.zeros(n), np.zeros(columns)
+        row_x[0] = 1.0 / delta
         for lag in range(p):
             row_x[1 + lag * n : 1 + (lag + 1) * n] = average / delta
         responses.append(average / delta)

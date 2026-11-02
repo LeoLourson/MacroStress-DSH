@@ -129,3 +129,45 @@ def test_all_with_the_dummy_rows_estimates():
     found = estimate(sim.panel(y), sim.spec(switching="all", mu=1.0, delta=1.0), 2)
     assert found.lags.shape[0] == sim.spec().sampler.draws
     assert not np.allclose(found.lags[:, 0], found.lags[:, 1])
+
+
+def test_the_initial_observation_row_reads_the_intercept_of_every_regime():
+    from dataclasses import replace
+
+    from mst.plugins.msvar.estimate import _mean_covariance, minnesota, regressors
+
+    # A stack of regimes whose intercepts differ by a hundred: with no months in either regime
+    # the prior rows alone speak to the intercepts, and each regime's copy of the
+    # initial-observation row pulls its own back to what the lag block leaves of the level.
+    y, _ = sim.simulate_common(60, np.random.default_rng(3))
+    panel = sim.panel(y)
+    prior = minnesota(panel, sim.spec(mu=None, delta=0.01))
+    prior = replace(prior, observation_y=prior.observation_y, observation_x=prior.observation_x)
+    x, target = regressors(y, 1)[:0], y[1:][:0]
+    n, k = 3, prior.mean.shape[1]
+    start = [np.zeros((n, k)), np.zeros((n, k))]
+    start[0][:, 0], start[1][:, 0] = 0.0, 100.0
+    logvar = [np.zeros(n), np.zeros(n)]
+    found = _mean_covariance(
+        target,
+        x,
+        np.zeros(0, dtype=int),
+        start,
+        [np.eye(n), np.eye(n)],
+        logvar,
+        prior,
+        np.random.default_rng(4),
+    )
+    # The row reads c_j + sum(A) ybar = ybar, tight at this delta, so both intercepts come out
+    # near the same value whatever they started from, and the lag block stays common.
+    assert np.array_equal(found[0][:, 1:], found[1][:, 1:])
+    assert np.allclose(found[0][:, 0], found[1][:, 0], atol=1.0)
+
+
+def test_a_regime_the_path_left_empty_keeps_its_row_of_transitions():
+    from mst.plugins.msvar.estimate import _transition
+
+    states = np.zeros(30, dtype=int)  # the top regime holds no month at all
+    found = _transition(states, 2, sim.spec(), np.random.default_rng(0))
+    assert found.shape == (2, 2)
+    assert np.allclose(found.sum(axis=1), 1.0)

@@ -25,9 +25,9 @@ def test_the_dummy_rows_are_the_sims_zha_ones():
         assert prior.observation_x[i, 1 + i] == pytest.approx(average[i] / 2.0)
         assert np.all(np.delete(prior.observation_x[i, 1:], i) == 0.0)
     # The initial-observation row: every lag column and every response carries the average
-    # over delta.
+    # over delta, and the constant column one over delta.
     assert np.allclose(prior.observation_y[-1], average / 4.0)
-    assert prior.observation_x[-1, 0] == 0.0
+    assert prior.observation_x[-1, 0] == pytest.approx(1 / 4.0)
     assert np.allclose(prior.observation_x[-1, 1:], np.tile(average / 4.0, 1))
 
 
