@@ -44,7 +44,7 @@ Losses add up **within a draw**, and only then are quantiles taken. The sum of t
 
 `positions` of the result are per position: `status`, `value_current`, `metrics`, `flags`, `diagnostics`. An `invalid` position has no metrics and no value change: name its `diagnostics` and do not count it as a zero loss.
 
-`not_admitted` means more than five percent of the cells of month and quantity on the paths break an admission condition — the band leaves the admissible domain or grows wider than the history: **the numbers are then diagnostics, not an estimate of losses**. Name the broken conditions and quantities from `admission.broken`; do not soften the verdict by rerunning with more draws.
+`not_admitted` means five percent or more of the cells of month and quantity on the paths break an admission condition — the band leaves the admissible domain or grows wider than the history: **the numbers are then diagnostics, not an estimate of losses**. Name the broken conditions and quantities from `admission.broken`; do not soften the verdict by rerunning with more draws.
 
 Flags:
 

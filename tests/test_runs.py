@@ -437,6 +437,28 @@ def test_the_contributions_carry_the_interval_of_the_same_function(
     assert interval["centre"]["value"] == pytest.approx(row["difference"]["p50"])
 
 
+def test_a_contribution_is_the_loss_of_the_scenario_less_the_loss_without_the_element(
+    workspace, portfolio, shock_pair
+):
+    # An impact lasting to the horizon reaches the loss; a price cut adds to it.
+    run_id = runs.new_id()
+    request = {"scenario": shock_pair[2], "draws": 5, "seed": 11, "portfolio": portfolio}
+    runs.begin(workspace, run_id, request | {"contributions": True})
+    runs.execute(workspace, run_id)
+    folder = runs.folder(workspace, run_id)
+    summary = store.read_json(folder / "summary.json")
+    (row,) = store.read_json(folder / "contributions.json")["contributions"]
+    expected = summary["loss"]["p50"] - row["loss"]["p50"]
+    assert expected > 0
+    assert row["difference"]["p50"] == pytest.approx(expected)
+    assert row["interval"]["centre"]["value"] == pytest.approx(expected)
+
+
+def test_a_rare_condition_is_numbered_as_the_other_outputs_number_it():
+    checks = {"constraint_probabilities": {0: 0.001, 1: 0.5, 2: None}, "constraint_threshold": 0.01}
+    assert runs._rare_constraints(checks) == [1]
+
+
 def test_the_paths_cut_at_a_month_keep_the_start_flags_and_seed():
     paths = FixedPaths(
         macros={"gl.brent": np.arange(14.0).reshape(2, 7)},

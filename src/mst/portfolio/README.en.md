@@ -14,7 +14,7 @@ Report rules:
 
 - losses are added within a draw, and only then are quantiles taken; the sum of position P95 values is not passed off as the portfolio's P95;
 - a position without a calculation is excluded with a reason, and `coverage.share` says which share of measurable value the numbers cover; unmeasurable value makes the share `null`, not 1;
-- the status is `ok`, `needs_review` or `incomplete`; an uncovered share above 5 % gives `incomplete`;
+- the status is `ok`, `needs_review`, `incomplete` or `not_admitted`; an uncovered share above 5 % gives `incomplete`, and 5 % or more of cells breaking an admission rule gives `not_admitted`, which wins over the others;
 - a scenario without conditions has no price: `dist` is `null`, not zero;
 - `dist.by_level` splits the price by level when there are conditions on drivers, and the sum equals `dist.distance`.
 

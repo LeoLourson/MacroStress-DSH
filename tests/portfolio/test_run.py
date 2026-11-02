@@ -154,7 +154,7 @@ def test_the_contribution_of_one_condition_is_the_difference_with_the_empty(
     empty_loss = runs.result(workspace, empty[0])["summary"]["loss"]
     full_loss = stored["summary"]["loss"]
     assert rows[0]["difference"]["es95"] == pytest.approx(
-        empty_loss["es95"] - full_loss["es95"], abs=1e-6
+        full_loss["es95"] - empty_loss["es95"], abs=1e-6
     )
 
 

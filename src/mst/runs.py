@@ -249,12 +249,12 @@ def execute(ws: store.Workspace, run_id: str) -> dict:
                         "difference": None
                         if found is None or full is None
                         else {
-                            key: found[key] - full[key]
+                            key: full[key] - found[key]
                             for key in ("p05", "p50", "p95", "es95")
                             if found.get(key) is not None and full.get(key) is not None
                         },
                         "interval": (
-                            paired_difference(variant_losses, losses, seed=request.seed)
+                            paired_difference(losses, variant_losses, seed=request.seed)
                             if variant_losses.size and losses.size
                             else None
                         ),
@@ -526,12 +526,12 @@ def _admission(checks: dict | None) -> dict:
 
 
 def _rare_constraints(checks: dict | None) -> list[int]:
-    """The numbers of the conditions whose base probability sits below the threshold."""
+    """The numbers, from one, of the conditions whose base probability is below the threshold."""
     if not checks or "constraint_probabilities" not in checks:
         return []
     threshold = checks.get("constraint_threshold", 0.0)
     return [
-        int(number)
+        int(number) + 1
         for number, share in checks["constraint_probabilities"].items()
         if share is not None and share < threshold
     ]

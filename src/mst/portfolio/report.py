@@ -138,11 +138,6 @@ def build(
     losses = losses_of(results)
     # A position's path outside its training range marks the whole tail unverified: losses
     # add up over the positions within one path, so one unverified tail is enough.
-    flags = [f"exposure_unknown:{position}" for position in unknown]
-    if excluded:
-        flags.append("portfolio_exclusions")
-        if share is None or 1.0 - share > coverage_limit:
-            flags.append("portfolio_incomplete")
     if not_admitted:
         flags.append("not_admitted")
     price_block = dist(dist_found)
