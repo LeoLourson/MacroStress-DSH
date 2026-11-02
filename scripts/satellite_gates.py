@@ -193,7 +193,13 @@ def _s6(satellites, named: list[str], usdrub: str) -> dict:
 
 
 def _training_range(meta: dict, satellites, driver_paths: np.ndarray) -> dict:
-    """The share of paths that leave the trained range of their driver, by quantity."""
+    """The share of paths that leave the trained range of their driver, by quantity.
+
+    Beside the canon's rule — the recorded training range of the node — the same share is
+    reported with the range widened by a historical twelve-month move on each side: the
+    largest change over any twelve consecutive months of the node's own history. The rule
+    itself stays as the canon states it; the widened number is what the owner decides on.
+    """
     out: dict[str, dict] = {}
     for driver in meta["drivers"]:
         quantity, node = satellites.node(driver)
@@ -204,11 +210,20 @@ def _training_range(meta: dict, satellites, driver_paths: np.ndarray) -> dict:
             continue
         declared = satellites.registry.quantity(quantity)
         column = _model_scale(driver_paths[:, :, meta["drivers"].index(driver)], declared)
-        outside = float(((column[:, 1:] < low) | (column[:, 1:] > high)).any(axis=1).mean())
-        out.setdefault(quantity, {"median": None, "drivers": {}})["drivers"][driver] = outside
+        own = satellites.arrays.get(f"{quantity}.d")
+        moves = np.abs(own[12:, node] - own[:-12, node]) if own is not None else np.array([])
+        move = float(np.nanmax(moves)) if np.isfinite(moves).any() else 0.0
+        outside = ((column[:, 1:] < low) | (column[:, 1:] > high)).any(axis=1).mean()
+        widened = ((column[:, 1:] < low - move) | (column[:, 1:] > high + move)).any(axis=1)
+        row = out.setdefault(quantity, {"median": None, "widened_median": None,
+                                        "drivers": {}, "widened": {}})
+        row["drivers"][driver] = float(outside)
+        row["widened"][driver] = float(widened.mean())
     for row in out.values():
         values = list(row["drivers"].values())
         row["median"] = float(np.median(values)) if values else None
+        widened = list(row["widened"].values())
+        row["widened_median"] = float(np.median(widened)) if widened else None
     return out
 
 
@@ -291,9 +306,17 @@ def _printed(report: dict) -> str:
             f"| {driver} | {row['value']:+.1f} | {band['full']:.1f} | "
             f"{band['residuals_only']:.1f} |"
         )
-    lines += ["", "Paths leaving the training range, by quantity (median over drivers):"]
+    lines += [
+        "",
+        "Paths leaving the training range, by quantity (median over drivers, the rule of the "
+        "canon; beside it the same share with the range widened by a historical twelve-month "
+        "move on each side):",
+    ]
     for quantity, row in report["training_range"].items():
-        lines.append(f"- {quantity}: {100 * row['median']:.1f}%")
+        lines.append(
+            f"- {quantity}: {100 * row['median']:.1f}% "
+            f"(widened {100 * row['widened_median']:.1f}%)"
+        )
     return "\n".join(lines)
 
 

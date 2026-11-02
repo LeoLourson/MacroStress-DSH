@@ -108,6 +108,48 @@ def test_the_gates_match_the_numbers_of_the_saved_run(module, workspace, base_ru
         assert 0.0 <= residuals <= full + 1e-6
 
 
+def test_the_training_range_shares_cover_the_widened_range_too(module, workspace, base_run):
+    report = module.gates(
+        workspace,
+        run=base_run,
+        month=2,
+        imoex="ru.usdrub",
+        usdrub="gl.brent",
+    )
+    meta = runs.meta(workspace, base_run)
+    with np.load(runs.folder(workspace, base_run) / "paths.npz") as saved:
+        drivers = saved["drivers"]
+    with np.load(
+        workspace.models / "satellites" / meta["satellites"] / "arrays.npz"
+    ) as stored:
+        for quantity, row in report["training_range"].items():
+            part = _share_part_of(workspace, meta, quantity)
+            d = stored[f"{quantity}.d"]
+            transform = _transform_of(workspace, meta, quantity)
+            for driver, value in row["widened"].items():
+                node = part["driver"].index(driver)
+                column = path_to_model(transform, drivers[:, :, meta["drivers"].index(driver)])
+                moves = np.abs(d[12:, node] - d[:-12, node])
+                move = float(np.nanmax(moves)) if np.isfinite(moves).any() else 0.0
+                low = part["train_low"][node] - move
+                high = part["train_high"][node] + move
+                left = ((column[:, 1:] < low) | (column[:, 1:] > high)).any(axis=1).mean()
+                assert value == pytest.approx(float(left), abs=1e-12)
+                # Widening the range can only keep paths inside, never add ones outside.
+                assert value <= row["drivers"][driver] + 1e-12
+
+
+def _share_part_of(workspace, meta, quantity):
+    folder = workspace.models / "satellites" / meta["satellites"]
+    return json.loads((folder / "meta.json").read_text(encoding="utf-8"))["quantities"][
+        quantity
+    ]
+
+
+def _transform_of(workspace, meta, quantity):
+    return _share_part_of(workspace, meta, quantity)["quantity"]["transform"]
+
+
 def test_the_gates_name_the_largest_elasticity_to_the_dollar(module, workspace, base_run):
     report = module.gates(
         workspace,
