@@ -121,7 +121,8 @@ def test_bvar_prior_weight_grows_as_the_prior_tightens(versions, tmp_path):
     assert set(loose) == set(IDS)
     # The audit's measure: a loose prior on 36 months of levels weighs little, and a tight
     # one weighs more — the same panel, the same draws, a smaller lambda.
-    assert all(0.0 < weight < 1.0 for weight in loose.values())
+    assert all(0.0 < weight["mean"] < 1.0 for weight in loose.values())
+    assert all(0.0 < weight["own_first_lag"] < 1.0 for weight in loose.values())
     spec = bvar_spec() | {"tightness": 0.01}
     tighter = macro_version.save(
         "bvar.sv",
@@ -134,7 +135,37 @@ def test_bvar_prior_weight_grows_as_the_prior_tightens(versions, tmp_path):
         tmp_path,
     )
     tight = diagnose_version.diagnose(tmp_path, tighter)["prior_weight"]
-    assert all(tight[id_] > loose[id_] for id_ in IDS)
+    assert all(tight[id_]["mean"] > loose[id_]["mean"] for id_ in IDS)
+
+
+def test_the_prior_weight_does_not_depend_on_the_units_of_a_variable(versions):
+    root, bvar, _ = versions
+    meta, arrays = macro_version.read(root, bvar)
+    plain = diagnose_version._prior_weight(meta, arrays)
+    y = arrays["panel_y"].copy()
+    y[:, 1] *= 10.0
+    rescaled = diagnose_version._prior_weight(meta, {**arrays, "panel_y": y})
+    for id_ in IDS:
+        assert rescaled[id_]["mean"] == pytest.approx(plain[id_]["mean"], rel=1e-9)
+        assert rescaled[id_]["own_first_lag"] == pytest.approx(
+            plain[id_]["own_first_lag"], rel=1e-9
+        )
+
+
+def test_the_dummy_rows_add_to_the_prior_weight(versions):
+    root, bvar, _ = versions
+    meta, arrays = macro_version.read(root, bvar)
+    plain = diagnose_version._prior_weight(meta, arrays)
+    spec = meta["spec"] | {"mu": 0.1, "delta": 0.1}
+    pulled = diagnose_version._prior_weight(meta | {"spec": spec}, arrays)
+    assert all(pulled[id_]["mean"] > plain[id_]["mean"] for id_ in IDS)
+
+
+def test_a_version_without_a_model_field_has_no_prior_weight(versions):
+    root, bvar, _ = versions
+    meta, arrays = macro_version.read(root, bvar)
+    bare = {key: value for key, value in meta.items() if key != "model"}
+    assert diagnose_version._prior_weight(bare, arrays) == {}
 
 
 def test_msvar_rho_is_per_regime_and_the_regime_shares_are_read(versions):
@@ -239,10 +270,10 @@ def test_macro_gates_read_a_finished_run(tmp_path):
         "fed_rate_below_0": 0.0,
         "spread_bbb_below_0": 0.0,
     }
-    # The key rate and the Fed rate carry the registry floor of zero; the fake run's paths
-    # sit at zero for every horizon month, so every path touches the floor. The other
-    # variables carry none.
-    assert row["bound_touch"] == {"ru.key_rate": 1.0, "gl.fed_rate": 1.0}
+    # The key rate, the Fed rate and the BBB spread carry the registry floor of zero; the
+    # fake run's paths sit at zero for every horizon month, so every path touches the floor.
+    # The other variables carry none.
+    assert row["bound_touch"] == {"ru.key_rate": 1.0, "gl.fed_rate": 1.0, "ru.spread_bbb": 1.0}
     assert row["gates"] == {
         "band_outside_domain_below_five_percent": True,
         "band_wider_than_history_below_five_percent": False,
@@ -255,3 +286,15 @@ def test_macro_gates_name_a_broken_run(tmp_path):
     (row,) = found["runs"]
     assert row["run"] == "20260101T000000-0002"
     assert "no meta.json" in row["broken"]
+
+
+@pytest.mark.parametrize("status", ["running", "failed"])
+def test_macro_gates_name_a_run_that_did_not_finish(tmp_path, status):
+    folder = tmp_path / "runs" / "20260101T000000-0003"
+    folder.mkdir(parents=True)
+    (folder / "meta.json").write_text(
+        json.dumps({"scenario": "test", "status": status}), encoding="utf-8"
+    )
+    (row,) = gates_version.gates(tmp_path, ["20260101T000000-0003"])["runs"]
+    assert status in row["broken"]
+    assert "gates" not in row

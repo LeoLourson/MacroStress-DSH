@@ -110,23 +110,27 @@ def _dof(dof: np.ndarray, ids: list[str]) -> dict[str, float | None]:
     return found
 
 
-def _prior_weight(meta: dict, arrays: dict) -> dict[str, float]:
-    """``P_0 / (X'X + P_0)`` on the diagonal of the lag block, averaged per equation.
+def _prior_weight(meta: dict, arrays: dict) -> dict[str, dict[str, float]]:
+    """``P_0 / (X'X + P_0)`` on the diagonal of the lag block, per equation.
 
     One at zero is a prior that does nothing, one at one a prior that swallows the data. The
     prior precision ``P_0`` is the one the estimating model builds — imported from its own
-    package, so the number is the audit's on the same version — and ``X`` is the interpolated
-    panel, the deterministic stand-in for the augmented one the sampler sees. The average
-    runs over the coefficients the equation is allowed to hold: block exogeneity leaves the
-    global equations without the Russian lags.
+    package — taken relative to the error variance of the equation, the scale ``X'X`` stands
+    on, so the number does not depend on the units of any variable: it is the audit's. The
+    dummy rows of the prior count in ``P_0`` through the diagonal of their own ``X'X``. ``X``
+    is the interpolated panel, the deterministic stand-in for the augmented one the sampler
+    sees. ``mean`` runs over the coefficients the equation is allowed to hold (block
+    exogeneity leaves the global equations without the Russian lags); ``own_first_lag`` is
+    the coefficient the audit quotes.
     """
-    if meta["model"] == "bvar.sv":
+    model = meta.get("model")
+    if model == "bvar.sv":
         from mst.plugins.bvar.estimate import fill, minnesota
         from mst.plugins.bvar.spec import Spec
         from mst.plugins.bvar.var import allowed
 
         dummies = len(Spec.model_validate(meta["spec"]).dummies)
-    elif meta["model"] == "msvar.markov":
+    elif model == "msvar.markov":
         from mst.plugins.msvar.estimate import fill, minnesota
         from mst.plugins.msvar.spec import Spec
         from mst.plugins.msvar.var import allowed
@@ -157,7 +161,15 @@ def _prior_weight(meta: dict, arrays: dict) -> dict[str, float]:
             # The column of lag ``lag`` and variable ``j`` reads y_{t-lag, j}, t = p .. T-1.
             gram[(lag - 1) * n + j] = np.sum(y[p - lag : p - lag + count, j] ** 2)
     block = slice(1, 1 + n * p)
-    precision = 1.0 / prior.var[:, block]
+    precision = prior.scale[:, None] ** 2 / prior.var[:, block]
+    if prior.observation_x is not None:
+        precision = precision + np.sum(prior.observation_x[:, block] ** 2, axis=0)[None, :]
     weight = precision / (gram[None, :] + precision)
     chosen = mask[:, block]
-    return {id_: float(np.mean(weight[k][chosen[k]])) for k, id_ in enumerate(panel.ids)}
+    return {
+        id_: {
+            "mean": float(np.mean(weight[k][chosen[k]])),
+            "own_first_lag": float(weight[k, k]),
+        }
+        for k, id_ in enumerate(panel.ids)
+    }

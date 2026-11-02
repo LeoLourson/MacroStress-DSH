@@ -17,10 +17,10 @@ import numpy as np
 def companion_radius(lags: np.ndarray) -> np.ndarray:
     """The spectral radius of the companion matrix; ``lags`` is (..., p, n, n).
 
-    The companion matrix stacks the lag matrices on its first block row — ``[A_1 ... A_p]`` —
-    and identities below, so its eigenvalues are the roots of the characteristic polynomial
-    ``z^p = A_1 z^{p-1} + ... + A_p``. Returns the largest modulus of them, one entry per
-    leading index; a scalar panel gives a scalar radius.
+    The companion matrix stacks the lag matrices on its first block row and identities
+    below, so its eigenvalues are the roots of ``det(z^p - A_1 z^{p-1} - ... - A_p) = 0``.
+    Returns the largest modulus of them, one entry per leading index; a scalar panel gives a
+    scalar radius.
     """
     matrix = np.asarray(lags, dtype=float)
     if matrix.ndim < 3 or matrix.shape[-2] != matrix.shape[-1]:
@@ -31,8 +31,8 @@ def companion_radius(lags: np.ndarray) -> np.ndarray:
     p, n = matrix.shape[-3], matrix.shape[-2]
     size = p * n
     companion = np.zeros((*batch, size, size))
-    # The first block row is [A_1 ... A_p]: the row names the equation, the column the lag
-    # and the variable of that lag.
+    # The first block row holds the transposes [A_1' ... A_p']: a determinant does not change
+    # under transposition, so the roots are the same, and the reshape needs no loop.
     companion[..., :n, :] = matrix.reshape(*batch, size, n).swapaxes(-2, -1)
     if p > 1:
         companion[..., n:, : size - n] = np.eye(size - n)
