@@ -21,6 +21,7 @@ ACTIONS = {
     "scenario": ("list", "get", "save", "validate", "reverse"),
     "run": ("start", "status", "result", "list"),
     "portfolio": ("list", "get", "save", "delete", "check", "exposure"),
+    "model": ("list", "describe", "base", "estimate", "backtest"),
 }
 """Every action the tool's dispatch knows; the description of the field must name them all."""
 
@@ -60,6 +61,13 @@ def test_every_tool_declares_the_hints_a_client_reads(tmp_path):
         if not annotations.title:
             problems.append(f"{name}: no title")
     assert not problems, problems
+
+
+def test_a_tool_that_overwrites_or_stops_something_declares_it(tmp_path):
+    # jobs cancel kills a process tree; scenario and portfolio save replace a stored file.
+    found = tools(tmp_path)
+    for name in ("jobs", "scenario", "portfolio"):
+        assert found[name].annotations.destructiveHint is True, name
 
 
 def test_the_description_of_an_action_field_names_every_action(tmp_path):

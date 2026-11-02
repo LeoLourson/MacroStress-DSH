@@ -59,8 +59,8 @@ def _plugin_output_to_stderr() -> Iterator[None]:
     """A plugin's stray ``print()`` goes to stderr, and the stdio channel stays JSON-RPC.
 
     The tools this wraps — scenario, portfolio, model — load and run plugin code in the
-    server's process (the heavy estimate and run jobs are separate processes and need no
-    this). The stdio transport took its own wrapper of ``sys.stdout.buffer`` at startup, so
+    server's process (the heavy estimate and run jobs are separate processes and do not
+    need it). The stdio transport took its own wrapper of ``sys.stdout.buffer`` at startup, so
     rebinding ``sys.stdout`` for the duration of a call cannot touch the channel: the
     plugin's output reaches the client's log instead of corrupting the protocol. An
     fd-level redirect was rejected because a concurrent response written through the
@@ -108,7 +108,7 @@ def build(ws: store.Workspace) -> FastMCP:
         annotations=ToolAnnotations(
             title="Workspace and job state",
             readOnlyHint=False,
-            destructiveHint=False,
+            destructiveHint=True,
             idempotentHint=False,
             openWorldHint=False,
         )
@@ -283,8 +283,8 @@ def build(ws: store.Workspace) -> FastMCP:
         kind: Annotated[
             str | None,
             Field(
-                description="The kind of document search limits itself to, e.g. a report "
-                "or a speech."
+                description="The kind of fragment search limits itself to: methodology, "
+                "scenario_set, transmission or episode."
             ),
         ] = None,
         region: Annotated[
@@ -357,7 +357,7 @@ def build(ws: store.Workspace) -> FastMCP:
         annotations=ToolAnnotations(
             title="Stored scenarios",
             readOnlyHint=False,
-            destructiveHint=False,
+            destructiveHint=True,
             idempotentHint=False,
             openWorldHint=False,
         )
@@ -366,7 +366,8 @@ def build(ws: store.Workspace) -> FastMCP:
         action: Annotated[
             str,
             Field(
-                description="What to do: list, get, save, validate or reverse."
+                description="What to do: list, get, save, validate or reverse. save "
+                "overwrites a scenario stored under the same id."
             ),
         ],
         id: Annotated[
@@ -528,8 +529,8 @@ def build(ws: store.Workspace) -> FastMCP:
         base_currency: Annotated[
             str,
             Field(
-                description="The currency the notional of positions is stated in; a "
-                "portfolio brings its own."
+                description="The currency the notional of positions is stated in, RUB "
+                "only: the models price against the rouble. A portfolio brings its own."
             ),
         ] = "RUB",
         targets: Annotated[
@@ -616,7 +617,8 @@ def build(ws: store.Workspace) -> FastMCP:
             str,
             Field(
                 description="What to do: list, get, save, delete, check against a "
-                "scenario, or value the exposure. delete removes the portfolio's file."
+                "scenario, or value the exposure. save overwrites a portfolio stored under "
+                "the same id; delete removes the portfolio's file."
             ),
         ],
         id: Annotated[
@@ -687,8 +689,8 @@ def build(ws: store.Workspace) -> FastMCP:
         action: Annotated[
             str,
             Field(
-                description="What to do; the valid actions depend on kind, as the tool "
-                "description lists."
+                description="What to do. macro: list, describe, base, estimate, backtest; "
+                "satellites: list, describe, estimate; catalog: list."
             ),
         ],
         version: Annotated[

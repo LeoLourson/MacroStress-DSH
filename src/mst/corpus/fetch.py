@@ -17,6 +17,7 @@ from urllib.parse import urljoin
 
 import httpx
 
+from ..store import replace
 from .manifest import Document, FileSpec, Manifest, documents
 
 USER_AGENT = "Mozilla/5.0 (X11; Linux x86_64) mst-corpus/1.0"
@@ -117,7 +118,7 @@ def download(http: httpx.Client, document: Document, root: Path) -> dict:
     target.parent.mkdir(parents=True, exist_ok=True)
     partial = target.with_suffix(target.suffix + ".part")
     partial.write_bytes(content)
-    partial.replace(target)
+    replace(partial, target)
     record = {
         "url": str(response.url),
         "sha256": hashlib.sha256(content).hexdigest(),

@@ -1,6 +1,6 @@
 # ADR 0001: Tool schemas describe every parameter and annotate every tool
 
-Date: 2026-11-03
+Date: 2026-11-02
 Status: accepted
 
 ## Context
@@ -17,7 +17,8 @@ Every parameter of every tool carries a `Field(description=...)` — what the fi
 its format, and what it interacts with. The description of an `action` field names every
 action the dispatch knows. Every tool declares `ToolAnnotations`: `guide` is a pure read
 (`readOnlyHint`), `series` and `corpus` touch the network (`openWorldHint`), `portfolio`
-can delete a file (`destructiveHint`), `run start` spawns a new run each call (no
+and `scenario` overwrite or delete a file and `jobs cancel` stops a job (`destructiveHint`),
+`run start` spawns a new run each call (no
 `idempotentHint`). `tests/test_mcp_schema.py` holds the coverage at 100 % of parameters and
 fails when a new action is not named in its field description.
 
@@ -26,4 +27,4 @@ fails when a new action is not named in its field description.
 A client no longer guesses valid argument combinations from the tool docstring alone, and
 can tell a read from a mutation before calling. The hints describe the tool as a whole, not
 each action, which is the price of the multiplexor design: an action more destructive than
-its tool's hint must say so in its own field description, as `portfolio delete` does.
+its tool's hint must say so in its own field description, as `portfolio save` does.

@@ -1,6 +1,6 @@
 # ADR 0002: `jobs wait` holds the call server-side instead of the client polling
 
-Date: 2026-11-03
+Date: 2026-11-02
 Status: accepted
 
 ## Context
@@ -28,6 +28,9 @@ shape fixed.
 
 The agent flow for a long job is `start` then `wait` (again, while `running` is true), with
 `log` for the output. The server instructions, the `run-report` guide, the tools reference
-and the first-session document teach `wait`. A client with a short request timeout sees the
-call return at its own timeout, exactly as before; the default 30 s fits under common
-client timeouts, and the cap of 120 s keeps a forgotten call from pinning a worker forever.
+and the first-session document teach `wait`. A client with a short request timeout gets its
+own timeout error while the job keeps running; the default 30 s fits under common
+client timeouts, and the cap of 120 s keeps a forgotten call from pinning a worker forever. Synchronous tools run on the event
+loop itself, so a long call to one delays the answer of `wait`: the first
+`model(kind="catalog")` imports every plugin and took over 190 s on a busy processor. Without
+such a call, `jobs(action="state")` during a `wait` answers in 0.1 s.

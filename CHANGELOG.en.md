@@ -6,7 +6,13 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## Unreleased
 
-- **An atomic write survives a Windows reader.** `store.write_json` and `versions.save`
+- **Storage stays file-based.** ADR 0005 records why the remark about moving to SQLite and
+  Arrow was not confirmed as a defect and when the decision is reopened.
+- **Tool hints.** `scenario` and `jobs` declare `destructiveHint`: `save` overwrites a scenario
+  and `cancel` stops a job. The `action` description of `model` names every action, and the
+  descriptions of `corpus.kind` and `run.base_currency` match the code.
+- **An atomic write survives a Windows reader.** `store.write_json`, `versions.save`,
+  `SeriesStore.write` and the download of a corpus document
   move the draft into place through `store.replace`: six attempts of `os.replace`, 20 ms
   apart, before the `PermissionError` surfaces. On Windows, renaming past a file another
   process holds open — the DSH prompt section reads `workspace.json` exactly that way —

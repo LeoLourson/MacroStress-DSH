@@ -1,6 +1,6 @@
 # ADR 0003: Plugin printing goes to stderr, not to the stdio channel
 
-Date: 2026-11-03
+Date: 2026-11-02
 Status: accepted
 
 ## Context
@@ -26,7 +26,7 @@ response the transport writes while the redirect holds would land on stderr and 
 
 A plugin author debugging with `print()` no longer breaks the protocol; the output is
 visible in the client's log instead. A C extension writing to descriptor 1 directly would
-still corrupt the channel — none of the shipped dependencies does, and the estimate and run
-jobs, where such extensions work hardest, run in child processes whose stdout is a log
+still corrupt the channel. The dependencies were not audited for that, but the estimate and
+run jobs, where such extensions work hardest, run in child processes whose stdout is a log
 file. The guard covers the three tools as a whole, so a future action that calls plugin
 code is covered without thinking about it.

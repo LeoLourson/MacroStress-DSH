@@ -45,7 +45,7 @@ def replace(source: Path, target: Path) -> None:
 
 
 def write_json(path: Path, obj: Any) -> None:
-    """Write ``obj`` as JSON atomically: a temporary file, then ``os.replace``."""
+    """Write ``obj`` as JSON atomically: a temporary file, then ``replace``."""
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
     descriptor, draft = tempfile.mkstemp(dir=path.parent, prefix=".draft-", suffix=".json")
