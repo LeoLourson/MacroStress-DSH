@@ -4,9 +4,11 @@ import argparse
 import os
 from datetime import date
 from pathlib import Path
-from typing import Any
+from typing import Annotated, Any
 
 from fastmcp import FastMCP
+from mcp.types import ToolAnnotations
+from pydantic import Field
 
 from . import guides, models, runs, store
 from . import jobs as tasks
@@ -44,8 +46,24 @@ def build(ws: store.Workspace) -> FastMCP:
     """The server of one workspace; every tool closes over it."""
     server = FastMCP("macrostress", instructions=INSTRUCTIONS)
 
-    @server.tool
-    def guide(name: str | None = None) -> dict:
+    @server.tool(
+        annotations=ToolAnnotations(
+            title="Working guides",
+            readOnlyHint=True,
+            destructiveHint=False,
+            idempotentHint=True,
+            openWorldHint=False,
+        )
+    )
+    def guide(
+        name: Annotated[
+            str | None,
+            Field(
+                description="The guide to read: scenario-from-corpus, run-report or drivers. "
+                "The list when omitted."
+            ),
+        ] = None,
+    ) -> dict:
         """The working guides of the agent: how to do the work, whatever the client.
 
         Without ``name``, the list. ``scenario-from-corpus`` turns an event into a scenario;
@@ -58,8 +76,38 @@ def build(ws: store.Workspace) -> FastMCP:
         """Build a scenario from the text of an event, by the corpus, for a human to approve."""
         return f"{guides.get('scenario-from-corpus')['content']}\n\n## Event\n\n{event}"
 
-    @server.tool
-    def jobs(action: str, id: str | None = None, tail: int = 50) -> dict:
+    @server.tool(
+        annotations=ToolAnnotations(
+            title="Workspace and job state",
+            readOnlyHint=False,
+            destructiveHint=False,
+            idempotentHint=False,
+            openWorldHint=False,
+        )
+    )
+    def jobs(
+        action: Annotated[
+            str,
+            Field(
+                description="What to do with the workspace or one job: state, status, log "
+                "or cancel. cancel stops the job's process tree and frees its resource."
+            ),
+        ],
+        id: Annotated[
+            str | None,
+            Field(
+                description="The job id that status, log and cancel read: the id a "
+                "starting tool returned."
+            ),
+        ] = None,
+        tail: Annotated[
+            int,
+            Field(
+                description="How many lines of the log to return, counted from the end; "
+                "the whole log when 0."
+            ),
+        ] = 50,
+    ) -> dict:
         """Workspace and task state. Actions: state, status, log, cancel."""
         if action == "state":
             return tasks.state(ws)
@@ -72,15 +120,65 @@ def build(ws: store.Workspace) -> FastMCP:
             return tasks.cancel(ws, _need(id, "id"))
         raise ValueError(f"jobs: unknown action {action!r}, try state, status, log, cancel")
 
-    @server.tool
+    @server.tool(
+        annotations=ToolAnnotations(
+            title="Stored series",
+            readOnlyHint=False,
+            destructiveHint=False,
+            idempotentHint=False,
+            openWorldHint=True,
+        )
+    )
     def series(
-        action: str,
-        id: str | None = None,
-        as_of: str | None = None,
-        text: str | None = None,
-        entry: dict[str, Any] | None = None,
-        ids: list[str] | None = None,
-        quantity: str | None = None,
+        action: Annotated[
+            str,
+            Field(
+                description="What to do: search for series, get one as known on a date, add "
+                "a source, or update (fetch) as a job."
+            ),
+        ],
+        id: Annotated[
+            str | None,
+            Field(
+                description="The series id that get reads: a macro variable like "
+                "ru.key_rate, or a driver like share_price:sibn."
+            ),
+        ] = None,
+        as_of: Annotated[
+            str | None,
+            Field(
+                description="The date get works as of, YYYY-MM-DD: only values published "
+                "by then are returned. Today when omitted."
+            ),
+        ] = None,
+        text: Annotated[
+            str | None,
+            Field(
+                description="The words search looks for, in the ids and loaders of the "
+                "known sources."
+            ),
+        ] = None,
+        entry: Annotated[
+            dict[str, Any] | None,
+            Field(
+                description="The source entry add writes to the workspace sources.toml: "
+                "the table of one source plus its id."
+            ),
+        ] = None,
+        ids: Annotated[
+            list[str] | None,
+            Field(
+                description="The series ids update fetches; every known series when "
+                "omitted. FRED needs the FRED_API_KEY environment variable."
+            ),
+        ] = None,
+        quantity: Annotated[
+            str | None,
+            Field(
+                description="A driver quantity, e.g. share_price: update discovers its "
+                "objects and fetches their series instead of ids."
+            ),
+        ] = None,
     ) -> dict:
         """Stored series. Actions: search, get, add, update.
 
@@ -101,20 +199,82 @@ def build(ws: store.Workspace) -> FastMCP:
             return _update(ws, ids or [])
         raise ValueError(f"series: unknown action {action!r}, try search, get, add, update")
 
-    @server.tool
+    @server.tool(
+        annotations=ToolAnnotations(
+            title="Scenario corpus",
+            readOnlyHint=False,
+            destructiveHint=False,
+            idempotentHint=False,
+            openWorldHint=True,
+        )
+    )
     def corpus(
-        action: str,
-        query: str | None = None,
-        as_of: str | None = None,
-        id: str | None = None,
-        kind: str | None = None,
-        region: str | None = None,
-        factors: list[str] | None = None,
-        k: int = 8,
-        key: str | None = None,
-        file: str | None = None,
-        url: str | None = None,
-        ids: list[str] | None = None,
+        action: Annotated[
+            str,
+            Field(
+                description="What to do: search the index, get one fragment, list the "
+                "manifest, add a file, or index and fetch as jobs."
+            ),
+        ],
+        query: Annotated[
+            str | None,
+            Field(description="The words search looks for in the fragments of the corpus."),
+        ] = None,
+        as_of: Annotated[
+            str | None,
+            Field(
+                description="The date search and get work as of, YYYY-MM-DD: only "
+                "fragments visible on that date."
+            ),
+        ] = None,
+        id: Annotated[
+            str | None,
+            Field(
+                description="The fragment id that get returns, as search reported it."
+            ),
+        ] = None,
+        kind: Annotated[
+            str | None,
+            Field(
+                description="The kind of document search limits itself to, e.g. a report "
+                "or a speech."
+            ),
+        ] = None,
+        region: Annotated[
+            str | None,
+            Field(description="The region search limits itself to."),
+        ] = None,
+        factors: Annotated[
+            list[str] | None,
+            Field(description="The factors search limits itself to."),
+        ] = None,
+        k: Annotated[
+            int,
+            Field(description="How many fragments search returns, best first."),
+        ] = 8,
+        key: Annotated[
+            str | None,
+            Field(
+                description="The manifest key add registers the file under."
+            ),
+        ] = None,
+        file: Annotated[
+            str | None,
+            Field(description="The path of the downloaded file add registers."),
+        ] = None,
+        url: Annotated[
+            str | None,
+            Field(
+                description="The address the file was downloaded from, which add records."
+            ),
+        ] = None,
+        ids: Annotated[
+            list[str] | None,
+            Field(
+                description="The documents fetch downloads, by manifest key; every "
+                "missing one when omitted."
+            ),
+        ] = None,
     ) -> dict:
         """The scenario corpus. Actions: search, get, list, add, index, fetch.
 
@@ -146,16 +306,70 @@ def build(ws: store.Workspace) -> FastMCP:
             f"corpus: unknown action {action!r}, try search, get, list, add, index, fetch"
         )
 
-    @server.tool
+    @server.tool(
+        annotations=ToolAnnotations(
+            title="Stored scenarios",
+            readOnlyHint=False,
+            destructiveHint=False,
+            idempotentHint=False,
+            openWorldHint=False,
+        )
+    )
     def scenario(
-        action: str,
-        id: str | None = None,
-        spec: dict[str, Any] | None = None,
-        portfolio: str | None = None,
-        kappa: float | None = None,
-        level: float | None = None,
-        draws: int | None = None,
-        seed: int | None = None,
+        action: Annotated[
+            str,
+            Field(
+                description="What to do: list, get, save, validate or reverse."
+            ),
+        ],
+        id: Annotated[
+            str | None,
+            Field(
+                description="The scenario id, which is also the name of its file: "
+                "lowercase letters, digits and dashes."
+            ),
+        ] = None,
+        spec: Annotated[
+            dict[str, Any] | None,
+            Field(
+                description="The scenario specification save checks against the contract "
+                "before it writes the file."
+            ),
+        ] = None,
+        portfolio: Annotated[
+            str | None,
+            Field(
+                description="The portfolio whose losses the reverse search measures."
+            ),
+        ] = None,
+        kappa: Annotated[
+            float | None,
+            Field(
+                description="The price the reverse search fixes, for the worst loss "
+                "under it."
+            ),
+        ] = None,
+        level: Annotated[
+            float | None,
+            Field(
+                description="The loss level the reverse search finds the lowest price "
+                "for."
+            ),
+        ] = None,
+        draws: Annotated[
+            int | None,
+            Field(
+                description="How many paths the reverse search draws on every point of "
+                "the family."
+            ),
+        ] = None,
+        seed: Annotated[
+            int | None,
+            Field(
+                description="The seed of the reverse search: the same inputs give the "
+                "same answer."
+            ),
+        ] = None,
     ) -> dict:
         """Stored scenarios. Actions: list, get, save, validate, reverse.
 
@@ -211,18 +425,76 @@ def build(ws: store.Workspace) -> FastMCP:
             f"scenario: unknown action {action!r}, try list, get, save, reverse, validate"
         )
 
-    @server.tool
+    @server.tool(
+        annotations=ToolAnnotations(
+            title="Scenario runs",
+            readOnlyHint=False,
+            destructiveHint=False,
+            idempotentHint=False,
+            openWorldHint=False,
+        )
+    )
     def run(
-        action: str,
-        id: str | None = None,
-        scenario: str | None = None,
-        portfolio: str | None = None,
-        positions: list[dict[str, Any]] | None = None,
-        draws: int | None = None,
-        seed: int | None = None,
-        base_currency: str = "RUB",
-        targets: list[str] | None = None,
-        contributions: bool = False,
+        action: Annotated[
+            str,
+            Field(
+                description="What to do: start a run, read its status or result, or list "
+                "the runs."
+            ),
+        ],
+        id: Annotated[
+            str | None,
+            Field(description="The run id that status and result read."),
+        ] = None,
+        scenario: Annotated[
+            str | None,
+            Field(description="The scenario the run calculates."),
+        ] = None,
+        portfolio: Annotated[
+            str | None,
+            Field(
+                description="The stored portfolio the run values; give portfolio or "
+                "positions, not both."
+            ),
+        ] = None,
+        positions: Annotated[
+            list[dict[str, Any]] | None,
+            Field(
+                description="The positions the run values, given in the call; give "
+                "portfolio or positions, not both."
+            ),
+        ] = None,
+        draws: Annotated[
+            int | None,
+            Field(description="How many paths the run draws."),
+        ] = None,
+        seed: Annotated[
+            int | None,
+            Field(
+                description="The seed of the run: the same scenario, versions and seed "
+                "give the same numbers."
+            ),
+        ] = None,
+        base_currency: Annotated[
+            str,
+            Field(
+                description="The currency the notional of positions is stated in; a "
+                "portfolio brings its own."
+            ),
+        ] = "RUB",
+        targets: Annotated[
+            list[str] | None,
+            Field(
+                description="The drivers the forecast reports, by id; every driver when "
+                "omitted. An empty list is refused."
+            ),
+        ] = None,
+        contributions: Annotated[
+            bool,
+            Field(
+                description="Whether the report also breaks the loss down by position."
+            ),
+        ] = False,
     ) -> dict:
         """Runs on the paths of a scenario. Actions: start, status, result, list.
 
@@ -280,12 +552,43 @@ def build(ws: store.Workspace) -> FastMCP:
             return runs.catalogue(ws)
         raise ValueError(f"run: unknown action {action!r}, try start, status, result, list")
 
-    @server.tool
+    @server.tool(
+        annotations=ToolAnnotations(
+            title="Stored portfolios",
+            readOnlyHint=False,
+            destructiveHint=True,
+            idempotentHint=False,
+            openWorldHint=False,
+        )
+    )
     def portfolio(
-        action: str,
-        id: str | None = None,
-        spec: dict[str, Any] | None = None,
-        scenario: str | None = None,
+        action: Annotated[
+            str,
+            Field(
+                description="What to do: list, get, save, delete, check against a "
+                "scenario, or value the exposure. delete removes the portfolio's file."
+            ),
+        ],
+        id: Annotated[
+            str | None,
+            Field(
+                description="The portfolio id, which is also the name of its file."
+            ),
+        ] = None,
+        spec: Annotated[
+            dict[str, Any] | None,
+            Field(
+                description="The portfolio specification save checks against the contract "
+                "before it writes the file."
+            ),
+        ] = None,
+        scenario: Annotated[
+            str | None,
+            Field(
+                description="The scenario whose macro and satellite versions check and "
+                "exposure work with."
+            ),
+        ] = None,
     ) -> dict:
         """Stored portfolios. Actions: list, get, save, delete, check, exposure.
 
@@ -310,16 +613,72 @@ def build(ws: store.Workspace) -> FastMCP:
             f"portfolio: unknown action {action!r}, try list, get, save, delete, check, exposure"
         )
 
-    @server.tool
+    @server.tool(
+        annotations=ToolAnnotations(
+            title="Model versions and plugins",
+            readOnlyHint=False,
+            destructiveHint=False,
+            idempotentHint=False,
+            openWorldHint=False,
+        )
+    )
     def model(
-        kind: str,
-        action: str,
-        version: str | None = None,
-        as_of: str | None = None,
-        only: list[str] | None = None,
-        model_id: str | None = None,
-        assignment: dict[str, str] | None = None,
-        horizon: int = 12,
+        kind: Annotated[
+            str,
+            Field(
+                description="What to work with: macro versions, satellite bundles, or "
+                "the catalog of installed plugins."
+            ),
+        ],
+        action: Annotated[
+            str,
+            Field(
+                description="What to do; the valid actions depend on kind, as the tool "
+                "description lists."
+            ),
+        ],
+        version: Annotated[
+            str | None,
+            Field(
+                description="The version hash: what describe and base read, and the "
+                "macro version the satellites of an estimate are built on."
+            ),
+        ] = None,
+        as_of: Annotated[
+            str | None,
+            Field(
+                description="The date estimate and backtest work as of, YYYY-MM-DD: only "
+                "data published by then enters."
+            ),
+        ] = None,
+        only: Annotated[
+            list[str] | None,
+            Field(
+                description="The macro variables backtest limits itself to, and the ones "
+                "base reports; all when omitted."
+            ),
+        ] = None,
+        model_id: Annotated[
+            str | None,
+            Field(
+                description="The macro plugin estimate and backtest run; the only one "
+                "installed when omitted."
+            ),
+        ] = None,
+        assignment: Annotated[
+            dict[str, str] | None,
+            Field(
+                description='A mapping of a quantity to the satellite plugin that '
+                'estimates it, e.g. {"bond_spread": "hier.gibbs"}, overriding the plugin '
+                "that declares it."
+            ),
+        ] = None,
+        horizon: Annotated[
+            int,
+            Field(
+                description="How many months of the base paths base reports."
+            ),
+        ] = 12,
     ) -> dict:
         """Model versions and plugins. kind: macro, satellites, catalog.
 

@@ -6,6 +6,11 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## Unreleased
 
+- **Tool schemas are fully described.** All 53 parameters of the eight MCP tools carry a
+  description (`Field(description=...)`), and every tool declares `ToolAnnotations`
+  (`readOnlyHint`, `destructiveHint`, `idempotentHint`, `openWorldHint`, `title`).
+  `tests/test_mcp_schema.py` keeps the coverage at 100 % and requires the description of
+  the `action` field to name every action the dispatch knows.
 - **The scenario file format changes: impacts are paths.** `{start, end, delta}` is replaced
   by `{start, values: [...]}`: `values[k]` is added in month `start + k`, a constant shift is
   a repeated value, a gap inside the path is a written zero, and aftereffects are nonzero
