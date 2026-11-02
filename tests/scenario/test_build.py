@@ -278,7 +278,7 @@ def test_an_interval_that_holds_the_median_is_dropped_from_the_one_sided_event(v
     found = dist_of(spec, versions.loaded, draws=200, seed=SEED)
     assert found.distance > 0.0
     assert found.one_sided is not None
-    assert found.one_sided.dropped == (0,)
+    assert found.one_sided.dropped == (1,)
     assert found.one_sided.distance == 0.0
     assert found.one_sided.log_probability == 0.0
     assert found.one_sided.standard_error == 0.0

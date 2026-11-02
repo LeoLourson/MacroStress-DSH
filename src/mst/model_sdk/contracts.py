@@ -188,7 +188,7 @@ class OneSided:
     from its lower bound — and a condition whose interval contains the median is dropped.
     ``A+`` holds ``A``, so ``dist+(s) <= dist(s)`` under a condition on the support, and the
     width of the interval does not enter ``dist+(s)``: events of unequal boxes are compared
-    by it. ``dropped`` numbers the coordinates that were dropped; with nothing kept the
+    by it. ``dropped`` numbers the conditions that were dropped, from one; with nothing kept the
     distance, the log probability and the error are zero, and the price is estimated.
     """
 

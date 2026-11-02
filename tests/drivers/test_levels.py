@@ -595,6 +595,21 @@ class TestDriverConditions:
         # The price enters the total, and a repeated condition removes no further path.
         assert single.distance > 0
         assert single.distance == pytest.approx(single.by_level[2])
+        # The error is measured on the overlay's price, not taken for nought.
+        assert single.standard_error > 0
+        # A price with conditions on drivers has no one-sided price: dist+ reads only the law
+        # of the macro conditions, and would pass for the price of the whole event.
+        macro_id = macro.panel.ids[0]
+        mixed = priced(
+            condition,
+            {
+                "terms": [{"variable": macro_id, "month": 1, "weight": 1.0}],
+                "low": -1e6,
+                "high": 1e6,
+                "basis": "assumption",
+            },
+        )
+        assert mixed.one_sided is None
         assert twice.distance == pytest.approx(single.distance)
 
     def test_a_driver_expectation_tilts_the_survivors_and_is_priced(self, estimated):
