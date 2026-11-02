@@ -581,7 +581,7 @@ def _checks(spec: Spec, macro, paths, empty, satellites) -> dict:
     history has ever seen. The shares are over the horizon months: a month whose band leaves
     the admissible domain or grows wider than the history counts against its variable.
     """
-    from .drivers.registry import to_model
+    from .drivers.registry import path_to_model
     from .macro.registry import load_registry as load_macro_registry
     from .metrics.baselines import (
         CONSTRAINT_THRESHOLD,
@@ -604,7 +604,7 @@ def _checks(spec: Spec, macro, paths, empty, satellites) -> dict:
     panel = {id_: macro.panel.y[:, j] for j, id_ in enumerate(macro.panel.ids)}
     for k, id_ in enumerate(paths.ids):
         fan[f"macro/{id_}"] = _fan_problems(
-            scenario_scale[:, 1:, k], panel.get(id_), macro_domain()
+            scenario_scale[:, 1:, k], panel.get(id_), macro_domain(registry.variable(id_))
         )
     for k, driver in enumerate(paths.drivers.ids):
         quantity, node = satellites.node(driver)
@@ -612,11 +612,11 @@ def _checks(spec: Spec, macro, paths, empty, satellites) -> dict:
         own = satellites.arrays.get(f"{quantity}.d")
         column = own[:, node] if own is not None else np.array([])
         # The run's driver paths are in each driver's own unit; the history the band is
-        # compared with — and the domain — are in the model scale, so the paths go through
-        # ``to_model`` before the comparison. ``from_model`` here would exponentiate a
-        # ``log100`` price twice and read every high-priced share as wider than history.
+        # compared with — and the domain — are in the model scale, so the paths come back
+        # before the comparison. ``from_model`` here would exponentiate a ``log100`` price
+        # twice and read every high-priced share as wider than history.
         fan[f"driver/{driver}"] = _fan_problems(
-            to_model(declared.transform, paths.drivers.paths[:, 1:, k]),
+            path_to_model(declared.transform, paths.drivers.paths[:, 1:, k]),
             column,
             quantity_domain(declared),
         )
@@ -626,9 +626,11 @@ def _checks(spec: Spec, macro, paths, empty, satellites) -> dict:
 
 def _macro_model_scale(registry, paths) -> np.ndarray:
     """The macro paths of a run back in the model scale every condition reads."""
+    from .drivers.registry import path_to_model
+
     return np.stack(
         [
-            registry.variable(id_).to_model(paths.macro[..., k])
+            path_to_model(registry.variable(id_).transform, paths.macro[..., k])
             for k, id_ in enumerate(paths.ids)
         ],
         axis=-1,

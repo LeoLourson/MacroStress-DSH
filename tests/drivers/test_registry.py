@@ -2,9 +2,10 @@
 
 import json
 
+import numpy as np
 import pytest
 
-from mst.drivers.registry import Registry, from_model, load_registry, to_model
+from mst.drivers.registry import Registry, from_model, load_registry, path_to_model, to_model
 from mst.macro.registry import load_registry as load_macro_registry
 from tests.drivers import simulated
 
@@ -69,3 +70,18 @@ def test_an_unknown_quantity_or_object_is_a_key_error():
         registry.quantity("no_such_quantity")
     with pytest.raises(KeyError):
         registry.object("no_such_object")
+
+
+def test_a_saturated_path_comes_back_to_the_model_scale_without_an_error():
+    # from_model reaches exactly 0 and 1 in floating point: a run's own paths must return.
+    with np.errstate(over="ignore"):
+        shares = from_model("logit", np.array([-1e4, 0.0, 1e4]))
+    assert shares[0] == 0.0 and shares[2] == 1.0
+    back = path_to_model("logit", shares)
+    assert np.all(np.isfinite(back)) and back[0] < -30 < 30 < back[2] and back[1] == 0.0
+    prices = from_model("log100", np.array([-1e6, 100.0]))
+    assert prices[0] == 0.0
+    back = path_to_model("log100", prices)
+    assert np.isfinite(back[0]) and back[1] == pytest.approx(100.0)
+    with pytest.raises(ValueError, match="between 0 and 1"):
+        to_model("logit", shares)  # outside data still has to be inside the range

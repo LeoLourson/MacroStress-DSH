@@ -801,7 +801,7 @@ def _macro_cells(
             continue
         levels[id_] = "macro"
         history = panel.y[:, j]
-        domain = macro_domain()
+        domain = macro_domain(registry.variable(id_))
         spread = history_range(history)
         walk = random_walk(history, episode.horizon, draws=plan.draws, seed=plan.seed)
         scale = sigma_with_fallback(history, months, peers=peers)
@@ -925,51 +925,6 @@ def _driver_fact(episode: Episode, series, month: date, declared):
         return float(to_model(declared.transform, rows[-1].value))
     except ValueError:
         return None
-
-
-def _macro_domain(variable) -> tuple[float, float]:
-    """The admissible range of a macro variable in the model scale.
-
-    Nought is the conservative lower boundary for every registered variable: rates, spreads
-    and unemployment are non-negative, and a ``log100`` price, index, volume or rate above one
-    maps above nought. The upper side is unbounded.
-    """
-    return (0.0, float("inf"))
-
-
-def _model_domain(declared) -> tuple[float, float] | None:
-    """The admissible range of a driver quantity in the model scale; None when unbounded.
-
-    A declared domain is mapped through the transform, its natural endpoints becoming the
-    natural boundaries instead of disabling the gate: ``log100`` keeps ``(0, +inf)`` and the
-    ``logit`` maps 0 and 1 to ``-inf`` and ``+inf``. Without a declared domain ``log100`` keeps
-    the positive half-line and the other transforms are unbounded.
-    """
-    declared_domain = declared.domain
-    if declared_domain is not None and len(declared_domain) == 2:
-        low = _endpoint(declared.transform, float(declared_domain[0]))
-        high = _endpoint(declared.transform, float(declared_domain[1]))
-        if low == -float("inf") and high == float("inf"):
-            return None
-        return (low, high)
-    if declared.transform == "log100":
-        return (0.0, float("inf"))
-    return None
-
-
-def _endpoint(transform: str, value: float) -> float:
-    """A domain endpoint in the model scale; the natural infinity where the transform diverges."""
-    if transform == "logit":
-        if value <= 0.0:
-            return -float("inf")
-        if value >= 1.0:
-            return float("inf")
-        return float(np.log(value / (1.0 - value)))
-    if transform == "log100":
-        if value <= 0.0:
-            return 0.0
-        return 100.0 * float(np.log(value))
-    return value
 
 
 def _admission(cells: list[Cell]) -> dict:

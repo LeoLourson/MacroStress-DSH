@@ -54,6 +54,22 @@ def from_model(transform: Transform, y):
     return 1 / (1 + np.exp(-y))
 
 
+def path_to_model(transform: Transform, x):
+    """``g(d)`` of a value ``from_model`` produced, which may have saturated.
+
+    Far from the centre the inverse reaches exactly 0 or 1 in floating point. Such a value
+    stands for the last representable one, so a run's own path comes back; ``to_model`` stays
+    strict, because outside data at a boundary is an error.
+    """
+    x = np.asarray(x, dtype=float)
+    tiny = np.finfo(float).tiny
+    if transform == "log100":
+        x = np.maximum(x, tiny)
+    elif transform == "logit":
+        x = np.clip(x, tiny, 1 - np.finfo(float).epsneg)
+    return to_model(transform, x)
+
+
 class Feature(Contract):
     """``max(0, y - above)`` of a macro variable in the model scale."""
 
