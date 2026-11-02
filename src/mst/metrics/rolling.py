@@ -73,7 +73,9 @@ class Grid:
     panels: dict = field(default_factory=dict)
     """The panel of every date, the history the walk of that date reads."""
     skipped: dict = field(default_factory=dict)
-    """The dates the model could not be estimated on, with the reason."""
+    """The dates whose data are too short for any model, with the reason."""
+    refused: dict = field(default_factory=dict)
+    """The dates with enough data where the model gave no version, with the reason."""
 
 
 def rolling_report(
@@ -101,6 +103,7 @@ def rolling_report(
         "validation_from": plan.rolling.validation_from,
         "dates": len(grid.dates),
         "skipped": {when.isoformat(): reason for when, reason in grid.skipped.items()},
+        "refused": {when.isoformat(): reason for when, reason in grid.refused.items()},
     }
     report["base_uniformity"] = _uniformity(grid, plan)
     report["quality"] = _quality(grid, plan, registry)
@@ -117,6 +120,30 @@ def grid_dates(store, registry, plan: Episodes, known_on: date) -> list[date]:
     return months[HISTORY_MONTHS :: plan.rolling.step_months]
 
 
+def _short_of_history(store, registry, as_of: date) -> bool:
+    """Whether the data known on a date cannot feed any model: a panel that cannot be built, or
+    a variable with fewer than three values. The data decide, not the wording of an error; a
+    variable the store never holds is no shortage of history."""
+    from mst.macro.panel import build_panel
+
+    held = [v for v in registry.variables if store.as_of(v.id, date.max)]
+    months = [row.month for v in held for row in store.as_of(v.id, as_of)]
+    if not months:
+        return True
+    seasonal = [v.id for v in held if v.seasonal]
+    try:
+        panel = build_panel(
+            store,
+            registry.model_copy(update={"variables": held}),
+            start=min(months),
+            as_of=as_of,
+            seasonal=seasonal,
+        )
+    except ValueError:
+        return True
+    return bool((np.isfinite(panel.y).sum(axis=0) < 3).any())
+
+
 def half_of(when: date, plan: Episodes) -> str:
     """The half of the grid a date belongs to; every date is tuning without a split."""
     start = plan.rolling.validation_from
@@ -126,8 +153,9 @@ def half_of(when: date, plan: Episodes) -> str:
 def _grid(plugin, store, registry, root, plan, known_on, macro_of, *, only=None) -> Grid:
     """The dates of the grid with their model versions, ``s_0`` simulations and facts.
 
-    A date the model cannot be estimated on — a series with too little history then — is named
-    in ``skipped``. The versions are kept only for the price: on a long grid they are heavy.
+    A date with too little history for any model is named in ``skipped``. A date with enough
+    data where the model gives no version is named in ``refused``: scoring only the dates a
+    model survives would hide its failures. The versions are kept only for the price: on a long grid they are heavy.
     """
     from mst.macro.panel import shift
     from mst.model_sdk.contracts import ScenarioPlan
@@ -138,13 +166,15 @@ def _grid(plugin, store, registry, root, plan, known_on, macro_of, *, only=None)
     if only is not None:
         dates = [when for when in dates if when in set(only)]
     reach = max([plan.after_months, *(event.horizon for event in plan.rolling.price_events)])
-    versions, forecasts, facts, panels, skipped, kept = {}, {}, {}, {}, {}, []
+    versions, forecasts, facts, panels, skipped, refused = {}, {}, {}, {}, {}, {}
+    kept = []
     for when in dates:
         as_of = calculation_date(when)
         try:
             version = macro_of(plugin, store, registry, as_of, root)
         except ValueError as error:
-            skipped[when] = str(error)
+            short = _short_of_history(store, registry, as_of)
+            (skipped if short else refused)[when] = str(error)
             continue
         kept.append(when)
         if plan.rolling.price_events:
@@ -179,6 +209,7 @@ def _grid(plugin, store, registry, root, plan, known_on, macro_of, *, only=None)
         facts=facts,
         panels=panels,
         skipped=skipped,
+        refused=refused,
     )
 
 
@@ -275,7 +306,8 @@ def rolling_decision(report: dict, against: Path, *, seed: int) -> dict:
     """The four steps of the decision rule on the logarithm of the relative CRPS.
 
     The reports must share their cells, and the comparison runs on the validation half when
-    there is one: the benchmark, at zero, is the walk; the incumbent is the other report.
+    there is one: the benchmark, at zero, is the walk; the incumbent is the other report. A
+    candidate that refused a date both reports should cover has failed whatever its score.
     """
     other = json.loads(Path(against).read_text(encoding="utf-8"))
     other = other.get("rolling", other)
@@ -304,6 +336,9 @@ def rolling_decision(report: dict, against: Path, *, seed: int) -> dict:
         incumbent_admission_shares=other["quality"]["halves"][half]["admission"],
     )
     verdict.update(half=half, vs_walk=versus_walk, vs_incumbent=versus_other)
+    if report["refused"]:
+        verdict["verdict"] = "rejected"
+        verdict["reason"] = f"the model refused {len(report['refused'])} date(s) of the grid"
     return verdict
 
 
@@ -318,7 +353,8 @@ def run(
     details: Path | None = None,
     against: Path | None = None,
 ) -> int:
-    """The rolling check from the command line; returns 1 when no date could be judged."""
+    """The rolling check from the command line; returns 1 when the model refused a date or no date
+    could be judged."""
     from mst import models as models_pkg
     from mst.data.store import SeriesStore
     from mst.macro.registry import load_registry
@@ -355,7 +391,7 @@ def run(
             json.dumps(report, ensure_ascii=False, indent=1, default=_jsonable),
             encoding="utf-8",
         )
-    return 0 if report["quality"]["rows"] else 1
+    return 0 if report["quality"]["rows"] and not report["refused"] else 1
 
 
 def print_rolling(report: dict) -> None:
@@ -396,8 +432,16 @@ def print_rolling(report: dict) -> None:
         for quantity, value in sorted(top["by_quantity"].items(), key=lambda item: item[1]):
             print(f"| {quantity} | {_number(value)} |")
     if report["skipped"]:
-        print(f"\nDates left out, the model cannot be estimated on them: {len(report['skipped'])}")
+        print(f"\nDates left out, too little history: {len(report['skipped'])}")
         for when, reason in report["skipped"].items():
+            print(f"- {when}: {reason}")
+    if report["refused"]:
+        print(
+            f"\n**The model refused {len(report['refused'])} of "
+            f"{len(report['refused']) + report['dates']} dates with enough data.** "
+            "The scores above cover only the dates it survived."
+        )
+        for when, reason in report["refused"].items():
             print(f"- {when}: {reason}")
     verdict = report.get("decision")
     if verdict:
@@ -471,9 +515,7 @@ def _price(grid: Grid, plan: Episodes, known_on: date) -> dict:
     rows = []
     for event in plan.rolling.price_events:
         terms = tuple(
-            LinearTerm(
-                variable=term["variable"], month=term["month"], weight=term["weight"]
-            )
+            LinearTerm(variable=term["variable"], month=term["month"], weight=term["weight"])
             for term in event.terms
         )
         constraint = LinearConstraint(terms=terms, low=event.low, high=event.high)
@@ -578,9 +620,7 @@ def _groups(rows: list[dict]) -> list[dict]:
     edges = (0.0, 0.02, 0.05, 0.2, 1.0)
     found = []
     for k in range(len(edges) - 1):
-        inside = [
-            row for row in rows if edges[k] <= row["pi"] < edges[k + 1]
-        ]
+        inside = [row for row in rows if edges[k] <= row["pi"] < edges[k + 1]]
         if not inside:
             continue
         found.append(

@@ -229,18 +229,38 @@ def test_the_grid_splits_into_halves_and_keeps_every_row_in_one(tmp_path, monkey
     assert quality["block_dates"] == 2
 
 
-def test_a_date_the_model_cannot_be_estimated_on_is_named_and_left_out(tmp_path, monkeypatch):
-    class Late(WalkMacro):
-        def estimate(self, context):
-            if context.as_of.year < 2025:
-                raise ValueError("variable 21 has fewer than three values")
-            return super().estimate(context)
+class Late(WalkMacro):
+    def estimate(self, context):
+        if context.as_of.year < 2025:
+            raise ValueError("no draw keeps its radius")
+        return super().estimate(context)
 
+
+def test_a_date_with_enough_data_where_the_model_fails_is_a_refusal(tmp_path, monkeypatch):
     found = report_of(tmp_path, monkeypatch, macro=Late())
-    assert found["skipped"]
-    assert set(found["skipped"].values()) == {"variable 21 has fewer than three values"}
+    assert set(found["refused"].values()) == {"no draw keeps its radius"}
+    assert not found["skipped"]
     assert all(row["date"] >= "2025-01-01" for row in found["quality"]["rows"])
+
+
+def test_a_date_short_of_history_is_left_out_and_is_no_refusal(tmp_path, monkeypatch):
+    from mst.metrics import rolling
+
+    monkeypatch.setattr(rolling, "_short_of_history", lambda *_: True)
+    found = report_of(tmp_path, monkeypatch, macro=Late())
+    assert set(found["skipped"].values()) == {"no draw keeps its radius"}
+    assert not found["refused"]
     assert found["dates"] > 0
+
+
+def test_short_of_history_reads_the_data(tmp_path):
+    from mst.macro.registry import load_registry
+    from mst.metrics.rolling import _short_of_history
+
+    store = simulated.series_store(tmp_path / "series", months=120, seed=14)
+    registry = load_registry()
+    assert _short_of_history(store, registry, date(2020, 2, 15))
+    assert not _short_of_history(store, registry, date(2029, 1, 1))
 
 
 def test_the_grid_can_be_narrowed_to_some_dates(tmp_path, monkeypatch):
@@ -290,9 +310,7 @@ def test_the_price_of_an_event_beats_the_historical_frequency(tmp_path, monkeypa
     # The threshold sits in the model scale of the middle of the store, so the event's
     # probability moves over the grid and the model's level carries information the base
     # rate has not.
-    found = report_of(
-        tmp_path, monkeypatch, events=[("brent-up", 1, 460.5, 1e6)], months=120
-    )
+    found = report_of(tmp_path, monkeypatch, events=[("brent-up", 1, 460.5, 1e6)], months=120)
     price = found["price"]
     assert price["events"] == 1
     assert price["scores"]["windows"] > 20
@@ -304,9 +322,7 @@ def test_the_price_of_an_event_beats_the_historical_frequency(tmp_path, monkeypa
 
 
 def test_the_parameter_part_of_the_price_is_reported(tmp_path, monkeypatch):
-    found = report_of(
-        tmp_path, monkeypatch, events=[("brent-up", 1, 460.5, 1e6)], months=120
-    )
+    found = report_of(tmp_path, monkeypatch, events=[("brent-up", 1, 460.5, 1e6)], months=120)
     rows = found["price"]["rows"]
     # The fake model has one parameter set, so the price is all event: dist + log P(S)
     # stays at zero whatever the date — the parameter uncertainty the difference names is

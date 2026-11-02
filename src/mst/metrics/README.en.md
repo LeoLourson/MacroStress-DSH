@@ -18,7 +18,7 @@ python -m mst.metrics backtest [MODEL_ID] --as-of DATE --store DIR --models DIR 
 
 The episodes answer another question: what the model does when the shock is known. They are selected with hindsight and their windows overlap, so their coverage shares and intervals understate the error and do not prove quality on their own. The benchmark of the conditional forecast is the conditional walk, which knows the same path of the fixed variables; the plain walk does not know it, so a win over it says little.
 
-Both checks are limited by the data: the series of the store start in 2012-01, the publication date of the macro series is approximate (`approximate`), and their history is already revised. The first dates where a series has too few values to estimate the model are named in the report and skipped.
+Both checks are limited by the data: the series of the store start in 2012-01, the publication date of the macro series is approximate (`approximate`), and their history is already revised. The first dates, where a series has too few values for any model, are named in the report and skipped. A date with enough data where the model gives no version is a refusal: the report counts refusals apart, the exit code is 1, and `--against` rejects such a candidate, because a score over the surviving dates would hide the failures.
 
 ## Words the report needs
 
