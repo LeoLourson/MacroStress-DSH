@@ -8,8 +8,7 @@ on:
   workflow_dispatch: {} # для ручного запуска
 
 permissions:
-  contents: read
-  administration: write # необходимо для обновления топиков
+  contents: write
 
 jobs:
   sync-topics:
