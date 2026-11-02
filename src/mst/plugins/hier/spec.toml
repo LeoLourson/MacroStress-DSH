@@ -17,6 +17,12 @@ rho_max = 0.99
 # forecast `reach` months ahead on the realized macro variables.
 holdout = 24
 reach = 12
+# The quantities whose equation runs on monthly changes: a share price is a trending level
+# pulled towards a spurious long-run level built from trending regressors, so its satellite is
+# fitted on Δd against Δx — the coefficients become elasticities and the drift a monthly one —
+# and the simulation accumulates the changes from the last observed level. Housing has a
+# quarterly `span`, and bonds and overdue shares are stationary: they stay in levels.
+differences = ["share_price"]
 
 [sampler]
 draws = 1000

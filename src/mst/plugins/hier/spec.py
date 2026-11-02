@@ -6,7 +6,7 @@ from typing import Annotated
 
 from pydantic import Field
 
-from mst.contracts import Contract, Positive
+from mst.contracts import Contract, Identifier, Positive
 
 SPEC_PATH = Path(__file__).with_name("spec.toml")
 
@@ -25,6 +25,10 @@ class Spec(Contract):
     rho_max: Annotated[float, Field(strict=True, gt=0, lt=1)]
     holdout: Count
     reach: Count
+    differences: list[Identifier] = []
+    """The quantities fitted on monthly changes: the long-run level of a trending driver is
+    spurious, so its equation runs on Δd and Δx and the simulation accumulates the level.
+    A quantity not named stays in levels."""
     sampler: Sampler
 
 

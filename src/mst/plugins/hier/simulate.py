@@ -12,8 +12,13 @@ up to ``t = 0`` are simulated on the observed macro panel and, for its last ``p`
 the history drawn by the repetition; a month whose ``x`` the panel does not know stops the
 driver. A driver without history of its own starts from the level of the nearest object above
 it and has the residual spread of the nearest one with data, independent of the others.
-The impacts of the scenario add their ``values`` to the path in the model scale, one
-value a month from ``start``.
+A quantity fitted in differences (``spec.differences``) is simulated in changes and
+accumulated: the recursion draws the monthly change on the changes of ``x``, the level is the
+running sum from the last observed one, and the recursion starts from the last observed
+change — or the stationary mean of the changes of that draw when the month before the last
+value is missing. The impacts of the scenario add their ``values`` to the path in the model
+scale, one value a month from ``start`` — for a differenced quantity, to the level, after the
+accumulation, so an impact never compounds.
 """
 
 import numpy as np
@@ -21,7 +26,7 @@ import numpy as np
 from mst.drivers.history import x_from_paths
 from mst.model_sdk.contracts import AdditiveImpact, DriverPaths, UpperPaths
 
-from .estimate import regressors
+from .estimate import difference, regressors
 
 PARAMETERS_FROM_ABOVE = "parameters_from_above"
 """The object has no history: its parameters and level come from the level above."""
@@ -47,6 +52,14 @@ def _nearest(hist, node: int, rows: np.ndarray) -> int:
     if above < 0:
         raise NotServed(hist.driver[node], "no object above it has history")
     return above
+
+
+def _initial_change(hist, source: int, last: int) -> float:
+    """The change a differenced driver starts from; NaN when the month before its last value
+    is missing — the stationary mean of the changes of the draw is used then."""
+    if last >= 1 and np.isfinite(hist.d[last - 1, source]):
+        return float(hist.d[last, source] - hist.d[last - 1, source])
+    return float("nan")
 
 
 def simulate(
@@ -94,7 +107,10 @@ def simulate(
         source = node if own else _nearest(hist, node, fit_.rows)
         last = int(np.flatnonzero(np.isfinite(hist.d[:, source]))[-1])
         lags, count = hist.quantity.lags, len(hist.months)
-        observed = hist.x[max(0, last + 1 - lags) : count - p]
+        # A differenced equation reads one month further back: Δx_t needs x_{t-1}, so the
+        # panel months it touches reach from ``last - lags`` and not ``last + 1 - lags``.
+        start_x = max(0, last - lags) if fit_.differenced else max(0, last + 1 - lags)
+        observed = hist.x[start_x : count - p]
         if not np.all(np.isfinite(observed)):
             raise NotServed(driver, "x is unknown between its last value and t = 0")
         flags = set()
@@ -102,7 +118,10 @@ def simulate(
             flags.add(PARAMETERS_FROM_ABOVE)
         if hist.approximate[:, source].any():
             flags.add(APPROXIMATE)
-        plan.append((driver, quantity, node, source, own, hist.d[last, source], last, flags))
+        initial = _initial_change(hist, source, last) if fit_.differenced else None
+        plan.append(
+            (driver, quantity, node, source, own, hist.d[last, source], last, flags, initial)
+        )
 
     joint = [item[0] for item in plan if item[4]]
     count = next(iter(model.fits.values())).gamma.shape[0]
@@ -128,7 +147,7 @@ def simulate(
         rng = np.random.default_rng([seed, stream, r])
         s = int(rng.integers(count))
         single = rng.standard_normal((steps, len(plan)))
-        for k, (driver, quantity, node, source, own, start, last, _) in enumerate(plan):
+        for k, (driver, quantity, node, source, own, start, last, _, initial) in enumerate(plan):
             fit_ = model.fits[quantity]
             hist = fit_.history
             gamma, lags = fit_.gamma[s, node], hist.quantity.lags
@@ -141,12 +160,23 @@ def simulate(
                     x_from_paths(hist.quantity, macro.ids, macro.paths[r, 1:]),
                 ]
             )
+            if fit_.differenced:
+                x = difference(x)
             noise = given[r, :, joint.index(driver)] if own else single[:, k]
             value, zero = start, len(hist.months) - 1
+            level, change = start, initial
             for step, u in enumerate(range(last + 1, zero + horizon + 1)):
-                value = gamma @ regressors(lags, x, value, u) + sigma * noise[step]
-                if u >= zero:
-                    paths[r, u - zero, k] = value
+                if fit_.differenced:
+                    if not np.isfinite(change):
+                        change = gamma[0] / (1 - gamma[1])
+                    change = gamma @ regressors(lags, x, change, u) + sigma * noise[step]
+                    level = level + change
+                    if u >= zero:
+                        paths[r, u - zero, k] = level
+                else:
+                    value = gamma @ regressors(lags, x, value, u) + sigma * noise[step]
+                    if u >= zero:
+                        paths[r, u - zero, k] = value
             if last == zero:
                 paths[r, 0, k] = start
     flags = {item[0]: item[7] for item in plan}
