@@ -18,12 +18,41 @@ import numpy as np
 from scipy.linalg import block_diag
 
 from mst.macro.registry import block_of
+from mst.model_sdk.stability import companion_radius
 
 from .estimate import Posterior
 from .signs import Shock
 from .var import responses
 
 BATCH = 1000
+
+
+def stable(posterior: Posterior, rho_max: float) -> Posterior:
+    """The posterior restricted to the draws whose companion radius is at or below ``rho_max``.
+
+    A unit root is admissible — most of these variables are nonstationary — but growth
+    without bound is not: a path simulated from an explosive draw drifts ever further, and
+    a condition on a path multiplies the effect. The mechanism is the identification
+    filter's — the posterior restricted to a region — and it runs before the rotation
+    search. Raises ``ValueError`` naming the model and the limit when no draw survives.
+    """
+    pick = np.flatnonzero(companion_radius(posterior.lags) <= rho_max)
+    if not len(pick):
+        raise ValueError(
+            f"no draw of bvar.sv keeps its companion radius at or below rho_max {rho_max}"
+        )
+    return replace(
+        posterior,
+        const=posterior.const[pick],
+        lags=posterior.lags[pick],
+        dummy=posterior.dummy[pick],
+        chol=posterior.chol[pick],
+        logvar=posterior.logvar[pick],
+        volvol=posterior.volvol[pick],
+        dof=posterior.dof[pick],
+        history=posterior.history[pick],
+        diagnostics={**posterior.diagnostics, "stable": len(pick)},
+    )
 
 
 def impact(posterior: Posterior, draw: int, month: int = -1) -> np.ndarray:
@@ -71,9 +100,24 @@ def rotate(response: np.ndarray, signs: np.ndarray, tries: int, rng) -> np.ndarr
     return None
 
 
-def identify(posterior: Posterior, shocks: list[Shock], *, sign_lag: int, tries: int, seed: int):
+def identify(
+    posterior: Posterior,
+    shocks: list[Shock],
+    *,
+    sign_lag: int,
+    tries: int,
+    seed: int,
+    rho_max: float | None = None,
+):
     """The posterior restricted to draws with an admissible ``Q``, with ``rotation`` and
-    ``shocks`` set. Raises ``ValueError`` if no draw has one."""
+    ``shocks`` set. Raises ``ValueError`` if no draw has one.
+
+    With ``rho_max`` set, the stability filter of ``stable`` runs first, so the rotations
+    are searched on the stable draws alone.
+    """
+    estimated = posterior.draws
+    if rho_max is not None:
+        posterior = stable(posterior, rho_max)
     ids, n, g = posterior.ids, len(posterior.ids), posterior.n_global
     index = {id_: i for i, id_ in enumerate(ids)}
     blocks = {"gl": range(0, g), "ru": range(g, n)}
@@ -117,6 +161,6 @@ def identify(posterior: Posterior, shocks: list[Shock], *, sign_lag: int, tries:
         diagnostics={
             **posterior.diagnostics,
             "identified": len(kept),
-            "estimated": posterior.draws,
+            "estimated": estimated,
         },
     )

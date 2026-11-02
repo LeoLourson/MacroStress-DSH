@@ -12,8 +12,16 @@ tightness = 0.2
 stationary = ["gl.vix", "ru.spread_aa", "ru.spread_a", "ru.spread_bbb"]
 # Months after the impact month that a sign restriction also covers, within each regime.
 sign_lag = 2
-# Rotations tried per parameter draw and regime before the draw is dropped as unidentified.
+# Rotations tried per parameter draw and regime before the draw is dropped as
+# unidentified.
 rotation_tries = 20000
+# The ceiling on the spectral radius of a parameter draw's companion matrix, in every
+# regime. A unit root is admissible and expected — most of these variables are
+# nonstationary — but growth without bound is not. With every lag coefficient switching
+# by regime the stress regime is explosive in nearly every draw, so until the lags stop
+# switching (switching = "mean_covariance") this filter leaves nothing: that is the
+# measured finding, not a reason to raise the ceiling.
+rho_max = 1.005
 # Dirichlet prior on every row of the transition matrix: `transition_stay` on staying in
 # the regime, `transition_switch` on leaving it for each other regime. The stress episodes
 # of the Russian panel are short, so the prior leans on persistence: a row of raw counts

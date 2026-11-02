@@ -23,9 +23,15 @@ stationary = ["gl.vix", "ru.spread_aa", "ru.spread_a", "ru.spread_bbb"]
 sign_lag = 2
 # Rotations tried per parameter draw before the draw is dropped as unidentified.
 rotation_tries = 20000
+# The ceiling on the spectral radius of a parameter draw's companion matrix. A unit root
+# is admissible and expected — most of these variables are nonstationary — but growth
+# without bound is not: a path simulated from a draw with a larger radius drifts ever
+# further, and a condition on a path multiplies the effect. The filter keeps the posterior
+# restricted to the stable region, as the identification filter does.
+rho_max = 1.005
 
 [sampler]
-draws = 1000
+draws = 4000
 burn = 1000
 thin = 2
 seed = 20261029

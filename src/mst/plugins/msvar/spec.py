@@ -42,6 +42,10 @@ class Spec(Contract):
     stationary: list[str] = []
     sign_lag: Annotated[int, Field(strict=True, ge=0)]
     rotation_tries: Count
+    rho_max: Annotated[float | None, Field(strict=True, ge=1.0)] = None
+    """The ceiling on the companion-matrix spectral radius a parameter draw must meet in
+    every regime to survive. ``None`` is no ceiling — the versions estimated before the
+    filter carry it."""
     transition_stay: Positive
     transition_switch: Positive
     sampler: Sampler

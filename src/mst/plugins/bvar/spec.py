@@ -50,6 +50,9 @@ class Spec(Contract):
     volvol_df: Annotated[float, Field(strict=True, gt=2)]
     sign_lag: Annotated[int, Field(strict=True, ge=0)]
     rotation_tries: Count
+    rho_max: Annotated[float | None, Field(strict=True, ge=1.0)] = None
+    """The ceiling on the companion-matrix spectral radius a parameter draw must meet to
+    survive. ``None`` is no ceiling — the versions estimated before the filter carry it."""
     sampler: Sampler
     dummies: list[Dummy] = []
 

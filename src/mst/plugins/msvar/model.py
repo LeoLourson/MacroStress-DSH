@@ -89,6 +89,7 @@ class MSVarModel(MacroModel):
             sign_lag=spec.sign_lag,
             tries=spec.rotation_tries,
             seed=spec.sampler.seed,
+            rho_max=spec.rho_max,
         )
         return parts(model, spec, panel, context.as_of)
 
