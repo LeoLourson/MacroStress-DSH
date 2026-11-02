@@ -10,7 +10,7 @@ whenToUse: when a scenario and a portfolio exist and losses, coverage and the sc
 
 `run(action="start", scenario="...", portfolio="...", draws=2048, seed=20261029)` creates `runs/<id>/` and a job on the `runs` resource; it returns `run` and `job`. `draws` is the number of path draws, `seed` an integer in 0..2^32-1. The same scenario, versions, `draws` and `seed` give the same numbers.
 
-`run(action="status", id=<run>)` gives the meta of the calculation and the job; `jobs(action="status", id=<job>)` and `jobs(action="log", id=<job>)` give progress and the log. `run(action="start")` also takes `positions` instead of a portfolio (`base_currency` RUB only).
+`run(action="status", id=<run>)` gives the meta of the calculation and the job; `jobs(action="wait", id=<job>, timeout_sec=30)` holds the call until the job ends — call it again while it returns `running: true` — and `jobs(action="log", id=<job>)` gives the log. `run(action="start")` also takes `positions` instead of a portfolio (`base_currency` RUB only).
 
 ## 2. Result
 

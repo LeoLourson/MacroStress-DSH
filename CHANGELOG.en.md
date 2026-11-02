@@ -6,6 +6,11 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## Unreleased
 
+- **`jobs` waits for a job server-side.** The `wait` action with `timeout_sec` (30 by
+  default, 120 at most) holds the call until the job ends or the timeout passes, and
+  returns the `status` record. One call replaces the `status`/`log` loop an agent ran
+  while the job worked; the server instructions, the `run-report` guide, the reference
+  and the first session now use `wait`.
 - **Tool schemas are fully described.** All 53 parameters of the eight MCP tools carry a
   description (`Field(description=...)`), and every tool declares `ToolAnnotations`
   (`readOnlyHint`, `destructiveHint`, `idempotentHint`, `openWorldHint`, `title`).

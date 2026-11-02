@@ -4,7 +4,7 @@ The general scheme is in [../concept/formalization.en.md](../concept/formalizati
 
 ## MCP tools
 
-The server `macrostress` (`src/mst/mcp.py`) gives eight tools, the prompt `scenario_from_event(event)` and instructions that any client receives when it connects. They send the agent to the `guide` tool before it starts work. An argument error comes back as a call error whose text lists the allowed values. A tool that starts a job returns its id at once, without waiting for the end (`run start` also returns the run id).
+The server `macrostress` (`src/mst/mcp.py`) gives eight tools, the prompt `scenario_from_event(event)` and instructions that any client receives when it connects. They send the agent to the `guide` tool before it starts work. An argument error comes back as a call error whose text lists the allowed values. A tool that starts a job returns its id at once, without waiting for the end (`run start` also returns the run id). To wait for the end, `jobs(action="wait", id=...)` holds the call until the job ends or the timeout passes, and the job's record comes back in the same call.
 
 ### `guide`
 
@@ -23,6 +23,7 @@ These are the same texts the DSH plugin registers as skills.
 | `status` | `id` | The job record (`argv`, `pid`, `started`, `finished`, `cancelled`), `running` and `exit_code` (`null` while running or if cancelled) |
 | `log` | `id`, `tail` (50; 0 is the whole log) | The last lines of the log |
 | `cancel` | `id` | Stops the job's process tree and releases the lock |
+| `wait` | `id`, `timeout_sec` (30; at most 120) | Holds the call until the job ends or the timeout passes, returning the record as `status` does: `running` tells whether to wait again. The `status`/`log` loop is no longer needed |
 
 ### `series`
 

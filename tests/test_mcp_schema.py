@@ -15,7 +15,7 @@ MINIMUM = 15
 """Characters a description must carry to count as one."""
 
 ACTIONS = {
-    "jobs": ("state", "status", "log", "cancel"),
+    "jobs": ("state", "status", "log", "cancel", "wait"),
     "series": ("search", "get", "add", "update"),
     "corpus": ("search", "get", "list", "add", "index", "fetch"),
     "scenario": ("list", "get", "save", "validate", "reverse"),

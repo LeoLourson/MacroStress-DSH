@@ -1,6 +1,7 @@
 """The MCP server: a tool parses its arguments and calls one function of the core."""
 
 import argparse
+import asyncio
 import os
 from datetime import date
 from pathlib import Path
@@ -38,8 +39,15 @@ fragment gives its number, and with "assumption" otherwise. When \
 neither the event nor the corpus gives a number, propose one from the nearest episode and mark \
 it "assumption": a scenario with no conditions and no impacts records no event, and questions \
 to the user come after the scenario, not instead of it. A human approves a scenario: never \
-fill approved_by yourself and never start a calculation that was not asked for.\
+fill approved_by yourself and never start a calculation that was not asked for.
+
+A tool that starts a job returns its id at once. Wait with jobs(action="wait", id=<job>): the \
+server holds the call until the job ends, and jobs(action="log", id=<job>) shows what it \
+printed.\
 """
+
+WAIT_STEP = 0.2
+"""Seconds between the file reads of a ``wait``, the only cost of waiting server-side."""
 
 
 def build(ws: store.Workspace) -> FastMCP:
@@ -85,18 +93,19 @@ def build(ws: store.Workspace) -> FastMCP:
             openWorldHint=False,
         )
     )
-    def jobs(
+    async def jobs(
         action: Annotated[
             str,
             Field(
-                description="What to do with the workspace or one job: state, status, log "
-                "or cancel. cancel stops the job's process tree and frees its resource."
+                description="What to do with the workspace or one job: state, status, log, "
+                "cancel or wait. wait holds the call until the job ends or timeout_sec "
+                "passes; cancel stops the job's process tree and frees its resource."
             ),
         ],
         id: Annotated[
             str | None,
             Field(
-                description="The job id that status, log and cancel read: the id a "
+                description="The job id that status, log, cancel and wait read: the id a "
                 "starting tool returned."
             ),
         ] = None,
@@ -107,8 +116,22 @@ def build(ws: store.Workspace) -> FastMCP:
                 "the whole log when 0."
             ),
         ] = 50,
+        timeout_sec: Annotated[
+            float,
+            Field(
+                ge=0.0,
+                le=120.0,
+                description="How long wait holds the call, in seconds. The job's record "
+                "comes back when the time is out; call wait again to keep waiting.",
+            ),
+        ] = 30.0,
     ) -> dict:
-        """Workspace and task state. Actions: state, status, log, cancel."""
+        """Workspace and task state. Actions: state, status, log, cancel, wait.
+
+        ``wait`` polls the job server-side, so one call replaces the loop of ``status`` and
+        ``log`` calls an agent would otherwise run while a long job works; it returns the
+        record ``status`` returns, and ``running`` says whether to call it again.
+        """
         if action == "state":
             return tasks.state(ws)
         if action == "status":
@@ -118,7 +141,11 @@ def build(ws: store.Workspace) -> FastMCP:
             return {"id": job_id, "log": tasks.log(ws, job_id, tail)}
         if action == "cancel":
             return tasks.cancel(ws, _need(id, "id"))
-        raise ValueError(f"jobs: unknown action {action!r}, try state, status, log, cancel")
+        if action == "wait":
+            return await _wait_for_job(ws, _need(id, "id"), timeout_sec)
+        raise ValueError(
+            f"jobs: unknown action {action!r}, try state, status, log, cancel, wait"
+        )
 
     @server.tool(
         annotations=ToolAnnotations(
@@ -750,6 +777,22 @@ def build(ws: store.Workspace) -> FastMCP:
 def _corpus_argv(ws: store.Workspace, command: str, *ids: str) -> list[str]:
     """The command line of ``python -m mst.corpus`` for this workspace."""
     return ["-m", "mst.corpus", command, *ids, "--corpus", str(ws.corpus)]
+
+
+async def _wait_for_job(ws: store.Workspace, job_id: str, timeout_sec: float) -> dict:
+    """The job's record once it ends, or the record when ``timeout_sec`` runs out.
+
+    The loop sleeps between file reads, so the server answers other calls while one client
+    waits; the record is the one ``status`` returns, with ``running`` telling the caller
+    whether to wait again.
+    """
+    loop = asyncio.get_running_loop()
+    deadline = loop.time() + max(timeout_sec, 0.0)
+    while True:
+        record = tasks.status(ws, job_id)
+        if not record["running"] or loop.time() >= deadline:
+            return record
+        await asyncio.sleep(WAIT_STEP)
 
 
 def _day(as_of: str) -> date:
