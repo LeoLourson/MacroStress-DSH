@@ -2,7 +2,11 @@
 
 import argparse
 import asyncio
+import contextlib
 import os
+import sys
+from collections.abc import Iterator
+from contextlib import contextmanager
 from datetime import date
 from pathlib import Path
 from typing import Annotated, Any
@@ -48,6 +52,22 @@ printed.\
 
 WAIT_STEP = 0.2
 """Seconds between the file reads of a ``wait``, the only cost of waiting server-side."""
+
+
+@contextmanager
+def _plugin_output_to_stderr() -> Iterator[None]:
+    """A plugin's stray ``print()`` goes to stderr, and the stdio channel stays JSON-RPC.
+
+    The tools this wraps — scenario, portfolio, model — load and run plugin code in the
+    server's process (the heavy estimate and run jobs are separate processes and need no
+    this). The stdio transport took its own wrapper of ``sys.stdout.buffer`` at startup, so
+    rebinding ``sys.stdout`` for the duration of a call cannot touch the channel: the
+    plugin's output reaches the client's log instead of corrupting the protocol. An
+    fd-level redirect was rejected because a concurrent response written through the
+    transport while the redirect held would land on stderr and be lost.
+    """
+    with contextlib.redirect_stdout(sys.stderr):
+        yield
 
 
 def build(ws: store.Workspace) -> FastMCP:
@@ -409,48 +429,51 @@ def build(ws: store.Workspace) -> FastMCP:
         ``portfolio``: the worst loss under the price ``kappa``, or the lowest price whose loss
         reaches ``level``.
         """
-        if action == "list":
-            return scenario_tool.catalogue(ws.scenarios)
-        if action == "get":
-            return scenario_tool.get(ws.scenarios, _need(id, "id"))
-        if action == "save":
-            return scenario_tool.save(ws.scenarios, _need(id, "id"), _need(spec, "spec"))
-        if action == "reverse":
-            from mst import plugins as _plugins
-            from mst.scenario.reverse import inf_dist, sup_rho, width_family
+        with _plugin_output_to_stderr():
+            if action == "list":
+                return scenario_tool.catalogue(ws.scenarios)
+            if action == "get":
+                return scenario_tool.get(ws.scenarios, _need(id, "id"))
+            if action == "save":
+                return scenario_tool.save(ws.scenarios, _need(id, "id"), _need(spec, "spec"))
+            if action == "reverse":
+                from mst import plugins as _plugins
+                from mst.scenario.reverse import inf_dist, sup_rho, width_family
 
-            loaded = scenario_tool.load(ws.scenarios, _need(id, "id"))
-            installed = _plugins.registry()
-            macro = macro_version.load(ws.models, loaded.macro, installed.macro)
-            satellites = satellite_bundle.load(
-                ws.models, loaded.satellites, installed.satellites
-            )
-            found = portfolio_tool.load(ws.portfolios, _need(portfolio, "portfolio"))
-            family = width_family(loaded, macro)
-            if kappa is not None:
-                return sup_rho(
+                loaded = scenario_tool.load(ws.scenarios, _need(id, "id"))
+                installed = _plugins.registry()
+                macro = macro_version.load(ws.models, loaded.macro, installed.macro)
+                satellites = satellite_bundle.load(
+                    ws.models, loaded.satellites, installed.satellites
+                )
+                found = portfolio_tool.load(ws.portfolios, _need(portfolio, "portfolio"))
+                family = width_family(loaded, macro)
+                if kappa is not None:
+                    return sup_rho(
+                        family,
+                        kappa,
+                        macro=macro,
+                        satellites=satellites,
+                        positions=found.positions,
+                        draws=_need(draws, "draws"),
+                        seed=_need(seed, "seed"),
+                    )
+                return inf_dist(
                     family,
-                    kappa,
+                    _need(level, "level"),
                     macro=macro,
                     satellites=satellites,
                     positions=found.positions,
                     draws=_need(draws, "draws"),
                     seed=_need(seed, "seed"),
                 )
-            return inf_dist(
-                family,
-                _need(level, "level"),
-                macro=macro,
-                satellites=satellites,
-                positions=found.positions,
-                draws=_need(draws, "draws"),
-                seed=_need(seed, "seed"),
+            if action == "validate":
+                return scenario_tool.validate(
+                    ws.scenarios, _need(id, "id"), ws.models, _indexed(ws)
+                )
+            raise ValueError(
+                f"scenario: unknown action {action!r}, try list, get, save, reverse, validate"
             )
-        if action == "validate":
-            return scenario_tool.validate(ws.scenarios, _need(id, "id"), ws.models, _indexed(ws))
-        raise ValueError(
-            f"scenario: unknown action {action!r}, try list, get, save, reverse, validate"
-        )
 
     @server.tool(
         annotations=ToolAnnotations(
@@ -624,21 +647,25 @@ def build(ws: store.Workspace) -> FastMCP:
         driver the out-of-sample check rejected; ``exposure`` values the positions at the
         calculation month of the scenario's macro version.
         """
-        if action == "list":
-            return portfolio_tool.catalogue(ws.portfolios)
-        if action == "get":
-            return portfolio_tool.get(ws.portfolios, _need(id, "id"))
-        if action == "save":
-            return portfolio_tool.save(ws.portfolios, _need(id, "id"), _need(spec, "spec"))
-        if action == "delete":
-            return portfolio_tool.delete(ws.portfolios, _need(id, "id"))
-        if action == "check":
-            return portfolio_tool.check(ws, _need(id, "id"), _need(scenario, "scenario"))
-        if action == "exposure":
-            return portfolio_tool.exposure(ws, _need(id, "id"), _need(scenario, "scenario"))
-        raise ValueError(
-            f"portfolio: unknown action {action!r}, try list, get, save, delete, check, exposure"
-        )
+        with _plugin_output_to_stderr():
+            if action == "list":
+                return portfolio_tool.catalogue(ws.portfolios)
+            if action == "get":
+                return portfolio_tool.get(ws.portfolios, _need(id, "id"))
+            if action == "save":
+                return portfolio_tool.save(ws.portfolios, _need(id, "id"), _need(spec, "spec"))
+            if action == "delete":
+                return portfolio_tool.delete(ws.portfolios, _need(id, "id"))
+            if action == "check":
+                return portfolio_tool.check(ws, _need(id, "id"), _need(scenario, "scenario"))
+            if action == "exposure":
+                return portfolio_tool.exposure(
+                    ws, _need(id, "id"), _need(scenario, "scenario")
+                )
+            raise ValueError(
+                f"portfolio: unknown action {action!r}, "
+                "try list, get, save, delete, check, exposure"
+            )
 
     @server.tool(
         annotations=ToolAnnotations(
@@ -720,56 +747,61 @@ def build(ws: store.Workspace) -> FastMCP:
         ``version`` is the version hash ``describe`` and ``base`` read and the macro version the
         satellites of an ``estimate`` are built on; ``list`` takes no version.
         """
-        if kind == "catalog":
-            if action != "list":
-                raise ValueError("model: unknown action for catalog, try list")
-            return models.catalog()
-        if kind == "satellites":
+        with _plugin_output_to_stderr():
+            if kind == "catalog":
+                if action != "list":
+                    raise ValueError("model: unknown action for catalog, try list")
+                return models.catalog()
+            if kind == "satellites":
+                if action == "list":
+                    return {"versions": satellite_bundle.catalogue(ws.models)}
+                if action == "describe":
+                    return satellite_bundle.describe(ws.models, _need(version, "version"))
+                if action == "estimate":
+                    argv = _satellites_argv(ws, _need(version, "version"), assignment)
+                    return _start(ws, "models", argv)
+                raise ValueError(
+                    f"model: unknown action {action!r} for satellites, "
+                    "try list, describe, estimate"
+                )
+            if kind != "macro":
+                raise ValueError(
+                    f"model: unknown kind {kind!r}, try macro, satellites, catalog"
+                )
             if action == "list":
-                return {"versions": satellite_bundle.catalogue(ws.models)}
+                return {"versions": macro_version.catalogue(ws.models)}
             if action == "describe":
-                return satellite_bundle.describe(ws.models, _need(version, "version"))
-            if action == "estimate":
-                argv = _satellites_argv(ws, _need(version, "version"), assignment)
-                return _start(ws, "models", argv)
-            raise ValueError(
-                f"model: unknown action {action!r} for satellites, try list, describe, estimate"
-            )
-        if kind != "macro":
-            raise ValueError(f"model: unknown kind {kind!r}, try macro, satellites, catalog")
-        if action == "list":
-            return {"versions": macro_version.catalogue(ws.models)}
-        if action == "describe":
-            return macro_version.describe(ws.models, _need(version, "version"))
-        if action == "base":
-            from mst import plugins as _plugins
+                return macro_version.describe(ws.models, _need(version, "version"))
+            if action == "base":
+                from mst import plugins as _plugins
 
-            return macro_version.base(
-                ws.models,
-                _need(version, "version"),
-                _plugins.registry().macro,
-                horizon=horizon,
-                only=only,
-            )
-        if action == "estimate":
-            return _start(
-                ws,
-                "models",
-                _macro_argv(
+                return macro_version.base(
+                    ws.models,
+                    _need(version, "version"),
+                    _plugins.registry().macro,
+                    horizon=horizon,
+                    only=only,
+                )
+            if action == "estimate":
+                return _start(
                     ws,
-                    "estimate-macro",
-                    _need(as_of, "as_of"),
-                    models.selected(model_id).model_id,
-                ),
+                    "models",
+                    _macro_argv(
+                        ws,
+                        "estimate-macro",
+                        _need(as_of, "as_of"),
+                        models.selected(model_id).model_id,
+                    ),
+                )
+            if action == "backtest":
+                model = models.selected(model_id).model_id
+                return _start(
+                    ws, "models", _backtest_argv(ws, _need(as_of, "as_of"), model, only or [])
+                )
+            raise ValueError(
+                f"model: unknown action {action!r}, "
+                "try list, describe, base, estimate, backtest"
             )
-        if action == "backtest":
-            model = models.selected(model_id).model_id
-            return _start(
-                ws, "models", _backtest_argv(ws, _need(as_of, "as_of"), model, only or [])
-            )
-        raise ValueError(
-            f"model: unknown action {action!r}, try list, describe, base, estimate, backtest"
-        )
 
     return server
 

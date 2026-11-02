@@ -6,6 +6,13 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## Unreleased
 
+- **A plugin's printing no longer breaks the stdio channel.** The `scenario`, `portfolio`
+  and `model` tools run plugin code in the server's process; their bodies are wrapped in
+  a redirect of `sys.stdout` to `sys.stderr`, so a stray `print()` of a plugin reaches
+  the client's log instead of the JSON-RPC stream. An fd-level redirect was rejected: a
+  response to a concurrent call, written by the transport while the redirect held, would
+  land on stderr and be lost; the transport holds its own wrapper of `sys.stdout.buffer`
+  from startup, so rebinding `sys.stdout` leaves the channel alone.
 - **`jobs` waits for a job server-side.** The `wait` action with `timeout_sec` (30 by
   default, 120 at most) holds the call until the job ends or the timeout passes, and
   returns the `status` record. One call replaces the `status`/`log` loop an agent ran

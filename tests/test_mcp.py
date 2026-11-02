@@ -108,6 +108,29 @@ def test_the_run_tool_keeps_an_explicit_empty_targets_list(workspace):
         raise AssertionError("an explicit empty targets list must not mean all drivers")
 
 
+def test_plugin_output_does_not_reach_the_servers_stdout(tmp_path, monkeypatch, capsys):
+    # scenario, portfolio and model run plugin code in the server's process; a stray
+    # print() of a plugin must land on stderr, where the client logs it, not on the
+    # stdout the stdio transport owns.
+    from mst import plugins
+
+    def noisy():
+        print("plugin debug noise")
+        raise KeyError("nowhere")
+
+    monkeypatch.setattr(plugins, "registry", noisy)
+    ws = store.Workspace(tmp_path)
+    try:
+        call(ws, "model", {"kind": "catalog", "action": "list"})
+    except Exception as error:  # fastmcp raises ToolError with the message of the tool
+        assert "nowhere" in str(error)
+    else:
+        raise AssertionError("a broken registry must not pass silently")
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert "plugin debug noise" in captured.err
+
+
 def test_jobs_without_an_id_is_refused(tmp_path):
     ws = store.Workspace(tmp_path)
     try:
