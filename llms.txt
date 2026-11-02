@@ -1,0 +1,52 @@
+# MacroStress
+
+> Local MCP server for macroeconomic portfolio stress testing: an agent or an analyst states
+> a scenario, a macro model (BVAR with stochastic volatility, MS-VAR) estimates the
+> conditional paths, satellite models turn them into equity, bond-spread, overdue-share and
+> housing drivers, and every portfolio position is repriced along the same draws, with
+> P5/P50/P95, ES95 and the scenario price dist(s).
+
+All state lives in one `workspace/` directory of plain files; there is no web app, no
+database and no scheduler. Models of every kind — macro, satellite, position — are plugins
+behind one registry; the core never names a concrete model. Model versions are
+content-addressed folders (sha256 over meta and arrays), so an estimation and its hash are
+inseparable and a changed file refuses to load. Monthly series keep the release date of
+every value, and every as_of slice sees only what was published by that day.
+
+## Maps
+
+- [Architecture](docs/concept/architecture.en.md): packages, data flow, workspace, versions, jobs
+- [Method](docs/concept/formalization.en.md): levels, the scenario, the conditional forecast, quality metrics
+- [Platform contracts](docs/reference/platform.en.md): position, paths, model, dispatcher, registry
+
+## MCP tools
+
+- [Tools reference](docs/reference/tools.en.md): the eight tools with every action, argument and result
+- `jobs(action="wait")` holds a call until a job ends; long estimates and runs are background jobs
+- `series(action="update")` fetches MOEX, the Bank of Russia, Rosstat and FRED; FRED needs `FRED_API_KEY`
+
+## Guides and how-to
+
+- [First session](docs/howto/first-session.en.md): from series to report, tool call by tool call
+- [Install](docs/howto/install.en.md): the Python package and the DeepSeek Harness plugin
+- [Any MCP client](docs/howto/mcp.en.md): Claude Desktop, Cursor, Claude Code, troubleshooting
+- [Plugins](docs/howto/plugins.en.md): a new asset type, macro model or satellite as a plugin
+- Agent guides served by the server itself: `src/mst/guides/` (scenario-from-corpus, run-report, drivers)
+
+## Decisions
+
+- [ADR 0001](docs/adr/0001-tool-schema-descriptions.en.md): every tool parameter described, every tool annotated
+- [ADR 0002](docs/adr/0002-job-wait.en.md): server-side wait instead of client polling
+- [ADR 0003](docs/adr/0003-plugin-stdio-isolation.en.md): plugin printing goes to stderr, not to the stdio channel
+
+## Development
+
+- Tests: `uv run pytest -q -m "not slow"` (the fast suite; the `slow` marker estimates the BVAR)
+- Lint: `uv run ruff check .`; documentation is paired `.md` (Russian) / `.en.md` (English), held by a test
+- New model or asset type: `python -m mst.plugin new --kind position|satellite|macro`
+- Schema guard: `tests/test_mcp_schema.py` keeps parameter descriptions at 100 %
+
+## Russian
+
+- Документация на русском: [docs/README.md](docs/README.md); русская версия каждого документа
+  лежит рядом с английской (`.md` рядом с `.en.md`)
