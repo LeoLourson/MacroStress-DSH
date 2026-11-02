@@ -12,6 +12,8 @@ whenToUse: when a scenario and a portfolio exist and losses, coverage and the sc
 
 `run(action="status", id=<run>)` gives the meta of the calculation and the job; `jobs(action="wait", id=<job>, timeout_sec=30)` holds the call until the job ends — call it again while it returns `running: true` — and `jobs(action="log", id=<job>)` gives the log. `run(action="start")` also takes `positions` instead of a portfolio (`base_currency` RUB only).
 
+`portfolio(action="check", id=..., scenario=...)` names every problem that keeps the portfolio from running under the scenario. Its `warnings` carry what an impact on a macro variable reaches: one per position whose driver reads that variable, with the driver's long-run loading — below 0.1 in absolute value the driver "barely reacts" — and the regressors it loads on most. A shock aimed at a position can still miss it through a small loading; read the warnings before you call the run a measurement of that shock.
+
 ## 2. Result
 
 `run(action="result", id=<run>)` returns `run`, `positions` and `summary`. For a portfolio `summary` is the report:

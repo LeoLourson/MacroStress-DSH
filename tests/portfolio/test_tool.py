@@ -4,6 +4,7 @@ import numpy as np
 import pytest
 from pydantic import ValidationError
 
+from mst.drivers import bundle as satellite_bundle
 from mst.macro import version as macro_version
 from mst.portfolio import tool
 from mst.scenario import tool as scenario_tool
@@ -43,7 +44,83 @@ def test_save_refuses_two_positions_with_one_id(workspace, positions):
 
 def test_check_accepts_a_portfolio_the_versions_serve(workspace, portfolio):
     report = tool.check(workspace, portfolio, "oil")
-    assert report == {"id": "demo", "scenario": "oil", "ok": True, "problems": []}
+    assert report == {
+        "id": "demo",
+        "scenario": "oil",
+        "ok": True,
+        "problems": [],
+        "warnings": [],
+    }
+
+
+def test_check_warns_what_an_impact_on_a_macro_variable_reaches(workspace, portfolio, versions):
+    # A bundle like the workspace's, with the shares' loadings on the market fixed: sber
+    # barely reacts to it, gazp carries a heavy loading.
+    bundle = versions.satellite
+    arrays = dict(bundle.arrays)
+    part = bundle.parts["share_price"]
+    sber = part["driver"].index("share_price:sber")
+    gazp = part["driver"].index("share_price:gazp")
+    gamma = arrays["share_price.gamma"].copy()
+    gamma[:, sber, :] = [1.0, 0.3, 0.028, 0.0]  # long-run loading 0.04
+    gamma[:, gazp, :] = [1.0, 0.3, 0.98, 0.0]  # long-run loading 1.4
+    arrays["share_price.gamma"] = gamma
+    name = satellite_bundle.save(
+        {
+            "macro": bundle.macro,
+            "as_of": bundle.as_of.isoformat(),
+            "registry": bundle.registry.model_dump(mode="json", by_alias=True),
+            "quantities": bundle.parts,
+            "correlated": list(bundle.correlated),
+            "unserved": [],
+        },
+        arrays,
+        workspace.models,
+    )
+    scenario_tool.save(
+        workspace.scenarios,
+        "spike",
+        {
+            "narrative": "рынок",
+            "horizon": 3,
+            "macro": versions.macro,
+            "satellites": name,
+            "impacts": [
+                {
+                    "target": "gl.brent",
+                    "start": 1,
+                    "values": [10.0, 10.0, 10.0],
+                    "reason": "r",
+                    "basis": "assumption",
+                }
+            ],
+            "approved_by": "И. Иванов",
+        },
+    )
+    tool.save(
+        workspace.portfolios,
+        "shares",
+        {
+            "name": "Акции",
+            "positions": [
+                {"id": "sber", "type": "common_stock", "notional": 1.0, "codes": {"secid": "SBER"}},
+                {"id": "gazp", "type": "common_stock", "notional": 1.0, "codes": {"secid": "GAZP"}},
+            ],
+        },
+    )
+
+    report = tool.check(workspace, "shares", "spike")
+    assert report["ok"] is True and report["problems"] == []
+    warnings = {row.split(":", 1)[0]: row for row in report["warnings"]}
+    # The driver with the small loading is named as barely reacting, the large one is not.
+    assert "barely reacts" in warnings["sber"] and "+0.04" in warnings["sber"]
+    assert "share_price:sber" in warnings["sber"] and "gl.brent" in warnings["sber"]
+    assert "barely reacts" not in warnings["gazp"] and "+1.40" in warnings["gazp"]
+    assert set(warnings) == {"sber", "gazp"}
+
+    # A portfolio whose other drivers read other variables is warned for the share alone.
+    calm = tool.check(workspace, portfolio, "spike")
+    assert {row.split(":", 1)[0] for row in calm["warnings"]} == {"sber"}
 
 
 def test_check_names_an_unknown_instrument_type(workspace, positions):

@@ -83,7 +83,7 @@ A portfolio is `portfolios/<id>.json`: the base currency (the ruble: models calc
 | `get` | `id` | The portfolio file as it is |
 | `save` | `id`, `spec` | Checks the contract and writes `portfolios/<id>.json` |
 | `delete` | `id` | Deletes the file; a missing portfolio is an error |
-| `check` | `id`, `scenario` | `{"ok": true, "problems": []}` or each reason by name: problems of the scenario itself (unreachable conditions, a foreign satellite version, corpus fragments after the date), an unknown asset type, `terms` the model does not read, a currency with no exchange rate path, a macro variable missing from the version, an object no driver covers, and a driver rejected by the satellite check, with its reason |
+| `check` | `id`, `scenario` | `{"ok": true, "problems": []}` or each reason by name: problems of the scenario itself (unreachable conditions, a foreign satellite version, corpus fragments after the date), an unknown asset type, `terms` the model does not read, a currency with no exchange rate path, a macro variable missing from the version, an object no driver covers, and a driver rejected by the satellite check, with its reason. When the scenario impacts a macro variable the answer also carries `warnings` — one per position whose driver reads that variable: the driver's long-run loading (below 0.1 it "barely reacts") and the regressors it loads on most — the way a shock that reaches a position in name only is seen |
 | `exposure` | `id`, `scenario` | The value of each position in the calculation month of the macro version: notional, exchange rate, value in the base currency |
 
 ### `model`

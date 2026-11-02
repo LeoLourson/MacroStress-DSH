@@ -4,8 +4,11 @@ A portfolio is ``portfolios/<id>.json`` of the workspace. ``save`` checks the co
 the file atomically; ``check`` loads the scenario the portfolio would run under and names every
 position its macro and satellite versions cannot serve — an unknown instrument type, terms its
 model cannot read, a macro variable the version lacks, an object no driver covers and a driver
-the out-of-sample check rejected, with that check's reason. ``exposure`` values the positions at
-the calculation month of the scenario's macro version, before any path is drawn.
+the out-of-sample check rejected, with that check's reason — and warns what an impact on a macro
+variable reaches through the positions' drivers, with the long-run loading of each one: a
+loading below a tenth in absolute value is named as barely reacting, which is how a shock the
+scenario does aim at a position still misses it. ``exposure`` values the positions at the
+calculation month of the scenario's macro version, before any path is drawn.
 """
 
 import re
@@ -28,6 +31,8 @@ from .spec import Portfolio
 
 ID = re.compile(r"^[a-z0-9][a-z0-9-]*$")
 """The id of a portfolio is also the name of its file."""
+BARELY_REACTS = 0.1
+"""A long-run loading below this in absolute value reaches a driver in name only."""
 
 
 def catalogue(root: Path) -> dict:
@@ -111,12 +116,20 @@ def check(
     options = RunOptions(
         as_of=as_of, horizon=spec.horizon, base_currency=portfolio.base_currency
     )
+    warnings = []
     for position in portfolio.positions:
         problems += [
             f"{position.id}: {problem}"
             for problem in _position_problems(position, options, macro, satellites, catalog)
         ]
-    return {"id": id, "scenario": scenario, "ok": not problems, "problems": problems}
+        warnings += _reach_warnings(position, options, satellites, spec, catalog)
+    return {
+        "id": id,
+        "scenario": scenario,
+        "ok": not problems,
+        "problems": problems,
+        "warnings": warnings,
+    }
 
 
 def exposure(ws: store.Workspace, id: str, scenario: str) -> dict:
@@ -220,3 +233,78 @@ def _reason(satellites, driver: str) -> str:
         return satellites.checks[quantity][node].reason
     except (KeyError, AttributeError):
         return "it has no history of its own"
+
+
+def _reach_warnings(
+    position: Position, options: RunOptions, satellites, spec, catalog: Catalog
+) -> list[str]:
+    """What the scenario's impacts on macro variables reach through this position's drivers.
+
+    A driver whose quantity reads an impacted variable is warned with its long-run loading —
+    how much of a permanent unit of the variable the driver's level carries — and the inputs
+    it loads on most, so a shock that reaches a position in name only is seen before the run.
+    Positions the check already names as problems are left to the problems.
+    """
+    impacted = [impact.target for impact in spec.impacts if not impact.on_driver]
+    if not impacted:
+        return []
+    try:
+        chosen = catalog.model_for(position)
+        needs = chosen.requirements(position, options)
+    except (KeyError, ValueError, ValidationError):
+        return []
+    served = set(satellites.served())
+    warnings = []
+    for requirement in needs.drivers:
+        driver = satellites.registry.resolve(
+            requirement.quantity,
+            object_=requirement.object,
+            codes=requirement.codes or position.codes,
+            among=served,
+        )
+        if driver is None:
+            continue
+        declared = satellites.registry.quantity(requirement.quantity)
+        for variable in impacted:
+            reads = variable in declared.regressors or any(
+                feature.variable == variable for feature in declared.features
+            )
+            if reads:
+                warnings.append(_loading_warning(position.id, driver, variable, satellites))
+    return warnings
+
+
+def _loading_warning(position_id: str, driver: str, variable: str, satellites) -> str:
+    """The long-run loading of a driver to an impacted variable, with its largest inputs."""
+    import numpy as np
+
+    from mst.drivers.bundle import HIER, long_run_loadings
+
+    quantity, node = satellites.node(driver)
+    part = satellites.parts[quantity]
+    gamma = satellites.arrays.get(f"{quantity}.gamma")
+    if part.get("model") != HIER or gamma is None:
+        return (
+            f"{position_id}: an impact on {variable} reaches {driver}; the model that "
+            "estimated it records no long-run loading"
+        )
+    loadings = {
+        name: float(np.median(values))
+        for name, values in long_run_loadings(part["quantity"], gamma, node).items()
+    }
+    of_variable = [feature["variable"] for feature in part["quantity"].get("features") or []]
+    reading = dict.fromkeys(part["quantity"]["regressors"] + of_variable, 0.0)
+    for name, source in zip(
+        loadings,
+        part["quantity"]["regressors"] + [f["id"] for f in part["quantity"].get("features") or []],
+        strict=True,
+    ):
+        reading[source] += loadings[name]
+    value = reading[variable]
+    barely = " — it barely reacts" if abs(value) < BARELY_REACTS else ""
+    top = sorted(loadings, key=lambda name: -abs(loadings[name]))[:3]
+    named = ", ".join(f"{name} ({loadings[name]:+.2f})" for name in top)
+    return (
+        f"{position_id}: an impact on {variable} reaches {driver} with long-run loading "
+        f"{value:+.2f}{barely}; it loads most on {named}"
+    )
