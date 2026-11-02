@@ -25,6 +25,7 @@ each has its own folder.
 | [adr/0002-job-wait.en.md](adr/0002-job-wait.en.md) | Why the server holds a waiting call instead of the client polling |
 | [adr/0003-plugin-stdio-isolation.en.md](adr/0003-plugin-stdio-isolation.en.md) | Why plugin printing goes to stderr at the Python level, not the descriptor |
 | [adr/0004-atomic-writes-windows.en.md](adr/0004-atomic-writes-windows.en.md) | Why an atomic write retries when a Windows reader holds the file |
+| [adr/0005-file-state-no-sqlite-arrow.en.md](adr/0005-file-state-no-sqlite-arrow.en.md) | Why state lives in files rather than SQLite and Arrow |
 
 Reading order for a new reader: formalization → architecture → install → mcp → first-session → tools → platform → plugins.
 

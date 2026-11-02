@@ -39,6 +39,7 @@ every value, and every as_of slice sees only what was published by that day.
 - [ADR 0002](docs/adr/0002-job-wait.en.md): server-side wait instead of client polling
 - [ADR 0003](docs/adr/0003-plugin-stdio-isolation.en.md): plugin printing goes to stderr, not to the stdio channel
 - [ADR 0004](docs/adr/0004-atomic-writes-windows.en.md): atomic writes retry when a Windows reader holds the target
+- [ADR 0005](docs/adr/0005-file-state-no-sqlite-arrow.en.md): state stays in files, without SQLite or Arrow
 
 ## Development
 
