@@ -14,7 +14,7 @@ MacroStress is a modular monolith with no database, web layer or orchestrator. S
 | Scenario | `mst.scenario` | $s=(N,m,O,D,\mathcal C)$: the narrative, the versions, the impacts at any level, the causes, the conditions; `build` gives the paths, `overlay` the tilt, `reverse` the reverse problem |
 | Model SDK | `mst.model_sdk` | The scenario plan, impacts, estimation contexts, the three model steps, the conditional machinery, the price of a law |
 | Position SDK | `mst.plugin_sdk` | `Paths`, requirements, prepared inputs, the result, the SDK version |
-| Versions | `mst.models` | `estimate-macro`, `estimate-satellites` (assignment of quantities to models), list and description |
+| Versions | `mst.models` | `estimate-macro`, `estimate-satellites` (assignment of quantities to models), `diagnose-satellites` (what a saved bundle implies: rho, elasticities, the pull to the long-run level), list and description |
 | Calculation core | `mst.engine` | The model catalog, input preparation, position calculation, result check |
 | Plugins | `mst.plugins.<id>` | Position, macro and satellite models; the registry is assembled from packages, entry points and `MST_PLUGINS_PATH` |
 | Quality | `mst.metrics` | Cells $(e,t,q)$, CRPS, band coverage, admission, benchmarks, the episode backtest, the rolling check |

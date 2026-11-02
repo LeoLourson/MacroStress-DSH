@@ -6,6 +6,21 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## Unreleased
 
+- **Satellites: shares in differences, the credit channel and a diagnosis.** `share_price`
+  is fitted on monthly changes (`spec.differences`): the spurious long-run level of a
+  trending price disappears, the coefficients become elasticities, the simulation
+  accumulates the changes from the last observed level and impacts land on the level
+  without compounding; the training bounds and the out-of-sample check stay in levels.
+  `ru.spread_bbb` joins the share price regressors — the credit channel (an estimation on
+  the data decides whether it stays). `python -m mst.models diagnose-satellites` reads a
+  saved bundle back: rho, the long-run elasticities with intervals, the distance to the
+  long-run level and the twelve-month pull, the reasons of the check's rejections and the
+  quantiles of the RMSE ratio. `scripts/satellite_gates.py` computes the gates S1-S3 and S6
+  of a base run, the share of paths outside the trained range (with the range widened by a
+  historical twelve-month move too) and splits a driver's band into residuals and macro
+  paths. `portfolio check`, when the scenario impacts a macro variable, warns what it
+  reaches: the long-run loading of each position's driver — below 0.1 it "barely reacts" —
+  and the regressors with the largest loadings.
 - **Storage stays file-based.** ADR 0005 records why the remark about moving to SQLite and
   Arrow was not confirmed as a defect and when the decision is reopened.
 - **Tool hints.** `scenario` and `jobs` declare `destructiveHint`: `save` overwrites a scenario

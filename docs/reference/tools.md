@@ -123,6 +123,7 @@ python -m mst.data update [SERIES ...] --workspace DIR
 # макромодель
 python -m mst.models estimate-macro bvar.sv --as-of 2026-10-29 --store DIR --models DIR
 python -m mst.models estimate-satellites --macro SHA256 --store DIR --models DIR --drivers FILE [--model QUANTITY=MODEL_ID]
+python -m mst.models diagnose-satellites SHA256 --models DIR   # ро, эластичности, тяга к равновесию, причины отказов
 python -m mst.metrics backtest bvar.sv --as-of 2026-10-29 --store DIR --models DIR --corpus FILE [--satellites --drivers FILE]
     [--only ID ...] [--details FILE] [--against REPORT.json] [--target-level LEVEL]
     [--portfolio ID] [--mc-bootstrap]
