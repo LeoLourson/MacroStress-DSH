@@ -664,3 +664,77 @@ def test_validate_checks_that_the_cited_fragments_are_visible_on_the_day(version
         corpus=tmp_path,
     )
     assert report["ok"] is False and "S1/2020#1/1" in report["problems"][0]
+
+
+def _floored(versions, monkeypatch):
+    """The key rate of the simulated panel reads through a floor just under its fan."""
+    registry = load_registry()
+    level = float(versions.data.y[-1, 1])
+    variables = [
+        variable.model_copy(update={"lower": level if variable.id == "ru.key_rate" else None})
+        for variable in registry.variables
+    ]
+    from mst.scenario import build as build_module
+
+    floored = registry.model_copy(update={"variables": variables})
+    monkeypatch.setattr(build_module, "load_registry", lambda: floored)
+    return level
+
+
+def test_an_impact_adds_to_the_shadow_and_the_floor_reads_the_sum(versions, monkeypatch):
+    # The impact is added before the floor: the condition holds on the shadow with the impact
+    # in it, whatever the floor does to the part the model drew below it.
+    level = _floored(versions, monkeypatch)
+    target = level + 1.0
+    impact = Impact(target="ru.key_rate", start=2, values=[3.0], reason="r", basis=["s"])
+    spec = scenario(versions, constraints=[fixed("ru.key_rate", 2, target)], impacts=[impact])
+    paths = paths_of(versions, spec)
+    (constraint,) = plan_of(spec, versions.loaded).constraints
+    assert np.all(np.abs(paths.macro[:, 2, 1] - target) <= constraint.tolerance + 1e-9)
+    assert paths.checks["support_share"] == 1.0
+
+
+def test_a_negative_impact_cannot_take_the_reported_value_below_the_floor(versions, monkeypatch):
+    level = _floored(versions, monkeypatch)
+    impact = Impact(target="ru.key_rate", start=2, values=[-500.0], reason="r", basis=["s"])
+    paths = paths_of(versions, scenario(versions, impacts=[impact]))
+    assert np.all(paths.macro[:, 1:, 1] >= level)
+    assert np.all(paths.shadow[:, 2, 1] < level)  # the shadow keeps the whole impact
+
+
+def test_a_support_condition_is_checked_on_the_shadow(versions, monkeypatch):
+    # A fall to below the floor: the floor would break the difference, and the shadow keeps it.
+    level = _floored(versions, monkeypatch)
+    spec = scenario(versions, constraints=[change("ru.key_rate", 3, 1, -5.0)])
+    paths = paths_of(versions, spec)
+    assert paths.checks["support_share"] == 1.0
+    assert np.all(paths.macro[:, 3, 1] >= level)
+    assert np.any(paths.macro[:, 3, 1] - paths.macro[:, 1, 1] > -5.0 + 1.0)
+
+
+def test_a_condition_on_a_mean_is_met_on_the_shadow(versions, monkeypatch):
+    # The mean the tilt reads is the shadow's: the mean of the floored values stands above it,
+    # so a tilt on the floored values would have measured another functional than the price.
+    level = _floored(versions, monkeypatch)
+    free = paths_of(versions, scenario(versions, inner=8)).shadow[:, 2, 1]
+    target = level - 0.5 * float(free.std())
+    spec = scenario(
+        versions,
+        inner=8,
+        expectations=[
+            {
+                "terms": [{"variable": "ru.key_rate", "month": 2, "weight": 1.0}],
+                "high": target,
+                "basis": "assumption",
+            }
+        ],
+    )
+    paths = paths_of(versions, spec)
+    assert np.mean(paths.shadow[:, 2, 1]) == pytest.approx(target, abs=0.2 * float(free.std()))
+    assert np.mean(paths.macro[:, 2, 1]) >= level > target
+
+
+def test_the_paths_carry_the_size_of_the_driving_shocks(versions):
+    target = float(versions.data.y[-1, 0] + 5.0)
+    paths = paths_of(versions, scenario(versions, constraints=[fixed("gl.brent", 3, target)]))
+    assert len(paths.diagnostics["driving_sd"]["median_by_month"]) == HORIZON

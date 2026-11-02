@@ -6,6 +6,8 @@ from datetime import date
 import numpy as np
 import pytest
 
+from mst.macro.registry import load_registry
+from mst.model_sdk.bounds import observed
 from mst.model_sdk.contracts import LinearConstraint, LinearTerm, ScenarioPlan
 from mst.plugins.bvar.estimate import Posterior
 from mst.plugins.bvar.forecast import simulate
@@ -50,7 +52,7 @@ def plan(constraints=(), horizon=6) -> ScenarioPlan:
 
 
 def test_no_reported_path_goes_below_the_floor():
-    run = simulate(bounded(-2.0), plan(), draws=200, seed=1)
+    run = observed(simulate(bounded(-2.0), plan(), draws=200, seed=1), load_registry())
     assert np.all(run.paths >= 0.0)
     # The shadow keeps drifting down, so almost every path ends pinned at the floor.
     assert float(np.mean(run.paths[:, -1, 0] == 0.0)) > 0.9
@@ -60,7 +62,9 @@ def test_the_condition_holds_on_the_shadow_and_a_rise_starts_from_it():
     # An exact condition two points below the floor: the shadow meets it — month 1 comes
     # out at the floor — and month 2 rises from the shadow (mean four: minus two plus the
     # drift of six), not from the floor (mean six).
-    run = simulate(bounded(6.0), plan([(1, -2.0)]), draws=400, seed=2)
+    shadow = simulate(bounded(6.0), plan([(1, -2.0)]), draws=400, seed=2)
+    assert np.allclose(shadow.paths[:, 1, 0], -2.0, atol=1e-9, rtol=0)
+    run = observed(shadow, load_registry())
     assert np.allclose(run.paths[:, 1, 0], 0.0, atol=1e-9, rtol=0)
     second = run.paths[:, 2, 0]
     error = 4 * second.std() / np.sqrt(len(second))
@@ -71,5 +75,5 @@ def test_the_condition_holds_on_the_shadow_and_a_rise_starts_from_it():
 def test_a_variable_the_registry_does_not_know_stays_unbounded():
     # The same posterior under a test id: no floor, the paths are the shadow ones.
     model = replace(bounded(-2.0), ids=["ru.b"])
-    run = simulate(model, plan(), draws=50, seed=3)
+    run = observed(simulate(model, plan(), draws=50, seed=3), load_registry())
     assert float(np.mean(run.paths[:, -1, 0] < 0.0)) > 0.9

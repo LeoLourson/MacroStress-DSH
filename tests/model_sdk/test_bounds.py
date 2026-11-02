@@ -1,10 +1,13 @@
 """The lower bounds of the macro variables: the shadow value and the observed one."""
 
+from datetime import date
+
 import numpy as np
 import pytest
 
-from mst.macro.registry import Registry, Variable
-from mst.model_sdk.bounds import clip_lower, lower_bounds
+from mst.macro.registry import Registry, Variable, load_registry
+from mst.model_sdk.bounds import clip_lower, lower_bounds, observed
+from mst.model_sdk.contracts import MacroSimulation
 
 
 def variable(id_, transform="identity", lower=None):
@@ -52,3 +55,26 @@ def test_the_clip_reads_each_column_through_its_floor():
 def test_without_bounds_the_paths_are_their_own():
     paths = np.array([[[2.0, -1.0]]])
     assert clip_lower(paths, None) is paths
+
+
+def test_the_shipped_registry_bounds_the_spread_whose_history_stays_above_zero():
+    known = {variable.id: variable for variable in load_registry().variables}
+    assert known["ru.spread_bbb"].lower == 0.0
+    assert known["ru.spread_bbb"].negative is False
+    # The spreads whose history went below zero stay unbounded.
+    assert known["ru.spread_aa"].lower is None and known["ru.spread_aa"].negative
+    assert known["ru.spread_a"].lower is None and known["ru.spread_a"].negative
+
+
+def test_observed_reads_a_simulation_through_the_floors_of_the_registry():
+    registry = Registry(variables=[variable("ru.key_rate", lower=0.0), variable("ru.b")])
+    shadow = MacroSimulation(
+        ids=["ru.key_rate", "ru.b"],
+        months=[date(2020, 1, 1)],
+        paths=np.array([[[-3.0, -3.0]]]),
+        diagnostics={"kept": 1},
+    )
+    found = observed(shadow, registry)
+    assert np.array_equal(found.paths, [[[0.0, -3.0]]])
+    assert found.diagnostics == {"kept": 1}
+    assert np.array_equal(shadow.paths, [[[-3.0, -3.0]]])  # the shadow stays what it was

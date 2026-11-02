@@ -13,8 +13,10 @@ about the macro part of the plan's gates:
 - the absurd-value shares of the paths: USD/RUB above 300, the key rate, the Fed rate and
   the BBB spread below zero.
 
-Every number is measured on the saved files of the run; a run that wrote no ``meta.json``
-or no arrays is reported as broken, and nothing is estimated again.
+Every number is measured on the saved files of the run; a run without a ``meta.json`` or
+whose status says it did not finish is reported as broken, and nothing is estimated again.
+The floors of the registry make the below-zero shares of the floored variables zero by
+construction, so their pressure on the floor is read from ``bound_touch``.
 """
 
 import json
@@ -28,6 +30,9 @@ from mst.store import Workspace
 #: The plan's thresholds, fixed in advance.
 SHARE_LIMIT = 0.05
 GAIN_LIMIT = 10.0
+
+#: The statuses of a run that wrote no results to read.
+UNFINISHED = ("requested", "running", "failed")
 
 #: The absurd values of the plan: a variable, the direction and the boundary.
 ABSURD = {
@@ -50,11 +55,14 @@ def _one_run(folder: Path, run_id: str) -> dict:
     if not meta_file.is_file():
         return {"run": run_id, "broken": "no meta.json: the run has not finished"}
     meta = json.loads(meta_file.read_text(encoding="utf-8"))
+    if meta.get("status") in UNFINISHED:
+        return {"run": run_id, "broken": f"status {meta['status']}: the run has not finished"}
     found = {"run": run_id, "scenario": meta.get("scenario")}
     found |= _macro_shares(meta)
     found |= _gain(folder)
     found |= _absurd(meta, folder)
     found |= _bound_touch(meta, folder)
+    found["driving_sd"] = meta.get("diagnostics", {}).get("driving_sd")
     found["gates"] = {
         "band_outside_domain_below_five_percent": (
             found["macro_band_outside_domain"] is not None

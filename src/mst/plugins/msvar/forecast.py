@@ -31,8 +31,6 @@ from dataclasses import dataclass
 import numpy as np
 
 from mst.macro.panel import shift
-from mst.macro.registry import load_registry
-from mst.model_sdk.bounds import clip_lower, lower_bounds
 from mst.model_sdk.conditional import (
     SWEEPS,
     InfeasibleScenario,
@@ -442,9 +440,6 @@ def simulate(
     chosen = _plan(model, plan)
     inner = plan.inner if inner is None else inner
     n, horizon = len(model.ids), chosen.horizon
-    # Rates and unemployment cannot go below zero in their own unit; the model works with a
-    # shadow value and the reported paths are the observed ones, read through the floor.
-    bounds = lower_bounds(load_registry(), model.ids)
     # The shocks the causes name are conditioned; with no cause named every shock is, and
     # with only a hidden coordinate named none is — the latent selection carries the event.
     driving = np.zeros(n, dtype=bool)
@@ -520,7 +515,7 @@ def simulate(
     return MacroSimulation(
         ids=model.ids,
         months=[shift(last, t) for t in range(horizon + 1)],
-        paths=clip_lower(paths, bounds),
+        paths=paths,
         history=history,
         diagnostics=_ess_summary(ess, candidates) | _driving_summary(driving_sd),
         group=group,

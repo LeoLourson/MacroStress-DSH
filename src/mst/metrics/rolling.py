@@ -28,6 +28,8 @@ from datetime import date
 
 import numpy as np
 
+from mst.model_sdk.bounds import observed
+
 from .episodes import Episodes
 
 BUCKETS = (0.05, 0.5, 0.95)
@@ -97,11 +99,14 @@ def _grid(plugin, store, registry, root, plan, known_on, macro_of) -> Grid:
         as_of = calculation_date(when)
         version = macro_of(plugin, store, registry, as_of, root)
         versions[when] = version
-        forecasts[when] = version.plugin.simulate(
-            version.model,
-            ScenarioPlan(horizon=plan.after_months),
-            draws=plan.draws,
-            seed=plan.seed,
+        forecasts[when] = observed(
+            version.plugin.simulate(
+                version.model,
+                ScenarioPlan(horizon=plan.after_months),
+                draws=plan.draws,
+                seed=plan.seed,
+            ),
+            registry,
         )
         # The facts in the scale of the model: a seasonal variable loses the calendar profile
         # the panel lost, on the date's own estimate.

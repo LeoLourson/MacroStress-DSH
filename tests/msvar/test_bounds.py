@@ -5,6 +5,8 @@ from datetime import date
 
 import numpy as np
 
+from mst.macro.registry import load_registry
+from mst.model_sdk.bounds import observed
 from mst.model_sdk.contracts import ScenarioPlan
 from mst.plugins.msvar.estimate import Posterior
 from mst.plugins.msvar.forecast import simulate
@@ -35,7 +37,9 @@ def bounded(const: float) -> Posterior:
 
 
 def test_no_reported_path_goes_below_the_floor():
-    run = simulate(bounded(-2.0), ScenarioPlan(horizon=6), draws=200, seed=1)
+    run = observed(
+        simulate(bounded(-2.0), ScenarioPlan(horizon=6), draws=200, seed=1), load_registry()
+    )
     assert np.all(run.paths >= 0.0)
     # The shadow keeps drifting down, so almost every path ends pinned at the floor.
     assert float(np.mean(run.paths[:, -1, 0] == 0.0)) > 0.9
@@ -43,5 +47,5 @@ def test_no_reported_path_goes_below_the_floor():
 
 def test_a_variable_the_registry_does_not_know_stays_unbounded():
     model = replace(bounded(-2.0), ids=["ru.b"])
-    run = simulate(model, ScenarioPlan(horizon=6), draws=50, seed=3)
+    run = observed(simulate(model, ScenarioPlan(horizon=6), draws=50, seed=3), load_registry())
     assert float(np.mean(run.paths[:, -1, 0] < 0.0)) > 0.9

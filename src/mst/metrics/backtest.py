@@ -49,6 +49,7 @@ from mst.macro.panel import seasonal_profile, shift
 from mst.macro.registry import REGISTRY_PATH as MACRO_REGISTRY_PATH
 from mst.macro.registry import Registry, load_registry
 from mst.macro.version import MacroVersion
+from mst.model_sdk.bounds import observed
 from mst.model_sdk.contracts import (
     LinearTerm,
     ScenarioPlan,
@@ -500,7 +501,7 @@ def _attach_bundle(
         episode.macro.model, episode.scenario, draws=plan.draws, seed=plan.seed
     )
     episode.driver_paths = episode.bundle.simulate(
-        simulation, episode.bundle.served(), (), seed=plan.seed
+        observed(simulation, load_registry()), episode.bundle.served(), (), seed=plan.seed
     )
 
 
@@ -531,27 +532,35 @@ def _report(
         # uniformity of u and the CRPS read, the only law the canon's uniformity holds for —
         # and with the causes the card's sources named, for the sensitivity of both to the
         # choice of the causes.
-        plain_run = episode.macro.plugin.simulate(
-            episode.macro.model,
-            ScenarioPlan(
-                horizon=episode.horizon,
-                constraints=episode.scenario.constraints,
+        plain_run = observed(
+            episode.macro.plugin.simulate(
+                episode.macro.model,
+                ScenarioPlan(
+                    horizon=episode.horizon,
+                    constraints=episode.scenario.constraints,
+                ),
+                draws=plan.draws,
+                seed=plan.seed,
             ),
-            draws=plan.draws,
-            seed=plan.seed,
+            registry,
         )
-        driven = episode.macro.plugin.simulate(
-            episode.macro.model, episode.scenario, draws=plan.draws, seed=plan.seed
+        driven = observed(
+            episode.macro.plugin.simulate(
+                episode.macro.model, episode.scenario, draws=plan.draws, seed=plan.seed
+            ),
+            registry,
         )
         episode.macro_paths = driven
-        base = episode.macro.plugin.simulate(
+        shadow = episode.macro.plugin.simulate(
             episode.macro.model,
             ScenarioPlan(horizon=episode.horizon),
             draws=plan.draws,
             seed=plan.seed,
         )
+        base = observed(shadow, registry)
+        # The conditions stand on the shadow, and their probability under the base reads it.
         constraint_shares[episode.id] = constraint_probabilities(
-            base.paths, base.ids, episode.scenario.constraints
+            shadow.paths, shadow.ids, episode.scenario.constraints
         )
         plain_cells: list[Cell] = []
         driven_cells: list[Cell] = []
