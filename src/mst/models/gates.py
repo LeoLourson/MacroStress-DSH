@@ -54,6 +54,7 @@ def _one_run(folder: Path, run_id: str) -> dict:
     found |= _macro_shares(meta)
     found |= _gain(folder)
     found |= _absurd(meta, folder)
+    found |= _bound_touch(meta, folder)
     found["gates"] = {
         "band_outside_domain_below_five_percent": (
             found["macro_band_outside_domain"] is not None
@@ -132,6 +133,32 @@ def _absurd(meta: dict, folder: Path) -> dict:
         beyond = column > boundary if direction == "above" else column < boundary
         found[name] = float(np.mean(np.any(beyond, axis=1)))
     return {"absurd": found}
+
+
+def _bound_touch(meta: dict, folder: Path) -> dict:
+    """The share of paths that touch a registered floor at some month of the horizon.
+
+    A large share in the base means the model is pressing against the floor — a finding
+    the plan asks to record, not a gate.
+    """
+    from mst.macro.registry import load_registry
+
+    paths_file = folder / "paths.npz"
+    ids = list(meta.get("variables") or [])
+    if not paths_file.is_file() or not ids:
+        return {"bound_touch": {}}
+    with np.load(paths_file) as stored:
+        macro = stored["macro"] if "macro" in stored.files else None
+    if macro is None:
+        return {"bound_touch": {}}
+    known = {variable.id: variable for variable in load_registry().variables}
+    found = {}
+    for k, id_ in enumerate(ids):
+        variable = known.get(id_)
+        # The run's paths are in the variable's own unit, and so is the floor.
+        if variable is not None and variable.lower is not None:
+            found[id_] = float(np.mean(np.any(macro[:, 1:, k] <= variable.lower, axis=1)))
+    return {"bound_touch": found}
 
 
 def main(argv: list[str] | None = None) -> int:

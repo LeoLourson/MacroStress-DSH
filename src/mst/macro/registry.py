@@ -42,6 +42,11 @@ class Variable(Contract):
     """The series is stored with its calendar pattern, which the panel build removes."""
     negative: bool = False
     """A value below nought is admissible: the admission rule sets no lower boundary."""
+    lower: float | None = None
+    """The floor of the variable's own unit the observed value cannot go below. The linear
+    law of a macro model does not know it, so the model works with a shadow value and the
+    simulation reads the observed one through this floor: ``x_t = max(s_t, lower)``. The
+    lags and the conditions stay on the shadow; ``None`` is no floor."""
 
     @property
     def block(self) -> Block:

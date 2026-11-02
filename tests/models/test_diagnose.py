@@ -239,6 +239,10 @@ def test_macro_gates_read_a_finished_run(tmp_path):
         "fed_rate_below_0": 0.0,
         "spread_bbb_below_0": 0.0,
     }
+    # The key rate and the Fed rate carry the registry floor of zero; the fake run's paths
+    # sit at zero for every horizon month, so every path touches the floor. The other
+    # variables carry none.
+    assert row["bound_touch"] == {"ru.key_rate": 1.0, "gl.fed_rate": 1.0}
     assert row["gates"] == {
         "band_outside_domain_below_five_percent": True,
         "band_wider_than_history_below_five_percent": False,

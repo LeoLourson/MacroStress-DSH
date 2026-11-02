@@ -8,7 +8,7 @@
 id = "ru.monetary"
 label = "денежно-кредитный"
 rises = ["ru.key_rate", "ru.ruonia", "ru.ofz_1y"]
-falls = ["ru.usdrub", "ru.imoex"]
+falls = ["ru.usdrub", "ru.imoex", "ru.cpi"]
 
 [[shocks]]
 id = "ru.inflation"

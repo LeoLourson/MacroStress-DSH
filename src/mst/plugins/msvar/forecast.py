@@ -31,6 +31,8 @@ from dataclasses import dataclass
 import numpy as np
 
 from mst.macro.panel import shift
+from mst.macro.registry import load_registry
+from mst.model_sdk.bounds import clip_lower, lower_bounds
 from mst.model_sdk.conditional import (
     SWEEPS,
     InfeasibleScenario,
@@ -440,6 +442,9 @@ def simulate(
     chosen = _plan(model, plan)
     inner = plan.inner if inner is None else inner
     n, horizon = len(model.ids), chosen.horizon
+    # Rates and unemployment cannot go below zero in their own unit; the model works with a
+    # shadow value and the reported paths are the observed ones, read through the floor.
+    bounds = lower_bounds(load_registry(), model.ids)
     # The shocks the causes name are conditioned; with no cause named every shock is, and
     # with only a hidden coordinate named none is — the latent selection carries the event.
     driving = np.zeros(n, dtype=bool)
@@ -451,6 +456,9 @@ def simulate(
     history = np.empty((draws * inner, model.lags_count, n))
     group = np.repeat(np.arange(draws), inner)
     ess: list[float] = []
+    # The largest driving shock of each month, in standard deviations: what the conditions
+    # ask of the named causes, month by month.
+    driving_sd: list[np.ndarray] = []
     cache: dict = {}
     for r in range(draws):
         draw = int(np.random.default_rng([seed, r, 0]).integers(model.draws))
@@ -506,13 +514,15 @@ def simulate(
             future = iterate(rep.history, rep.lags, rep.intercept, shocks)
             paths[r * inner + j] = np.vstack([rep.history[-1], future])
             history[r * inner + j] = rep.history
+            if chosen.terms and driving.any():
+                driving_sd.append(np.abs(eps[:, driving]).max(axis=1))
     last = model.months[-1]
     return MacroSimulation(
         ids=model.ids,
         months=[shift(last, t) for t in range(horizon + 1)],
-        paths=paths,
+        paths=clip_lower(paths, bounds),
         history=history,
-        diagnostics=_ess_summary(ess, candidates),
+        diagnostics=_ess_summary(ess, candidates) | _driving_summary(driving_sd),
         group=group,
     )
 
@@ -529,4 +539,21 @@ def _ess_summary(ess: list[float], candidates: int) -> dict:
             "median": float(np.median(values)),
             "max": float(values.max()),
         },
+    }
+
+
+def _driving_summary(driving_sd: list[np.ndarray]) -> dict:
+    """The size of the shocks the conditions need, in standard deviations.
+
+    A cut of five points through one shock needs a large shock — the reason such a scenario
+    moves so much. The number stays visible, per month of the horizon and at its largest.
+    """
+    if not driving_sd:
+        return {}
+    sizes = np.asarray(driving_sd)
+    return {
+        "driving_sd": {
+            "median_by_month": [float(value) for value in np.median(sizes, axis=0)],
+            "max": float(sizes.max()),
+        }
     }
