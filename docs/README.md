@@ -26,6 +26,7 @@
 | [adr/0001-tool-schema-descriptions.md](adr/0001-tool-schema-descriptions.md) | Почему каждый параметр инструмента описан, а каждый инструмент аннотирован |
 | [adr/0002-job-wait.md](adr/0002-job-wait.md) | Почему ожидание задачи держит вызов сервер, а не опрашивает клиент |
 | [adr/0003-plugin-stdio-isolation.md](adr/0003-plugin-stdio-isolation.md) | Почему печать плагина уходит в stderr на уровне Python, а не дескриптора |
+| [adr/0004-atomic-writes-windows.md](adr/0004-atomic-writes-windows.md) | Почему атомарная запись повторяется, когда читатель держит файл на Windows |
 
 Порядок чтения для нового читателя: formalization → architecture →
 install → mcp → first-session → tools → platform → plugins.

@@ -6,12 +6,18 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## Unreleased
 
+- **An atomic write survives a Windows reader.** `store.write_json` and `versions.save`
+  move the draft into place through `store.replace`: six attempts of `os.replace`, 20 ms
+  apart, before the `PermissionError` surfaces. On Windows, renaming past a file another
+  process holds open — the DSH prompt section reads `workspace.json` exactly that way —
+  failed and took the tool call with it; the write now outlives the reading window, and
+  POSIX is untouched (ADR 0004).
 - **llms.txt and ADRs.** The root holds `llms.txt`, a machine-readable map of the
   repository for AI reviewers and agents: the architecture map, the tools, the guides,
   the decisions and the development commands. `docs/adr/` keeps architecture decision
   records (context, decision, consequences): 0001 schema descriptions, 0002 server-side
-  waiting, 0003 stdio isolation; every record is a `.md`/`.en.md` pair, like all the
-  documentation.
+  waiting, 0003 stdio isolation, 0004 atomic-write retries; every record is a
+  `.md`/`.en.md` pair, like all the documentation.
 - **A plugin's printing no longer breaks the stdio channel.** The `scenario`, `portfolio`
   and `model` tools run plugin code in the server's process; their bodies are wrapped in
   a redirect of `sys.stdout` to `sys.stderr`, so a stray `print()` of a plugin reaches

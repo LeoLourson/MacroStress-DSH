@@ -4,10 +4,15 @@ import hashlib
 import json
 import os
 import tempfile
+import time
 from pathlib import Path
 from typing import Any
 
 from . import versions
+
+REPLACE_ATTEMPTS = 6
+REPLACE_PAUSE = 0.02
+"""How many tries and how long a pause between them a replace gets on Windows."""
 
 
 def sha256_of(obj: Any) -> str:
@@ -18,6 +23,25 @@ def sha256_of(obj: Any) -> str:
     """
     text = json.dumps(obj, sort_keys=True, ensure_ascii=False, separators=(",", ":"))
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
+def replace(source: Path, target: Path) -> None:
+    """Replace ``target`` with ``source``, tolerating a reader that holds ``target``.
+
+    ``os.replace`` is atomic, but on Windows it raises PermissionError while another
+    process has ``target`` open for reading — the DSH prompt section reads
+    ``workspace.json`` exactly that way, from its own process. A few short retries cover
+    the reader's window; a holder that never lets go still gets the error. Readers on
+    POSIX are not affected: renaming past an open file is allowed there.
+    """
+    for attempt in range(REPLACE_ATTEMPTS):
+        try:
+            os.replace(source, target)
+            return
+        except PermissionError:
+            if attempt == REPLACE_ATTEMPTS - 1:
+                raise
+            time.sleep(REPLACE_PAUSE)
 
 
 def write_json(path: Path, obj: Any) -> None:
@@ -31,7 +55,7 @@ def write_json(path: Path, obj: Any) -> None:
             file.write("\n")
             file.flush()
             os.fsync(file.fileno())
-        os.replace(draft, path)
+        replace(draft, path)
     except BaseException:
         Path(draft).unlink(missing_ok=True)
         raise

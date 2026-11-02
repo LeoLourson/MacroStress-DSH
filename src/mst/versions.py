@@ -11,7 +11,6 @@ versions already written keep their names.
 
 import hashlib
 import json
-import os
 import re
 import shutil
 import tempfile
@@ -35,8 +34,12 @@ def digest(meta: dict, arrays: dict[str, np.ndarray]) -> str:
 def save(directory: Path, meta: dict, arrays: dict[str, np.ndarray]) -> str:
     """Writes the version under ``directory`` unless it exists; returns its name.
 
-    The files go to a ``.draft-`` folder first, which is renamed when complete.
+    The files go to a ``.draft-`` folder first, which is renamed when complete. The rename
+    retries through ``store.replace``: on Windows a scanner or an antivirus can hold a
+    fresh file for a moment, and the version is finished only when the rename lands.
     """
+    from . import store
+
     name = digest(meta, arrays)
     target = directory / name
     if target.exists():
@@ -48,7 +51,7 @@ def save(directory: Path, meta: dict, arrays: dict[str, np.ndarray]) -> str:
             json.dumps(meta, sort_keys=True, ensure_ascii=False, indent=1), encoding="utf-8"
         )
         np.savez(draft / "arrays.npz", **arrays)
-        os.replace(draft, target)
+        store.replace(draft, target)
     except BaseException:
         shutil.rmtree(draft, ignore_errors=True)
         raise

@@ -24,6 +24,7 @@ each has its own folder.
 | [adr/0001-tool-schema-descriptions.en.md](adr/0001-tool-schema-descriptions.en.md) | Why every tool parameter is described and every tool annotated |
 | [adr/0002-job-wait.en.md](adr/0002-job-wait.en.md) | Why the server holds a waiting call instead of the client polling |
 | [adr/0003-plugin-stdio-isolation.en.md](adr/0003-plugin-stdio-isolation.en.md) | Why plugin printing goes to stderr at the Python level, not the descriptor |
+| [adr/0004-atomic-writes-windows.en.md](adr/0004-atomic-writes-windows.en.md) | Why an atomic write retries when a Windows reader holds the file |
 
 Reading order for a new reader: formalization → architecture → install → mcp → first-session → tools → platform → plugins.
 
