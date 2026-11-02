@@ -22,6 +22,23 @@ def test_degrees_of_freedom_are_recovered_from_mixing_variables():
     assert 7 <= np.median(draws) <= 9
 
 
+def test_the_grid_starts_at_its_floor_and_draws_never_fall_below():
+    rng = np.random.default_rng(3)
+    grid = sv.dof_grid(5.0)
+    assert grid[0] == pytest.approx(5.0)
+    assert grid[-1] == pytest.approx(sv.DOF_TOP)
+    # Mixing variables of a truth at 3 — the heaviest the old grid allowed — pull the
+    # posterior to the floor of the shipped grid, never through it.
+    omega = 1.5 / rng.gamma(1.5, size=5000)
+    draws = [sv.draw_dof(omega, rng, grid) for _ in range(100)]
+    assert min(draws) >= 5.0
+    assert np.median(draws) == pytest.approx(5.0)
+
+
+def test_a_floor_at_three_keeps_the_earlier_grid():
+    assert np.array_equal(sv.dof_grid(), np.arange(3.0, 51.0))
+
+
 def test_logvar_path_follows_the_true_one():
     rng = np.random.default_rng(1)
     h = np.cumsum(0.2 * rng.standard_normal(600))

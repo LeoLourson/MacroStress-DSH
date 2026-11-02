@@ -29,6 +29,20 @@ rotation_tries = 20000
 # further, and a condition on a path multiplies the effect. The filter keeps the posterior
 # restricted to the stable region, as the identification filter does.
 rho_max = 1.005
+# The weight of the dummy rows of Sims and Zha (1998) and Giannone, Lenza and Primiceri
+# (2015): `mu` — sum-of-coefficients, `delta` — the initial observation. They act on
+# levels, where the Minnesota prior weighs little (the audit of 2026-10-30), and pull
+# the sums of own-lag coefficients toward one — unit roots — and away from explosive
+# roots. The candidate grid of the plan (tightness in {0.05, 0.1, 0.2} with mu = delta
+# in {1, 5}, the present prior as the reference) is selected by the backtest on the
+# tuning half of the episodes; 1 and 1 are the values Sims and Zha recommend.
+mu = 1.0
+delta = 1.0
+# The floor of the degrees-of-freedom grid of the Student tails: variance is infinite at
+# 2 and kurtosis at 4, and for rates that sit still and then step the floor at 3 absorbs
+# what the volatility process should carry — the median draw sat at it for the Fed rate,
+# the key rate, the spreads and retail. 3 stays a candidate for comparison.
+dof_min = 5.0
 
 [sampler]
 draws = 4000

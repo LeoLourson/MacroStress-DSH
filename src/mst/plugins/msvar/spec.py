@@ -3,7 +3,7 @@
 import tomllib
 from datetime import date
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, Literal
 
 from pydantic import Field, field_validator
 
@@ -46,6 +46,17 @@ class Spec(Contract):
     """The ceiling on the companion-matrix spectral radius a parameter draw must meet in
     every regime to survive. ``None`` is no ceiling — the versions estimated before the
     filter carry it."""
+    mu: Positive | None = None
+    """The weight of the sum-of-coefficients dummy rows (Sims and Zha, 1998; Giannone,
+    Lenza and Primiceri, 2015); ``None`` turns them off. Smaller is tighter: the sums of
+    own-lag coefficients pull toward one, and the system away from explosive roots."""
+    delta: Positive | None = None
+    """The weight of the initial-observation dummy row; ``None`` turns it off. Smaller is
+    tighter: the no-change forecast at the beginning of the sample gets better."""
+    switching: Literal["all", "mean_covariance"] = "all"
+    """What switches with the regime: every coefficient, or the mean and the covariance
+    alone with one common lag block. ``all`` is the behaviour the versions estimated before
+    the field carried."""
     transition_stay: Positive
     transition_switch: Positive
     sampler: Sampler

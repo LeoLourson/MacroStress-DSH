@@ -19,8 +19,20 @@ MIX_WEIGHT = np.array([0.00730, 0.10556, 0.00002, 0.04395, 0.34001, 0.24566, 0.2
 MIX_MEAN = np.array([-10.12999, -3.97281, -8.56686, 2.77786, 0.61942, 1.79518, -1.08819]) - 1.2704
 MIX_VAR = np.array([5.79596, 2.61369, 5.17950, 0.16735, 0.64009, 0.34023, 1.26261])
 
-# Uniform prior of nu over these degrees of freedom; 50 is close to normal.
-DOF_GRID = np.arange(3.0, 51.0)
+# Uniform prior of nu over a grid of degrees of freedom; 50 is close to normal. The grid
+# starts at the floor the spec names (``dof_min``, the shipped 5): variance is infinite at
+# 2 and kurtosis at 4, and for rates that sit still and then step the floor absorbs what
+# the volatility process should carry. The default keeps the grid the versions estimated
+# before the field carried.
+DOF_FLOOR = 3.0
+DOF_TOP = 50.0
+
+
+def dof_grid(dof_min: float = DOF_FLOOR) -> np.ndarray:
+    """The uniform grid of degrees of freedom, from the floor the spec names."""
+    return np.arange(float(dof_min), DOF_TOP + 1.0)
+
+
 # log(e^2 + OFFSET) keeps an exactly zero error finite.
 OFFSET = 1e-8
 
@@ -65,11 +77,13 @@ def draw_mixing(scaled_e2: np.ndarray, nu: float, rng) -> np.ndarray:
     return (nu + scaled_e2) / 2 / rng.gamma((nu + 1) / 2, size=len(scaled_e2))
 
 
-def draw_dof(omega: np.ndarray, rng) -> float:
-    """``nu`` on ``DOF_GRID`` given the mixing variables ``omega``."""
-    half = DOF_GRID[:, None] / 2
+def draw_dof(omega: np.ndarray, rng, grid: np.ndarray | None = None) -> float:
+    """``nu`` on the grid given the mixing variables ``omega``; the default grid starts at
+    ``DOF_FLOOR``."""
+    values = dof_grid() if grid is None else np.asarray(grid, dtype=float)
+    half = values[:, None] / 2
     loglik = (half * np.log(half) - gammaln(half) - (half + 1) * np.log(omega) - half / omega).sum(
         axis=1
     )
     weight = np.exp(loglik - loglik.max())
-    return float(rng.choice(DOF_GRID, p=weight / weight.sum()))
+    return float(rng.choice(values, p=weight / weight.sum()))
