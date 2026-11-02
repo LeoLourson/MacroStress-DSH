@@ -2,13 +2,13 @@
 
 A first session follows the scheme: models are prepared from history, then a scenario is written, then the calculation runs. Once the server is connected, the client has seven tools: `jobs`, `series`, `corpus`, `scenario`, `run`, `portfolio`, `model`; the full reference is [../reference/tools.en.md](../reference/tools.en.md).
 
-Long operations start as jobs: the tool returns a `job` at once, and progress is visible through `jobs(action="status", id=...)` and `jobs(action="log", id=...)`.
+Long operations start as jobs: the tool returns a `job` at once, `jobs(action="wait", id=...)` holds the call until the job ends, and `jobs(action="log", id=...)` shows the log.
 
 ## 1. History: series
 
 1. `jobs(action="state")`: what the workspace holds: model versions, the corpus index, the number of jobs.
 2. `series(action="update")`: download all macro series. FRED needs a key in the environment variable `FRED_API_KEY`.
-3. `jobs(action="status", id=...)` and `jobs(action="log", id=...)`: wait for the job to end.
+3. `jobs(action="wait", id=...)`: hold the call until the job ends; `jobs(action="log", id=...)`: what the job printed.
 
 ## 2. Macro model, level 0
 

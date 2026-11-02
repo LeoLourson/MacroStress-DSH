@@ -1,3 +1,4 @@
+import os
 from datetime import date
 
 import pytest
@@ -16,6 +17,24 @@ def test_written_rows_read_back_sorted(tmp_path):
     rows = [obs(FEB, 2.5, date(2024, 3, 1)), obs(JAN, 0.1 + 0.2, date(2024, 2, 1), True)]
     store.write("ru.cpi", rows)
     assert store.read("ru.cpi") == sorted(rows, key=lambda row: (row.month, row.published))
+
+
+def test_a_write_retries_when_a_reader_holds_the_series_file(tmp_path, monkeypatch):
+    real = os.replace
+    left = {"count": 2}
+
+    def flaky(source, target):
+        if left["count"] > 0:
+            left["count"] -= 1
+            raise PermissionError("the file is open in another process")
+        real(source, target)
+
+    monkeypatch.setattr(os, "replace", flaky)
+    store = SeriesStore(tmp_path)
+    row = obs(JAN, 1.0, date(2024, 2, 1))
+    store.write("ru.cpi", [row])
+    assert store.read("ru.cpi") == [row]
+    assert left["count"] == 0
 
 
 def test_unknown_series_has_no_rows(tmp_path):

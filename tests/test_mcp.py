@@ -41,6 +41,26 @@ def test_jobs_state_refreshes_the_file_the_prompt_section_reads(tmp_path):
     assert store.read_json(ws.state_file)["portfolios"] == 1
 
 
+def test_jobs_wait_returns_a_finished_job_in_one_call(tmp_path):
+    ws = store.Workspace(tmp_path)
+    job_id = jobs.start(ws, "code", ["-c", "print(1)"])
+    found = call(ws, "jobs", {"action": "wait", "id": job_id, "timeout_sec": 60})
+    assert found.data["running"] is False
+    assert found.data["exit_code"] == 0
+    assert "1" in call(ws, "jobs", {"action": "log", "id": job_id}).data["log"]
+
+
+def test_jobs_wait_returns_the_running_job_when_the_time_is_out(tmp_path):
+    ws = store.Workspace(tmp_path)
+    job_id = jobs.start(ws, "code", ["-c", "import time; time.sleep(30)"])
+    try:
+        found = call(ws, "jobs", {"action": "wait", "id": job_id, "timeout_sec": 0.5})
+    finally:
+        call(ws, "jobs", {"action": "cancel", "id": job_id})
+    assert found.data["running"] is True
+    assert found.data["exit_code"] is None
+
+
 def test_jobs_rejects_an_unknown_action(tmp_path):
     ws = store.Workspace(tmp_path)
     try:
@@ -86,6 +106,29 @@ def test_the_run_tool_keeps_an_explicit_empty_targets_list(workspace):
         assert "targets name the drivers of the forecast" in str(error)
     else:
         raise AssertionError("an explicit empty targets list must not mean all drivers")
+
+
+def test_plugin_output_does_not_reach_the_servers_stdout(tmp_path, monkeypatch, capsys):
+    # scenario, portfolio and model run plugin code in the server's process; a stray
+    # print() of a plugin must land on stderr, where the client logs it, not on the
+    # stdout the stdio transport owns.
+    from mst import plugins
+
+    def noisy():
+        print("plugin debug noise")
+        raise KeyError("nowhere")
+
+    monkeypatch.setattr(plugins, "registry", noisy)
+    ws = store.Workspace(tmp_path)
+    try:
+        call(ws, "model", {"kind": "catalog", "action": "list"})
+    except Exception as error:  # fastmcp raises ToolError with the message of the tool
+        assert "nowhere" in str(error)
+    else:
+        raise AssertionError("a broken registry must not pass silently")
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert "plugin debug noise" in captured.err
 
 
 def test_jobs_without_an_id_is_refused(tmp_path):

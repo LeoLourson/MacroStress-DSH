@@ -6,6 +6,41 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## Unreleased
 
+- **Storage stays file-based.** ADR 0005 records why the remark about moving to SQLite and
+  Arrow was not confirmed as a defect and when the decision is reopened.
+- **Tool hints.** `scenario` and `jobs` declare `destructiveHint`: `save` overwrites a scenario
+  and `cancel` stops a job. The `action` description of `model` names every action, and the
+  descriptions of `corpus.kind` and `run.base_currency` match the code.
+- **An atomic write survives a Windows reader.** `store.write_json`, `versions.save`,
+  `SeriesStore.write` and the download of a corpus document
+  move the draft into place through `store.replace`: six attempts of `os.replace`, 20 ms
+  apart, before the `PermissionError` surfaces. On Windows, renaming past a file another
+  process holds open — the DSH prompt section reads `workspace.json` exactly that way —
+  failed and took the tool call with it; the write now outlives the reading window, and
+  POSIX is untouched (ADR 0004).
+- **llms.txt and ADRs.** The root holds `llms.txt`, a machine-readable map of the
+  repository for AI reviewers and agents: the architecture map, the tools, the guides,
+  the decisions and the development commands. `docs/adr/` keeps architecture decision
+  records (context, decision, consequences): 0001 schema descriptions, 0002 server-side
+  waiting, 0003 stdio isolation, 0004 atomic-write retries; every record is a
+  `.md`/`.en.md` pair, like all the documentation.
+- **A plugin's printing no longer breaks the stdio channel.** The `scenario`, `portfolio`
+  and `model` tools run plugin code in the server's process; their bodies are wrapped in
+  a redirect of `sys.stdout` to `sys.stderr`, so a stray `print()` of a plugin reaches
+  the client's log instead of the JSON-RPC stream. An fd-level redirect was rejected: a
+  response to a concurrent call, written by the transport while the redirect held, would
+  land on stderr and be lost; the transport holds its own wrapper of `sys.stdout.buffer`
+  from startup, so rebinding `sys.stdout` leaves the channel alone.
+- **`jobs` waits for a job server-side.** The `wait` action with `timeout_sec` (30 by
+  default, 120 at most) holds the call until the job ends or the timeout passes, and
+  returns the `status` record. One call replaces the `status`/`log` loop an agent ran
+  while the job worked; the server instructions, the `run-report` guide, the reference
+  and the first session now use `wait`.
+- **Tool schemas are fully described.** All 53 parameters of the eight MCP tools carry a
+  description (`Field(description=...)`), and every tool declares `ToolAnnotations`
+  (`readOnlyHint`, `destructiveHint`, `idempotentHint`, `openWorldHint`, `title`).
+  `tests/test_mcp_schema.py` keeps the coverage at 100 % and requires the description of
+  the `action` field to name every action the dispatch knows.
 - **The scenario file format changes: impacts are paths.** `{start, end, delta}` is replaced
   by `{start, values: [...]}`: `values[k]` is added in month `start + k`, a constant shift is
   a repeated value, a gap inside the path is a written zero, and aftereffects are nonzero
