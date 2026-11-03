@@ -1,0 +1,71 @@
+name: Sync GitHub Topics from pyproject.toml
+
+on:
+  push:
+    branches: [main] # или ваша основная ветка
+    paths:
+      - 'pyproject.toml'
+  workflow_dispatch: {} # для ручного запуска
+
+permissions:
+  contents: write
+
+jobs:
+  sync-topics:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Extract keywords from pyproject.toml
+        id: extract-keywords
+        run: |
+          python - <<'PY' >> "$GITHUB_OUTPUT"
+          import tomllib
+          import json
+          import re
+
+          with open('pyproject.toml', 'rb') as f:
+              data = tomllib.load(f)
+
+          project = data.get('project', {})
+          keywords = project.get('keywords', [])
+
+          # Нормализация под требования GitHub Topics:
+          # только строчные буквы, цифры и дефисы.
+          normalized = []
+          for kw in keywords:
+              kw = kw.strip().lower()
+              kw = re.sub(r'[^a-z0-9-]+', '-', kw).strip('-')
+              if kw:
+                  normalized.append(kw)
+
+          # Убираем дубликаты, сохраняя порядок
+          seen = set()
+          topics = [x for x in normalized if not (x in seen or seen.add(x))]
+
+          print(f"topics_json={json.dumps(topics)}")
+          PY
+
+      - name: Update repository topics
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.TOPICS_PAT }}
+          script: |
+            const topics = JSON.parse('${{ steps.extract-keywords.outputs.topics_json }}');
+
+            if (!topics.length) {
+              core.warning('No keywords found in pyproject.toml — topics were not updated.');
+              return;
+            }
+
+            try {
+              await github.rest.repos.replaceAllTopics({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                names: topics,
+              });
+              core.notice(`Topics updated: ${topics.join(', ')}`);
+            } catch (error) {
+              core.setFailed(`Не удалось обновить топики: ${error.message}`);
+            }

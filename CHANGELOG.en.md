@@ -8,6 +8,56 @@ All notable changes to this project are documented here. The format follows [Kee
 
 - **The backtest judges the forecast on a grid of dates, and the conditional forecast against a conditional benchmark.** The new command `python -m mst.metrics rolling` compares the unconditional forecast with the random walk on dates nobody selected: relative CRPS without division by $\sigma_q(t)$, coverage per horizon, the halves before and after `validation_from`, the `--against` decision. The episodes gain the `conditional_walk` benchmark, which knows the path the scenario fixes, and their decision reads it. The block bootstrap (`block_interval`) now really draws blocks: its `block` parameter was unused before, and the price interval was narrower than the true one. Both walks start from the last known value and count the months missing since, and read the registry's floor as the model does. Renaming a version folder survives a short file lock on Windows and another process publishing the same version.
 - **The macro models repaired (the plan `plans/macro-models.md`).** Both macro models carry a stability ceiling `rho_max = 1.005`: after sampling, only the parameter draws whose companion-matrix radius meets the ceiling survive (in the MS-VAR, in every regime); the filter runs before the rotation search and writes `stable` into the diagnostics beside `estimated` and `identified`. The command `python -m mst.models diagnose` and the script `scripts/macro_gates.py` measure the radii, the gates G2-G5 and the absurd-value shares from the saved artefacts. The MS-VAR's regimes switch the mean and the covariance (`switching = "mean_covariance"`): one common lag block, intercepts per regime, the earlier behaviour kept as `"all"`. In both models the Minnesota prior is complemented by the sum-of-coefficients and initial-observation dummy observations (Sims-Zha 1998; Giannone-Lenza-Primiceri 2015) with the weights `mu` and `delta`. The degrees-of-freedom grid of `bvar.sv` starts at `dof_min = 5`. Rates, unemployment and the BBB spread carry the lower bound `0` in the registry: the plugin simulates a shadow value, the impacts, the conditions and the price stand on it, and the platform reads the observed value through the bound once, after the impacts and the tilt (`mst.model_sdk.bounds.observed`); the AA and A spreads got no bound — their history has been below zero. The monetary shock of both models lowers `ru.cpi` too; the size of the driving shock the conditions need, in standard deviations by month, is in the `diagnostics` of the run's `meta.json` (`driving_sd`). Estimating the new versions, selecting the prior candidates and the full backtests are the owner's to run on the machine with the workspace; the steps and the measures are kept in `plans/macro-models-results.md`.
+- **Satellites: shares in differences, the credit channel and a diagnosis.** `share_price`
+  is fitted on monthly changes (`spec.differences`): the spurious long-run level of a
+  trending price disappears, the coefficients become elasticities, the simulation
+  accumulates the changes from the last observed level and impacts land on the level
+  without compounding; the training bounds and the out-of-sample check stay in levels.
+  `ru.spread_bbb` joins the share price regressors — the credit channel (an estimation on
+  the data decides whether it stays). `python -m mst.models diagnose-satellites` reads a
+  saved bundle back: rho, the long-run elasticities with intervals, the distance to the
+  long-run level and the twelve-month pull, the reasons of the check's rejections and the
+  quantiles of the RMSE ratio. `scripts/satellite_gates.py` computes the gates S1-S3 and S6
+  of a base run, the share of paths outside the trained range (with the range widened by a
+  historical twelve-month move too) and splits a driver's band into residuals and macro
+  paths. `portfolio check`, when the scenario impacts a macro variable, warns what it
+  reaches: the long-run loading of each position's driver — below 0.1 it "barely reacts" —
+  and the regressors with the largest loadings.
+- **Storage stays file-based.** ADR 0005 records why the remark about moving to SQLite and
+  Arrow was not confirmed as a defect and when the decision is reopened.
+- **Tool hints.** `scenario` and `jobs` declare `destructiveHint`: `save` overwrites a scenario
+  and `cancel` stops a job. The `action` description of `model` names every action, and the
+  descriptions of `corpus.kind` and `run.base_currency` match the code.
+- **An atomic write survives a Windows reader.** `store.write_json`, `versions.save`,
+  `SeriesStore.write` and the download of a corpus document
+  move the draft into place through `store.replace`: six attempts of `os.replace`, 20 ms
+  apart, before the `PermissionError` surfaces. On Windows, renaming past a file another
+  process holds open — the DSH prompt section reads `workspace.json` exactly that way —
+  failed and took the tool call with it; the write now outlives the reading window, and
+  POSIX is untouched (ADR 0004).
+- **llms.txt and ADRs.** The root holds `llms.txt`, a machine-readable map of the
+  repository for AI reviewers and agents: the architecture map, the tools, the guides,
+  the decisions and the development commands. `docs/adr/` keeps architecture decision
+  records (context, decision, consequences): 0001 schema descriptions, 0002 server-side
+  waiting, 0003 stdio isolation, 0004 atomic-write retries; every record is a
+  `.md`/`.en.md` pair, like all the documentation.
+- **A plugin's printing no longer breaks the stdio channel.** The `scenario`, `portfolio`
+  and `model` tools run plugin code in the server's process; their bodies are wrapped in
+  a redirect of `sys.stdout` to `sys.stderr`, so a stray `print()` of a plugin reaches
+  the client's log instead of the JSON-RPC stream. An fd-level redirect was rejected: a
+  response to a concurrent call, written by the transport while the redirect held, would
+  land on stderr and be lost; the transport holds its own wrapper of `sys.stdout.buffer`
+  from startup, so rebinding `sys.stdout` leaves the channel alone.
+- **`jobs` waits for a job server-side.** The `wait` action with `timeout_sec` (30 by
+  default, 120 at most) holds the call until the job ends or the timeout passes, and
+  returns the `status` record. One call replaces the `status`/`log` loop an agent ran
+  while the job worked; the server instructions, the `run-report` guide, the reference
+  and the first session now use `wait`.
+- **Tool schemas are fully described.** All 53 parameters of the eight MCP tools carry a
+  description (`Field(description=...)`), and every tool declares `ToolAnnotations`
+  (`readOnlyHint`, `destructiveHint`, `idempotentHint`, `openWorldHint`, `title`).
+  `tests/test_mcp_schema.py` keeps the coverage at 100 % and requires the description of
+  the `action` field to name every action the dispatch knows.
 - **The scenario file format changes: impacts are paths.** `{start, end, delta}` is replaced
   by `{start, values: [...]}`: `values[k]` is added in month `start + k`, a constant shift is
   a repeated value, a gap inside the path is a written zero, and aftereffects are nonzero

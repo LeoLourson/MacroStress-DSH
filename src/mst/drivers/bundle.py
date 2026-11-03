@@ -53,6 +53,8 @@ OUTSIDE_TRAINING = "outside_training_range"
 """At least one percent of the paths leave the range of the driver's own history."""
 IMPACT = "impact"
 """A direct impact of the scenario moves the path."""
+HIER = "hier.gibbs"
+"""The satellite model whose parts record the linear form ``z_t`` of section 6.2."""
 
 
 @dataclass(frozen=True)
@@ -412,6 +414,26 @@ def load(
         correlation=arrays["correlation"],
         arrays=arrays,
     )
+
+
+def long_run_loadings(quantity: dict, gamma: np.ndarray, node: int) -> dict[str, np.ndarray]:
+    """Per-draw long-run loadings of every input of a ``hier.gibbs`` part's node.
+
+    ``quantity`` is the part's recorded declaration, ``gamma`` its recorded ``(S, N, k)`` draw
+    of coefficients over ``z_t = (1, d_{t-1}, x_t, ..., x_{t-L})``. The loading of an input is
+    the sum of its coefficients over ``1 - rho``: for a quantity in levels the share of the
+    long-run level a permanent unit of the input carries, for one in differences the response
+    of the level to the same shift. A part of another model records no such ``z_t``; callers
+    check the model id before they read the loadings.
+    """
+    inputs = quantity["regressors"] + [feature["id"] for feature in quantity.get("features") or []]
+    lags = quantity["lags"]
+    rho = gamma[:, node, 1]
+    return {
+        name: sum(gamma[:, node, 2 + lag * len(inputs) + c] for lag in range(lags + 1))
+        / (1 - rho)
+        for c, name in enumerate(inputs)
+    }
 
 
 def _part_meta(part: dict) -> dict:

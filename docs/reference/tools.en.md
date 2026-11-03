@@ -4,7 +4,7 @@ The general scheme is in [../concept/formalization.en.md](../concept/formalizati
 
 ## MCP tools
 
-The server `macrostress` (`src/mst/mcp.py`) gives eight tools, the prompt `scenario_from_event(event)` and instructions that any client receives when it connects. They send the agent to the `guide` tool before it starts work. An argument error comes back as a call error whose text lists the allowed values. A tool that starts a job returns its id at once, without waiting for the end (`run start` also returns the run id).
+The server `macrostress` (`src/mst/mcp.py`) gives eight tools, the prompt `scenario_from_event(event)` and instructions that any client receives when it connects. They send the agent to the `guide` tool before it starts work. An argument error comes back as a call error whose text lists the allowed values. A tool that starts a job returns its id at once, without waiting for the end (`run start` also returns the run id). To wait for the end, `jobs(action="wait", id=...)` holds the call until the job ends or the timeout passes, and the job's record comes back in the same call.
 
 ### `guide`
 
@@ -23,6 +23,7 @@ These are the same texts the DSH plugin registers as skills.
 | `status` | `id` | The job record (`argv`, `pid`, `started`, `finished`, `cancelled`), `running` and `exit_code` (`null` while running or if cancelled) |
 | `log` | `id`, `tail` (50; 0 is the whole log) | The last lines of the log |
 | `cancel` | `id` | Stops the job's process tree and releases the lock |
+| `wait` | `id`, `timeout_sec` (30; at most 120) | Holds the call until the job ends or the timeout passes, returning the record as `status` does: `running` tells whether to wait again. The `status`/`log` loop is no longer needed |
 
 ### `series`
 
@@ -82,7 +83,7 @@ A portfolio is `portfolios/<id>.json`: the base currency (the ruble: models calc
 | `get` | `id` | The portfolio file as it is |
 | `save` | `id`, `spec` | Checks the contract and writes `portfolios/<id>.json` |
 | `delete` | `id` | Deletes the file; a missing portfolio is an error |
-| `check` | `id`, `scenario` | `{"ok": true, "problems": []}` or each reason by name: problems of the scenario itself (unreachable conditions, a foreign satellite version, corpus fragments after the date), an unknown asset type, `terms` the model does not read, a currency with no exchange rate path, a macro variable missing from the version, an object no driver covers, and a driver rejected by the satellite check, with its reason |
+| `check` | `id`, `scenario` | `{"ok": true, "problems": []}` or each reason by name: problems of the scenario itself (unreachable conditions, a foreign satellite version, corpus fragments after the date), an unknown asset type, `terms` the model does not read, a currency with no exchange rate path, a macro variable missing from the version, an object no driver covers, and a driver rejected by the satellite check, with its reason. When the scenario impacts a macro variable the answer also carries `warnings` — one per position whose driver reads that variable: the driver's long-run loading (below 0.1 it "barely reacts") and the regressors it loads on most — the way a shock that reaches a position in name only is seen |
 | `exposure` | `id`, `scenario` | The value of each position in the calculation month of the macro version: notional, exchange rate, value in the base currency |
 
 ### `model`
@@ -110,6 +111,7 @@ python -m mst.data update [SERIES ...] --workspace DIR
 # macro model
 python -m mst.models estimate-macro bvar.sv --as-of 2026-10-29 --store DIR --models DIR
 python -m mst.models estimate-satellites --macro SHA256 --store DIR --models DIR --drivers FILE [--model QUANTITY=MODEL_ID]
+python -m mst.models diagnose-satellites SHA256 --models DIR   # rho, elasticities, the pull to the level, the check's reasons
 python -m mst.metrics backtest bvar.sv --as-of 2026-10-29 --store DIR --models DIR --corpus FILE [--satellites --drivers FILE]
     [--only ID ...] [--details FILE] [--against REPORT.json] [--target-level LEVEL]
     [--portfolio ID] [--mc-bootstrap]

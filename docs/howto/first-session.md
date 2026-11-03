@@ -5,15 +5,15 @@
 инструментов: `jobs`, `series`, `corpus`, `scenario`, `run`, `portfolio`, `model`; полный
 справочник — [../reference/tools.md](../reference/tools.md).
 
-Долгие операции запускаются задачами: инструмент сразу возвращает `job`, ход работы виден через
-`jobs(action="status", id=...)` и `jobs(action="log", id=...)`.
+Долгие операции запускаются задачами: инструмент сразу возвращает `job`, ожидание конца —
+`jobs(action="wait", id=...)`, а ход работы виден через `jobs(action="log", id=...)`.
 
 ## 1. История: ряды
 
 1. `jobs(action="state")` — что лежит в workspace: версии моделей, индекс корпуса, число задач.
 2. `series(action="update")` — загрузить все макроряды. Для FRED нужен ключ в переменной
    окружения `FRED_API_KEY`.
-3. `jobs(action="status", id=...)` и `jobs(action="log", id=...)` — ждать конца задачи.
+3. `jobs(action="wait", id=...)` — держать вызов до конца задачи; `jobs(action="log", id=...)` — что задача напечатала.
 
 ## 2. Макромодель, уровень 0
 

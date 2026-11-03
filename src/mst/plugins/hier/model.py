@@ -133,6 +133,8 @@ class HierModel(SatelliteModel):
                 rows=np.array(part.meta["rows"], dtype=int),
                 train_low=_bounds(_required_bounds(part.meta, quantity, "train_low")),
                 train_high=_bounds(_required_bounds(part.meta, quantity, "train_high")),
+                differenced=quantity
+                in part.meta.get("spec", {}).get("differences", []),
             )
             checks[quantity] = {
                 int(node): Check(**row) for node, row in part.meta["checks"].items()

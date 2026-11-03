@@ -8,11 +8,12 @@ the release lag rather than observed.
 
 import calendar
 import csv
-import os
 import re
 from dataclasses import dataclass
 from datetime import date, timedelta
 from pathlib import Path
+
+from ..store import replace
 
 SERIES_ID = re.compile(r"^[a-z0-9_]+(\.[a-z0-9_]+)*$")
 COLUMNS = ["month", "value", "published", "approximate"]
@@ -107,7 +108,7 @@ class SeriesStore:
                         int(row.approximate),
                     ]
                 )
-        os.replace(draft, path)
+        replace(draft, path)
 
     def as_of(self, series: str, day: date) -> list[Observation]:
         """For each month, the last version published on or before ``day``, sorted by month."""

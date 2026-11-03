@@ -25,6 +25,41 @@ def test_written_json_reads_back_and_leaves_no_draft(tmp_path):
     assert json.loads(path.read_text(encoding="utf-8")) == {"a": "цена", "b": 1}
 
 
+def test_a_replace_retries_when_a_reader_holds_the_target(monkeypatch, tmp_path):
+    # On Windows os.replace fails with PermissionError while another process has the
+    # target open — the DSH prompt section reads workspace.json that way. The retries
+    # must carry the write past a short holder.
+    real = os.replace
+    left = {"count": 2}
+
+    def flaky(source, target):
+        if left["count"] > 0:
+            left["count"] -= 1
+            raise PermissionError("the file is open in another process")
+        real(source, target)
+
+    monkeypatch.setattr(os, "replace", flaky)
+    store.write_json(tmp_path / "state.json", {"a": 1})
+    assert store.read_json(tmp_path / "state.json") == {"a": 1}
+    assert left["count"] == 0
+
+
+def test_a_replace_gives_up_and_leaves_no_draft_when_the_holder_never_lets_go(
+    monkeypatch, tmp_path
+):
+    def stuck(source, target):
+        raise PermissionError("the file is open in another process")
+
+    monkeypatch.setattr(os, "replace", stuck)
+    try:
+        store.write_json(tmp_path / "state.json", {"a": 1})
+    except PermissionError:
+        pass
+    else:
+        raise AssertionError("a permanent holder must still get the error")
+    assert list(tmp_path.iterdir()) == []
+
+
 def test_state_counts_entries_and_names_the_newest_version(tmp_path):
     ws = store.Workspace(tmp_path)
     assert store.state(ws)["portfolios"] == 0

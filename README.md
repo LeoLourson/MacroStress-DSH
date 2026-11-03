@@ -58,7 +58,8 @@ Once a client is connected, it sees seven tools. Long operations start jobs: a t
 
 1. `jobs(action="state")` — what is in the workspace: model versions, corpus index, jobs.
 2. `series(action="update")` — download the macro series. FRED needs a key in `FRED_API_KEY`.
-3. `jobs(action="status", id=...)` and `jobs(action="log", id=...)` — wait for the job.
+3. `jobs(action="wait", id=...)` — wait for the job in one call; `jobs(action="log", id=...)`
+   — see what it printed.
 4. `model(kind="macro", action="estimate", as_of="2026-10-29")` — estimate the macro model
    (`bvar.sv`, the only one installed; `model_id` names another) on the data known at that
    date. The version is a hash.
