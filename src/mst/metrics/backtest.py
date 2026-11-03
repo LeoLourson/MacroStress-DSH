@@ -1119,8 +1119,12 @@ def _wild_interval(rows: list[dict], key: str, plan: Episodes) -> tuple[float, f
         return None
     from .wild import wild_interval
 
+    # One number per episode, scaled by its share of cells, so their plain mean is the
+    # cell-weighted mean and the bootstrap moves whole episodes.
+    scale = len(samples) / len(point)
+    contributions = {episode: sum(values) * scale for episode, values in samples.items()}
     low, high = wild_interval(
-        samples,
+        contributions,
         repetitions=INTERVAL_REPETITIONS,
         seed=plan.seed,
         null=float(np.mean(point)),
