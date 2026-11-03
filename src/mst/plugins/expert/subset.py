@@ -32,7 +32,8 @@ class SubsetResult:
     ``inside`` holds the standard normal inputs whose performance function is not positive
     — the samples inside the box — in rows; ``log_probability`` is ``-inf`` when none were
     found within the levels, and ``coefficient_of_variation`` is the spread of the
-    estimate as a share of itself, read from the chains (Au and Beck, correlated chains).
+    estimate as a share of itself: the levels' squared spreads summed, each read from the
+    correlation of its chains (Au and Beck, 2001, the correlation between levels left out).
     """
 
     log_probability: float
@@ -60,13 +61,15 @@ def subset(
     x = rng.standard_normal((samples, dimension))
     g = function(x)
     done = 0
+    variance = 0.0
     for _ in range(levels):
         count = int((g <= 0).sum())
         if count >= seeds:
-            return _reached(x, g, count, samples, done, p0, seeds)
+            return _reached(x, g, count, done, p0, seeds, variance)
         # The level's threshold: the seeds are the ``seeds`` samples closest to the box.
         order = np.argsort(g, kind="stable")[:seeds]
         threshold = float(g[order][-1])
+        variance += _level_variance(g <= threshold, done, seeds)
         done += 1
         current = x[order].copy()
         current_g = g[order]
@@ -93,27 +96,41 @@ def subset(
     )
 
 
-def _reached(x, g, count, samples, done, p0, seeds) -> SubsetResult:
+def _level_variance(hit: np.ndarray, done: int, seeds: int) -> float:
+    """The squared coefficient of variation of one level's share ``hit.mean()``.
+
+    The first level is plain Monte Carlo, so its share is binomial. A later level's pool is
+    laid out ``(step, chain)``, and the correlation of the indicator along each chain widens
+    the binomial spread by ``1 + gamma`` (Au and Beck, 2001, eq. 29).
+    """
+    share = float(hit.mean())
+    if share <= 0.0:
+        return float("inf")
+    binomial = (1.0 - share) / (share * len(hit))
+    if done == 0:
+        return binomial
+    chains = hit.reshape(-1, seeds).astype(float)
+    steps = len(chains)
+    centred = share * (1.0 - share)
+    gamma = 0.0
+    for lag in range(1, steps):
+        joint = float((chains[:-lag] * chains[lag:]).mean()) - share**2
+        gamma += 2.0 * (1.0 - lag / steps) * joint / centred if centred > 0 else 0.0
+    return binomial * (1.0 + gamma)
+
+
+def _reached(x, g, count, done, p0, seeds, variance) -> SubsetResult:
     """The estimate of the level whose share reached ``p0``: ``p0^done`` times the share.
 
-    The spread reads the chains at the final level (the direct level has no chains, so its
-    share is binomial); the samples inside the box are what the imposition resamples.
+    ``variance`` sums the squared spreads of the levels before; the final level adds its
+    own, and the samples inside the box are what the imposition resamples.
     """
-    share = count / samples
+    share = count / len(g)
     log_probability = float(done * np.log(p0) + np.log(share))
     inside = x[g <= 0]
-    if done == 0:
-        cov = float(np.sqrt((1.0 - share) / (share * samples))) if share > 0 else float("inf")
-    else:
-        # The pool is laid out (step, chain): the states of one chain sit ``seeds`` apart.
-        states = (g <= 0).reshape(-1, seeds).mean(axis=0)
-        cov = (
-            float(np.std(states, ddof=1) / (seeds**0.5 * share))
-            if seeds > 1 and share > 0
-            else float("inf")
-        )
+    total = variance + _level_variance(g <= 0, done, seeds)
     return SubsetResult(
         log_probability=log_probability,
-        coefficient_of_variation=cov,
+        coefficient_of_variation=float(np.sqrt(total)),
         inside=inside,
     )

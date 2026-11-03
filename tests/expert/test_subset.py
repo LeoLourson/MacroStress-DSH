@@ -27,6 +27,20 @@ def test_a_gaussian_tail_probability_of_one_in_a_million():
     assert len(result.inside) > 0 and np.all(result.inside >= threshold)
 
 
+def test_the_reported_spread_follows_the_spread_over_independent_runs():
+    # Four levels of p0 = 0.1: every level adds its spread, so the reported coefficient of
+    # variation stays within a factor of two of what independent runs show.
+    threshold = float(ndtri(1.0 - 1e-4))
+    found = [
+        subset(lambda x: threshold - x[:, 0], 1, samples=500, rng=np.random.default_rng(k))
+        for k in range(100)
+    ]
+    probabilities = np.exp([result.log_probability for result in found])
+    empirical = probabilities.std() / probabilities.mean()
+    reported = np.mean([result.coefficient_of_variation for result in found])
+    assert empirical / 2.0 < reported < empirical * 2.0, (reported, empirical)
+
+
 def test_the_samples_inside_the_box_are_inside():
     result = subset(
         lambda x: np.abs(x).max(axis=1) - 2.5, 2, samples=1000, rng=np.random.default_rng(2)
