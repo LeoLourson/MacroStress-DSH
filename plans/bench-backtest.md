@@ -86,6 +86,7 @@
 - `CHANGELOG.md` и `.en.md`: запись о переносе, новом аргументе и смене хеша плана.
 - Проверка: `tests/test_docs_translation.py` зелёный, `git grep -n "metrics/episodes.toml"`
   находит только CHANGELOG.
+- Обновление 'README.md' и '.en.md' для показательной ссылки на результаты bench для повышения доверия к проекту.
 
 ## Риски и стоп-условия
 
