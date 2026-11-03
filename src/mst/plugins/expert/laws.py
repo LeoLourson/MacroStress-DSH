@@ -12,8 +12,9 @@ than 1 % of the width is reported.
 Everything here is a pure function of arrays: no store, no registry, no file.
 """
 
-import numpy as np
 from functools import lru_cache
+
+import numpy as np
 from scipy.integrate import cumulative_simpson
 from scipy.optimize import least_squares
 from scipy.special import ndtr, ndtri
