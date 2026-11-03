@@ -4,14 +4,14 @@ import numpy as np
 from scipy.special import ndtr, ndtri
 
 from mst.plugins.expert.laws import level_grid, pareto_quantile, table
+from mst.plugins.expert.spec import Spec
 from mst.plugins.expert.stream import (
+    ShockTables,
     contributions,
     draw,
     levels,
     occurrences,
 )
-from mst.plugins.expert.stream import ShockTables
-from mst.plugins.expert.spec import Spec
 from tests.expert import fakes
 
 ALPHA = 4.0
