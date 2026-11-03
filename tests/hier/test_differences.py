@@ -295,14 +295,13 @@ def test_without_the_option_the_fit_is_bit_for_bit_as_before(tmp_path):
     result = fit(hist, spec)
     assert result.differenced is False
     # The numbers the same code produced before the option existed, on the same data.
-    assert float(result.gamma.sum()) == -55.413514720370415
-    assert result.gamma[0, hist.nodes.index("sector")].tolist() == [
-        2.3739325374713793,
-        0.433567148962365,
-        1.4416411514393548,
-        -0.6411546563515367,
-    ]
-    assert float(np.nanmedian(result.sigma)) == 1.0011809768151583
+    # Linear algebra differs between platforms in the last digits, so the pin is to ten of them.
+    assert float(result.gamma.sum()) == pytest.approx(-55.413514720370415, rel=1e-10)
+    assert result.gamma[0, hist.nodes.index("sector")].tolist() == pytest.approx(
+        [2.3739325374713793, 0.433567148962365, 1.4416411514393548, -0.6411546563515367],
+        rel=1e-10,
+    )
+    assert float(np.nanmedian(result.sigma)) == pytest.approx(1.0011809768151583, rel=1e-10)
     assert result.rows.tolist() == [239, 239, 239, 239, 0]
     assert result.train_low[hist.nodes.index("delta")] == result.train_low[
         hist.nodes.index("sector")
