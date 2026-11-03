@@ -65,6 +65,7 @@ def gates(
         if driver in set(satellites.served())
         and satellites.quantity_of(driver) == "share_price"
     ]
+    # S1 judges the served shares of the run; ``shares`` narrows S2, S6 and the bands only.
     named = shares or served
     unknown = [driver for driver in named if driver not in meta["drivers"]]
     if unknown:
@@ -77,9 +78,9 @@ def gates(
             satellites.registry.quantity("share_price").transform,
             month,
         )
-        for driver in named
+        for driver in dict.fromkeys(served + list(named))
     }
-    s1 = float(np.median(list(returns.values())) - index)
+    s1 = float(np.median([returns[driver] for driver in served]) - index)
     return {
         "run": run,
         "bundle": meta["satellites"],
@@ -89,11 +90,11 @@ def gates(
         "s1": {"value": s1, "limit": S1_LIMIT, "holds": abs(s1) <= S1_LIMIT},
         "s2": {
             driver: {
-                "value": value - index,
+                "value": returns[driver] - index,
                 "limit": S2_LIMIT,
-                "holds": abs(value - index) <= S2_LIMIT,
+                "holds": abs(returns[driver] - index) <= S2_LIMIT,
             }
-            for driver, value in returns.items()
+            for driver in named
         },
         "s3": _s3(meta, satellites, driver_paths),
         "s6": _s6(satellites, named, usdrub),
@@ -141,13 +142,13 @@ def _s3(meta: dict, satellites, driver_paths: np.ndarray) -> dict:
         own = satellites.arrays.get(f"{quantity}.d")
         if own is None:
             continue
+        # Month 0 is the same point on every path, and the run's rule does not count it.
         problems = _fan_problems(
-            _model_scale(driver_paths[:, :, meta["drivers"].index(driver)], declared),
+            _model_scale(driver_paths[:, :, meta["drivers"].index(driver)], declared)[:, 1:],
             own[:, node],
             quantity_domain(declared),
         )
-        if problems:
-            shares.append(problems.get(WIDTH, 0.0))
+        shares.append(problems.get(WIDTH, 0.0))
     recorded = [
         row.get(WIDTH, 0.0)
         for name, row in meta["checks"]["paths"].items()

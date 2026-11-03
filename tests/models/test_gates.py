@@ -108,6 +108,31 @@ def test_the_gates_match_the_numbers_of_the_saved_run(module, workspace, base_ru
         assert 0.0 <= residuals <= full + 1e-6
 
 
+def test_s3_counts_the_horizon_months_as_the_run_does(module, workspace, base_run, monkeypatch):
+    # Every band is wider than a history of no width, except month 0, where all paths coincide:
+    # the admission rule counts the months after it, so the share is one and not 2/3 of it.
+    monkeypatch.setattr("mst.metrics.cells.history_range", lambda history: 1e-9)
+    report = module.gates(workspace, run=base_run, month=2, imoex="ru.usdrub", usdrub="gl.brent")
+    assert report["s3"]["share"] == 1.0
+
+
+def test_s1_judges_the_served_shares_whichever_are_named(module, workspace):
+    run_id = runs.new_id()
+    other = SHARE | {"id": "gazp", "codes": {"secid": "GAZP"}}
+    runs.begin(
+        workspace,
+        run_id,
+        {"scenario": "oil", "draws": 8, "seed": 11, "positions": [SHARE, other]},
+    )
+    runs.execute(workspace, run_id)
+    common = {"run": run_id, "month": 2, "imoex": "ru.usdrub", "usdrub": "gl.brent"}
+    everything = module.gates(workspace, **common)
+    named = module.gates(workspace, shares=["share_price:sber"], **common)
+    assert named["s1"]["value"] == everything["s1"]["value"]
+    assert list(named["s2"]) == ["share_price:sber"]
+    assert len(everything["s2"]) == 2
+
+
 def test_the_training_range_shares_cover_the_widened_range_too(module, workspace, base_run):
     report = module.gates(
         workspace,
