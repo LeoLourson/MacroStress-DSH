@@ -984,17 +984,57 @@ def _start(ws: store.Workspace, resource: str, argv: list[str]) -> dict:
     return {"job": tasks.start(ws, resource, argv), "argv": argv}
 
 
+LOCAL_WORKSPACE = Path("workspace")
+
+
 def default_workspace() -> Path:
-    """The workspace without ``--workspace``: the rule ``dsh/index.js`` follows too."""
+    """The workspace without ``--workspace``: the rule ``dsh/index.js`` follows too.
+
+    ``MACROSTRESS_WORKSPACE``, else the first existing of ``~/.macrostress/workspace``, the user
+    data directory of the OS and ``./workspace``, else the user data directory of the OS.
+    ``main`` falls back to ``./workspace`` when that one cannot be created: managed machines often
+    forbid writing outside the project.
+    """
     named = os.environ.get("MACROSTRESS_WORKSPACE")
-    return Path(named) if named else Path.home() / ".macrostress" / "workspace"
+    if named:
+        return Path(named)
+    home = Path.home()
+    if sys.platform == "win32":
+        data = Path(os.environ.get("LOCALAPPDATA") or home / "AppData" / "Local")
+    elif sys.platform == "darwin":
+        data = home / "Library" / "Application Support"
+    else:
+        data = Path(os.environ.get("XDG_DATA_HOME") or home / ".local" / "share")
+    shared = data / "macrostress" / "workspace"
+    for found in (home / ".macrostress" / "workspace", shared, LOCAL_WORKSPACE):
+        if found.is_dir():
+            return found
+    return shared
+
+
+def _create(root: Path) -> None:
+    try:
+        root.mkdir(parents=True, exist_ok=True)
+    except OSError as error:
+        # Before the MCP handshake a traceback reaches the client only as "connection closed".
+        sys.exit(
+            f"macrostress: cannot create the workspace {root.resolve()}: {error}. "
+            "Set MACROSTRESS_WORKSPACE (or pass --workspace) to a directory you can write to."
+        )
 
 
 def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(prog="mst.mcp")
     parser.add_argument("--workspace", type=Path, default=None)
-    ws = store.Workspace(parser.parse_args(argv).workspace or default_workspace())
-    ws.root.mkdir(parents=True, exist_ok=True)
+    named = parser.parse_args(argv).workspace
+    root = named or default_workspace()
+    if named is None and not os.environ.get("MACROSTRESS_WORKSPACE"):
+        try:
+            root.mkdir(parents=True, exist_ok=True)
+        except OSError:
+            root = LOCAL_WORKSPACE
+    _create(root)
+    ws = store.Workspace(root.resolve())
     store.write_state(ws)
     build(ws).run()
 

@@ -14,8 +14,7 @@
 | `skills/` | Три скилла агента: `scenario-from-corpus`, `run-report`, `drivers` |
 | `test/smoke.mjs` | Проверка без DSH: фейковый контекст, скиллы, пять строк по временному `workspace.json`, запасной однострочный вариант, перечитывание файла и снятие скиллов |
 
-Каталог данных сервер и `index.js` находят по одному правилу: `MACROSTRESS_WORKSPACE`, иначе
-`~/.macrostress/workspace`. Настройки одной машины пишутся в патче профиля, см.
+Каталог данных сервер и `index.js` находят по одному правилу: `MACROSTRESS_WORKSPACE`, иначе первый существующий из `~/.macrostress/workspace`, каталога данных пользователя ОС (`%LOCALAPPDATA%\macrostress\workspace` в Windows, `~/Library/Application Support/macrostress/workspace` в macOS, `$XDG_DATA_HOME/macrostress/workspace` или `~/.local/share/macrostress/workspace` в Linux) и `./workspace` в каталоге запуска. Если ни одного нет, сервер создаёт каталог данных ОС, а без прав записи вне проекта — `./workspace`. Настройки одной машины пишутся в патче профиля, см.
 [../docs/howto/install.md](../docs/howto/install.md).
 
 Проверка плагина без запуска DSH:

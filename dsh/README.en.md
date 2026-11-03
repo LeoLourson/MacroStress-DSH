@@ -11,7 +11,7 @@ The DSH plugin package `dsh-macrostress`. It connects the MCP server `macrostres
 | `skills/` | Three agent skills: `scenario-from-corpus`, `run-report`, `drivers` |
 | `test/smoke.mjs` | A check without DSH: a fake context, the skills, five lines from a temporary `workspace.json`, the one-line fallback, the rereading of the file and the removal of the skills |
 
-The server and `index.js` find the data directory by one rule: `MACROSTRESS_WORKSPACE`, else `~/.macrostress/workspace`. Settings of one machine go in the profile patch, see [../docs/howto/install.en.md](../docs/howto/install.en.md).
+The server and `index.js` find the data directory by one rule: `MACROSTRESS_WORKSPACE`, else the first existing of `~/.macrostress/workspace`, the user data directory of the OS (`%LOCALAPPDATA%\macrostress\workspace` on Windows, `~/Library/Application Support/macrostress/workspace` on macOS, `$XDG_DATA_HOME/macrostress/workspace` or `~/.local/share/macrostress/workspace` on Linux) and `./workspace` in the start directory. If none exists, the server creates the user data directory of the OS, and `./workspace` when it cannot write outside the project. Settings of one machine go in the profile patch, see [../docs/howto/install.en.md](../docs/howto/install.en.md).
 
 A check of the plugin without starting DSH:
 

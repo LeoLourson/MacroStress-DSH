@@ -22,7 +22,7 @@ The server speaks over stdio and waits for a client, so it prints nothing after 
 
 ## 2. Where the data live
 
-`dsh/cordis.patch.yml` holds no paths: `uvx` runs the package from PyPI, and the server and the plugin find one data directory by one rule: the environment variable `MACROSTRESS_WORKSPACE`, else `~/.macrostress/workspace`. An ordinary installation needs no configuration.
+`dsh/cordis.patch.yml` holds no paths: `uvx` runs the package from PyPI, and the server and the plugin find one data directory by one rule: the environment variable `MACROSTRESS_WORKSPACE`, else the first existing of `~/.macrostress/workspace`, the user data directory of the OS (`%LOCALAPPDATA%\macrostress\workspace` on Windows, `~/Library/Application Support/macrostress/workspace` on macOS, `$XDG_DATA_HOME/macrostress/workspace` or `~/.local/share/macrostress/workspace` on Linux) and `./workspace` in the start directory. If none exists, the server creates the user data directory of the OS, and `./workspace` when it cannot write outside the project. An ordinary installation needs no configuration.
 
 Everything that belongs to one machine goes in the profile patch `~/.dsh/profiles/<name>/cordis.patch.yml`: it applies after the bundle and replaces the `config` of an entry whole. This is how to connect your own data directory or a development checkout:
 

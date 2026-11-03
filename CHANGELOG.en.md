@@ -89,6 +89,7 @@ All notable changes to this project are documented here. The format follows [Kee
   the guides (`run-report`, `scenario-from-corpus`) and the reference pages follow the new
   format.
 
+- **The default data directory is the user data directory of the OS** (`%LOCALAPPDATA%` on Windows, `~/Library/Application Support` on macOS, `$XDG_DATA_HOME` or `~/.local/share` on Linux): on managed machines Python often cannot create a folder in the root of the profile. An existing `~/.macrostress/workspace` is still used. An existing `./workspace` in the start directory is found too, and the server creates it when it cannot write outside the project. If the directory cannot be created, the server exits with a message that names the path and `MACROSTRESS_WORKSPACE`; before, the client saw only "connection closed".
 - **The way of working is now in the server, not in the harness.** Any MCP client gets instructions on connecting, the `guide` tool with the guides and the prompt `scenario_from_event`. Only the DSH plugin saw this before. The guides live in `src/mst/guides`, and `dsh/skills` is their copy under a test.
 - **The scenario guide is rewritten by the canon:** the event, the calendar, conditions, impacts, causes, labels and human approval.
 - **The guides and the plugin's system prompt section are in English:** the model reads them, and English costs fewer tokens. The model answers in the language of the user.
