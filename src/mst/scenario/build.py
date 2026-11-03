@@ -359,8 +359,10 @@ def _one_sided_by_probabilities(
     )
     if not len(kept):
         return OneSided(distance=0.0, log_probability=0.0, standard_error=0.0, dropped=dropped)
+    # The rays cover the kept coordinates only, so the plan is sliced to match them.
+    sliced = replace(plan, constraints=tuple(plan.constraints[k] for k in kept))
     logs = macro.plugin.log_box_probability(
-        macro.model, plan, side_low, side_high, draws=draws, seed=seed
+        macro.model, sliced, side_low, side_high, draws=draws, seed=seed
     )
     if logs is None:
         return None

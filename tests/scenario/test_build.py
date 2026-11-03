@@ -757,6 +757,7 @@ class MeasuredBoxes:
         self._sigma = sigma
         self._logs = logs
         self.seen = []
+        self.plans = []
 
     def simulate(self, model, plan, *, draws, seed):
         # Constant zero paths: the medians of the one-sided price are zero, whatever
@@ -779,6 +780,7 @@ class MeasuredBoxes:
 
     def log_box_probability(self, model, plan, low, high, *, draws, seed):
         self.seen.append((np.asarray(low, dtype=float), np.asarray(high, dtype=float)))
+        self.plans.append(plan)
         if self._logs is not None:
             return np.asarray(self._logs, dtype=float)
         low = np.asarray(low, dtype=float)
@@ -820,6 +822,23 @@ def test_a_model_measuring_its_own_boxes_has_a_one_sided_price(versions):
     assert ray[0] == pytest.approx(1.0) and np.isposinf(ray[1]), "the ray opens upwards"
     assert found.one_sided.distance == pytest.approx(-np.log(1.0 - norm.cdf(0.5)))
     assert found.one_sided.dropped == ()
+
+
+def test_the_one_sided_price_of_a_model_reads_only_the_kept_constraints(versions):
+    # The first interval holds the median zero and is dropped; the plan the model
+    # measures the ray on carries the second constraint alone, matching the bounds.
+    plugin = MeasuredBoxes(versions.loaded.plugin, mean=0.0, sigma=2.0)
+    measured = replace(versions.loaded, plugin=plugin)
+    spec = scenario(
+        versions,
+        constraints=[interval("gl.brent", 1, -1.0, 1.0), interval("gl.brent", 2, 1.0, 2.0)],
+    )
+    found = dist_of(spec, measured, draws=8, seed=SEED)
+    assert found.one_sided is not None and found.one_sided.dropped == (1,)
+    ray, plan = plugin.seen[-1], plugin.plans[-1]
+    assert len(plan.constraints) == len(ray[0]) == 1
+    assert plan.constraints[0].terms[0].month == 2
+    assert ray[0] == pytest.approx(1.0) and np.isposinf(ray[1])
 
 
 def test_a_model_whose_boxes_are_impossible_has_an_infinite_price(versions):
