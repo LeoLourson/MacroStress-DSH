@@ -28,6 +28,10 @@ A model version is an immutable directory `<sha256>/` with `meta.json` and `arra
 
 Series store each value with its publication date. `as_of(day)` returns what was known on that day; on the first download the revision date is estimated and marked `approximate = 1`. Model estimation, the scenario and the run read only data no later than their date.
 
+The answers of a model's elicitation live in `workspace/elicitation/<date>/<key>.json`: a model whose estimate reads answers rather than series alone declares their keys through the `input_keys` method of SDK 3.1, and the `model(kind="inputs")` tool hands out the question, checks the answer's form and stores it; no human approves the answers — their form and the model itself check them. Such a model's estimate receives the answers folder in its context (`inputs`), a checkpoint folder of its own (`checkpoints`, removed once the version is saved) and a callable telling whether a fragment of the model corpus is visible (`fragment`). The models have a corpus of their own — `workspace/corpus-model` with a separate manifest and index (the `market` source kind — market expectations); the `corpus` tool picks it with `corpus="model"`, and the agent sees only material published before the calculation date.
+
+The price of a scenario reads the law of the constraint functionals from the model: `constraint_law` gives rows mixing gaussian laws, and when no mixture carries the law (the causes name shocks with nonlinear inputs), the model may return its own box probabilities through `log_box_probability` — the price and its error are then the mean and the spread of `-log P(S|R)` over the values of `R`, and the one-sided price takes its medians from an unconstrained simulation with the same causes.
+
 ## 3. Position and paths
 
 `Position` says what it is, what it is worth and by which object it is matched:

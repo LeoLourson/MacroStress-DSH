@@ -39,7 +39,7 @@ These are the same texts the DSH plugin registers as skills.
 
 ### `corpus`
 
-The corpus root is `<workspace>/corpus`. `search` and `get` read the index and need no network.
+The corpus root is `<workspace>/corpus`; the `corpus="model"` parameter works with the corpus of the models, `<workspace>/corpus-model` (episodes, the state at the date, transmission reviews, market expectations — the `market` source kind), in every action. `search` and `get` read the index and need no network.
 
 | `action` | Arguments | Result |
 |---|---|---|
@@ -98,6 +98,10 @@ A portfolio is `portfolios/<id>.json`: the base currency (the ruble: models calc
 | `satellites` | `list` | none | Satellite versions (bundles) |
 | `satellites` | `describe` | `version` | Served drivers and rejected ones with the reason |
 | `satellites` | `estimate` | `version` (the macro version hash), `assignment` (quantity → model) | A job on `models`: `python -m mst.models estimate-satellites` assembles the bundle, with its own model for each quantity |
+| `inputs` | `list` | `as_of`, `model_id` | The answer keys of the model for the date: written or missing, the hash and the time; the missing ones first |
+| `inputs` | `question` | `as_of`, `model_id`, `key` | The text of the question and the JSON Schema of the answer; the model fixes the form |
+| `inputs` | `write` | `as_of`, `model_id`, `key`, `payload` | Checks the form and stores the normal form in `workspace/elicitation/<date>/<key>.json`; a refusal names the field. The agent itself writes the answers and no human approves them — see the `model-inputs` guide |
+| `inputs` | `status` | `as_of`, `model_id` | What is still missing; when nothing is, the estimate may run |
 | `catalog` | `list` | none | Installed model plugins: macro, satellite, position, and which model serves each quantity |
 
 ## Commands
