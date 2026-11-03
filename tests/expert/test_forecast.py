@@ -16,7 +16,6 @@ from tests.expert import fakes
 @pytest.fixture(scope="module")
 def model(tmp_path_factory):
     """A loaded expert model of the fixture's answers, with every frequency zero."""
-    from mst.macro import version as macro_version
     from mst.plugins.expert.estimate import estimate
 
     ctx = fakes.answers_context(

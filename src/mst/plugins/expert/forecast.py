@@ -20,6 +20,7 @@ from dataclasses import dataclass
 
 import numpy as np
 
+from mst.macro.panel import shift
 from mst.model_sdk.conditional import (
     SWEEPS,
     InfeasibleScenario,
@@ -33,7 +34,6 @@ from mst.model_sdk.contracts import (
     MacroSimulation,
     ScenarioPlan,
 )
-from mst.macro.panel import shift
 
 from .estimate import HORIZON, Expert
 from .model import RESIDUAL
