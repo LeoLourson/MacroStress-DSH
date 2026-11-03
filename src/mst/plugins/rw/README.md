@@ -223,8 +223,6 @@ $$
 
 Цена жилья. Оценки её разброса и корреляций выведены как оценки максимального правдоподобия блуждания с пропусками, и эталона, с которым их можно сверить, нет.
 
-Английская версия `README.en.md` пока не написана.
-
 ## Литература
 
 Antolín-Díaz J., Petrella I., Rubio-Ramírez J. (2021). Structural scenario analysis with SVARs. Journal of Monetary Economics 117.
