@@ -1,5 +1,7 @@
 """mst.portfolio.tool: the files of the portfolios, their check and their exposure."""
 
+from types import SimpleNamespace
+
 import numpy as np
 import pytest
 from pydantic import ValidationError
@@ -92,7 +94,14 @@ def test_check_warns_what_an_impact_on_a_macro_variable_reaches(workspace, portf
                     "values": [10.0, 10.0, 10.0],
                     "reason": "r",
                     "basis": "assumption",
-                }
+                },
+                {
+                    "target": "gl.brent",
+                    "start": 2,
+                    "values": [1.0, 1.0],
+                    "reason": "r",
+                    "basis": "assumption",
+                },
             ],
             "approved_by": "И. Иванов",
         },
@@ -117,10 +126,29 @@ def test_check_warns_what_an_impact_on_a_macro_variable_reaches(workspace, portf
     assert "share_price:sber" in warnings["sber"] and "gl.brent" in warnings["sber"]
     assert "barely reacts" not in warnings["gazp"] and "+1.40" in warnings["gazp"]
     assert set(warnings) == {"sber", "gazp"}
+    # Two impacts on one variable are one warning per driver.
+    assert len(report["warnings"]) == 2
 
     # A portfolio whose other drivers read other variables is warned for the share alone.
     calm = tool.check(workspace, portfolio, "spike")
     assert {row.split(":", 1)[0] for row in calm["warnings"]} == {"sber"}
+
+
+def test_a_loading_through_a_feature_counts_for_its_variable():
+    # overdue_share reads the key rate twice: as a regressor and as max(0, rate - 15).
+    quantity = {
+        "regressors": ["ru.key_rate", "ru.output"],
+        "features": [{"id": "key_rate_above_15", "variable": "ru.key_rate", "above": 15.0}],
+        "lags": 0,
+    }
+    satellites = SimpleNamespace(
+        node=lambda driver: ("overdue_share", 0),
+        parts={"overdue_share": {"model": "hier.gibbs", "quantity": quantity}},
+        arrays={"overdue_share.gamma": np.array([[[1.0, 0.5, 0.2, 0.3, 0.1]]])},
+    )
+    warning = tool._loading_warning("loan", "overdue_share:all", "ru.key_rate", satellites)
+    assert "long-run loading +0.60" in warning
+    assert "key_rate_above_15 (+0.20)" in warning
 
 
 def test_check_names_an_unknown_instrument_type(workspace, positions):

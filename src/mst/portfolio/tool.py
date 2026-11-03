@@ -245,7 +245,7 @@ def _reach_warnings(
     it loads on most, so a shock that reaches a position in name only is seen before the run.
     Positions the check already names as problems are left to the problems.
     """
-    impacted = [impact.target for impact in spec.impacts if not impact.on_driver]
+    impacted = list(dict.fromkeys(i.target for i in spec.impacts if not i.on_driver))
     if not impacted:
         return []
     try:
@@ -292,15 +292,13 @@ def _loading_warning(position_id: str, driver: str, variable: str, satellites) -
         name: float(np.median(values))
         for name, values in long_run_loadings(part["quantity"], gamma, node).items()
     }
-    of_variable = [feature["variable"] for feature in part["quantity"].get("features") or []]
-    reading = dict.fromkeys(part["quantity"]["regressors"] + of_variable, 0.0)
-    for name, source in zip(
-        loadings,
-        part["quantity"]["regressors"] + [f["id"] for f in part["quantity"].get("features") or []],
-        strict=True,
-    ):
-        reading[source] += loadings[name]
-    value = reading[variable]
+    # A feature is a term of its variable, so its loading counts for that variable.
+    features = {
+        feature["id"]: feature["variable"] for feature in part["quantity"].get("features") or []
+    }
+    value = sum(
+        loading for name, loading in loadings.items() if features.get(name, name) == variable
+    )
     barely = " — it barely reacts" if abs(value) < BARELY_REACTS else ""
     top = sorted(loadings, key=lambda name: -abs(loadings[name]))[:3]
     named = ", ".join(f"{name} ({loadings[name]:+.2f})" for name in top)
