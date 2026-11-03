@@ -117,10 +117,11 @@ def estimate(context, *, base: str, spec: Spec | None = None) -> MacroEstimate:
     expected = np.zeros((HORIZON + 1, n))
     for index, shock in enumerate(shocks):
         report(f"expert: tables and stream of {shock.id}")
-        unit = _resume(context.checkpoints, hashes[shock.id], spec)
+        name = _key(hashes[shock.id], spec, panel.ids, index)
+        unit = _resume(context.checkpoints, name, spec)
         if unit is None:
             unit = _shock_unit(shock, answers[shock.id], panel.ids, spec, index)
-            _keep(context.checkpoints, hashes[shock.id], spec, unit)
+            _keep(context.checkpoints, name, unit)
         tables, miss, stats = unit
         responses[index] = tables.responses
         medians[index] = tables.medians
@@ -293,11 +294,11 @@ def _shock_unit(shock, answer: dict, ids: list[str], spec: Spec, index: int):
     return tables, miss.reshape(tables.medians.shape), stats
 
 
-def _resume(folder: Path | None, answer_hash: str, spec: Spec):
-    """The checkpoint unit of one shock, or None when there is none to resume from."""
+def _resume(folder: Path | None, name: str, spec: Spec):
+    """The checkpoint unit ``name`` of one shock, or None when there is none to resume from."""
     if folder is None:
         return None
-    path = folder / _key(answer_hash, spec)
+    path = folder / name
     if not (path / "arrays.npz").is_file():
         return None
     with np.load(path / "arrays.npz") as found:
@@ -323,8 +324,8 @@ def _resume(folder: Path | None, answer_hash: str, spec: Spec):
     )
 
 
-def _keep(folder: Path | None, answer_hash: str, spec: Spec, unit) -> None:
-    """Keep a finished shock under its key; written whole or not at all."""
+def _keep(folder: Path | None, name: str, unit) -> None:
+    """Keep a finished shock under its key ``name``; written whole or not at all."""
     if folder is None:
         return
     tables, miss, stats = unit
@@ -344,16 +345,30 @@ def _keep(folder: Path | None, answer_hash: str, spec: Spec, unit) -> None:
             cov_change=stats.cov_change,
             mean_response=stats.mean_response,
         )
-        versions._publish(draft, folder / _key(answer_hash, spec))
+        versions._publish(draft, folder / name)
     except BaseException:
         shutil.rmtree(draft, ignore_errors=True)
         raise
 
 
-def _key(answer_hash: str, spec: Spec) -> str:
-    """The name of the checkpoint unit of one shock: its answer and the spec."""
+def _key(answer_hash: str, spec: Spec, ids: list[str], index: int) -> str:
+    """The name of the checkpoint unit of one shock: everything the unit depends on.
+
+    The answer and the spec, the order of the panel's variables the tables are laid out
+    in, the shock's place in the list that seeds its stream, and the model's version, so
+    a unit an older code wrote is never read back.
+    """
+    from .model import ExpertModel
+
     return versions.digest(
-        {"answer": answer_hash, "spec": spec.model_dump(mode="json")}, {}
+        {
+            "answer": answer_hash,
+            "spec": spec.model_dump(mode="json"),
+            "ids": list(ids),
+            "index": index,
+            "version": ExpertModel.version,
+        },
+        {},
     )
 
 
@@ -373,9 +388,14 @@ def _residual_problem(ids: list[str], sigma_u: np.ndarray) -> str:
 
 
 def _cholesky(sigma: np.ndarray) -> np.ndarray:
-    """The Cholesky factor of the residual covariance, with a relative jitter if singular."""
+    """The Cholesky factor of the residual covariance, with a jitter if singular.
+
+    The check before admits an eigenvalue slightly below zero, so the jitter lifts the
+    smallest eigenvalue above zero, and at least by a relative 1e-12 of the mean variance.
+    """
     try:
         return np.linalg.cholesky(sigma)
     except np.linalg.LinAlgError:
-        jitter = 1e-12 * max(np.trace(sigma) / len(sigma), 1e-300)
+        smallest = float(np.linalg.eigvalsh(sigma)[0])
+        jitter = max(-2.0 * smallest, 1e-12 * max(np.trace(sigma) / len(sigma), 1e-300))
         return np.linalg.cholesky(sigma + jitter * np.eye(len(sigma)))

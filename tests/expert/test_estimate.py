@@ -126,6 +126,38 @@ def test_an_interrupted_estimate_resumes_from_the_checkpoint(tmp_path, spec, mon
     ), "a resumed estimate gives the same version"
 
 
+def test_a_checkpoint_of_another_model_version_is_not_resumed(tmp_path, spec, monkeypatch):
+    from dataclasses import replace
+
+    from mst.plugins.expert import estimate as estimate_module
+    from mst.plugins.expert.model import ExpertModel
+
+    context = replace(fakes.answers_context(tmp_path), checkpoints=tmp_path / "checkpoints")
+    original = estimate_module._shock_unit
+    calls = []
+
+    def interrupted(shock, answer, ids, specification, index):
+        if len(calls) >= 3:
+            raise RuntimeError("interrupted")
+        calls.append(shock.id)
+        return original(shock, answer, ids, specification, index)
+
+    monkeypatch.setattr(estimate_module, "_shock_unit", interrupted)
+    with pytest.raises(RuntimeError, match="interrupted"):
+        estimate(context, base="rw", spec=spec)
+
+    recomputed = []
+
+    def counting(shock, answer, ids, specification, index):
+        recomputed.append(shock.id)
+        return original(shock, answer, ids, specification, index)
+
+    monkeypatch.setattr(estimate_module, "_shock_unit", counting)
+    monkeypatch.setattr(ExpertModel, "version", ExpertModel.version + ".next")
+    estimate(context, base="rw", spec=spec)
+    assert len(recomputed) == 18, "the code changed: no shock is read from the old checkpoint"
+
+
 def test_the_market_variant_needs_the_market_answer(tmp_path, spec):
     ctx = fakes.answers_context(tmp_path, with_market=False)
     with pytest.raises(ValueError, match=MARKET):
@@ -189,3 +221,12 @@ def test_a_saved_version_loads_back(tmp_path, spec):
     assert len(version.model.tables) == 18
     assert version.model.base_path.shape == (13, 23)
     assert version.meta["base"] == "rw"
+
+
+def test_a_residual_the_check_admits_has_a_cholesky_factor():
+    from mst.plugins.expert.estimate import _cholesky
+
+    # The check admits an eigenvalue down to -1e-10 of the largest; the factor must exist.
+    sigma = np.diag([1.0, -5e-11])
+    factor = _cholesky(sigma)
+    assert np.allclose(factor @ factor.T, sigma, atol=1e-9)
