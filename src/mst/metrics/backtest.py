@@ -85,7 +85,7 @@ from .cells import (
     score_cells,
     sigma_with_fallback,
 )
-from .episodes import EPISODES_PATH, Episodes, calculation_date, load_episodes
+from .episodes import Episodes, calculation_date, load_episodes
 
 INTERVAL_REPETITIONS = 1000
 """The repetitions of the episode bootstrap behind every reported interval."""
@@ -137,6 +137,7 @@ def run(
     *,
     store: Path,
     models: Path,
+    episodes: Path,
     corpus: Path,
     as_of: date,
     macro_id: str | None = None,
@@ -152,6 +153,7 @@ def run(
 ) -> int:
     """The backtest of every episode the plan names; prints Markdown tables, returns an exit code.
 
+    ``episodes`` is the plan file, ``bench/model-backtest/episodes.toml`` in the repository.
     ``as_of`` is the date the facts are read on — the realized paths as they are known today;
     each episode's models are estimated on the day before it starts, whatever ``as_of`` is.
     With ``satellites`` the served drivers are scored too: their bundle is estimated on each
@@ -171,7 +173,7 @@ def run(
         raise ValueError(
             "--portfolio needs --satellites: the tail values the positions on the driver paths"
         )
-    plan = load_episodes()
+    plan = load_episodes(episodes)
     plugin = models_pkg.selected(macro_id)
     registry = load_registry()
     starts = {e.id: e.start_month for e in manifest.load(corpus).episodes}
@@ -1346,7 +1348,7 @@ def _decision_block(
     if not against.exists():
         raise ValueError(f"--against {against}: the file does not exist")
     incumbent = json.loads(against.read_text(encoding="utf-8"))
-    if incumbent.get("meta", {}).get("episodes_toml") != _file_digest(plan.path or EPISODES_PATH):
+    if incumbent.get("meta", {}).get("episodes_toml") != _file_digest(plan.path):
         raise ValueError(
             "--against was produced from a different episode plan; "
             "the two versions must be compared on the same cells"
@@ -1587,7 +1589,7 @@ def _meta(
         "draws": plan.draws,
         "seed": plan.seed,
         "after_months": plan.after_months,
-        "episodes_toml": _file_digest(plan.path or EPISODES_PATH),
+        "episodes_toml": _file_digest(plan.path),
         "macro_registry": _file_digest(MACRO_REGISTRY_PATH),
         "store": str(store),
         "models": str(models),

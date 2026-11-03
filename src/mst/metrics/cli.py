@@ -2,10 +2,10 @@
 
 ::
 
-  python -m mst.metrics backtest [MODEL_ID] --as-of DATE --store DIR --models DIR --corpus FILE
-      [--drivers FILE] [--satellites] [--only ID ...] [--details FILE] [--against REPORT.json]
-      [--portfolio ID] [--mc-bootstrap] [--no-rolling]
-  python -m mst.metrics rolling [MODEL_ID] --as-of DATE --store DIR --models DIR
+  python -m mst.metrics backtest [MODEL_ID] --as-of DATE --store DIR --models DIR --episodes FILE
+      --corpus FILE [--drivers FILE] [--satellites] [--only ID ...] [--details FILE]
+      [--against REPORT.json] [--portfolio ID] [--mc-bootstrap] [--no-rolling]
+  python -m mst.metrics rolling [MODEL_ID] --as-of DATE --store DIR --models DIR --episodes FILE
       [--dates YYYY-MM-DD ...] [--half tuning|validation] [--details FILE] [--against REPORT.json]
 
 ``rolling`` judges the forecast itself: on a grid of dates nobody selected, the unconditional
@@ -14,7 +14,7 @@ the calibration and a block-bootstrap interval. ``--dates`` fills the cache of t
 by date, in parallel processes; ``--against`` names the incumbent report for the decision.
 
 ``backtest`` estimates the macro model (the named one, or the only one installed) on the day
-before every episode of ``episodes.toml`` starts, builds the scenario from what actually
+before every episode of the plan ``--episodes`` starts, builds the scenario from what actually
 happened, scores the conditional forecast against the fact — CRPS normalised by the typical
 movement known at that episode's calculation date, calibration, sharpness, coverage, the
 admission rules pooled per rule — and reports it next to the random walk with drift, the
@@ -35,6 +35,8 @@ import sys
 from datetime import date
 from pathlib import Path
 
+PLAN = "the episode plan, bench/model-backtest/episodes.toml in the repository"
+
 
 def main(argv: list[str] | None = None) -> int:
     from .backtest import run
@@ -47,6 +49,7 @@ def main(argv: list[str] | None = None) -> int:
     check.add_argument("--as-of", type=date.fromisoformat, required=True)
     check.add_argument("--store", type=Path, required=True)
     check.add_argument("--models", type=Path, required=True)
+    check.add_argument("--episodes", type=Path, required=True, help=PLAN)
     check.add_argument("--corpus", type=Path, required=True)
     check.add_argument("--drivers", type=Path, help="the driver catalog, with --satellites")
     check.add_argument("--satellites", action="store_true", help="score the drivers too")
@@ -79,6 +82,7 @@ def main(argv: list[str] | None = None) -> int:
     grid.add_argument("--as-of", type=date.fromisoformat, required=True)
     grid.add_argument("--store", type=Path, required=True)
     grid.add_argument("--models", type=Path, required=True)
+    grid.add_argument("--episodes", type=Path, required=True, help=PLAN)
     grid.add_argument(
         "--dates", nargs="+", type=date.fromisoformat, help="only these dates of the grid"
     )
@@ -94,6 +98,7 @@ def main(argv: list[str] | None = None) -> int:
         return run_rolling(
             store=args.store,
             models=args.models,
+            episodes=args.episodes,
             as_of=args.as_of,
             macro_id=args.model_id,
             dates=args.dates,
@@ -104,6 +109,7 @@ def main(argv: list[str] | None = None) -> int:
     return run(
         store=args.store,
         models=args.models,
+        episodes=args.episodes,
         corpus=args.corpus,
         as_of=args.as_of,
         macro_id=args.model_id,

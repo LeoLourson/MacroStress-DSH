@@ -2,9 +2,10 @@
 
 import asyncio
 
+import pytest
 from fastmcp import Client
 
-from mst import jobs, store
+from mst import jobs, mcp, store
 from mst.mcp import build
 
 
@@ -155,3 +156,17 @@ def test_the_scenario_tool_takes_the_arguments_of_the_reverse_search(workspace):
         assert "nowhere" in str(error)
     else:
         raise AssertionError("the portfolio of the search does not exist")
+
+
+def test_the_backtest_is_started_on_the_plan_of_the_repository(tmp_path):
+    argv = mcp._backtest_argv(store.Workspace(tmp_path), "2026-10-01", "bvar.sv")
+
+    plan = argv[argv.index("--episodes") + 1]
+    assert plan.replace("\\", "/").endswith("bench/model-backtest/episodes.toml")
+
+
+def test_a_backtest_without_the_plan_names_the_command_to_run(tmp_path, monkeypatch):
+    monkeypatch.setattr(mcp, "EPISODE_PLAN", tmp_path / "absent.toml")
+
+    with pytest.raises(ValueError, match="--episodes FILE"):
+        mcp._backtest_argv(store.Workspace(tmp_path), "2026-10-01", "bvar.sv")

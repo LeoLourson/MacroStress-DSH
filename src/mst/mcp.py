@@ -53,6 +53,10 @@ printed.\
 WAIT_STEP = 0.2
 """Seconds between the file reads of a ``wait``, the only cost of waiting server-side."""
 
+EPISODE_PLAN = Path(__file__).resolve().parents[2] / "bench" / "model-backtest" / "episodes.toml"
+"""The episode plan of the backtest, found next to the sources of a repository checkout; a
+package installed without the repository has none."""
+
 
 @contextmanager
 def _plugin_output_to_stderr() -> Iterator[None]:
@@ -873,6 +877,11 @@ def _backtest_argv(
     ws: store.Workspace, as_of: str, model_id: str, only: list[str] | None = None
 ) -> list[str]:
     """The command line of ``python -m mst.metrics backtest`` for this workspace."""
+    if not EPISODE_PLAN.is_file():
+        raise ValueError(
+            f"model: the episode plan {EPISODE_PLAN} is not there; run "
+            "python -m mst.metrics backtest --episodes FILE with the plan of the repository"
+        )
     day = date.fromisoformat(as_of).isoformat()
     argv = [
         "-m",
@@ -885,6 +894,8 @@ def _backtest_argv(
         str(ws.series),
         "--models",
         str(ws.models),
+        "--episodes",
+        str(EPISODE_PLAN),
         "--corpus",
         str(ws.corpus / "manifest.json"),
         "--drivers",

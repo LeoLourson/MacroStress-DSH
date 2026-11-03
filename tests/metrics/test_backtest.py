@@ -2,6 +2,7 @@
 
 import json
 from datetime import date
+from pathlib import Path
 from types import SimpleNamespace
 
 import numpy as np
@@ -20,6 +21,7 @@ from mst.metrics.episodes import calculation_date, load_episodes
 from . import simulated
 
 KNOWN_ON = date(2030, 1, 1)
+PLAN = Path(__file__).resolve().parents[2] / "bench" / "model-backtest" / "episodes.toml"
 
 
 @pytest.fixture(autouse=True)
@@ -120,12 +122,13 @@ def workspace(tmp_path, monkeypatch):
     }
 
 
-def run_episodes(workspace, corpus, tmp_path, *, name="details.json", only=(), **extra):
+def run_episodes(workspace, corpus, plan, tmp_path, *, name="details.json", only=(), **extra):
     """Run the backtest and read its details file."""
     details = tmp_path / name
     code = runner.run(
         store=workspace["store"].root,
         models=workspace["models"],
+        episodes=plan,
         corpus=corpus,
         as_of=KNOWN_ON,
         only=list(only),
@@ -135,16 +138,16 @@ def run_episodes(workspace, corpus, tmp_path, *, name="details.json", only=(), *
     return code, json.loads(details.read_text(encoding="utf-8"))
 
 
-def test_the_runner_scores_the_cells_of_every_episode(workspace, tmp_path, capsys, monkeypatch):
+def test_the_runner_scores_the_cells_of_every_episode(workspace, tmp_path, capsys):
     corpus = manifest(tmp_path, [("R1", date(2023, 6, 1)), ("R2", date(2024, 3, 1))])
     plan = plan_file(
         tmp_path, [("R1", "gl.brent", "fake.demand"), ("R2", "ru.key_rate", "fake.rate")]
     )
-    monkeypatch.setattr(runner, "load_episodes", lambda path=None: load_episodes(plan))
 
     code = runner.run(
         store=workspace["store"].root,
         models=workspace["models"],
+        episodes=plan,
         corpus=corpus,
         as_of=KNOWN_ON,
     )
@@ -157,15 +160,15 @@ def test_the_runner_scores_the_cells_of_every_episode(workspace, tmp_path, capsy
     assert "gl.brent" in out
 
 
-def test_the_episode_versions_are_cached_by_the_data(workspace, tmp_path, monkeypatch):
+def test_the_episode_versions_are_cached_by_the_data(workspace, tmp_path):
     corpus = manifest(tmp_path, [("R1", date(2023, 6, 1)), ("R2", date(2024, 3, 1))])
     plan = plan_file(
         tmp_path, [("R1", "gl.brent", "fake.demand"), ("R2", "ru.key_rate", "fake.rate")]
     )
-    monkeypatch.setattr(runner, "load_episodes", lambda path=None: load_episodes(plan))
     arguments = dict(
         store=workspace["store"].root,
         models=workspace["models"],
+        episodes=plan,
         corpus=corpus,
         as_of=KNOWN_ON,
     )
@@ -179,30 +182,36 @@ def test_the_episode_versions_are_cached_by_the_data(workspace, tmp_path, monkey
     assert (workspace["models"] / "backtest" / "macro").is_dir()
 
 
-def test_an_unknown_driving_shock_is_reported_not_raised(workspace, tmp_path, monkeypatch, capsys):
+def test_an_unknown_driving_shock_is_reported_not_raised(workspace, tmp_path, capsys):
     corpus = manifest(tmp_path, [("R1", date(2023, 6, 1)), ("R2", date(2024, 3, 1))])
     plan = plan_file(
         tmp_path, [("R1", "gl.brent", "no.such.shock"), ("R2", "ru.key_rate", "fake.rate")]
     )
-    monkeypatch.setattr(runner, "load_episodes", lambda path=None: load_episodes(plan))
 
     code = runner.run(
-        store=workspace["store"].root, models=workspace["models"], corpus=corpus, as_of=KNOWN_ON
+        store=workspace["store"].root,
+        models=workspace["models"],
+        episodes=plan,
+        corpus=corpus,
+        as_of=KNOWN_ON,
     )
 
     assert code == 1
     assert "the macro model knows no shocks no.such.shock" in capsys.readouterr().out
 
 
-def test_an_episode_missing_from_the_manifest_is_reported(workspace, tmp_path, monkeypatch, capsys):
+def test_an_episode_missing_from_the_manifest_is_reported(workspace, tmp_path, capsys):
     corpus = manifest(tmp_path, [("R2", date(2024, 3, 1))])
     plan = plan_file(
         tmp_path, [("R9", "gl.brent", "fake.demand"), ("R2", "ru.key_rate", "fake.rate")]
     )
-    monkeypatch.setattr(runner, "load_episodes", lambda path=None: load_episodes(plan))
 
     code = runner.run(
-        store=workspace["store"].root, models=workspace["models"], corpus=corpus, as_of=KNOWN_ON
+        store=workspace["store"].root,
+        models=workspace["models"],
+        episodes=plan,
+        corpus=corpus,
+        as_of=KNOWN_ON,
     )
 
     assert code == 1
@@ -210,16 +219,15 @@ def test_an_episode_missing_from_the_manifest_is_reported(workspace, tmp_path, m
 
 
 def test_a_run_without_a_single_episode_reports_it_instead_of_raising(
-    workspace, tmp_path, monkeypatch, capsys
+    workspace, tmp_path, capsys
 ):
     corpus = manifest(tmp_path, [("R1", date(2023, 6, 1)), ("R2", date(2024, 3, 1))])
     # Unknown driving shocks drop both episodes: the report has no scored cells at all.
     plan = plan_file(
         tmp_path, [("R1", "gl.brent", "fake.one"), ("R2", "ru.key_rate", "fake.two")]
     )
-    monkeypatch.setattr(runner, "load_episodes", lambda path=None: load_episodes(plan))
 
-    code, report = run_episodes(workspace, corpus, tmp_path)
+    code, report = run_episodes(workspace, corpus, plan, tmp_path)
 
     assert code == 1
     assert report["episodes"] == []
@@ -229,16 +237,15 @@ def test_a_run_without_a_single_episode_reports_it_instead_of_raising(
     assert "No episode could be judged" in capsys.readouterr().out
 
 
-def test_the_monte_carlo_option_moves_no_other_field(workspace, tmp_path, monkeypatch):
+def test_the_monte_carlo_option_moves_no_other_field(workspace, tmp_path):
     corpus = manifest(tmp_path, [("R1", date(2023, 6, 1)), ("R2", date(2024, 3, 1))])
     plan = plan_file(
         tmp_path, [("R1", "gl.brent", "fake.demand"), ("R2", "ru.key_rate", "fake.rate")]
     )
-    monkeypatch.setattr(runner, "load_episodes", lambda path=None: load_episodes(plan))
 
-    _, plain = run_episodes(workspace, corpus, tmp_path, name="plain.json")
+    _, plain = run_episodes(workspace, corpus, plan, tmp_path, name="plain.json")
     _, monte_carlo = run_episodes(
-        workspace, corpus, tmp_path, name="mc.json", mc_bootstrap=True
+        workspace, corpus, plan, tmp_path, name="mc.json", mc_bootstrap=True
     )
 
     # The Monte-Carlo error is reported beside the sampling error, never in place of it.
@@ -250,14 +257,13 @@ def test_the_monte_carlo_option_moves_no_other_field(workspace, tmp_path, monkey
     assert interval["interval"] is not None
 
 
-def test_the_details_file_holds_the_full_report(workspace, tmp_path, monkeypatch):
+def test_the_details_file_holds_the_full_report(workspace, tmp_path):
     corpus = manifest(tmp_path, [("R1", date(2023, 6, 1)), ("R2", date(2024, 3, 1))])
     plan = plan_file(
         tmp_path, [("R1", "gl.brent", "fake.demand"), ("R2", "ru.key_rate", "fake.rate")]
     )
-    monkeypatch.setattr(runner, "load_episodes", lambda path=None: load_episodes(plan))
 
-    code, report = run_episodes(workspace, corpus, tmp_path)
+    code, report = run_episodes(workspace, corpus, plan, tmp_path)
 
     assert code == 0
     assert report["problems"] == []
@@ -277,15 +283,14 @@ def test_the_details_file_holds_the_full_report(workspace, tmp_path, monkeypatch
 
 
 def test_the_report_holds_the_aggregate_the_usefulness_and_the_halves(
-    workspace, tmp_path, monkeypatch, capsys
+    workspace, tmp_path, capsys
 ):
     corpus = manifest(tmp_path, [("R1", date(2023, 6, 1)), ("R2", date(2024, 3, 1))])
     plan = plan_file(
         tmp_path, [("R1", "gl.brent", "fake.demand"), ("R2", "ru.key_rate", "fake.rate")]
     )
-    monkeypatch.setattr(runner, "load_episodes", lambda path=None: load_episodes(plan))
 
-    _, report = run_episodes(workspace, corpus, tmp_path)
+    _, report = run_episodes(workspace, corpus, plan, tmp_path)
     out = capsys.readouterr().out
 
     aggregate = report["aggregate"]
@@ -312,16 +317,14 @@ def test_the_report_holds_the_aggregate_the_usefulness_and_the_halves(
     assert "| macro | all |" in out
 
 
-def test_the_full_table_does_not_depend_on_the_halves(workspace, tmp_path, monkeypatch):
+def test_the_full_table_does_not_depend_on_the_halves(workspace, tmp_path):
     corpus = manifest(tmp_path, [("R1", date(2023, 6, 1)), ("R2", date(2024, 3, 1))])
     checks = [("R1", "gl.brent", "fake.demand"), ("R2", "ru.key_rate", "fake.rate")]
     plan = plan_file(tmp_path, checks)
-    monkeypatch.setattr(runner, "load_episodes", lambda path=None: load_episodes(plan))
-    _, first = run_episodes(workspace, corpus, tmp_path, name="first.json")
+    _, first = run_episodes(workspace, corpus, plan, tmp_path, name="first.json")
 
     swapped = plan_file(tmp_path, checks, swap=True)
-    monkeypatch.setattr(runner, "load_episodes", lambda path=None: load_episodes(swapped))
-    _, second = run_episodes(workspace, corpus, tmp_path, name="second.json")
+    _, second = run_episodes(workspace, corpus, swapped, tmp_path, name="second.json")
 
     # The final table is built over all episodes: the marks change the halves, nothing else.
     assert first["aggregate"]["levels"] == second["aggregate"]["levels"]
@@ -385,14 +388,13 @@ def test_the_tail_section_prints_the_horizon_and_the_dropped_episodes(capsys):
     assert "dropped R2: no fact at t = H" in out
 
 
-def test_the_random_walk_is_not_the_base_run(workspace, tmp_path, monkeypatch):
+def test_the_random_walk_is_not_the_base_run(workspace, tmp_path):
     corpus = manifest(tmp_path, [("R1", date(2023, 6, 1)), ("R2", date(2024, 3, 1))])
     plan = plan_file(
         tmp_path, [("R1", "gl.brent", "fake.demand"), ("R2", "ru.key_rate", "fake.rate")]
     )
-    monkeypatch.setattr(runner, "load_episodes", lambda path=None: load_episodes(plan))
 
-    _, report = run_episodes(workspace, corpus, tmp_path)
+    _, report = run_episodes(workspace, corpus, plan, tmp_path)
 
     row = report["quantities"]["ru.key_rate"]
     # The fake model ignores the scenario, so its base run is its conditional forecast.
@@ -406,15 +408,14 @@ def test_the_random_walk_is_not_the_base_run(workspace, tmp_path, monkeypatch):
     )
 
 
-def test_an_episode_scores_the_same_alone_and_with_others(workspace, tmp_path, monkeypatch):
+def test_an_episode_scores_the_same_alone_and_with_others(workspace, tmp_path):
     corpus = manifest(tmp_path, [("R1", date(2023, 6, 1)), ("R2", date(2024, 3, 1))])
     plan = plan_file(
         tmp_path, [("R1", "gl.brent", "fake.demand"), ("R2", "ru.key_rate", "fake.rate")]
     )
-    monkeypatch.setattr(runner, "load_episodes", lambda path=None: load_episodes(plan))
 
-    _, alone = run_episodes(workspace, corpus, tmp_path, name="alone.json", only=["R1"])
-    _, together = run_episodes(workspace, corpus, tmp_path, name="together.json")
+    _, alone = run_episodes(workspace, corpus, plan, tmp_path, name="alone.json", only=["R1"])
+    _, together = run_episodes(workspace, corpus, plan, tmp_path, name="together.json")
 
     def cells_of(report):
         return {
@@ -532,15 +533,14 @@ def test_the_constraint_gate_needs_more_than_one_percent():
 
 
 def test_a_fact_episode_reports_the_constraint_probability_as_not_applicable(
-    workspace, tmp_path, monkeypatch, capsys
+    workspace, tmp_path, capsys
 ):
     corpus = manifest(tmp_path, [("R1", date(2023, 6, 1)), ("R2", date(2024, 3, 1))])
     plan = plan_file(
         tmp_path, [("R1", "gl.brent", "fake.demand"), ("R2", "ru.key_rate", "fake.rate")]
     )
-    monkeypatch.setattr(runner, "load_episodes", lambda path=None: load_episodes(plan))
 
-    code, report = run_episodes(workspace, corpus, tmp_path)
+    code, report = run_episodes(workspace, corpus, plan, tmp_path)
     out = capsys.readouterr().out
 
     assert code == 0
@@ -574,14 +574,13 @@ def test_the_interval_resamples_the_reported_statistic():
     assert runner._interval([], "crps", plan) is None
 
 
-def test_the_report_meta_records_the_versions_and_the_vintage(workspace, tmp_path, monkeypatch):
+def test_the_report_meta_records_the_versions_and_the_vintage(workspace, tmp_path):
     corpus = manifest(tmp_path, [("R1", date(2023, 6, 1)), ("R2", date(2024, 3, 1))])
     plan = plan_file(
         tmp_path, [("R1", "gl.brent", "fake.demand"), ("R2", "ru.key_rate", "fake.rate")]
     )
-    monkeypatch.setattr(runner, "load_episodes", lambda path=None: load_episodes(plan))
 
-    _, report = run_episodes(workspace, corpus, tmp_path)
+    _, report = run_episodes(workspace, corpus, plan, tmp_path)
     meta = report["meta"]
 
     assert meta["draws"] == 40 and meta["seed"] == 3
@@ -693,12 +692,11 @@ def test_seasonal_facts_use_the_calculation_date_profile(tmp_path):
     assert not np.allclose(result[:, 0], alternative)
 
 
-def test_the_satellites_score_the_served_drivers(workspace, tmp_path, monkeypatch):
+def test_the_satellites_score_the_served_drivers(workspace, tmp_path):
     corpus = manifest(tmp_path, [("R1", date(2023, 6, 1)), ("R2", date(2024, 3, 1))])
     plan = plan_file(
         tmp_path, [("R1", "gl.brent", "fake.demand"), ("R2", "ru.key_rate", "fake.rate")]
     )
-    monkeypatch.setattr(runner, "load_episodes", lambda path=None: load_episodes(plan))
     # The driver catalog of the workspace: one object, one driver, with a realized series.
     catalog = _catalog(tmp_path)
     store = workspace["store"]
@@ -712,7 +710,7 @@ def test_the_satellites_score_the_served_drivers(workspace, tmp_path, monkeypatc
     )
 
     code, report = run_episodes(
-        workspace, corpus, tmp_path, drivers=catalog, satellites=True
+        workspace, corpus, plan, tmp_path, drivers=catalog, satellites=True
     )
 
     assert code == 0
@@ -728,12 +726,11 @@ def test_the_satellites_score_the_served_drivers(workspace, tmp_path, monkeypatc
     assert row["unverified_tail"] is False
 
 
-def test_the_portfolio_tail_is_reported_with_its_horizon(workspace, tmp_path, monkeypatch, capsys):
+def test_the_portfolio_tail_is_reported_with_its_horizon(workspace, tmp_path, capsys):
     corpus = manifest(tmp_path, [("R1", date(2023, 6, 1)), ("R2", date(2024, 3, 1))])
     plan = plan_file(
         tmp_path, [("R1", "gl.brent", "fake.demand"), ("R2", "ru.key_rate", "fake.rate")]
     )
-    monkeypatch.setattr(runner, "load_episodes", lambda path=None: load_episodes(plan))
     catalog = _catalog(tmp_path)
     store = workspace["store"]
     grid = months_between(simulated.START, shift(simulated.START, 59))
@@ -761,6 +758,7 @@ def test_the_portfolio_tail_is_reported_with_its_horizon(workspace, tmp_path, mo
     _, report = run_episodes(
         workspace,
         corpus,
+        plan,
         tmp_path,
         name="tail.json",
         drivers=catalog,
@@ -775,16 +773,15 @@ def test_the_portfolio_tail_is_reported_with_its_horizon(workspace, tmp_path, mo
     assert "## Tail (Acerbi-Székely)" in capsys.readouterr().out
 
 
-def test_an_unknown_portfolio_is_a_named_error(workspace, tmp_path, monkeypatch):
+def test_an_unknown_portfolio_is_a_named_error(workspace, tmp_path):
     corpus = manifest(tmp_path, [("R1", date(2023, 6, 1)), ("R2", date(2024, 3, 1))])
     plan = plan_file(
         tmp_path, [("R1", "gl.brent", "fake.demand"), ("R2", "ru.key_rate", "fake.rate")]
     )
-    monkeypatch.setattr(runner, "load_episodes", lambda path=None: load_episodes(plan))
 
     # Without the driver paths there is nothing to value the positions on.
     with pytest.raises(ValueError, match="needs --satellites"):
-        run_episodes(workspace, corpus, tmp_path, portfolio="absent")
+        run_episodes(workspace, corpus, plan, tmp_path, portfolio="absent")
 
     catalog = _catalog(tmp_path)
     grid = months_between(simulated.START, shift(simulated.START, 59))
@@ -797,17 +794,16 @@ def test_an_unknown_portfolio_is_a_named_error(workspace, tmp_path, monkeypatch)
     )
     with pytest.raises(ValueError, match="no portfolio 'absent'"):
         run_episodes(
-            workspace, corpus, tmp_path, drivers=catalog, satellites=True, portfolio="absent"
+            workspace, corpus, plan, tmp_path, drivers=catalog, satellites=True, portfolio="absent"
         )
 
 
-def test_the_decision_compares_two_reports_on_the_same_cells(workspace, tmp_path, monkeypatch):
+def test_the_decision_compares_two_reports_on_the_same_cells(workspace, tmp_path):
     corpus = manifest(tmp_path, [("R1", date(2023, 6, 1)), ("R2", date(2024, 3, 1))])
     plan = plan_file(
         tmp_path, [("R1", "gl.brent", "fake.demand"), ("R2", "ru.key_rate", "fake.rate")]
     )
-    monkeypatch.setattr(runner, "load_episodes", lambda path=None: load_episodes(plan))
-    _, report = run_episodes(workspace, corpus, tmp_path, name="incumbent.json")
+    _, report = run_episodes(workspace, corpus, plan, tmp_path, name="incumbent.json")
     against = tmp_path / "incumbent.json"
     halves = {episode["id"]: episode["half"] for episode in report["episodes"]}
 
@@ -853,7 +849,6 @@ def test_the_satellite_bundle_is_cached_by_its_own_inputs(workspace, tmp_path, m
     plan = plan_file(
         tmp_path, [("R1", "gl.brent", "fake.demand"), ("R2", "ru.key_rate", "fake.rate")]
     )
-    monkeypatch.setattr(runner, "load_episodes", lambda path=None: load_episodes(plan))
     catalog = _catalog(tmp_path)
     store = workspace["store"]
     grid = months_between(simulated.START, shift(simulated.START, 59))
@@ -873,14 +868,14 @@ def test_the_satellite_bundle_is_cached_by_its_own_inputs(workspace, tmp_path, m
 
     monkeypatch.setattr(models_pkg, "estimate_satellites", counted)
     _, first = run_episodes(
-        workspace, corpus, tmp_path, name="first.json", drivers=catalog, satellites=True
+        workspace, corpus, plan, tmp_path, name="first.json", drivers=catalog, satellites=True
     )
     estimated = len(calls)
     # One bundle per episode: the episodes are estimated on different macro versions.
     assert estimated == 2
 
     _, second = run_episodes(
-        workspace, corpus, tmp_path, name="second.json", drivers=catalog, satellites=True
+        workspace, corpus, plan, tmp_path, name="second.json", drivers=catalog, satellites=True
     )
 
     # The same inputs reuse both bundles: the estimation is not repeated.
@@ -974,7 +969,6 @@ def test_an_episode_the_satellite_estimation_cannot_serve_is_skipped_by_name(
     plan = plan_file(
         tmp_path, [("R1", "gl.brent", "fake.demand"), ("R2", "ru.key_rate", "fake.rate")]
     )
-    monkeypatch.setattr(runner, "load_episodes", lambda path=None: load_episodes(plan))
     catalog = _catalog(tmp_path)
     original = models_pkg.estimate_satellites
     calls = []
@@ -990,7 +984,7 @@ def test_an_episode_the_satellite_estimation_cannot_serve_is_skipped_by_name(
     monkeypatch.setattr(models_pkg, "estimate_satellites", failing)
 
     code, report = run_episodes(
-        workspace, corpus, tmp_path, name="late.json", drivers=catalog, satellites=True
+        workspace, corpus, plan, tmp_path, name="late.json", drivers=catalog, satellites=True
     )
 
     # The first episode is named and skipped; the check goes on with the second.
@@ -1030,7 +1024,7 @@ def test_the_shipped_episodes_fit_the_shocked_variables():
     from mst.macro.registry import load_registry
     from mst.plugins.bvar.signs import load_signs
 
-    plan = load_episodes()
+    plan = load_episodes(PLAN)
     variables = {v.id for v in load_registry().variables}
     shocks = set(load_signs().ids)
     for check in plan.episodes:

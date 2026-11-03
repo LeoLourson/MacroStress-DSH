@@ -20,7 +20,6 @@ from pydantic import Field, field_validator
 
 from mst.contracts import Contract, Identifier, Number, Seed
 
-EPISODES_PATH = Path(__file__).with_name("episodes.toml")
 Count = Annotated[int, Field(strict=True, ge=1)]
 Half = Literal["tuning", "validation"]
 """Which half of the episode plan an episode belongs to: tuning fits the models, validation checks
@@ -117,7 +116,8 @@ class Episodes(Contract):
         return episodes
 
 
-def load_episodes(path: Path = EPISODES_PATH) -> Episodes:
+def load_episodes(path: Path) -> Episodes:
+    """The plan in ``path``: the repository keeps it in ``bench/model-backtest/episodes.toml``."""
     with path.open("rb") as file:
         return Episodes.model_validate({**tomllib.load(file), "path": path})
 

@@ -27,7 +27,7 @@ after that job.
 ## What stays outside `bench/`
 
 The historical episodes of the macro model check live in
-[`src/mst/metrics/episodes.toml`](../src/mst/metrics/episodes.toml). By kind it is a check set
+[`bench/model-backtest/episodes.toml`](model-backtest/episodes.toml). By kind it is a check set
 too, but `python -m mst.metrics` reads it from the installed package, and the backtest report
 keeps the file's hash. Moving it would break the run from the PyPI package and the comparison
 with earlier reports, so the file stays where it is.

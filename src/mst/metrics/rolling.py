@@ -347,6 +347,7 @@ def run(
     *,
     store: Path,
     models: Path,
+    episodes: Path,
     as_of: date,
     macro_id: str | None = None,
     dates: list[date] | None = None,
@@ -362,7 +363,7 @@ def run(
 
     from .backtest import _episode_macro, _jsonable
 
-    plan = load_episodes()
+    plan = load_episodes(episodes)
     if plan.rolling is None:
         raise ValueError("the episode plan names no [rolling] grid")
     data = SeriesStore(store)
