@@ -21,6 +21,7 @@ so a model plugin never sees the platform's orchestration.
 
 import math
 from abc import ABC, abstractmethod
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import date
 from pathlib import Path
@@ -320,11 +321,25 @@ class MacroEstimateContext:
     The model builds its own panel (``mst.macro.panel.build_panel``) with its own spec, so two
     macro models may read the same history differently; nothing but the date limits what the
     model is allowed to see.
+
+    A model whose estimate reads answers the series store and the registries do not hold —
+    the elicitation answers of ``mst.plugins.expert`` — declares them through
+    ``input_keys`` and finds the folder they are written to in ``inputs``: the folder of the
+    plugin's answers in the workspace, ``workspace/elicitation`` today. ``checkpoints`` is a
+    folder of the model's own where it may keep each finished unit
+    (``mst.model_sdk.checkpoint``), so a restarted estimate resumes from it; ``None`` keeps
+    nothing. ``fragment`` tells whether a fragment of the model corpus with an id is visible
+    on ``as_of``; the platform fills it from ``mst.corpus.tool.get`` on the model corpus, so
+    a plugin checks the sources an answer cites without importing the corpus, and ``None``
+    means the corpus is not indexed.
     """
 
     store: SeriesStoreLike
     registry: MacroRegistryLike
     as_of: date
+    inputs: Path | None = None
+    checkpoints: Path | None = None
+    fragment: Callable[[str], bool] | None = None
 
 
 @dataclass(frozen=True)
@@ -450,6 +465,36 @@ class MacroModel(ABC):
         platform reports no price for its scenarios.
         """
         return None
+
+    def input_keys(self, as_of: date) -> tuple[str, ...]:
+        """The inputs the model needs for a date, by key; the empty tuple declares none.
+
+        The keys name the answers the agent writes before the estimate
+        (``model(kind="inputs")`` of the server); a model that declares none is estimated
+        from the series store alone.
+        """
+        return ()
+
+    def question(self, context: MacroEstimateContext, key: str) -> dict:
+        """What the agent reads before answering: ``{"key", "text", "schema"}``.
+
+        ``text`` carries the question in English with everything the answer needs — the
+        quantities asked, their units, the state of the series on ``context.as_of`` — and
+        ``schema`` the JSON Schema of the answer. The default refuses: a model that declares
+        no inputs has no questions.
+        """
+        raise KeyError(f"the model declares no input {key!r}")
+
+    def check_input(
+        self, context: MacroEstimateContext, key: str, payload: dict
+    ) -> dict:
+        """The answer of ``key`` in its normal form, or ``ValueError`` naming the field.
+
+        The normal form is what the platform stores and what the estimate reads back; a
+        malformed answer is refused with a message that names the field, so the agent can
+        correct it. The default refuses: a model that declares no inputs accepts none.
+        """
+        raise KeyError(f"the model declares no input {key!r}")
 
     def describe(self) -> dict:
         return {

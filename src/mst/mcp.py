@@ -866,6 +866,8 @@ def _macro_argv(
         "--models",
         str(ws.models),
     ]
+    if command == "estimate-macro":
+        argv += ["--inputs", str(ws.elicitation)]
     if command == "backtest":
         argv += ["--corpus", str(ws.corpus / "manifest.json")]
         if only:

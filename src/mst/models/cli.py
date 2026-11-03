@@ -3,6 +3,7 @@
 ::
 
   python -m mst.models estimate-macro [MODEL_ID] --as-of DATE --store DIR --models DIR
+      [--inputs DIR]
   python -m mst.models estimate-satellites --macro SHA256 --store DIR --models DIR --drivers FILE
   python -m mst.models diagnose-satellites SHA256 --models DIR
   python -m mst.models list --models DIR
@@ -12,7 +13,9 @@
 
 ``estimate-macro`` estimates the named macro model (or the only one installed) on the panel
 known on ``--as-of`` and writes the version to ``<models>/macro/<sha256>/``; it prints the
-hash. ``estimate-satellites`` assembles the satellite bundle of a macro version: every
+hash. ``--inputs`` names the folder of the model's answers (``workspace/elicitation``), which
+a model with declared inputs reads. ``estimate-satellites`` assembles the satellite bundle of
+a macro version: every
 quantity with drivers is estimated by the satellite model assigned to it — the one that
 declares it, or ``--model QUANTITY=MODEL_ID`` — and the parts and the residual correlation
 become one version; it prints the hash and the check of every driver. ``diagnose-satellites``
@@ -44,6 +47,12 @@ def main(argv: list[str] | None = None) -> int:
     run.add_argument("--as-of", type=date.fromisoformat, required=True)
     run.add_argument("--store", type=Path, required=True)
     run.add_argument("--models", type=Path, required=True)
+    run.add_argument(
+        "--inputs",
+        type=Path,
+        default=None,
+        help="the folder of the model's answers, workspace/elicitation by default",
+    )
     bundle = commands.add_parser(
         "estimate-satellites", help="assemble the satellite bundle of a macro version"
     )
@@ -83,7 +92,15 @@ def main(argv: list[str] | None = None) -> int:
         sys.stdout.reconfigure(encoding="utf-8")
 
     if args.command == "estimate-macro":
-        print(estimate_macro(args.model_id, store=args.store, models=args.models, as_of=args.as_of))
+        print(
+            estimate_macro(
+                args.model_id,
+                store=args.store,
+                models=args.models,
+                as_of=args.as_of,
+                inputs=args.inputs,
+            )
+        )
         return 0
     if args.command == "estimate-satellites":
         overrides = {}

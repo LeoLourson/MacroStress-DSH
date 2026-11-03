@@ -96,6 +96,16 @@ class Workspace:
         return self.root / "corpus"
 
     @property
+    def model_corpus(self) -> Path:
+        """The corpus of the models, separate from the corpus of the scenarios."""
+        return self.root / "corpus-model"
+
+    @property
+    def elicitation(self) -> Path:
+        """The answers the agent writes for the models: ``elicitation/<date>/<key>.json``."""
+        return self.root / "elicitation"
+
+    @property
     def models(self) -> Path:
         return self.root / "models"
 
