@@ -3,9 +3,9 @@
  * that describe how to work with it, and the system prompt section that tells every
  * agent which model versions a run would use.
  *
- * The server and this plugin find the same workspace: `MACROSTRESS_WORKSPACE`, else
- * `~/.macrostress/workspace`, so the section and the tools describe one directory. A profile
- * that keeps it elsewhere overrides both entries in its own patch.
+ * The server and this plugin find the same workspace by one rule (see `defaultWorkspace`), so
+ * the section and the tools describe one directory. A profile that keeps it elsewhere overrides
+ * both entries in its own patch.
  */
 
 import { readdirSync, readFileSync, statSync } from 'node:fs';
@@ -18,9 +18,34 @@ export const inject = ['skills', 'systemPrompt'];
 
 const here = dirname(fileURLToPath(import.meta.url));
 
-/** The workspace without a config: the rule `mst.mcp` follows too. */
-export function defaultWorkspace(env = process.env, home = homedir()) {
-  return env.MACROSTRESS_WORKSPACE || join(home, '.macrostress', 'workspace');
+/**
+ * The workspace without a config: the rule `mst.mcp` follows too. `MACROSTRESS_WORKSPACE`,
+ * else the first existing of `~/.macrostress/workspace`, the user data directory of the OS and
+ * `./workspace`, else the user data directory of the OS. The server falls back to `./workspace`
+ * when it cannot create that one, and from then on this rule finds it.
+ */
+export function defaultWorkspace(
+  env = process.env,
+  home = homedir(),
+  platform = process.platform,
+  cwd = process.cwd(),
+) {
+  if (env.MACROSTRESS_WORKSPACE) return env.MACROSTRESS_WORKSPACE;
+  let data;
+  if (platform === 'win32') data = env.LOCALAPPDATA || join(home, 'AppData', 'Local');
+  else if (platform === 'darwin') data = join(home, 'Library', 'Application Support');
+  else data = env.XDG_DATA_HOME || join(home, '.local', 'share');
+  const shared = join(data, 'macrostress', 'workspace');
+  const found = [join(home, '.macrostress', 'workspace'), shared, join(cwd, 'workspace')];
+  return found.find(isDirectory) ?? shared;
+}
+
+function isDirectory(path) {
+  try {
+    return statSync(path).isDirectory();
+  } catch {
+    return false;
+  }
 }
 
 /** Split one SKILL.md into its frontmatter fields and its body. */

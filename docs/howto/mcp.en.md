@@ -28,7 +28,7 @@ The server speaks over stdio and prints nothing until a client connects. The wor
 
 ## Client configuration
 
-The client starts the command itself. Without `--workspace` the server takes `MACROSTRESS_WORKSPACE`, else `~/.macrostress/workspace`. Pass the absolute path to the workspace and put the FRED key in `env`, so the server hands it to the download jobs.
+The client starts the command itself. Without `--workspace` the server takes `MACROSTRESS_WORKSPACE`, else the first existing of `~/.macrostress/workspace`, the user data directory of the OS (`%LOCALAPPDATA%\macrostress\workspace` on Windows, `~/Library/Application Support/macrostress/workspace` on macOS, `$XDG_DATA_HOME/macrostress/workspace` or `~/.local/share/macrostress/workspace` on Linux) and `./workspace` in the start directory. If none exists, the server creates the user data directory of the OS, and `./workspace` when it cannot write outside the project. Pass the absolute path to the workspace and put the FRED key in `env`, so the server hands it to the download jobs.
 
 ### Claude Desktop
 

@@ -8,7 +8,7 @@
  */
 
 import assert from 'node:assert/strict';
-import { mkdtempSync, readFileSync, rmSync, utimesSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, utimesSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -64,7 +64,27 @@ const state = {
 
 // The default workspace follows the rule of mst.mcp, and the patch names no machine.
 assert.equal(defaultWorkspace({ MACROSTRESS_WORKSPACE: 'D:\\data' }, 'H'), 'D:\\data');
-assert.equal(defaultWorkspace({}, 'H'), join('H', '.macrostress', 'workspace'));
+assert.equal(
+  defaultWorkspace({ LOCALAPPDATA: 'L' }, 'H', 'win32', 'C'),
+  join('L', 'macrostress', 'workspace'),
+);
+assert.equal(
+  defaultWorkspace({}, 'H', 'darwin', 'C'),
+  join('H', 'Library', 'Application Support', 'macrostress', 'workspace'),
+);
+assert.equal(defaultWorkspace({}, 'H', 'linux', 'C'), join('H', '.local', 'share', 'macrostress', 'workspace'));
+assert.equal(defaultWorkspace({ XDG_DATA_HOME: 'X' }, 'H', 'linux', 'C'), join('X', 'macrostress', 'workspace'));
+const home = mkdtempSync(join(tmpdir(), 'dsh-home-'));
+try {
+  mkdirSync(join(home, '.macrostress', 'workspace'), { recursive: true });
+  mkdirSync(join(home, 'project', 'workspace'), { recursive: true });
+  const project = join(home, 'project');
+  assert.equal(defaultWorkspace({}, home, 'win32', project), join(home, '.macrostress', 'workspace'));
+  rmSync(join(home, '.macrostress'), { recursive: true });
+  assert.equal(defaultWorkspace({}, home, 'win32', project), join(project, 'workspace'));
+} finally {
+  rmSync(home, { recursive: true, force: true });
+}
 const patch = readFileSync(join(here, '..', 'cordis.patch.yml'), 'utf8');
 assert.doesNotMatch(patch, /[A-Za-z]:[\\/]|\/home\/|\/Users\//, 'an absolute path in the patch');
 

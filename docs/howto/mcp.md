@@ -36,7 +36,7 @@ uv run macrostress --workspace C:/data/macrostress
 
 ## Настройка клиента
 
-Клиент запускает команду сам. Без `--workspace` сервер берёт `MACROSTRESS_WORKSPACE`, иначе `~/.macrostress/workspace`. Передайте абсолютный путь к workspace, а ключ FRED положите в
+Клиент запускает команду сам. Без `--workspace` сервер берёт `MACROSTRESS_WORKSPACE`, иначе первый существующий из `~/.macrostress/workspace`, каталога данных пользователя ОС (`%LOCALAPPDATA%\macrostress\workspace` в Windows, `~/Library/Application Support/macrostress/workspace` в macOS, `$XDG_DATA_HOME/macrostress/workspace` или `~/.local/share/macrostress/workspace` в Linux) и `./workspace` в каталоге запуска. Если ни одного нет, сервер создаёт каталог данных ОС, а без прав записи вне проекта — `./workspace`. Передайте абсолютный путь к workspace, а ключ FRED положите в
 `env`, чтобы сервер передавал его задачам загрузки.
 
 ### Claude Desktop

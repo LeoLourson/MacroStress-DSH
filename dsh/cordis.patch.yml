@@ -3,7 +3,8 @@
 #
 # No path of any machine belongs here. uvx runs the package published on PyPI, and the server
 # and the plugin find the same default workspace: MACROSTRESS_WORKSPACE, else
-# ~/.macrostress/workspace. A machine that needs something else overrides these two entries in
+# the first existing of ~/.macrostress/workspace, the user data directory of the OS and
+# ./workspace (see defaultWorkspace in index.js). A machine that needs something else overrides these two entries in
 # its own profile patch; docs/howto/install.en.md shows how.
 - insert:
     - id: mcp-macrostress

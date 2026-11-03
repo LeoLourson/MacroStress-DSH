@@ -28,8 +28,7 @@ Ctrl+C. При запуске он создаёт `workspace/` и пишет т�
 ## 2. Где лежат данные
 
 В `dsh/cordis.patch.yml` нет путей: `uvx` запускает пакет с PyPI, а сервер и плагин находят один
-каталог данных по одному правилу: переменная окружения `MACROSTRESS_WORKSPACE`, иначе
-`~/.macrostress/workspace`. Для обычной установки ничего настраивать не нужно.
+каталог данных по одному правилу: переменная окружения `MACROSTRESS_WORKSPACE`, иначе первый существующий из `~/.macrostress/workspace`, каталога данных пользователя ОС (`%LOCALAPPDATA%\macrostress\workspace` в Windows, `~/Library/Application Support/macrostress/workspace` в macOS, `$XDG_DATA_HOME/macrostress/workspace` или `~/.local/share/macrostress/workspace` в Linux) и `./workspace` в каталоге запуска. Если ни одного нет, сервер создаёт каталог данных ОС, а без прав записи вне проекта — `./workspace`. Для обычной установки ничего настраивать не нужно.
 
 Всё, что относится к одной машине, пишется в патче профиля
 `~/.dsh/profiles/<имя>/cordis.patch.yml`: он применяется после бандла и заменяет `config` записи
