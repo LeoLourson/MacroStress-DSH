@@ -11,7 +11,7 @@
 | `cordis.patch.yml` | Патч дерева профиля: вставляет `@deepseek-ai/dsh-mcp-client` с сервером `uvx macrostress` и сам плагин. Путей машины в нём нет |
 | `index.js` | Плагин: при включении регистрирует скиллы из `skills/*.md` и раздел промпта `macrostress` из пяти строк по `workspace.json`; при выключении снимает скиллы |
 | `locale/` | Название и описание плагина на русском и английском |
-| `skills/` | Три скилла агента: `scenario-from-corpus`, `run-report`, `drivers` |
+| `skills/` | Четыре скилла агента: `scenario-from-corpus`, `run-report`, `drivers`, `model-inputs` |
 | `test/smoke.mjs` | Проверка без DSH: фейковый контекст, скиллы, пять строк по временному `workspace.json`, запасной однострочный вариант, перечитывание файла и снятие скиллов |
 
 Каталог данных сервер и `index.js` находят по одному правилу: `MACROSTRESS_WORKSPACE`, иначе первый существующий из `~/.macrostress/workspace`, каталога данных пользователя ОС (`%LOCALAPPDATA%\macrostress\workspace` в Windows, `~/Library/Application Support/macrostress/workspace` в macOS, `$XDG_DATA_HOME/macrostress/workspace` или `~/.local/share/macrostress/workspace` в Linux) и `./workspace` в каталоге запуска. Если ни одного нет, сервер создаёт каталог данных ОС, а без прав записи вне проекта — `./workspace`. Настройки одной машины пишутся в патче профиля, см.
@@ -23,7 +23,7 @@
 node dsh/test/smoke.mjs
 ```
 
-Он вызывает `apply` с фейковым контекстом, проверяет три скилла, карточку в обеих локалях,
+Он вызывает `apply` с фейковым контекстом, проверяет четыре скилла, карточку в обеих локалях,
 пять строк раздела по временному `workspace.json`, однострочный запасной вариант, перечитывание
 файла и снятие скиллов при выключении. После перезапуска DSH скиллы видны в списке, а раздел —
 в системном промпте; карточка плагина — в Settings → Plugins.

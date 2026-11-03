@@ -111,7 +111,7 @@ try {
   assert.ok(lines[4].includes('jobs(action="state")'), 'the starting call');
 
   const names = first.skills.map((skill) => skill.name).sort();
-  assert.deepEqual(names, ['drivers', 'run-report', 'scenario-from-corpus']);
+  assert.deepEqual(names, ['drivers', 'model-inputs', 'run-report', 'scenario-from-corpus']);
   for (const skill of first.skills) {
     assert.ok(skill.description.length > 0, `${skill.name}: description`);
     assert.ok(skill.content.length > 0, `${skill.name}: content`);
@@ -126,6 +126,7 @@ try {
   assert.ok(content['run-report'].includes('ES95'));
   assert.ok(content['drivers'].includes('model(kind="satellites"'));
   assert.ok(content['drivers'].includes('served'));
+  assert.ok(content['model-inputs'].includes('model(kind="inputs", action="question"'));
 
   // The section is re-read when workspace.json changes, not cached forever.
   const changed = { ...state, portfolios: 2, scenarios: 1, runs: 0, jobs: 0 };
@@ -161,4 +162,4 @@ for (const locale of ['ru', 'en']) {
   assert.ok(card.meta.description, `${locale}: description`);
 }
 
-console.log('ok: 3 skills, 5 prompt lines, fallback, re-read, disposal, both locales');
+console.log('ok: 4 skills, 5 prompt lines, fallback, re-read, disposal, both locales');
