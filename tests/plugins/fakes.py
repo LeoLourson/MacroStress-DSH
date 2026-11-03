@@ -135,3 +135,24 @@ def model_plugin(**changes) -> Plugin:
     }
     values.update(changes)
     return Plugin(**values)
+
+
+class InputMacroModel(DemoMacroModel):
+    """A macro model with two input keys, for the tests of the inputs tool."""
+
+    model_id = "gmodel.inputs.v1"
+
+    def input_keys(self, as_of):
+        return ("q1", "q2")
+
+    def question(self, context, key):
+        if key not in self.input_keys(context.as_of):
+            raise KeyError(f"the model declares no input {key!r}")
+        return {"key": key, "text": f"what is {key}?", "schema": {"type": "object"}}
+
+    def check_input(self, context, key, payload):
+        if key not in self.input_keys(context.as_of):
+            raise KeyError(f"the model declares no input {key!r}")
+        if "value" not in payload:
+            raise ValueError("value: the answer needs the field value")
+        return {"value": float(payload["value"])}

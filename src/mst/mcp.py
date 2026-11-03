@@ -35,7 +35,8 @@ consequences.
 Read a guide before the work it covers: guide(name="scenario-from-corpus") when the user names \
 an event or asks what happens if it occurs, even without the words scenario or corpus; \
 guide(name="run-report") before a calculation or its report; guide(name="drivers") before work \
-on drivers and satellites. guide() lists them.
+on drivers and satellites; guide(name="model-inputs") before estimating a model that declares \
+inputs, when answers of its elicitation are still missing. guide() lists them.
 
 Search the corpus before writing any number of a scenario. Mark a condition or an impact with \
 "event" when the text of the event states its number, with a corpus fragment only when the \
@@ -688,15 +689,17 @@ def build(ws: store.Workspace) -> FastMCP:
         kind: Annotated[
             str,
             Field(
-                description="What to work with: macro versions, satellite bundles, or "
-                "the catalog of installed plugins."
+                description="What to work with: macro versions, satellite bundles, the "
+                "inputs a model declares (the answers the agent writes), or the catalog of "
+                "installed plugins."
             ),
         ],
         action: Annotated[
             str,
             Field(
                 description="What to do. macro: list, describe, base, estimate, backtest; "
-                "satellites: list, describe, estimate; catalog: list."
+                "satellites: list, describe, estimate; inputs: list, question, write, "
+                "status; catalog: list."
             ),
         ],
         version: Annotated[
@@ -735,6 +738,20 @@ def build(ws: store.Workspace) -> FastMCP:
                 "that declares it."
             ),
         ] = None,
+        key: Annotated[
+            str | None,
+            Field(
+                description="The input key question and write read: one of the keys a "
+                "model declares for the date."
+            ),
+        ] = None,
+        payload: Annotated[
+            dict[str, Any] | None,
+            Field(
+                description="The answer write checks and stores, as the question's "
+                "schema asks."
+            ),
+        ] = None,
         horizon: Annotated[
             int,
             Field(
@@ -742,7 +759,7 @@ def build(ws: store.Workspace) -> FastMCP:
             ),
         ] = 12,
     ) -> dict:
-        """Model versions and plugins. kind: macro, satellites, catalog.
+        """Model versions and plugins. kind: macro, satellites, inputs, catalog.
 
         The episode check of the models is ``backtest`` (``python -m mst.metrics``).
         Actions for ``macro``: list, describe, base, estimate, backtest; for ``satellites``:
@@ -754,12 +771,21 @@ def build(ws: store.Workspace) -> FastMCP:
         it in an ``estimate`` of the satellites, overriding the model that declares it.
         ``version`` is the version hash ``describe`` and ``base`` read and the macro version the
         satellites of an ``estimate`` are built on; ``list`` takes no version.
+
+        ``inputs`` works with the answers a model declares for a date: ``list`` and ``status``
+        name every key written or missing, ``question`` gives the text the agent reads before
+        answering and ``write`` checks the answer's form and stores it. The inputs are written
+        by the agent itself and no human approves them — read guide(name="model-inputs")
+        first — and ``model_id`` and ``as_of`` name the model and the date; a refused answer
+        comes back with the field it was refused for.
         """
         with _plugin_output_to_stderr():
             if kind == "catalog":
                 if action != "list":
                     raise ValueError("model: unknown action for catalog, try list")
                 return models.catalog()
+            if kind == "inputs":
+                return _model_inputs(ws, action, model_id, as_of, key, payload)
             if kind == "satellites":
                 if action == "list":
                     return {"versions": satellite_bundle.catalogue(ws.models)}
@@ -812,6 +838,76 @@ def build(ws: store.Workspace) -> FastMCP:
             )
 
     return server
+
+
+def _model_inputs(
+    ws: store.Workspace, action: str, model_id: str | None, as_of: str | None, key, payload
+) -> dict:
+    """The actions of ``model(kind="inputs")``: the answers a model declares for a date.
+
+    The context the model's ``question`` and ``check_input`` see is the one an estimate
+    would build: the series store, the registries, the calculation date, the folder of the
+    answers and the visibility of the model corpus fragments on that date.
+    """
+    from mst import inputs as model_inputs
+    from mst.macro.registry import load_registry as load_macro_registry
+    from mst.model_sdk.contracts import MacroEstimateContext
+
+    if action not in {"list", "question", "write", "status"}:
+        raise ValueError(
+            f"model: unknown action {action!r} for inputs, try list, question, write, status"
+        )
+    day = _day(_need(as_of, "as_of"))
+    model = models.selected(model_id)
+    if action == "list":
+        return {
+            "model": model.model_id,
+            "as_of": day.isoformat(),
+            **model_inputs.status(ws.elicitation, model, day),
+        }
+    context = MacroEstimateContext(
+        store=SeriesStore(ws.series),
+        registry=load_macro_registry(),
+        as_of=day,
+        inputs=ws.elicitation,
+        fragment=_model_fragment(ws, day),
+    )
+    if action == "question":
+        return model.question(context, _need(key, "key"))
+    if action == "write":
+        the_key = _need(key, "key")
+        normal = model.check_input(context, the_key, _need(payload, "payload"))
+        digest = model_inputs.write(ws.elicitation, day, the_key, normal)
+        found = model_inputs.status(ws.elicitation, model, day)
+        return {
+            "model": model.model_id,
+            "as_of": day.isoformat(),
+            "key": the_key,
+            "hash": digest,
+            "missing": [row["key"] for row in found["keys"] if not row["written"]],
+        }
+    found = model_inputs.status(ws.elicitation, model, day)
+    return {
+        "model": model.model_id,
+        "as_of": day.isoformat(),
+        "missing": [row["key"] for row in found["keys"] if not row["written"]],
+        "written": [row["key"] for row in found["keys"] if row["written"]],
+    }
+
+
+def _model_fragment(ws: store.Workspace, day: date):
+    """Whether a fragment of the model corpus is visible on ``day``; ``None`` without an index."""
+    if not (ws.model_corpus / "index" / "chunks.jsonl").is_file():
+        return None
+
+    def visible(fragment_id: str) -> bool:
+        try:
+            corpus_tool.get(ws.model_corpus, fragment_id, day)
+        except ValueError:
+            return False
+        return True
+
+    return visible
 
 
 def _corpus_argv(ws: store.Workspace, command: str, *ids: str) -> list[str]:

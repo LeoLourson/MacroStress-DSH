@@ -170,3 +170,73 @@ def test_a_backtest_without_the_plan_names_the_command_to_run(tmp_path, monkeypa
 
     with pytest.raises(ValueError, match="--episodes FILE"):
         mcp._backtest_argv(store.Workspace(tmp_path), "2026-10-01", "bvar.sv")
+def _one_input_model(monkeypatch):
+    from mst import plugins
+    from tests.plugins import fakes
+
+    registry = plugins.build([fakes.model_plugin(macro=(fakes.InputMacroModel(),))])
+    monkeypatch.setattr(plugins, "registry", lambda: registry)
+
+
+def test_the_inputs_tool_lists_questions_and_refuses_an_unknown_action(tmp_path, monkeypatch):
+    _one_input_model(monkeypatch)
+    ws = store.Workspace(tmp_path)
+    listed = call(ws, "model", {"kind": "inputs", "action": "list", "as_of": "2026-11-01"}).data
+    assert listed["model"] == "gmodel.inputs.v1"
+    assert [row["key"] for row in listed["keys"]] == ["q1", "q2"]
+    assert all(not row["written"] for row in listed["keys"])
+    try:
+        call(ws, "model", {"kind": "inputs", "action": "nope", "as_of": "2026-11-01"})
+    except Exception as error:
+        assert "unknown action" in str(error)
+
+
+def test_the_inputs_tool_gives_the_question_and_writes_the_answer(tmp_path, monkeypatch):
+    _one_input_model(monkeypatch)
+    ws = store.Workspace(tmp_path)
+    question = call(
+        ws,
+        "model",
+        {"kind": "inputs", "action": "question", "as_of": "2026-11-01", "key": "q1"},
+    ).data
+    assert question["key"] == "q1" and "text" in question and "schema" in question
+
+    written = call(
+        ws,
+        "model",
+        {
+            "kind": "inputs",
+            "action": "write",
+            "as_of": "2026-11-01",
+            "key": "q1",
+            "payload": {"value": 3.0},
+        },
+    ).data
+    assert written["key"] == "q1" and len(written["hash"]) == 64
+    assert written["missing"] == ["q2"]
+
+    found = call(
+        ws, "model", {"kind": "inputs", "action": "status", "as_of": "2026-11-01"}
+    ).data
+    assert found["written"] == ["q1"] and found["missing"] == ["q2"]
+    assert (ws.elicitation / "2026-11-01" / "q1.json").is_file()
+
+
+def test_a_refused_answer_writes_nothing_and_names_the_field(tmp_path, monkeypatch):
+    _one_input_model(monkeypatch)
+    ws = store.Workspace(tmp_path)
+    try:
+        call(
+            ws,
+            "model",
+            {
+                "kind": "inputs",
+                "action": "write",
+                "as_of": "2026-11-01",
+                "key": "q1",
+                "payload": {"nope": 1.0},
+            },
+        )
+    except Exception as error:
+        assert "value" in str(error)
+    assert not (ws.elicitation / "2026-11-01").exists()
