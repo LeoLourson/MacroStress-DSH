@@ -72,7 +72,7 @@ def test_estimate_and_backtest_become_tasks_on_the_models_resource(tmp_path):
     ).data
     try:
         assert answer["argv"][:4] == ["-m", "mst.metrics", "backtest", "bvar.sv"]
-        assert "--corpus" in answer["argv"] and "--drivers" in answer["argv"]
+        assert "--episodes" in answer["argv"] and "--drivers" in answer["argv"]
         assert jobs.status(ws, answer["job"])["resource"] == "models"
     finally:
         jobs.cancel(ws, answer["job"])

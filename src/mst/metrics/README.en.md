@@ -5,9 +5,9 @@ A check of models on history. Models are rolled back to a past date and, on the 
 What is compared and by what rules is described in the [general scheme of the system](../../../docs/concept/formalization.en.md), section "Quality metrics". This page covers how it works in code and how to read the report.
 
 ```powershell
-python -m mst.metrics rolling [MODEL_ID] --as-of DATE --store DIR --models DIR \
+python -m mst.metrics rolling [MODEL_ID] --as-of DATE --store DIR --models DIR --episodes FILE \
   [--dates YYYY-MM-DD ...] [--half tuning|validation] [--details FILE] [--against REPORT.json]
-python -m mst.metrics backtest [MODEL_ID] --as-of DATE --store DIR --models DIR --corpus FILE \
+python -m mst.metrics backtest [MODEL_ID] --as-of DATE --store DIR --models DIR --episodes FILE \
   [--drivers FILE] [--satellites] [--only ID ...] [--details FILE] \
   [--against REPORT.json] [--target-level LEVEL] [--portfolio ID] [--mc-bootstrap] [--no-rolling]
 ```
@@ -22,7 +22,7 @@ Both checks are limited by the data: the series of the store start in 2012-01, t
 
 ## Words the report needs
 
-**Episode**: a past event with a recorded scenario: which variables are set by the fact, which shocks explained the event, by which sources. The calculation date is the day before the episode starts; models are estimated anew on the data of this date and cannot peek at the future. The list of episodes is [episodes.toml](../../../bench/model-backtest/episodes.toml). An episode is data, not part of a model, and the set grows as new events are analyzed.
+**Episode**: a past event with a recorded scenario: the start month `start`, which variables are set by the fact, which shocks explained the event, by which sources. The calculation date is the day before the episode starts; models are estimated anew on the data of this date and cannot peek at the future. The list of episodes is [episodes.toml](../../../bench/model-backtest/episodes.toml), its path is given by `--episodes`. The field `card` links to the corpus card of the same event, but the backtest does not read the card. An episode is data, not part of a model, and the set grows as new events are analyzed.
 
 **Cell**: an episode, a month of the horizon and a quantity. A cell has a fact and a forecast distribution. Cells of one episode are dependent, since they share one model, one data set and one scenario, so shares are counted over cells and intervals over episodes. In a cell whose value the scenario sets exactly, the forecast repeats the fact and checks nothing: it is printed but does not enter the scores.
 
@@ -85,7 +85,7 @@ Both reports are matched by cells: an incomplete pair is an error with a list, n
 | Tail | $Z$, intervals, trimming, dropped episodes, with `--portfolio` |
 | Reproducibility | Versions of models and data, date, seed, commit |
 
-The report is printed as Markdown tables to stdout; the full report with all quantities and cells goes to the file `--details`. Exit code 1 means some episode was not checked (absent from the manifest, short history, an inadmissible scenario) or an admission condition was broken.
+The report is printed as Markdown tables to stdout; the full report with all quantities and cells goes to the file `--details`. Exit code 1 means some episode was not checked (an unknown shock, short history, an inadmissible scenario) or an admission condition was broken.
 
 ## Cache
 
@@ -108,7 +108,7 @@ Coverage and sharpness are reference information, not a goal.
 | `decision.py` | The two standard errors rule: four steps on the aggregates of the target level |
 | `es.py` | Acerbi–Székely $Z$: the conditional paths of an episode in own units, the factual paths of the window, valuation of portfolio positions through the engine, episode contributions, intervals, the sensitivity to trimming the 1 % most extreme paths |
 | `baselines.py` | Benchmarks: a random walk with drift (pairs at the exact distance, so gappy series do not break the drift) and a naive annual forecast; admission rules; the probability of a condition in the base calculation |
-| `episodes.py`, `episodes.toml` | Episodes: variables, shocks, window, exclusions; the half `half` and the scenario source `source` of each; the calculation date is the day before the start; the rolling grid and the event family |
+| `episodes.py` | Episodes of the plan `--episodes`: start month and card, variables, shocks, window, exclusions; the half `half` and the scenario source `source` of each; the calculation date is the day before the start; the rolling grid and the event family |
 | `backtest.py` | The calculation: model versions, cells, checks of admission and conditions, intervals (by episodes and wild), the aggregate with splits, value, halves, the verdict `--against`, the tail `--portfolio`, reproducibility metadata |
 | `rolling.py`, `block.py` | The rolling check over the dates of history: the uniformity at $s_0$, the logarithmic score of $P(S)$ against the historical frequency, the block bootstrap |
 | `quality.py` | The relative CRPS: the ratio to a benchmark in logarithms, equal weights, an interval by moving blocks, the paired comparison of two versions |

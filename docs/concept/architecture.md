@@ -77,7 +77,7 @@ workspace/
   models/macro/<sha256>/  версии макромоделей: meta.json, arrays.npz; meta["model"] называет плагин
   models/satellites/<sha256>/  бандлы сателлитов: своя модель на каждую величину
   models/backtest/        версии эпизодов бэктеста: macro/<sha256>/, satellites/<sha256>/ и указатели <key>
-  corpus/manifest.json    манифест корпуса; нужен эпизодному бэктесту
+  corpus/manifest.json    манифест корпуса
   corpus/sources/, corpus/episodes/  тексты в Markdown и карточки эпизодов
   corpus/raw/, corpus/text/, corpus/series/  оригиналы, конспекты, дневные ряды D1–D5
   corpus/downloads.json   что скачано: адрес, хеш, размер, дата

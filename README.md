@@ -98,7 +98,8 @@ or in a directory listed in `MST_PLUGINS_PATH`. The guide is
 [docs/howto/plugins.en.md](docs/howto/plugins.en.md).
 
 The shipped models are examples under development and change between releases. The episode
-backtest scores every version on historical events against a random walk with drift.
+backtest scores every version on historical events against a random walk with drift. Its
+episodes and the other check sets with known answers are in [bench/](bench/README.en.md).
 
 ## Data
 

@@ -62,7 +62,7 @@ workspace/
   models/macro/<sha256>/  macro model versions: meta.json, arrays.npz; meta["model"] names the plugin
   models/satellites/<sha256>/  satellite bundles: its own model for each quantity
   models/backtest/        backtest episode versions: macro/<sha256>/, satellites/<sha256>/ and pointers <key>
-  corpus/manifest.json    the corpus manifest; the episode backtest needs it
+  corpus/manifest.json    the corpus manifest
   corpus/sources/, corpus/episodes/  texts in Markdown and episode cards
   corpus/raw/, corpus/text/, corpus/series/  originals, summaries, daily series D1–D5
   corpus/downloads.json   what was downloaded: address, hash, size, date

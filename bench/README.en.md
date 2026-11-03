@@ -12,6 +12,7 @@ after that job.
 |---|---|---|
 | [`corpus-search/`](corpus-search/questions.md) | the corpus search: does it find the fragments that hold the answer to a question asked on the day `as_of` | recall@5, `python -m mst.corpus eval --corpus workspace/corpus --questions bench/corpus-search/questions.md` |
 | [`scenario-from-corpus/`](scenario-from-corpus/events.toml) | how the agent builds a scenario from the text of an event, as the skill `scenario-from-corpus` tells it; 100 events that never happened, so the agent cannot know the outcome | no metric until the expected decisions are added |
+| [`model-backtest/`](model-backtest/episodes.toml) | the quality of the macro models and the satellites on history: episodes R13–R32 with the scenario of what happened, the date grid `[rolling]` and the family of events for the price; one plan for all models | normalized CRPS, coverage, admission and price against the random walk, `python -m mst.metrics backtest MODEL_ID --episodes bench/model-backtest/episodes.toml ...` and `rolling` with the same `--episodes` |
 
 ## Rules
 
@@ -23,11 +24,7 @@ after that job.
   the texts of the events, and the expected decisions are added separately.
 - A new set gets a folder named after the job it measures, and the description of its format,
   metric and command in the head of its file or in the folder's README.
+- An item of a set does not copy the material of the system. An episode of `model-backtest/`
+  keeps its start month `start` and links to its corpus card with `card`; the test
+  [`tests/test_bench.py`](../tests/test_bench.py) holds `start` equal to the card's start month.
 
-## What stays outside `bench/`
-
-The historical episodes of the macro model check live in
-[`bench/model-backtest/episodes.toml`](model-backtest/episodes.toml). By kind it is a check set
-too, but `python -m mst.metrics` reads it from the installed package, and the backtest report
-keeps the file's hash. Moving it would break the run from the PyPI package and the comparison
-with earlier reports, so the file stays where it is.

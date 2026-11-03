@@ -4,6 +4,23 @@
 
 All notable changes to this project are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project uses [semantic versioning](https://semver.org/).
 
+## Unreleased
+
+- **The check sets are gathered in `bench/`.** The folder splits by the job a set measures.
+  `corpus-search/questions.md` holds the questions of the search check, moved from
+  `corpus/eval/`; `python -m mst.corpus eval` reads them through the required
+  `--questions FILE`. `scenario-from-corpus/events.toml` holds 100 events that never happened,
+  for checking how the agent builds a scenario; the expected decisions are kept apart from the
+  repository.
+- **The backtest plan moved to `bench/model-backtest/episodes.toml`.** The file moved with its
+  content unchanged; `python -m mst.metrics backtest` and `rolling` read it through the required
+  `--episodes FILE`, and the MCP tool `model(action="backtest")` passes the repository path. An
+  episode keeps its own start month `start` and a link `card` to its corpus card, so the
+  backtest no longer reads the corpus manifest and its `--corpus` argument is gone. A test holds
+  the episode's `start` equal to the card's start month. The plan hash in the report
+  (`meta.episodes_toml`) changed: `--against` with reports made before this change refuses, and
+  the reference report has to be computed again.
+
 ## 1.0.2: macro models, satellites and a date-grid backtest (2026-11-03)
 
 - **The backtest judges the forecast on a grid of dates, and the conditional forecast against a conditional benchmark.** The new command `python -m mst.metrics rolling` compares the unconditional forecast with the random walk on dates nobody selected: relative CRPS without division by $\sigma_q(t)$, coverage per horizon, the halves before and after `validation_from`, the `--against` decision. The episodes gain the `conditional_walk` benchmark, which knows the path the scenario fixes, and their decision reads it. The block bootstrap (`block_interval`) now really draws blocks: its `block` parameter was unused before, and the price interval was narrower than the true one. Both walks start from the last known value and count the months missing since, and read the registry's floor as the model does. Renaming a version folder survives a short file lock on Windows and another process publishing the same version.
