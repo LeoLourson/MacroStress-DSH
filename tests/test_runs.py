@@ -677,3 +677,9 @@ def test_a_run_that_cannot_get_the_resource_is_marked_failed(workspace):
     failed = [item for item in runs.catalogue(workspace)["runs"] if item["status"] == "failed"]
     assert len(failed) == 1
     assert "busy" in runs.meta(workspace, failed[0]["id"])["error"]
+
+
+def test_the_meta_of_a_run_carries_the_diagnostics_of_the_macro_model(workspace):
+    run_id, _ = start(workspace)
+    meta = store.read_json(workspace.runs / run_id / "meta.json")
+    assert isinstance(meta["diagnostics"], dict)

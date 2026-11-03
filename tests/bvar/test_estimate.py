@@ -97,3 +97,19 @@ def test_stochastic_volatility_tracks_a_known_volatility_path():
     assert covered(lag, sim.LAG)[1:].mean() >= 0.6
     assert np.all(posterior.volvol > 0)
     assert np.isfinite(posterior.dof).all()
+
+
+def test_the_sampler_recovers_known_degrees_of_freedom_above_the_floor():
+    # The volatility path absorbs some of the tails, so the level is biased up, but the
+    # sampler tells heavy tails from light: a truth at the floor sits lower than a truth
+    # near the Gaussian end, and never falls through the floor.
+    heavy = estimate(
+        sim.panel(sim.simulate(400, np.random.default_rng(6), dof=6.0)),
+        sim.spec(volatility="stochastic", draws=300, burn=300, thin=1, seed=13, dof_min=5.0),
+    )
+    light = estimate(
+        sim.panel(sim.simulate(400, np.random.default_rng(8), dof=30.0)),
+        sim.spec(volatility="stochastic", draws=300, burn=300, thin=1, seed=13, dof_min=5.0),
+    )
+    assert np.all(np.median(heavy.dof, axis=0) >= 5.0)
+    assert np.mean(light.dof) > np.mean(heavy.dof) + 5.0

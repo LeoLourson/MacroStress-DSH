@@ -8,6 +8,10 @@ successive observations, fitted by least squares on the same months, so a quarte
 compared with a quarterly autoregression. A driver is served when its satellite has the smaller
 root mean squared error. A driver without history of its own is served when the nearest
 driver above it with history is.
+
+A satellite fitted in differences is judged in levels like any other: its forecast accumulates
+the changes from the level of the origin, and the autoregression beside it is the same AR(1) on
+the levels, so the verdict stays comparable.
 """
 
 
@@ -16,7 +20,7 @@ import numpy as np
 from mst.drivers.history import History
 from mst.model_sdk import Check
 
-from .estimate import fit, regressors
+from .estimate import difference, fit, regressors
 from .spec import Spec
 
 
@@ -24,7 +28,18 @@ def _rmse(errors: list[float]) -> float | None:
     return float(np.sqrt(np.mean(np.square(errors)))) if errors else None
 
 
-def _forecasts(hist: History, node: int, cut: int, reach: int, gamma, alpha, rho):
+def _first_change(d: np.ndarray, origin: int, gamma) -> float:
+    """The change a differenced forecast starts from at ``origin``.
+
+    The month before the origin is missing now and then; the forecast then starts from the
+    stationary mean of the changes of that draw, the model's own unconditional expectation.
+    """
+    if origin >= 1 and np.isfinite(d[origin - 1]):
+        return float(d[origin] - d[origin - 1])
+    return float(gamma[0] / (1 - gamma[1]))
+
+
+def _forecasts(hist: History, node: int, cut: int, reach: int, gamma, alpha, rho, x, differenced):
     """Errors of the satellite and of the autoregression from every origin of the holdout."""
     d, lags = hist.d[:, node], hist.quantity.lags
     observed = np.flatnonzero(np.isfinite(d))
@@ -33,12 +48,17 @@ def _forecasts(hist: History, node: int, cut: int, reach: int, gamma, alpha, rho
         targets = observed[(observed > origin) & (observed <= origin + reach)]
         if not len(targets):
             continue
-        value, reached = d[origin], set()
+        value, change, reached = d[origin], _first_change(d, origin, gamma), set()
         for t in range(origin + 1, int(targets[-1]) + 1):
-            z = regressors(lags, hist.x, value, t)
+            z = regressors(lags, x, change if differenced else value, t)
             if not np.all(np.isfinite(z)):
                 break
-            value = float(gamma @ z)
+            step = float(gamma @ z)
+            if differenced:
+                change = step
+                value = value + change
+            else:
+                value = step
             if t in targets:
                 reached.add(t)
                 mine.append(d[t] - value)
@@ -54,6 +74,7 @@ def check(hist: History, spec: Spec) -> dict[int, Check]:
     """The check of every node with a driver, by node index."""
     cut = len(hist.months) - 1 - spec.holdout
     trained = fit(hist, spec, until=cut)
+    x = difference(hist.x) if trained.differenced else hist.x
     out = {}
     for node, driver in enumerate(hist.driver):
         d = hist.d[:, node]
@@ -66,7 +87,9 @@ def check(hist: History, spec: Spec) -> dict[int, Check]:
         own = np.column_stack([np.ones(len(train) - 1), d[train[:-1]]])
         alpha, rho = np.linalg.lstsq(own, d[train[1:]], rcond=None)[0]
         gamma = trained.gamma[:, node].mean(axis=0)
-        mine, base = _forecasts(hist, node, cut, spec.reach, gamma, alpha, rho)
+        mine, base = _forecasts(
+            hist, node, cut, spec.reach, gamma, alpha, rho, x, trained.differenced
+        )
         a, b = _rmse(mine), _rmse(base)
         if a is None or b is None:
             out[node] = Check(a, b, len(mine), False, "no observation of the holdout forecast")

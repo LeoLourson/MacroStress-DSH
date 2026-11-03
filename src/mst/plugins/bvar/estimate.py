@@ -25,6 +25,16 @@ The Minnesota prior pulls a variable's own first lag to 1 (to 0 if the spec call
 stationary) and every other lag coefficient to 0, with standard deviation ``lambda sigma_i /
 (l sigma_k)`` for lag ``l`` of variable ``k`` in equation ``i``; ``sigma_k`` is the scale of
 the monthly changes of ``k``. The constant and the dummies are left practically free.
+
+On top of it stand the dummy observations of Sims and Zha (1998) and Giannone, Lenza and
+Primiceri (2015), weighted by ``mu`` and ``delta``: the sum-of-coefficients rows state that
+a no-change forecast of each variable alone is good at the beginning of the sample, and the
+initial-observation row states it for every variable at once. They act on levels, where the
+Minnesota prior weighs little, and pull the sums of own-lag coefficients toward one — unit
+roots — and away from explosive roots. In the conjugate sampler they join the regression on
+top of the data, exactly as the literature writes them; in the triangular one they weigh in
+the coefficient draw at the a-priori error scale of each equation, while the volatility
+steps and the triangle read history alone.
 """
 
 from dataclasses import dataclass, field
@@ -82,6 +92,8 @@ class Prior:
     var: np.ndarray  # (n, k), equation i scaled by sigma_i^2 (non-conjugate form)
     scale: np.ndarray  # (n,) sigma_i
     mask: np.ndarray  # (n, k) allowed coefficients
+    observation_y: np.ndarray | None = None  # (d, n) responses of the dummy rows
+    observation_x: np.ndarray | None = None  # (d, k) regressors of the dummy rows
 
 
 def scales(y: np.ndarray) -> np.ndarray:
@@ -99,6 +111,47 @@ def scales(y: np.ndarray) -> np.ndarray:
     return result
 
 
+def _observation_rows(
+    y: np.ndarray, p: int, columns: int, mu: float | None, delta: float | None
+):
+    """The dummy rows of Sims and Zha (1998) and Giannone, Lenza and Primiceri (2015).
+
+    ``n + 1`` rows over ``columns`` regressor columns: row ``i`` of the first ``n`` states
+    that a no-change forecast of variable ``i`` alone is good at the beginning of the
+    sample — the average of the first ``p`` observations over ``mu`` sits in its own-lag
+    regressors and, alone, in its response — and the last row states it for every variable
+    at once over ``delta``, the full average in every lag column and every response and
+    ``1 / delta`` in the constant column, so the row states ``c + sum(A) ybar = ybar``, which
+    a stationary system with mean ``ybar`` meets too. A larger hyperparameter loosens the
+    pull; ``None`` turns the rows off. Where the first ``p`` months hold no value of a
+    variable, its first observed value stands in.
+    """
+    if mu is None and delta is None:
+        return None
+    n = y.shape[1]
+    average = np.empty(n)
+    for k in range(n):
+        head = y[:p, k][np.isfinite(y[:p, k])]
+        average[k] = head.mean() if head.size else y[np.isfinite(y[:, k]), k][0]
+    responses, regressors = [], []
+    if mu is not None:
+        for i in range(n):
+            row_y, row_x = np.zeros(n), np.zeros(columns)
+            row_y[i] = average[i] / mu
+            for lag in range(p):
+                row_x[1 + lag * n + i] = average[i] / mu
+            responses.append(row_y)
+            regressors.append(row_x)
+    if delta is not None:
+        row_y, row_x = np.zeros(n), np.zeros(columns)
+        row_x[0] = 1.0 / delta
+        for lag in range(p):
+            row_x[1 + lag * n : 1 + (lag + 1) * n] = average / delta
+        responses.append(average / delta)
+        regressors.append(row_x)
+    return np.array(responses), np.array(regressors)
+
+
 def minnesota(panel: Panel, spec: Spec) -> Prior:
     n, p, d = len(panel.ids), spec.lags, len(spec.dummies)
     unknown = set(spec.stationary) - set(panel.ids)
@@ -112,7 +165,14 @@ def minnesota(panel: Panel, spec: Spec) -> Prior:
     for lag in range(1, p + 1):
         block = slice(1 + (lag - 1) * n, 1 + lag * n)
         var[:, block] = (spec.tightness / (lag * sigma[None, :])) ** 2
-    return Prior(mean, var * sigma[:, None] ** 2, sigma, allowed(n, panel.n_global, p, d))
+    rows = _observation_rows(panel.y, p, 1 + n * p + d, spec.mu, spec.delta)
+    return Prior(
+        mean,
+        var * sigma[:, None] ** 2,
+        sigma,
+        allowed(n, panel.n_global, p, d),
+        *(rows if rows else (None, None)),
+    )
 
 
 def dummy_matrix(months: list[date], dummies: list[Dummy]) -> np.ndarray:
@@ -148,6 +208,10 @@ def conjugate_step(y: np.ndarray, dummies: np.ndarray, prior: Prior, p: int, n_g
     n, g = y.shape[1], n_global
     x = regressors(y, dummies, p)
     target = y[p:]
+    if prior.observation_y is not None:
+        # The dummy rows join the regression on top of the data, as Sims and Zha write them.
+        target = np.vstack([target, prior.observation_y])
+        x = np.vstack([x, prior.observation_x])
     sigma2 = prior.scale**2
     # The conjugate prior variance is the same in every equation up to sigma_i^2.
     relative = prior.var / sigma2[:, None]
@@ -302,7 +366,8 @@ def _stochastic(panel, spec, prior, dummies, rng) -> Posterior:
     h = np.tile(h_start, (equations, 1))
     omega = np.ones((equations, n))
     s2 = np.full(n, spec.volvol_mean)
-    nu = np.full(n, sv.DOF_GRID[-1])
+    grid = sv.dof_grid(spec.dof_min)
+    nu = np.full(n, grid[-1])
     shape = spec.volvol_df / 2
     volvol_prior = (shape, spec.volvol_mean * (shape - 1))
     a_var = (prior.scale[:, None] / prior.scale[None, :]) ** 2
@@ -312,13 +377,26 @@ def _stochastic(panel, spec, prior, dummies, rng) -> Posterior:
         precisions = np.einsum("ji,tj,jk->tik", a, 1 / variance, a)
         y = impute(panel.y, missing, coefficients, precisions, dummies, p, rng)
         x, target = regressors(y, dummies, p), y[p:]
-        coefficients = _coefficients(target, x, coefficients, a, variance, prior, rng)
+        # The dummy rows weigh in the coefficient draw at the a-priori error scale of each
+        # equation; the volatility steps and the triangle read history alone.
+        if prior.observation_y is None:
+            coefficients = _coefficients(target, x, coefficients, a, variance, prior, rng)
+        else:
+            coefficients = _coefficients(
+                np.vstack([target, prior.observation_y]),
+                np.vstack([x, prior.observation_x]),
+                coefficients,
+                a,
+                np.vstack([variance, np.tile(prior.scale**2, (len(prior.observation_y), 1))]),
+                prior,
+                rng,
+            )
         u = target - x @ coefficients.T
         a = _triangle(u, variance, a_var, rng)
         e = u @ a.T
         for j in range(n):
             omega[:, j] = sv.draw_mixing(e[:, j] ** 2 / np.exp(h[:, j]), nu[j], rng)
-            nu[j] = sv.draw_dof(omega[:, j], rng)
+            nu[j] = sv.draw_dof(omega[:, j], rng, grid)
             log_e2 = np.log(e[:, j] ** 2 / omega[:, j] + sv.OFFSET)
             h[:, j] = sv.draw_logvar(log_e2, h[:, j], s2[j], (h_start[j], LOGVAR_PRIOR_VAR), rng)
             s2[j] = sv.draw_volvol(h[:, j], volvol_prior, rng)

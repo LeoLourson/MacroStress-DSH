@@ -77,13 +77,16 @@ class Rolling(Contract):
     """The rolling check over the dates of history: the grid and the events of the price.
 
     step_months is the step of the grid the models are re-estimated on; the grid runs
-    from the first estimation date the history allows to the last month the facts know. The
+    from the first estimation date the history allows to the last month the facts know, and
+    a date the model cannot be estimated on is named and left out. ``validation_from`` splits
+    the dates into a tuning half and a validation one, the latter from that month on. The
     price_events name the family of events the price is checked on: each is a box on the
     horizon, fixed before the check and independent of the dates, and each carries its own
     horizon in months.
     """
 
     step_months: Annotated[int, Field(strict=True, ge=1, le=12)]
+    validation_from: date | None = None
     price_events: list[PriceEvent] = []
 
 

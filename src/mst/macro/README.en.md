@@ -9,7 +9,7 @@ python -m mst.models list --models DIR
 
 | File | What it does |
 |---|---|
-| `registry.toml`, `registry.py` | The registry: 23 variables with a transformation $g$, the blocks `gl.`/`ru.`; named shocks belong to the macro model identified by them |
+| `registry.toml`, `registry.py` | The registry: 23 variables with a transformation $g$, the blocks `gl.`/`ru.`; an optional lower bound `lower` (zero for rates and unemployment): the model works with a shadow value and the report reads it through the bound; named shocks belong to the macro model identified by them |
 | `panel.py` | The panel: series on the date in the model scale on a grid of months, the global block first, seasonal adjustment, missing values as NaN |
 | `version.py` | Macro model versions on top of `mst.versions`: a check of mandatory keys, saving, loading by the plugin that estimated it (`meta["model"]`), the panel of a version, list and description |
 

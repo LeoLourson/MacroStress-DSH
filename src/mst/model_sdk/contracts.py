@@ -141,8 +141,11 @@ class MacroSimulation:
     """``R`` paths of the macro variables of a macro version.
 
     ``paths`` is ``(R, H + 1, n)`` in the model scale ``y = g(X)``; month ``t = 0`` is the last
-    month of history. ``history`` carries the months ``1 - p .. 0`` of every repetition, drawn
-    where the panel did not know them, for the satellites that need the recent past.
+    month of history. A plugin returns the shadow values, on which the conditions and their
+    price stand; the platform reads them through the registry's floors
+    (``mst.model_sdk.bounds.observed``). ``history`` carries the months ``1 - p .. 0`` of every
+    repetition, drawn where the panel did not know them, for the satellites that need the
+    recent past.
     ``diagnostics`` reports what the imposition did beyond drawing: the spread of the
     effective sizes of the hidden-coordinate candidates, so a scenario riding a single
     candidate is seen as such.

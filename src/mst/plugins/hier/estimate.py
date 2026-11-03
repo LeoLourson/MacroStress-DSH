@@ -29,7 +29,7 @@ checks simulated paths against what the node was trained on rather than against 
 history column.
 """
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 import numpy as np
 from scipy.linalg import cho_solve_banded, cholesky_banded, solve_banded
@@ -53,6 +53,19 @@ def lagged(x: np.ndarray, lags: int, t: int) -> np.ndarray:
 def regressors(lags: int, x: np.ndarray, previous: float, t: int) -> np.ndarray:
     """``z_t`` from ``d_{t-1}`` and the rows ``t - lags .. t`` of ``x``."""
     return np.concatenate([[1.0, previous], lagged(x, lags, t)])
+
+
+def difference(columns: np.ndarray) -> np.ndarray:
+    """Monthly changes of a ``(T, ...)`` array of the panel; month 0 has none.
+
+    A month missing in the levels gives a missing change for two months — the change into it
+    and the change out of it — which the sampler draws like any other unknown month of the
+    path. Used on ``d`` and on ``x`` alike, the linear form of the model is unchanged: the
+    sampler sees ``Δd`` against ``Δx`` and returns the coefficients in that scale.
+    """
+    out = np.full(columns.shape, np.nan)
+    out[1:] = columns[1:] - columns[:-1]
+    return out
 
 
 @dataclass
@@ -186,6 +199,10 @@ class Fit:
     """
     train_high: np.ndarray | None = None
     """(N,) the highest observed value of every node inside its estimation window."""
+    differenced: bool = False
+    """The equation was fitted on monthly changes: ``gamma`` reads ``Δd`` and ``Δx`` and the
+    simulation accumulates the level from the last observed one. The bounds stay in levels,
+    so the outside-range flag keeps its meaning."""
 
 
 def columns(quantity) -> list[str]:
@@ -239,13 +256,49 @@ def training_bounds(
     return low, high
 
 
+def level_bounds(
+    hist: History, rows: np.ndarray, paths: dict[int, Path]
+) -> tuple[np.ndarray, np.ndarray]:
+    """The training bounds of a quantity fitted in differences: the levels it was trained on.
+
+    A change is an observation exactly when both its months are observed, so the levels the
+    estimation saw are the two months of every observed change — a level no change touches is
+    not data the model was trained on. The bounds stay in levels, so the outside-range flag
+    keeps the meaning it has for a quantity in levels; a node without a series of its own
+    inherits them from the nearest object above it with data, as ``training_bounds`` gives it.
+    """
+    low = np.full(len(rows), np.nan)
+    high = np.full(len(rows), np.nan)
+    for i, item in paths.items():
+        months = np.concatenate([item.observed, item.observed - 1])
+        values = hist.d[months[months >= 0], i]
+        if len(values):
+            low[i], high[i] = float(values.min()), float(values.max())
+    for i in range(len(rows)):
+        if rows[i] > 0:
+            continue
+        above = hist.parent[i]
+        while above >= 0 and rows[above] == 0:
+            above = hist.parent[above]
+        if above >= 0:
+            low[i], high[i] = low[above], high[above]
+    return low, high
+
+
 def fit(hist: History, spec: Spec, *, until: int | None = None, seed: int | None = None) -> Fit:
-    """Posterior draws of the satellite parameters of one quantity, months ``<= until``."""
+    """Posterior draws of the satellite parameters of one quantity, months ``<= until``.
+
+    A quantity named in ``spec.differences`` is fitted on monthly changes: ``d`` and ``x`` are
+    differenced before the sampler, so ``gamma`` reads ``Δd`` against ``Δx`` with the same
+    machinery, while the recorded training bounds stay in levels.
+    """
     columns_ = columns(hist.quantity)
     k, n = len(columns_), len(hist.nodes)
+    differenced = hist.quantity.id in spec.differences
+    data = replace(hist, d=difference(hist.d), x=difference(hist.x)) if differenced else hist
     paths = {}
     for i in range(n):
-        item = path_of(hist, i, until)
+        item = path_of(data, i, until)
         if item is not None and len(item.path) - 1 > k:
             paths[i] = item
     if not paths:
@@ -321,7 +374,8 @@ def fit(hist: History, spec: Spec, *, until: int | None = None, seed: int | None
     original = kept_gamma / spread
     original[..., 0] = kept_gamma[..., 0] - (kept_gamma[..., 1:] * centre[1:] / spread[1:]).sum(-1)
     rows = np.array([len(paths[i].observed) if i in paths else 0 for i in range(n)])
-    train_low, train_high = training_bounds(hist, rows, paths)
+    bounds = level_bounds if differenced else training_bounds
+    train_low, train_high = bounds(hist, rows, paths)
     return Fit(
         history=hist,
         gamma=original,
@@ -329,6 +383,7 @@ def fit(hist: History, spec: Spec, *, until: int | None = None, seed: int | None
         rows=rows,
         train_low=train_low,
         train_high=train_high,
+        differenced=differenced,
     )
 
 
@@ -359,12 +414,18 @@ def _stationary(draw: np.ndarray, precision, shift, spread, rho_max: float, rng)
 
 
 def residuals(fit_: Fit, node: int) -> np.ndarray:
-    """(T,) residuals of a node at the posterior mean; NaN where a month was not used."""
+    """(T,) residuals of a node at the posterior mean; NaN where a month was not used.
+
+    A quantity fitted in differences reports the residuals of its own equation, the changes:
+    those are the shocks the version correlates across drivers.
+    """
     hist, gamma = fit_.history, fit_.gamma[:, node].mean(axis=0)
     d, lags = hist.d[:, node], hist.quantity.lags
+    x = difference(hist.x) if fit_.differenced else hist.x
+    y = difference(d) if fit_.differenced else d
     out = np.full(len(d), np.nan)
     for t in range(max(1, lags), len(d)):
-        z = regressors(lags, hist.x, d[t - 1], t)
-        if np.isfinite(d[t]) and np.all(np.isfinite(z)):
-            out[t] = d[t] - gamma @ z
+        z = regressors(lags, x, y[t - 1], t)
+        if np.isfinite(y[t]) and np.all(np.isfinite(z)):
+            out[t] = y[t] - gamma @ z
     return out

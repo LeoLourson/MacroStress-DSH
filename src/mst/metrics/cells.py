@@ -58,6 +58,8 @@ class Cell:
     """(R,) the naive forecast (a year earlier with the trend), for target quantities."""
     base: np.ndarray | None = None
     """(R,) the unconstrained run of the model, the second comparison of the scheme."""
+    conditional: np.ndarray | None = None
+    """(R,) the walk that knows the path the scenario fixes: the like-for-like benchmark."""
     sigma: float = float("nan")
     """``sigma_q(t)`` from the history known at the episode's calculation date."""
     sigma_source: str = "none"
@@ -254,6 +256,7 @@ def score_cells(cells: list[Cell]) -> dict:
             ("baseline", cell.baseline),
             ("base", cell.base),
             ("naive", cell.naive),
+            ("conditional", cell.conditional),
         ):
             if column is None:
                 continue
@@ -285,6 +288,11 @@ def score_cells(cells: list[Cell]) -> dict:
     naive_normalized = [
         row["naive_normalized"] for row in rows if row.get("naive_normalized") is not None
     ]
+    conditional_normalized = [
+        row["conditional_normalized"]
+        for row in rows
+        if row.get("conditional_normalized") is not None
+    ]
     return {
         "cells": len(cells),
         "constrained": len(constrained),
@@ -301,6 +309,9 @@ def score_cells(cells: list[Cell]) -> dict:
         else None,
         "naive_crps": float(np.mean(naive)) if naive else None,
         "naive_normalized_crps": float(np.mean(naive_normalized)) if naive_normalized else None,
+        "conditional_normalized_crps": float(np.mean(conditional_normalized))
+        if conditional_normalized
+        else None,
         "coverage": float(np.mean([row["coverage"] for row in rows])),
         "calibration": {
             "shares": [share / count for share in buckets],
@@ -326,6 +337,7 @@ def _empty_scores(cells: int, constrained: int, *, dropped: int = 0) -> dict:
         "baseline_normalized_crps": None,
         "naive_crps": None,
         "naive_normalized_crps": None,
+        "conditional_normalized_crps": None,
         "coverage": None,
         "calibration": None,
         "sharpness": None,

@@ -6,15 +6,17 @@ A scenario speaks of regimes in two ways. The field `regime_event` names `regime
 
 Regime labels are held by the overall volatility: after each sampler pass the regimes are renumbered in ascending order of the covariance trace, so the order of declaration in `signs.toml`, from calm to stress, does not change from pass to pass. The order of `[[regimes]]` in `signs.toml` is this order.
 
+Rates and unemployment cannot go negative, and a linear model does not know it: the registry gives them a lower bound `lower` (zero), the plugin simulates a shadow value, and after the impacts and the tilt the platform reads the observed one (`mst.model_sdk.bounds.observed`). The lags, the impacts, the conditions and the price stay on the shadow; an exact condition at the bound means the shadow within its tolerance $\tau$ of the bound. Estimation still reads the history as observed — an approximation. The BBB spread carries the bound too: its history never went below +0.99. The AA and A spreads carry none: their history has been below zero (`negative = true` in the registry).
+
 The package connects like any model plugin: `plugin = Plugin(...)` with `macro=(MODEL,)`. The core knows it only through the registry `mst.plugins`; to estimate and publish a version: `python -m mst.models estimate-macro msvar.markov --as-of ... --store ... --models ...` (with two installed macro models, the BVAR and this one, the model name is mandatory).
 
 | File | What it does |
 |---|---|
 | `plugin.py` | The plugin declaration: one macro model `msvar.markov` |
 | `model.py` | The adapter to `mst.model_sdk`: estimate/load/simulate/constraint_law and `parts` (the meta and arrays of a version; the version's `shocks` are the economic shocks plus the regime elements) |
-| `estimate.py` | The Gibbs sampler: FFBS of the regime path, coefficients by regime, covariances, transitions, augmentation of missing months; renumbering of regimes by volatility |
-| `identify.py` | Sign restrictions by uniform rotations inside each regime |
-| `forecast.py` | The conditional forecast by the regime path (path candidates with unnamed causes and the cause `regime_path`, the regime event `regime_event` separately) and the law of the conditions of the mixture |
+| `estimate.py` | The Gibbs sampler: FFBS of the regime path, coefficients (`switching`: "all" — by regime, "mean_covariance" — common lags with the mean and covariance switching), covariances, transitions, augmentation of missing months; the prior's dummy observations (`mu`, `delta`); renumbering of regimes by volatility |
+| `identify.py` | Sign restrictions by uniform rotations inside each regime; before them, the stability filter `rho_max` in every regime |
+| `forecast.py` | The conditional forecast by the regime path (path candidates with unnamed causes and the cause `regime_path`, the regime event `regime_event` separately, the size of the driving shocks in the diagnostics, which reach the run's `meta.json`) and the law of the conditions of the mixture |
 | `signs.py`, `signs.toml` | Named shocks with signs and regimes, the set `J` of each version |
 | `spec.py`, `spec.toml` | The estimation specification: lags, priors, transitions, sampler; no dummies, since the stress regime takes the crisis months |
 | `var.py` | The algebra of the switching VAR: regressors, the block mask, responses, iteration along a regime path |

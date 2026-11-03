@@ -646,8 +646,10 @@ def build(ws: store.Workspace) -> FastMCP:
 
         ``save`` checks the contract and writes ``portfolios/<id>.json``; ``check`` names every
         position the scenario's macro and satellite versions cannot serve, with the reason of a
-        driver the out-of-sample check rejected; ``exposure`` values the positions at the
-        calculation month of the scenario's macro version.
+        driver the out-of-sample check rejected, and warns what an impact on a macro variable
+        reaches through the positions' drivers, with the long-run loading of each one (below 0.1
+        it barely reacts); ``exposure`` values the positions at the calculation month of the
+        scenario's macro version.
         """
         with _plugin_output_to_stderr():
             if action == "list":

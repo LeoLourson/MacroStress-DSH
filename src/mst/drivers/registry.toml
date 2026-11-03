@@ -17,7 +17,10 @@ id = "share_price"
 label = "Цена акции"
 unit = "руб. за акцию"
 transform = "log100"
-regressors = ["ru.imoex", "ru.usdrub", "ru.key_rate", "gl.brent"]
+# `ru.spread_bbb` is the credit channel: one regressor in the hierarchy, so a sector can load
+# on it and other sectors stay near zero. The spreads of different ratings correlate at about
+# 0.9, so the other two ratings are not added.
+regressors = ["ru.imoex", "ru.usdrub", "ru.key_rate", "gl.brent", "ru.spread_bbb"]
 lags = 1
 
 [quantities.catalog]

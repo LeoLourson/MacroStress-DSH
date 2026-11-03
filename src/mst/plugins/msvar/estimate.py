@@ -14,6 +14,11 @@ alternates:
   errors e = A_s u are independent across equations, so each equation's posterior is a
   regression on the months of its regime with Minnesota prior and the triangular weights of
   Carriero, Clark and Marcellino (2019, Journal of Econometrics 212(1));
+  under ``switching = "mean_covariance"`` the lag block is common instead: each equation
+  draws it from all the months, every month's errors weighed by the covariance of its
+  regime, and every regime draws its intercept given the lags — with 23 variables and 3
+  lags the months of one regime cannot carry a second set of lag matrices, and the canon's
+  equation needs only the mean and the covariance to switch;
 - the covariance of every regime from the residuals of its months, conjugate
   inverse-Wishart, factored as ``C_s diag(exp(h_s)) C_s'`` with ``C_s`` unit lower
   triangular;
@@ -37,6 +42,19 @@ stationary) and every other lag coefficient to 0, with standard deviation
 ``sigma_k`` is the scale of the monthly changes of ``k``. The constant is left practically
 free. The prior is the same in every regime: the months of a regime are few, and the prior,
 not the regime, is where the shrinkage lives.
+
+On top of it stand the dummy observations of Sims and Zha (1998) and Giannone, Lenza and
+Primiceri (2015), weighted by ``mu`` and ``delta``: the sum-of-coefficients rows state that
+a no-change forecast of each variable alone is good at the beginning of the sample, and the
+initial-observation row states it for every variable at once. They act on levels, where the
+Minnesota prior weighs little, and pull the sums of own-lag coefficients toward one — unit
+roots — and away from explosive roots. In the coefficient steps they weigh in at the
+a-priori error scale of each equation: under ``switching = "all"`` they join every regime's
+regression with the regime's triangular weights, and in the pooled step they carry the
+identity triangular, so a prior row weighs its own equation. The initial-observation row
+reads an intercept, and the intercepts are per regime, so the pooled step holds one copy of
+it per regime, each scaled by ``1 / sqrt(m)``: the prior is the same in every regime, and the
+weight on the common lag block is that of one row.
 """
 
 from dataclasses import dataclass, field
@@ -94,6 +112,8 @@ class Prior:
     var: np.ndarray  # (n, k), equation i scaled by sigma_i^2
     scale: np.ndarray  # (n,) sigma_i
     mask: np.ndarray  # (n, k) allowed coefficients
+    observation_y: np.ndarray | None = None  # (d, n) responses of the dummy rows
+    observation_x: np.ndarray | None = None  # (d, k) regressors of the dummy rows
 
 
 def scales(y: np.ndarray) -> np.ndarray:
@@ -111,8 +131,50 @@ def scales(y: np.ndarray) -> np.ndarray:
     return result
 
 
+def _observation_rows(
+    y: np.ndarray, p: int, columns: int, mu: float | None, delta: float | None
+):
+    """The dummy rows of Sims and Zha (1998) and Giannone, Lenza and Primiceri (2015).
+
+    ``n + 1`` rows over ``columns`` regressor columns: row ``i`` of the first ``n`` states
+    that a no-change forecast of variable ``i`` alone is good at the beginning of the
+    sample — the average of the first ``p`` observations over ``mu`` sits in its own-lag
+    regressors and, alone, in its response — and the last row states it for every variable
+    at once over ``delta``, the full average in every lag column and every response and
+    ``1 / delta`` in the constant column, so the row states ``c + sum(A) ybar = ybar``, which
+    a stationary system with mean ``ybar`` meets too. A larger hyperparameter loosens the
+    pull; ``None`` turns the rows off. Where the first ``p`` months hold no value of a
+    variable, its first observed value stands in.
+    """
+    if mu is None and delta is None:
+        return None
+    n = y.shape[1]
+    average = np.empty(n)
+    for k in range(n):
+        head = y[:p, k][np.isfinite(y[:p, k])]
+        average[k] = head.mean() if head.size else y[np.isfinite(y[:, k]), k][0]
+    responses, regressors = [], []
+    if mu is not None:
+        for i in range(n):
+            row_y, row_x = np.zeros(n), np.zeros(columns)
+            row_y[i] = average[i] / mu
+            for lag in range(p):
+                row_x[1 + lag * n + i] = average[i] / mu
+            responses.append(row_y)
+            regressors.append(row_x)
+    if delta is not None:
+        row_y, row_x = np.zeros(n), np.zeros(columns)
+        row_x[0] = 1.0 / delta
+        for lag in range(p):
+            row_x[1 + lag * n : 1 + (lag + 1) * n] = average / delta
+        responses.append(average / delta)
+        regressors.append(row_x)
+    return np.array(responses), np.array(regressors)
+
+
 def minnesota(panel: Panel, spec: Spec) -> Prior:
-    """The Minnesota prior, the same in every regime; see the module docstring."""
+    """The Minnesota prior with its dummy rows, the same in every regime; see the module
+    docstring."""
     n, p = len(panel.ids), spec.lags
     unknown = set(spec.stationary) - set(panel.ids)
     if unknown:
@@ -125,7 +187,14 @@ def minnesota(panel: Panel, spec: Spec) -> Prior:
     for lag in range(1, p + 1):
         block = slice(1 + (lag - 1) * n, 1 + lag * n)
         var[:, block] = (spec.tightness / (lag * sigma[None, :])) ** 2
-    return Prior(mean, var * sigma[:, None] ** 2, sigma, allowed(n, panel.n_global, p))
+    rows = _observation_rows(panel.y, p, 1 + n * p, spec.mu, spec.delta)
+    return Prior(
+        mean,
+        var * sigma[:, None] ** 2,
+        sigma,
+        allowed(n, panel.n_global, p),
+        *(rows if rows else (None, None)),
+    )
 
 
 def fill(y: np.ndarray) -> np.ndarray:
@@ -253,9 +322,130 @@ def _covariance(u: np.ndarray, scale: np.ndarray, rng) -> np.ndarray:
     return np.atleast_2d(draw)
 
 
-def _transition(states: np.ndarray, spec: Spec, rng) -> np.ndarray:
-    """One row-stochastic draw: a sticky Dirichlet prior plus the counts of the path."""
-    m = int(states.max()) + 1
+def _equation(
+    u: np.ndarray,
+    rows: np.ndarray,
+    i: int,
+    xi: np.ndarray,
+    current: np.ndarray,
+    mean: np.ndarray,
+    var: np.ndarray,
+    a: np.ndarray,
+    variance: np.ndarray,
+    rng,
+):
+    """One draw of equation ``i``'s coefficients on the columns ``xi``; updates ``u`` in place.
+
+    ``u`` (T, n) holds every equation's residual against its current fit, and ``rows`` picks
+    the months that enter the regression. The orthogonalised errors of ``j >= i`` read
+    ``e_j = sum_k a_t[j, k] u_t[k]`` with the month's own triangular matrix ``a`` (T, n, n)
+    and orthogonal variances ``variance`` (T, n), so a month weighs as its regime does — the
+    triangular algorithm of Carriero, Clark and Marcellino (2019) with month-varying
+    weights. ``mean`` and ``var`` are the prior mean and variance of the drawn coefficients.
+    """
+    fitted = xi @ current
+    e = np.einsum("tk,tjk->tj", u[rows], a[rows][:, i:, :])
+    column = a[rows][:, i:, i]
+    own = variance[rows][:, i:]
+    pseudo = e + fitted[:, None] * column
+    weight = column**2 / own
+    response = (pseudo * (column / own)).sum(axis=1)
+    prec = np.diag(1 / var) + xi.T @ (xi * weight.sum(axis=1)[:, None])
+    root = np.linalg.cholesky(prec)
+    rhs = mean / var + xi.T @ response
+    found = np.linalg.solve(root.T, np.linalg.solve(root, rhs))
+    draw = found + np.linalg.solve(root.T, rng.standard_normal(len(mean)))
+    u[rows, i] = u[rows, i] - xi @ (draw - current)
+    return draw
+
+
+def _mean_covariance(target, x, states, coefficients, a, logvar, prior, rng):
+    """The coefficient step under ``switching = "mean_covariance"``.
+
+    One lag block serves every regime: each equation draws it from all the months, every
+    month's errors weighed by the covariance of its regime, and every regime then draws its
+    intercept given the lags, from its own months alone. The saved draw keeps one
+    coefficient matrix per regime — equal lag blocks, per-regime intercepts — so the
+    forecast and the identification read the shape they always did.
+    """
+    m, n, p = len(coefficients), target.shape[1], (x.shape[1] - 1) // target.shape[1]
+    lags = slice(1, 1 + n * p)
+    month_a = np.stack(a)[states]  # (T, n, n) the month's regime
+    month_variance = np.exp(np.stack(logvar)[states])  # (T, n)
+    owner = states  # the regime whose intercept each row's fit reads
+    if prior.observation_y is not None:
+        # The dummy rows carry the identity triangular and the a-priori error scale: their
+        # errors are independent across equations. A row with a zero constant column belongs
+        # to no regime; a row with a constant reads an intercept, so every regime holds a
+        # copy of it, scaled so the copies weigh one row on the common lag block.
+        reads = prior.observation_x[:, 0] != 0.0
+        copies = np.repeat(np.flatnonzero(reads), m)
+        scale = np.concatenate([np.ones(int((~reads).sum())), np.full(len(copies), np.sqrt(m))])
+        chosen = np.concatenate([np.flatnonzero(~reads), copies])
+        owner = np.concatenate(
+            [
+                states,
+                np.zeros(int((~reads).sum()), dtype=int),
+                np.tile(np.arange(m), int(reads.sum())),
+            ]
+        )
+        target = np.vstack([target, prior.observation_y[chosen] / scale[:, None]])
+        x = np.vstack([x, prior.observation_x[chosen] / scale[:, None]])
+        month_a = np.concatenate([month_a, np.tile(np.eye(n), (len(chosen), 1, 1))])
+        month_variance = np.concatenate(
+            [month_variance, np.tile(prior.scale**2, (len(chosen), 1))]
+        )
+    # The residual of every equation against the current fit of its row's regime.
+    u = target - np.einsum("tk,tik->ti", x, np.stack(coefficients)[owner])
+    # The common lag block: drawn from all the months at once, one equation at a time.
+    common = coefficients[0][:, lags].copy()
+    every = np.ones(len(target), dtype=bool)
+    for i in range(n):
+        allowed = prior.mask[i, lags]
+        common[i, allowed] = _equation(
+            u,
+            every,
+            i,
+            x[:, lags][:, allowed],
+            common[i, allowed],
+            prior.mean[i, lags][allowed],
+            prior.var[i, lags][allowed],
+            month_a,
+            month_variance,
+            rng,
+        )
+    for j in range(m):
+        coefficients[j][:, lags] = common
+        # The months of the regime and the copies of the rows that read its intercept; a row
+        # without a constant has nothing to say about it.
+        rows = (owner == j) & (x[:, 0] != 0.0)
+        if not rows.any():
+            # An empty regime draws its intercept from the prior, as the lag step does.
+            coefficients[j][:, 0] = prior.mean[:, 0] + np.sqrt(prior.var[:, 0]) * (
+                rng.standard_normal(n)
+            )
+            continue
+        for i in range(n):
+            coefficients[j][i, 0] = _equation(
+                u,
+                rows,
+                i,
+                x[rows][:, :1],
+                np.array([coefficients[j][i, 0]]),
+                prior.mean[i, 0:1],
+                prior.var[i, 0:1],
+                month_a,
+                month_variance,
+                rng,
+            )[0]
+    return coefficients
+
+
+def _transition(states: np.ndarray, m: int, spec: Spec, rng) -> np.ndarray:
+    """One row-stochastic draw: a sticky Dirichlet prior plus the counts of the path.
+
+    ``m`` is the number of regimes: a regime the path left empty keeps its row, from the prior.
+    """
     counts = np.zeros((m, m))
     for i, j in zip(states[:-1], states[1:], strict=True):
         counts[i, j] += 1
@@ -367,12 +557,30 @@ def estimate(panel: Panel, spec: Spec, n_regimes: int) -> Posterior:
         logvar = [h for _, h in factors]
         y = impute(panel.y, missing, states, coefficients, a, logvar, p, rng)
         x, target = regressors(y, p), y[p:]
-        for j in range(m):
-            rows = states == j
-            variance = np.tile(np.exp(logvar[j]), (int(rows.sum()), 1))
-            coefficients[j] = _coefficients(
-                target[rows], x[rows], coefficients[j], a[j], variance, prior, rng
-            )
+        if spec.switching == "mean_covariance":
+            coefficients = _mean_covariance(target, x, states, coefficients, a, logvar, prior, rng)
+        else:
+            for j in range(m):
+                rows = states == j
+                variance = np.tile(np.exp(logvar[j]), (int(rows.sum()), 1))
+                if prior.observation_y is None:
+                    coefficients[j] = _coefficients(
+                        target[rows], x[rows], coefficients[j], a[j], variance, prior, rng
+                    )
+                else:
+                    # The dummy rows join every regime's regression, at the a-priori error
+                    # scale of each equation.
+                    coefficients[j] = _coefficients(
+                        np.vstack([target[rows], prior.observation_y]),
+                        np.vstack([x[rows], prior.observation_x]),
+                        coefficients[j],
+                        a[j],
+                        np.vstack(
+                            [variance, np.tile(prior.scale**2, (len(prior.observation_y), 1))]
+                        ),
+                        prior,
+                        rng,
+                    )
         for j in range(m):
             rows = states == j
             u = target[rows] - x[rows] @ coefficients[j].T
@@ -387,7 +595,7 @@ def estimate(panel: Panel, spec: Spec, n_regimes: int) -> Posterior:
             states = relabelled[states]
             transition = transition[np.ix_(order, order)]
         factors = [unit_lower(sigma) for sigma in sigmas]
-        transition = _transition(states, spec, rng)
+        transition = _transition(states, m, spec, rng)
         states = ffbs(
             target, x, coefficients, sigmas, transition, stationary(transition), rng
         )

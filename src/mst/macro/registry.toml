@@ -14,6 +14,7 @@ id = "gl.fed_rate"
 label = "ставка ФРС"
 unit = "%"
 transform = "identity"
+lower = 0.0
 source = "FRED"
 
 [[variables]]
@@ -21,6 +22,7 @@ id = "gl.ust_10y"
 label = "доходность UST на 10 лет"
 unit = "%"
 transform = "identity"
+lower = 0.0
 source = "FRED"
 
 [[variables]]
@@ -35,6 +37,7 @@ id = "ru.key_rate"
 label = "ключевая ставка"
 unit = "%"
 transform = "identity"
+lower = 0.0
 source = "Банк России"
 
 [[variables]]
@@ -42,6 +45,7 @@ id = "ru.ruonia"
 label = "ставка RUONIA"
 unit = "%"
 transform = "identity"
+lower = 0.0
 source = "Банк России"
 
 [[variables]]
@@ -49,6 +53,7 @@ id = "ru.ofz_1y"
 label = "доходность ОФЗ на 1 год по G-кривой"
 unit = "%"
 transform = "identity"
+lower = 0.0
 source = "КБД Московской биржи, публикация Банка России"
 
 [[variables]]
@@ -56,6 +61,7 @@ id = "ru.ofz_5y"
 label = "доходность ОФЗ на 5 лет по G-кривой"
 unit = "%"
 transform = "identity"
+lower = 0.0
 source = "КБД Московской биржи, публикация Банка России"
 
 [[variables]]
@@ -63,6 +69,7 @@ id = "ru.ofz_10y"
 label = "доходность ОФЗ на 10 лет по G-кривой"
 unit = "%"
 transform = "identity"
+lower = 0.0
 source = "КБД Московской биржи, публикация Банка России"
 
 [[variables]]
@@ -86,7 +93,7 @@ id = "ru.spread_bbb"
 label = "спред корпоративных облигаций группы BBB к G-кривой"
 unit = "п. п."
 transform = "identity"
-negative = true
+lower = 0.0
 source = "индексы MOEX: RUCBICPB до 2020-12, RUCBCPBBBNS с 2021-01 (сшивка, скачок уровня)"
 
 [[variables]]
@@ -124,6 +131,7 @@ id = "ru.unemployment"
 label = "безработица"
 unit = "%"
 transform = "identity"
+lower = 0.0
 source = "Росстат"
 seasonal = true
 
@@ -155,6 +163,7 @@ id = "ru.mortgage_rate"
 label = "средняя ставка ипотеки"
 unit = "%"
 transform = "identity"
+lower = 0.0
 source = "Банк России"
 
 [[variables]]

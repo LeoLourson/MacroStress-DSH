@@ -451,6 +451,9 @@ def simulate(
     history = np.empty((draws * inner, model.lags_count, n))
     group = np.repeat(np.arange(draws), inner)
     ess: list[float] = []
+    # The largest driving shock of each month, in standard deviations: what the conditions
+    # ask of the named causes, month by month.
+    driving_sd: list[np.ndarray] = []
     cache: dict = {}
     for r in range(draws):
         draw = int(np.random.default_rng([seed, r, 0]).integers(model.draws))
@@ -506,13 +509,15 @@ def simulate(
             future = iterate(rep.history, rep.lags, rep.intercept, shocks)
             paths[r * inner + j] = np.vstack([rep.history[-1], future])
             history[r * inner + j] = rep.history
+            if chosen.terms and driving.any():
+                driving_sd.append(np.abs(eps[:, driving]).max(axis=1))
     last = model.months[-1]
     return MacroSimulation(
         ids=model.ids,
         months=[shift(last, t) for t in range(horizon + 1)],
         paths=paths,
         history=history,
-        diagnostics=_ess_summary(ess, candidates),
+        diagnostics=_ess_summary(ess, candidates) | _driving_summary(driving_sd),
         group=group,
     )
 
@@ -529,4 +534,21 @@ def _ess_summary(ess: list[float], candidates: int) -> dict:
             "median": float(np.median(values)),
             "max": float(values.max()),
         },
+    }
+
+
+def _driving_summary(driving_sd: list[np.ndarray]) -> dict:
+    """The size of the shocks the conditions need, in standard deviations.
+
+    A cut of five points through one shock needs a large shock — the reason such a scenario
+    moves so much. The number stays visible, per month of the horizon and at its largest.
+    """
+    if not driving_sd:
+        return {}
+    sizes = np.asarray(driving_sd)
+    return {
+        "driving_sd": {
+            "median_by_month": [float(value) for value in np.median(sizes, axis=0)],
+            "max": float(sizes.max()),
+        }
     }

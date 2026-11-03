@@ -1054,3 +1054,13 @@ def test_every_point_pins_its_cell_whatever_its_rounding():
         assert runner._pinned([point]) == {("x", 1)}
     wide = LinearConstraint(terms=(term,), low=0.0, high=1.0, tolerance=0.01)
     assert runner._pinned([wide]) == set()
+
+
+def test_wild_interval_takes_episodes_with_unequal_cell_counts():
+    plan = SimpleNamespace(seed=7)
+    rows = [{"episode": "a", "difference": value} for value in (1.0, 2.0, 3.0)]
+    rows += [{"episode": "b", "difference": 10.0}]
+    low, high = runner._wild_interval(rows, "difference", plan)
+    # The cell-weighted mean is 4; the interval moves whole episodes, so it spans their spread.
+    assert low < 4.0 < high
+    assert high - low > 1.0

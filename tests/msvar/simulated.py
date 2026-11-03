@@ -76,6 +76,22 @@ def simulate(count: int, rng, states: np.ndarray | None = None) -> tuple[np.ndar
     return y, states
 
 
+def simulate_common(count: int, rng) -> tuple[np.ndarray, np.ndarray]:
+    """``count`` months of an MS-VAR whose lags do not switch: the regimes share ``LAGS[0]``
+    and differ in the intercept and the covariance — the data ``switching =
+    "mean_covariance"`` is written for."""
+    n = len(IDS)
+    states = regimes(count, rng)
+    y = np.zeros((count, n))
+    previous = np.linalg.solve(np.eye(n) - LAGS[0], CONST[0])
+    for t in range(count):
+        s = states[t]
+        z = rng.standard_normal(n)
+        y[t] = CONST[s] + LAGS[0] @ previous + CHOL @ (np.exp(LOGVAR[s] / 2) * z)
+        previous = y[t]
+    return y, states
+
+
 def panel(y: np.ndarray) -> Panel:
     return Panel(
         ids=IDS,

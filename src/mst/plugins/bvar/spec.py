@@ -50,6 +50,20 @@ class Spec(Contract):
     volvol_df: Annotated[float, Field(strict=True, gt=2)]
     sign_lag: Annotated[int, Field(strict=True, ge=0)]
     rotation_tries: Count
+    rho_max: Annotated[float | None, Field(strict=True, ge=1.0)] = None
+    """The ceiling on the companion-matrix spectral radius a parameter draw must meet to
+    survive. ``None`` is no ceiling — the versions estimated before the filter carry it."""
+    mu: Positive | None = None
+    """The weight of the sum-of-coefficients dummy rows (Sims and Zha, 1998; Giannone,
+    Lenza and Primiceri, 2015); ``None`` turns them off. Smaller is tighter: the sums of
+    own-lag coefficients pull toward one, and the system away from explosive roots."""
+    delta: Positive | None = None
+    """The weight of the initial-observation dummy row; ``None`` turns it off. Smaller is
+    tighter: the no-change forecast at the beginning of the sample gets better."""
+    dof_min: Annotated[float, Field(strict=True, gt=2)] = 3.0
+    """The floor of the degrees-of-freedom grid of the Student tails (stochastic only).
+    The shipped 5 sits above the kurtosis boundary at 4; the versions estimated before the
+    field carried the 3."""
     sampler: Sampler
     dummies: list[Dummy] = []
 

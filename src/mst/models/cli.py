@@ -4,8 +4,10 @@
 
   python -m mst.models estimate-macro [MODEL_ID] --as-of DATE --store DIR --models DIR
   python -m mst.models estimate-satellites --macro SHA256 --store DIR --models DIR --drivers FILE
+  python -m mst.models diagnose-satellites SHA256 --models DIR
   python -m mst.models list --models DIR
   python -m mst.models describe --version SHA256 --models DIR
+  python -m mst.models diagnose --version SHA256 --models DIR
   python -m mst.models catalog
 
 ``estimate-macro`` estimates the named macro model (or the only one installed) on the panel
@@ -13,9 +15,13 @@ known on ``--as-of`` and writes the version to ``<models>/macro/<sha256>/``; it 
 hash. ``estimate-satellites`` assembles the satellite bundle of a macro version: every
 quantity with drivers is estimated by the satellite model assigned to it — the one that
 declares it, or ``--model QUANTITY=MODEL_ID`` — and the parts and the residual correlation
-become one version; it prints the hash and the check of every driver. ``list`` and
-``describe`` read the versions of the workspace; ``catalog`` lists the installed model
-plugins with the quantities their satellites serve. The episode check of the models lives in
+become one version; it prints the hash and the check of every driver. ``diagnose-satellites``
+reads a saved bundle back and prints what its fitted satellites imply — the pull to the
+long-run level, the elasticities, the check's reasons — as JSON, without estimating anything.
+``list`` and ``describe`` read the versions of the workspace; ``diagnose`` measures a saved
+macro version — the spectral radius of its draws, its regimes, its tails and the weight of
+its prior — without estimating anything; ``catalog`` lists the installed model plugins with
+the quantities their satellites serve. The episode check of the models lives in
 ``python -m mst.metrics backtest``.
 """
 
@@ -55,9 +61,20 @@ def main(argv: list[str] | None = None) -> int:
 
     listed = commands.add_parser("list", help="the model versions of the workspace")
     listed.add_argument("--models", type=Path, required=True)
+    diagnosed = commands.add_parser(
+        "diagnose-satellites",
+        help="what a saved satellite bundle implies, without estimating anything",
+    )
+    diagnosed.add_argument("bundle", help="the satellite version to read")
+    diagnosed.add_argument("--models", type=Path, required=True)
     described = commands.add_parser("describe", help="one version, as its meta records it")
     described.add_argument("--version", required=True)
     described.add_argument("--models", type=Path, required=True)
+    examined = commands.add_parser(
+        "diagnose", help="the stability diagnostics of a saved version, without estimating"
+    )
+    examined.add_argument("--version", required=True)
+    examined.add_argument("--models", type=Path, required=True)
     commands.add_parser("catalog", help="the installed model plugins")
 
     args = parser.parse_args(argv)
@@ -114,6 +131,28 @@ def main(argv: list[str] | None = None) -> int:
         from mst.macro import version as macro_version
 
         print(json.dumps(macro_version.describe(args.models, args.version), ensure_ascii=False))
+        return 0
+    if args.command == "diagnose":
+        import json
+
+        from . import diagnose as diagnose_version
+
+        print(
+            json.dumps(
+                diagnose_version.diagnose(args.models, args.version), ensure_ascii=False, indent=1
+            )
+        )
+        return 0
+    if args.command == "diagnose-satellites":
+        import json
+
+        from .diagnose_satellites import diagnose_satellites
+
+        print(
+            json.dumps(
+                diagnose_satellites(args.models, args.bundle), ensure_ascii=False, indent=1
+            )
+        )
         return 0
     import json
 

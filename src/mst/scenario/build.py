@@ -22,7 +22,7 @@ event has no probability at some value of ``R`` contradicts the models, and its 
 infinite with the message saying so.
 """
 
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from datetime import date
 from pathlib import Path
 
@@ -35,6 +35,7 @@ from ..macro.registry import load_registry
 from ..macro.version import MacroVersion
 from ..metrics.cells import typical_movement
 from ..model_sdk import dist as dist_sdk
+from ..model_sdk.bounds import observed
 from ..model_sdk.conditional import InfeasibleScenario
 from ..model_sdk.contracts import (
     AdditiveImpact,
@@ -80,6 +81,12 @@ class Paths:
     event and the means against their bounds."""
     seed: int
     draws: int
+    shadow: np.ndarray | None = None
+    """``(R, H + 1, n)`` the macro paths in the model scale before the floors of the registry:
+    what the conditions read. ``None`` when the paths did not come from a macro model."""
+    diagnostics: dict = field(default_factory=dict)
+    """What the macro model reports about the imposition: the size of the driving shocks the
+    conditions need and the spread of the hidden-coordinate candidates."""
 
 
 def tolerance_of(terms, macro: MacroVersion) -> float:
@@ -350,15 +357,18 @@ def build(
     simulation = _with_macro_impacts(simulation, spec.impacts)
     tilt, simulation = _tilted(spec, plan, simulation, seed=seed)
     registry = load_registry()
+    # The conditions, the tilt and the price stand on the shadow with the impacts in it; the
+    # floors apply once, to what the levels above and the report read.
+    reported = observed(simulation, registry)
     own = np.stack(
         [
-            registry.variable(id_).from_model(simulation.paths[..., k])
-            for k, id_ in enumerate(simulation.ids)
+            registry.variable(id_).from_model(reported.paths[..., k])
+            for k, id_ in enumerate(reported.ids)
         ],
         axis=-1,
     )
     drivers = satellites.simulate(
-        simulation,
+        reported,
         _drivers(satellites, spec, macro),
         [
             AdditiveImpact(
@@ -435,6 +445,8 @@ def build(
         checks=checks,
         seed=seed,
         draws=draws,
+        shadow=simulation.paths,
+        diagnostics=simulation.diagnostics,
     )
 
 

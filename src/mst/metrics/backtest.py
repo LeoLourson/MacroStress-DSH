@@ -7,8 +7,13 @@ scenario is what actually happened: the realized paths of the episode's variable
 month, with the shocks the sources of the time named. The same model also runs the base
 scenario (no constraints, no impacts), and every cell — episode, month, quantity — is scored
 against the fact several times: the conditional forecast, the random walk with drift computed
-from the history known at that episode's calculation date, the unconditional (base) run of the
-model itself, and, for targets, the naive forecast of a year earlier with the trend.
+from the history known at that episode's calculation date, the conditional walk that also reads
+the path the scenario fixes, the unconditional (base) run of the model itself, and, for targets,
+the naive forecast of a year earlier with the trend. The conditional walk is the benchmark of
+the conditional forecast: the plain walk does not know the future path the model is given, so a
+win over it says little. The quality of the forecast itself is judged by the rolling check
+(``mst.metrics.rolling``) on a grid of dates nobody selected; the named events only add what a
+model does when the shock is known.
 
 The quantities are every unconstrained macro variable the episode window knows and, with
 ``--satellites``, every served driver with a realized series. The report aggregates the cells
@@ -49,6 +54,7 @@ from mst.macro.panel import seasonal_profile, shift
 from mst.macro.registry import REGISTRY_PATH as MACRO_REGISTRY_PATH
 from mst.macro.registry import Registry, load_registry
 from mst.macro.version import MacroVersion
+from mst.model_sdk.bounds import lower_bounds, observed
 from mst.model_sdk.contracts import (
     LinearTerm,
     ScenarioPlan,
@@ -63,6 +69,7 @@ from .baselines import (
     DOMAIN,
     WIDTH,
     band_problems,
+    conditional_walk,
     constraint_probabilities,
     macro_domain,
     naive_annual,
@@ -141,6 +148,7 @@ def run(
     portfolio: str | None = None,
     mc_bootstrap: bool = False,
     target_level: str = "macro",
+    rolling: bool = True,
 ) -> int:
     """The backtest of every episode the plan names; prints Markdown tables, returns an exit code.
 
@@ -153,7 +161,8 @@ def run(
     portfolio for the Acerbi-Székely tail section; ``mc_bootstrap`` adds the Monte-Carlo
     interval of the equal-weight aggregate, separated from the episode-sampling intervals;
     ``target_level`` is the level whose aggregate the decision compares — the macro level by
-    default, or a driver level (``driver/<quantity>``) with ``--satellites``.
+    default, or a driver level (``driver/<quantity>``) with ``--satellites``. ``rolling`` off
+    leaves out the rolling check of the plan, which ``python -m mst.metrics rolling`` also runs.
     """
     from mst import models as models_pkg
     from mst.corpus import manifest
@@ -210,6 +219,7 @@ def run(
         portfolio_id=portfolio,
         mc_bootstrap=mc_bootstrap,
         target_level=target_level,
+        run_rolling=rolling,
     )
     _print(report)
     for problem in problems:
@@ -500,7 +510,7 @@ def _attach_bundle(
         episode.macro.model, episode.scenario, draws=plan.draws, seed=plan.seed
     )
     episode.driver_paths = episode.bundle.simulate(
-        simulation, episode.bundle.served(), (), seed=plan.seed
+        observed(simulation, load_registry()), episode.bundle.served(), (), seed=plan.seed
     )
 
 
@@ -518,6 +528,7 @@ def _report(
     portfolio_id: str | None = None,
     mc_bootstrap: bool = False,
     target_level: str = "macro",
+    run_rolling: bool = True,
 ) -> dict:
     """The scores of every quantity over the episodes, with the gates, intervals and metadata."""
     cells: list[Cell] = []
@@ -531,27 +542,35 @@ def _report(
         # uniformity of u and the CRPS read, the only law the canon's uniformity holds for —
         # and with the causes the card's sources named, for the sensitivity of both to the
         # choice of the causes.
-        plain_run = episode.macro.plugin.simulate(
-            episode.macro.model,
-            ScenarioPlan(
-                horizon=episode.horizon,
-                constraints=episode.scenario.constraints,
+        plain_run = observed(
+            episode.macro.plugin.simulate(
+                episode.macro.model,
+                ScenarioPlan(
+                    horizon=episode.horizon,
+                    constraints=episode.scenario.constraints,
+                ),
+                draws=plan.draws,
+                seed=plan.seed,
             ),
-            draws=plan.draws,
-            seed=plan.seed,
+            registry,
         )
-        driven = episode.macro.plugin.simulate(
-            episode.macro.model, episode.scenario, draws=plan.draws, seed=plan.seed
+        driven = observed(
+            episode.macro.plugin.simulate(
+                episode.macro.model, episode.scenario, draws=plan.draws, seed=plan.seed
+            ),
+            registry,
         )
         episode.macro_paths = driven
-        base = episode.macro.plugin.simulate(
+        shadow = episode.macro.plugin.simulate(
             episode.macro.model,
             ScenarioPlan(horizon=episode.horizon),
             draws=plan.draws,
             seed=plan.seed,
         )
+        base = observed(shadow, registry)
+        # The conditions stand on the shadow, and their probability under the base reads it.
         constraint_shares[episode.id] = constraint_probabilities(
-            base.paths, base.ids, episode.scenario.constraints
+            shadow.paths, shadow.ids, episode.scenario.constraints
         )
         plain_cells: list[Cell] = []
         driven_cells: list[Cell] = []
@@ -614,10 +633,11 @@ def _report(
             "note": "no scored cells: every cell was constrained, dropped or had no fact",
         }
     aggregate["rows"] = rows
+    aggregate["relative"] = _episode_relative(rows, target_level, plan)
     admission = _admission(cells)
     gate = _constraint_gate(constraint_shares)
     rolling = {}
-    if plan.rolling is not None:
+    if plan.rolling is not None and run_rolling:
         from .rolling import rolling_report
 
         rolling = rolling_report(
@@ -699,6 +719,29 @@ def _report(
     return report
 
 
+def _episode_relative(rows: list[dict], target_level: str, plan: Episodes) -> dict:
+    """The scale-free scores of the episodes: the forecast against its benchmarks.
+
+    The windows of neighbouring episodes overlap, so the episode intervals are too narrow: they
+    are read as a lower bound of the error, and the rolling check carries the verdict.
+    """
+    from .quality import interval, relative
+
+    chosen = [row for row in rows if row["level"] == target_level]
+    pairs = {
+        "conditional_vs_conditional_walk": ("crps", "conditional_crps"),
+        "conditional_vs_walk": ("crps", "baseline_crps"),
+        "base_vs_walk": ("base_crps", "baseline_crps"),
+    }
+    return {
+        name: {
+            **relative(chosen, first, second),
+            "interval": interval(chosen, first, second, unit="episode", seed=plan.seed),
+        }
+        for name, (first, second) in pairs.items()
+    }
+
+
 def _cause_sensitivity(episode: Episode, plain: list[Cell], driven: list[Cell]) -> dict:
     """How the scores move between the causes: the canon's check of the choice of D.
 
@@ -760,14 +803,17 @@ def _cell_rows(cells: list[Cell], levels: dict[str, str]) -> list[dict]:
             "normalized": value / movement if known_scale else None,
             "sigma_source": cell.sigma_source,
             "sigma_pairs": cell.sigma_pairs,
+            "crps": value,
             "baseline_normalized": None,
             "base_normalized": None,
             "naive_normalized": None,
+            "conditional_normalized": None,
         }
         for name, column in (
             ("baseline", cell.baseline),
             ("base", cell.base),
             ("naive", cell.naive),
+            ("conditional", cell.conditional),
         ):
             if column is None:
                 continue
@@ -775,6 +821,7 @@ def _cell_rows(cells: list[Cell], levels: dict[str, str]) -> list[dict]:
             if not len(known):
                 continue
             score = crps(known, cell.fact)
+            row[f"{name}_crps"] = score
             row[f"{name}_normalized"] = score / movement if known_scale else None
         rows.append(row)
     return rows
@@ -795,6 +842,7 @@ def _macro_cells(
     pinned = _pinned(episode.scenario.constraints)
     months = list(range(1, len(episode.months) + 1))
     peers = {id_: panel.y[:, j] for j, id_ in enumerate(panel.ids) if id_ in column_of}
+    given = [panel.ids.index(id_) for id_ in episode.constrained]
     for j, id_ in enumerate(panel.ids):
         i = column_of.get(id_)
         if i is None:
@@ -803,7 +851,23 @@ def _macro_cells(
         history = panel.y[:, j]
         domain = macro_domain(registry.variable(id_))
         spread = history_range(history)
-        walk = random_walk(history, episode.horizon, draws=plan.draws, seed=plan.seed)
+        floors = lower_bounds(registry, [id_])
+        lower = None if floors is None else float(floors[0])
+        walk = random_walk(
+            history, episode.horizon, draws=plan.draws, seed=plan.seed, lower=lower
+        )
+        knowing = (
+            None
+            if j in given
+            else conditional_walk(
+                history,
+                panel.y[:, given],
+                episode.realized[:, given],
+                draws=plan.draws,
+                seed=plan.seed,
+                lower=lower,
+            )
+        )
         scale = sigma_with_fallback(history, months, peers=peers)
         for k in range(len(episode.months)):
             fact = episode.realized[k, j]
@@ -819,6 +883,7 @@ def _macro_cells(
                     draws=draws.paths[:, k + 1, i],
                     baseline=walk[:, k],
                     base=base.paths[:, k + 1, i],
+                    conditional=None if knowing is None else knowing[:, k],
                     constrained=(id_, k + 1) in pinned,
                     sigma=sigma,
                     sigma_source=source,
@@ -1054,8 +1119,12 @@ def _wild_interval(rows: list[dict], key: str, plan: Episodes) -> tuple[float, f
         return None
     from .wild import wild_interval
 
+    # One number per episode, scaled by its share of cells, so their plain mean is the
+    # cell-weighted mean and the bootstrap moves whole episodes.
+    scale = len(samples) / len(point)
+    contributions = {episode: sum(values) * scale for episode, values in samples.items()}
     low, high = wild_interval(
-        samples,
+        contributions,
         repetitions=INTERVAL_REPETITIONS,
         seed=plan.seed,
         null=float(np.mean(point)),
@@ -1265,9 +1334,10 @@ def _decision_block(
     intersection. The comparison happens on the equal-weight aggregates of ``target_level``
     over the validation half — the half the plan checks on; the block names it. The standard
     error of every paired difference is the spread of that aggregate over an episode bootstrap
-    — the same statistic the report shows — and the wild cluster bootstrap re-checks it. Cells
-    where either report has no normalised score cannot be paired; they are counted and named
-    instead of shrinking the comparison silently.
+    — the same statistic the report shows — and the wild cluster bootstrap re-checks it. The
+    benchmark is the conditional walk where the level has one, since it knows what the forecast
+    knows, and the plain walk otherwise. Cells where either report has no normalised score
+    cannot be paired; they are counted and named instead of shrinking the comparison silently.
     """
     from .aggregate import aggregate_bootstrap, episode_contributions
     from .decision import decide
@@ -1324,9 +1394,12 @@ def _decision_block(
         {key: value for key, value in row.items() if key != "diff_vs_incumbent"}
         for row in paired_rows
     ]
+    known_conditional = any(row.get("conditional_normalized") is not None for row in candidate_rows)
+    benchmark = "conditional" if known_conditional else "baseline"
+    difference_column = f"diff_vs_{benchmark}"
     found = aggregate_bootstrap(
         candidate_rows,
-        ("model", "baseline", "diff_vs_baseline"),
+        ("model", benchmark, difference_column),
         level=target_level,
         repetitions=INTERVAL_REPETITIONS,
         seed=plan.seed,
@@ -1346,16 +1419,16 @@ def _decision_block(
         seed=[plan.seed, 19],
     )
     candidate_crps = found["model"]["point"]
-    benchmark_crps = found["baseline"]["point"]
+    benchmark_crps = found[benchmark]["point"]
     incumbent_crps = incumbent_found["model"]["point"]
-    difference = found["diff_vs_baseline"]["point"]
+    difference = found[difference_column]["point"]
     if candidate_crps is None or benchmark_crps is None:
         raise ValueError(
             f"--against {against}: level {target_level!r} has no scored cells in the "
             "validation half to decide on"
         )
     notes = []
-    se_benchmark = found["diff_vs_baseline"]["se"]
+    se_benchmark = found[difference_column]["se"]
     se_incumbent = paired_found["diff_vs_incumbent"]["se"]
     if se_benchmark is None:
         notes.append("the benchmark SE is undefined on one episode; it is read as zero")
@@ -1363,8 +1436,8 @@ def _decision_block(
     if se_incumbent is None:
         notes.append("the incumbent SE is undefined on one episode; it is read as zero")
         se_incumbent = 0.0
-    pair = (found["diff_vs_baseline"]["low"], found["diff_vs_baseline"]["high"])
-    contributions = episode_contributions(candidate_rows, "diff_vs_baseline", level=target_level)
+    pair = (found[difference_column]["low"], found[difference_column]["high"])
+    contributions = episode_contributions(candidate_rows, difference_column, level=target_level)
     wild = (
         wild_interval(
             {episode: value * len(contributions) for episode, value in contributions.items()},
@@ -1391,6 +1464,7 @@ def _decision_block(
     verdict.update(
         {
             "target_level": target_level,
+            "benchmark": "conditional walk" if benchmark == "conditional" else "random walk",
             "half": "validation" if validation & chosen else "all episodes",
             "primary": (
                 "wild"
@@ -1675,6 +1749,10 @@ def _print(report: dict) -> None:
         )
     if "decision" in report:
         _print_decision(report)
+    if report.get("rolling"):
+        from .rolling import print_rolling
+
+        print_rolling(report["rolling"])
     if "tail" in report:
         _print_tail(report)
     meta = report["meta"]
@@ -1696,16 +1774,28 @@ def _print(report: dict) -> None:
         print("- none: the report computes every metric")
 
 
+def _print_relative(report: dict) -> None:
+    """The scale-free scores of the episodes: below one the forecast wins."""
+    print("\n## Relative CRPS of the episodes (below one the forecast wins)\n")
+    print("| comparison | score | 95 % episode interval, too narrow: the windows overlap |")
+    print("|---|---:|---|")
+    for name, block in report["aggregate"].get("relative", {}).items():
+        found = block["interval"]
+        bounds = None if found["low"] is None else (found["low"], found["high"])
+        print(f"| {name} | {_number(block['score'])} | {_interval_text(bounds)} |")
+
+
 def _print_aggregate(report: dict) -> None:
     """The equal-weight table of the level × horizon aggregate, the model and its comparisons."""
     aggregate = report["aggregate"]
     target = report["target_level"]
+    _print_relative(report)
     print(f"\n## Aggregate (equal weights across quantities; target level `{target}`)\n")
     print(
-        "| level | horizon | model | random walk | base run | naive | model - random walk "
-        "| model - base run |"
+        "| level | horizon | model | random walk | base run | naive | conditional walk "
+        "| model - random walk | model - base run | model - conditional walk |"
     )
-    print("|---|---:|---:|---:|---:|---:|---:|---:|")
+    print("|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|")
     for level, block in aggregate["levels"].items():
         for month, values in sorted(block["by_horizon"].items()):
             print(f"| {level} | {month} | {_aggregate_text(values)} |")
@@ -1751,7 +1841,16 @@ def _aggregate_text(values: dict) -> str:
     """One aggregate row: the four comparisons and the two paired differences."""
     return " | ".join(
         _number(values.get(name))
-        for name in ("model", "baseline", "base", "naive", "diff_vs_baseline", "diff_vs_base")
+        for name in (
+            "model",
+            "baseline",
+            "base",
+            "naive",
+            "conditional",
+            "diff_vs_baseline",
+            "diff_vs_base",
+            "diff_vs_conditional",
+        )
     )
 
 
@@ -1815,7 +1914,7 @@ def _print_decision(report: dict) -> None:
     )
     print(
         f"- CRPS/sigma: candidate {_number(verdict.get('candidate_crps'))}, "
-        f"random walk {_number(verdict.get('benchmark_crps'))}, "
+        f"{verdict.get('benchmark', 'benchmark')} {_number(verdict.get('benchmark_crps'))}, "
         f"incumbent {_number(verdict.get('incumbent_crps'))}"
     )
     print(

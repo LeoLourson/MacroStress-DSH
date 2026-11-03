@@ -20,12 +20,43 @@ import numpy as np
 from scipy.linalg import block_diag
 
 from mst.macro.registry import block_of
+from mst.model_sdk.stability import companion_radius
 
 from .estimate import Posterior
 from .signs import Signs
 from .var import responses
 
 BATCH = 1000
+
+
+def stable(posterior: Posterior, rho_max: float) -> Posterior:
+    """The posterior restricted to the draws whose every regime keeps its companion radius
+    at or below ``rho_max``.
+
+    A unit root is admissible — most of these variables are nonstationary — but growth
+    without bound is not: a path simulated from an explosive regime drifts ever further,
+    and a condition on a path multiplies the effect. The mechanism is the identification
+    filter's — the posterior restricted to a region — and it runs before the rotation
+    search. Raises ``ValueError`` naming the model and the limit when no draw survives.
+    """
+    radius = companion_radius(posterior.lags)  # (draws, regimes)
+    pick = np.flatnonzero((radius <= rho_max).all(axis=1))
+    if not len(pick):
+        raise ValueError(
+            "no draw of msvar.markov keeps the companion radius of every regime "
+            f"at or below rho_max {rho_max}"
+        )
+    return replace(
+        posterior,
+        const=posterior.const[pick],
+        lags=posterior.lags[pick],
+        chol=posterior.chol[pick],
+        logvar=posterior.logvar[pick],
+        transition=posterior.transition[pick],
+        states=posterior.states[pick],
+        history=posterior.history[pick],
+        diagnostics={**posterior.diagnostics, "stable": len(pick)},
+    )
 
 
 def impact(posterior: Posterior, draw: int, regime: int) -> np.ndarray:
@@ -75,14 +106,26 @@ def rotate(response: np.ndarray, signs: np.ndarray, tries: int, rng) -> np.ndarr
 
 
 def identify(
-    posterior: Posterior, signs: Signs, *, sign_lag: int, tries: int, seed: int
+    posterior: Posterior,
+    signs: Signs,
+    *,
+    sign_lag: int,
+    tries: int,
+    seed: int,
+    rho_max: float | None = None,
 ) -> Posterior:
     """The posterior restricted to draws whose every regime admits an admissible ``Q``.
 
     Sets the whole ``J`` set of the version: the economic shocks — the columns of every
     ``B_s`` — and the regime elements the signs table declares. Raises ``ValueError`` when
     no draw has an admissible rotation in some regime.
+
+    With ``rho_max`` set, the stability filter of ``stable`` runs first, in every regime,
+    so the rotations are searched on the stable draws alone.
     """
+    estimated = posterior.draws
+    if rho_max is not None:
+        posterior = stable(posterior, rho_max)
     shocks = signs.shocks
     ids, n, g = posterior.ids, len(posterior.ids), posterior.n_global
     index = {id_: i for i, id_ in enumerate(ids)}
@@ -138,6 +181,6 @@ def identify(
         diagnostics={
             **posterior.diagnostics,
             "identified": len(kept),
-            "estimated": posterior.draws,
+            "estimated": estimated,
         },
     )

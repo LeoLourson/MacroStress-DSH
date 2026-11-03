@@ -65,8 +65,8 @@ class MSVarModel(MacroModel):
     variables: tuple[str, ...] = ()
     latents = ("regime_path",)
     description = (
-        "Векторная авторегрессия, у которой константа, лаговые коэффициенты и ковариация "
-        "ошибок переключаются по марковскому режиму; шоки идентифицированы знаками "
+        "Векторная авторегрессия, у которой константа и ковариация ошибок переключаются по "
+        "марковскому режиму при общих лагах; шоки идентифицированы знаками "
         "signs.toml внутри каждого режима, и режимные элементы события адресуются "
         "сценарием наравне с шоками."
     )
@@ -89,6 +89,7 @@ class MSVarModel(MacroModel):
             sign_lag=spec.sign_lag,
             tries=spec.rotation_tries,
             seed=spec.sampler.seed,
+            rho_max=spec.rho_max,
         )
         return parts(model, spec, panel, context.as_of)
 

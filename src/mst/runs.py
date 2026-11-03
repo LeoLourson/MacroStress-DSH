@@ -470,6 +470,7 @@ def _write(
         "dist": _dist_meta(paths.dist),
         "basis": _basis(spec),
         "checks": checks,
+        "diagnostics": paths.diagnostics,
         "admission": admission,
         "git_commit": _git_commit(),
         "data": {"series": str(workspace.series)} if workspace is not None else None,
@@ -594,7 +595,10 @@ def _checks(spec: Spec, macro, paths, empty, satellites) -> dict:
     registry = load_macro_registry()
     plan = scenario_build.plan_of(spec, macro)
     if plan.constraints:
-        model_scale = _macro_model_scale(registry, empty)
+        # The conditions stand on the shadow, so their probability under the base reads it.
+        model_scale = (
+            empty.shadow if empty.shadow is not None else _macro_model_scale(registry, empty)
+        )
         checks["constraint_probabilities"] = constraint_probabilities(
             model_scale, list(empty.ids), plan.constraints
         )

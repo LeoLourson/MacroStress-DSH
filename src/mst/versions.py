@@ -11,9 +11,11 @@ versions already written keep their names.
 
 import hashlib
 import json
+import os
 import re
 import shutil
 import tempfile
+import time
 from pathlib import Path
 
 import numpy as np
@@ -34,12 +36,8 @@ def digest(meta: dict, arrays: dict[str, np.ndarray]) -> str:
 def save(directory: Path, meta: dict, arrays: dict[str, np.ndarray]) -> str:
     """Writes the version under ``directory`` unless it exists; returns its name.
 
-    The files go to a ``.draft-`` folder first, which is renamed when complete. The rename
-    retries through ``store.replace``: on Windows a scanner or an antivirus can hold a
-    fresh file for a moment, and the version is finished only when the rename lands.
+    The files go to a ``.draft-`` folder first, which is renamed when complete.
     """
-    from . import store
-
     name = digest(meta, arrays)
     target = directory / name
     if target.exists():
@@ -51,11 +49,31 @@ def save(directory: Path, meta: dict, arrays: dict[str, np.ndarray]) -> str:
             json.dumps(meta, sort_keys=True, ensure_ascii=False, indent=1), encoding="utf-8"
         )
         np.savez(draft / "arrays.npz", **arrays)
-        store.replace(draft, target)
+        _publish(draft, target)
     except BaseException:
         shutil.rmtree(draft, ignore_errors=True)
         raise
     return name
+
+
+def _publish(draft: Path, target: Path, *, tries: int = 6) -> None:
+    """Renames the finished draft into place.
+
+    On Windows the rename fails with a permission error while a scanner or an indexer holds a
+    file of the fresh draft, and when another process has just published the same version; the
+    first passes in a moment, and in the second the version is there, so the draft is dropped.
+    """
+    for attempt in range(tries):
+        try:
+            os.replace(draft, target)
+            return
+        except PermissionError:
+            if target.exists():
+                shutil.rmtree(draft, ignore_errors=True)
+                return
+            if attempt == tries - 1:
+                raise
+            time.sleep(0.1 * 2**attempt)
 
 
 def read(directory: Path, name: str, what: str) -> tuple[dict, dict[str, np.ndarray]]:
