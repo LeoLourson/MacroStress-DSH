@@ -6,7 +6,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 LINK = re.compile(r"\]\(([^)\s]+)\)")
-TREES = ("docs", "dsh", "src", "tests", "corpus")
+TREES = ("docs", "dsh", "src", "tests", "corpus", "bench")
 SKIPPED = ("docs/local/", "src/mst/templates/")
 """A private folder and the templates a new plugin is generated from."""
 

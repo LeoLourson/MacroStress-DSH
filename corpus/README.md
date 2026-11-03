@@ -1,6 +1,6 @@
 # Корпус сценариев
 
-По этим материалам строится сценарий стресс-теста: здесь собраны методики регуляторов, их опубликованные сценарии, работы о передаче шоков и описания прошлых кризисов. Полный список лежит в [`manifest.json`](manifest.json). В git лежат манифест, `series.toml` и проверочные вопросы; скачанные оригиналы, тексты в Markdown и индекс — данные: они живут в `workspace/corpus/` и в git не попадают.
+По этим материалам строится сценарий стресс-теста: здесь собраны методики регуляторов, их опубликованные сценарии, работы о передаче шоков и описания прошлых кризисов. Полный список лежит в [`manifest.json`](manifest.json). В git лежат манифест, `series.toml` и шаблоны; скачанные оригиналы, тексты в Markdown и индекс — данные: они живут в `workspace/corpus/` и в git не попадают.
 
 ## Состав
 
@@ -21,7 +21,6 @@
 corpus/
   manifest.json                 список корпуса и адреса оригиналов, правится руками
   series.toml                   ряды для таблиц движений и их привязка к факторам и странам
-  eval/questions.md             проверочные вопросы для поиска
   templates/source.md           шаблон документа
   templates/episode.md          шаблон эпизода
 ```
@@ -31,7 +30,7 @@ corpus/
 
 ```
 workspace/corpus/
-  manifest.json, series.toml, eval/, templates/   копия того, что выше
+  manifest.json, series.toml, templates/   копия того, что выше
   downloads.json                что скачано: адрес, sha256, размер, дата; пишет fetch
   sources/methodology/M1.md     документ с одним изданием
   sources/scenario-sets/S1/2023.md   серия: файл на издание
@@ -59,7 +58,7 @@ python -m mst.corpus series [SERIES ...] --corpus DIR --store DIR  дневны�
 python -m mst.corpus episodes [ID ...] --corpus DIR --store DIR    карточки эпизодов
 python -m mst.corpus index --corpus DIR              index/chunks.jsonl и векторы
 python -m mst.corpus search QUERY --as-of DAY --corpus DIR  поиск
-python -m mst.corpus eval --corpus DIR               recall@5 по eval/questions.md
+python -m mst.corpus eval --corpus DIR --questions FILE   recall@5 по проверочным вопросам
 python -m mst.corpus all --corpus DIR --store DIR    fetch, convert, series, episodes, index подряд
 ```
 
@@ -136,7 +135,11 @@ search(query, as_of, kind=None, region=None, factors=None, k=8) -> [chunk]
 
 ## Проверка поиска
 
-В `eval/questions.md` лежат 20–30 вопросов, которые возникают при построении сценария, и для каждого — правильные `chunk_id`. Метрика — recall@5 по всем вопросам; любое изменение нарезки, стемминга или модели поиска сопровождается её пересчётом.
+Проверочные вопросы поиска — не материал корпуса, они лежат в [`bench/corpus-search/`](../bench/corpus-search/questions.md); там же описана метрика. Любое изменение нарезки, стемминга или модели поиска сопровождается её пересчётом:
+
+```
+python -m mst.corpus eval --corpus workspace/corpus --questions bench/corpus-search/questions.md
+```
 
 ## Что в корпусе сейчас
 

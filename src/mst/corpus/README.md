@@ -13,11 +13,11 @@ python -m mst.corpus series [SERIES ...] --corpus DIR --store DIR
 python -m mst.corpus episodes [ID ...] --corpus DIR --store DIR
 python -m mst.corpus index --corpus DIR
 python -m mst.corpus search QUERY --as-of DAY --corpus DIR
-python -m mst.corpus eval --corpus DIR
+python -m mst.corpus eval --corpus DIR --questions FILE
 ```
 
 `--corpus` — корень корпуса в workspace (`workspace/corpus`). В git лежат только манифест,
-`series.toml`, проверочные вопросы и шаблоны (`corpus/` в корне репозитория); скачанные
+`series.toml` и шаблоны (`corpus/` в корне репозитория); проверочные вопросы поиска — в `bench/corpus-search/`; скачанные
 оригиналы, тексты и индекс — данные workspace.
 
 | Файл | Что делает |
@@ -27,7 +27,7 @@ python -m mst.corpus eval --corpus DIR
 | `convert.py` | PDF и веб-страница в Markdown: текстовый слой pypdf, заголовки из оглавления, колонтитулы и номера страниц выброшены, шапка с датой публикации |
 | `series.py` | Дневные ряды D1–D5 для таблиц движений: загрузчик из `mst.data` или BIS, кеш в `series/`, месячный ряд из хранилища как запасной вариант |
 | `episodes.py` | Карточка эпизода: окно, база, экстремум, изменение, дни до экстремума и восстановления; написанные руками разделы сохраняются |
-| `index.py` | Нарезка Markdown на фрагменты, `chunks.jsonl`, векторы e5, BM25 + косинус с фильтром `as_of`, recall@5 по `eval/questions.md` |
+| `index.py` | Нарезка Markdown на фрагменты, `chunks.jsonl`, векторы e5, BM25 + косинус с фильтром `as_of`, recall@5 по проверочным вопросам `bench/corpus-search/questions.md` |
 | `embed.py` | Векторы multilingual-e5-small на CPU через ONNX Runtime |
 | `tool.py` | Операции инструмента `corpus`: `search`, `get`, `list`, `add` |
 | `cli.py`, `__main__.py` | Команда `python -m mst.corpus` |

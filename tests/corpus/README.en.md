@@ -11,3 +11,4 @@ Tests of `mst.corpus`. The network is substituted: source answers and pages are 
 | `test_series.py` | BIS rows from SDMX CSV, ruble denomination only on a marked jump, the year-on-year growth of an index |
 | `test_episodes.py` | A window from three months before `start` to twelve after, the move and recovery from the last value before `start`, a card keeps its written sections, a factor without data stays `unmeasured`, `series.toml` names only known series |
 | `test_index.py` | Numbering of sections with pages and heading paths, a long section is cut with whole tables, search hides fragments after `as_of` and ranks by stems, question markup and recall, vectors find a fragment with no common words, are reused and are checked on load, `state.json` names the day and the number of fragments |
+| `test_cli.py` | `eval` reads the check questions from the path `--questions`, outside the corpus root |

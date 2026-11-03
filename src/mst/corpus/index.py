@@ -437,7 +437,10 @@ class Question:
 
 
 def questions(text: str) -> list[Question]:
-    """Questions of ``corpus/eval/questions.md``: ``## Q<n>. <question>`` and a list of fields."""
+    """Questions of ``bench/corpus-search/questions.md``.
+
+    Each is ``## Q<n>. <question>`` and a list of fields.
+    """
     out = []
     for part in re.split(r"(?m)^## ", text)[1:]:
         title, _, body = part.partition("\n")

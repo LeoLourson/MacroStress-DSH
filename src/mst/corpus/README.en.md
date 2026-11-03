@@ -11,10 +11,10 @@ python -m mst.corpus series [SERIES ...] --corpus DIR --store DIR
 python -m mst.corpus episodes [ID ...] --corpus DIR --store DIR
 python -m mst.corpus index --corpus DIR
 python -m mst.corpus search QUERY --as-of DAY --corpus DIR
-python -m mst.corpus eval --corpus DIR
+python -m mst.corpus eval --corpus DIR --questions FILE
 ```
 
-`--corpus` is the corpus root in the workspace (`workspace/corpus`). Git holds only the manifest, `series.toml`, the check questions and the templates (`corpus/` in the repository root); downloaded originals, texts and the index are workspace data.
+`--corpus` is the corpus root in the workspace (`workspace/corpus`). Git holds only the manifest, `series.toml` and the templates (`corpus/` in the repository root); the check questions of the search are in `bench/corpus-search/`; downloaded originals, texts and the index are workspace data.
 
 | File | What it does |
 |---|---|
@@ -23,7 +23,7 @@ python -m mst.corpus eval --corpus DIR
 | `convert.py` | A PDF or web page to Markdown: the pypdf text layer, headings from the table of contents, headers, footers and page numbers dropped, a head with the publication date |
 | `series.py` | Daily series D1–D5 for the tables of moves: a loader from `mst.data` or BIS, a cache in `series/`, the monthly series from the store as a fallback |
 | `episodes.py` | An episode card: window, base, extreme, change, days to the extreme and to recovery; sections written by hand are kept |
-| `index.py` | Cutting Markdown into fragments, `chunks.jsonl`, e5 vectors, BM25 + cosine with an `as_of` filter, recall@5 by `eval/questions.md` |
+| `index.py` | Cutting Markdown into fragments, `chunks.jsonl`, e5 vectors, BM25 + cosine with an `as_of` filter, recall@5 by the check questions `bench/corpus-search/questions.md` |
 | `embed.py` | multilingual-e5-small vectors on the CPU through ONNX Runtime |
 | `tool.py` | Operations of the tool `corpus`: `search`, `get`, `list`, `add` |
 | `cli.py`, `__main__.py` | The command `python -m mst.corpus` |

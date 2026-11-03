@@ -11,13 +11,14 @@
   python -m mst.corpus episodes [ID ...] [--dry-run] --corpus DIR --store DIR
   python -m mst.corpus index --corpus DIR
   python -m mst.corpus search QUERY --as-of DAY --corpus DIR
-  python -m mst.corpus eval --corpus DIR
+  python -m mst.corpus eval --corpus DIR --questions FILE
   python -m mst.corpus all --corpus DIR --store DIR
 
 ``--corpus`` is the corpus root (``workspace/corpus``): the manifest, ``series.toml``, the
 Markdown texts, and ``raw/``, ``text/``, ``series/``, ``index/``, ``downloads.json`` that the
 commands write. ``--store`` is the monthly series store (``workspace/series``) the episode cards
-fall back to when a daily series is not downloaded.
+fall back to when a daily series is not downloaded. ``--questions`` is the check set of the search,
+``bench/corpus-search/questions.md``: it is not material of the corpus and stays outside it.
 
 Requests go only to the addresses in the manifest and to the series sources (Bank of Russia,
 Moscow Exchange, FRED with FRED_API_KEY, BIS). A run that fails on some files exits with 1 and
@@ -236,7 +237,7 @@ def run_search(args) -> int:
 
 
 def run_eval(args) -> int:
-    items = questions((args.corpus / "eval" / "questions.md").read_text(encoding="utf-8"))
+    items = questions(args.questions.read_text(encoding="utf-8"))
     value, unmarked = recall(Index.load(args.corpus / "index"), items)
     print(f"questions: {len(items)}, marked up: {len(items) - len(unmarked)}")
     print("recall@5: " + ("none, nothing marked up" if value is None else f"{value:.3f}"))
@@ -304,7 +305,9 @@ def main(argv: list[str] | None = None) -> int:
     command.add_argument("--factor", action="append")
     command.add_argument("-k", type=int, default=8)
     command.set_defaults(run=run_search)
-    commands.add_parser("eval", parents=[corpus]).set_defaults(run=run_eval)
+    command = commands.add_parser("eval", parents=[corpus])
+    command.add_argument("--questions", type=Path, required=True, help="the check questions")
+    command.set_defaults(run=run_eval)
     commands.add_parser("all", parents=[corpus, store]).set_defaults(run=run_all)
     args = parser.parse_args(argv)
     return args.run(args)

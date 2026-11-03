@@ -1,6 +1,6 @@
 # Scenario corpus
 
-A stress-test scenario is built from these materials: regulators' methodologies, their published scenarios, works on the transmission of shocks and descriptions of past crises. The full list is in [`manifest.json`](manifest.json). Git holds the manifest, `series.toml` and the check questions; downloaded originals, Markdown texts and the index are data: they live in `workspace/corpus/` and stay out of git.
+A stress-test scenario is built from these materials: regulators' methodologies, their published scenarios, works on the transmission of shocks and descriptions of past crises. The full list is in [`manifest.json`](manifest.json). Git holds the manifest, `series.toml` and the templates; downloaded originals, Markdown texts and the index are data: they live in `workspace/corpus/` and stay out of git.
 
 ## Contents
 
@@ -21,7 +21,6 @@ In git:
 corpus/
   manifest.json                 the corpus list and the addresses of originals, edited by hand
   series.toml                   series for the tables of moves and their link to factors and countries
-  eval/questions.md             check questions for search
   templates/source.md           document template
   templates/episode.md          episode template
 ```
@@ -30,7 +29,7 @@ In the workspace (`--corpus workspace/corpus`, outside git) the same layout plus
 
 ```
 workspace/corpus/
-  manifest.json, series.toml, eval/, templates/   a copy of the above
+  manifest.json, series.toml, templates/   a copy of the above
   downloads.json                what was downloaded: address, sha256, size, date; written by fetch
   sources/methodology/M1.md     a document with one edition
   sources/scenario-sets/S1/2023.md   a series: a file per edition
@@ -58,7 +57,7 @@ python -m mst.corpus series [SERIES ...] --corpus DIR --store DIR  daily series 
 python -m mst.corpus episodes [ID ...] --corpus DIR --store DIR    episode cards
 python -m mst.corpus index --corpus DIR              index/chunks.jsonl and vectors
 python -m mst.corpus search QUERY --as-of DAY --corpus DIR  search
-python -m mst.corpus eval --corpus DIR               recall@5 by eval/questions.md
+python -m mst.corpus eval --corpus DIR --questions FILE   recall@5 by the check questions
 python -m mst.corpus all --corpus DIR --store DIR    fetch, convert, series, episodes, index in a row
 ```
 
@@ -131,7 +130,11 @@ The same search is available through the tool `corpus(action="search")`, and a f
 
 ## Search check
 
-`eval/questions.md` holds 20–30 questions that arise when building a scenario, and for each the correct `chunk_id`s. The metric is recall@5 over all questions; any change of the cutting, the stemming or the search model comes with its recalculation.
+The check questions of the search are not material of the corpus: they live in [`bench/corpus-search/`](../bench/corpus-search/questions.md), which also describes the metric. Any change of the cutting, the stemming or the search model comes with its recalculation:
+
+```
+python -m mst.corpus eval --corpus workspace/corpus --questions bench/corpus-search/questions.md
+```
 
 ## What the corpus holds now
 
