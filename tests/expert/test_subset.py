@@ -235,3 +235,21 @@ def test_two_constraints_are_priced_and_imposed_together():
     for month, low, high in bounds:
         values = found.paths[:, month, 0]
         assert np.all((values >= low - 1e-9) & (values <= high + 1e-9))
+
+
+def test_the_imposition_reports_its_progress(capsys):
+    model = _linear_model()
+    plan = ScenarioPlan(
+        horizon=1,
+        constraints=(
+            LinearConstraint(
+                terms=(LinearTerm(variable="ru.cpi", month=1, weight=1.0),),
+                low=100.6,
+                high=100.8,
+            ),
+        ),
+        causes=("gl.oil",),
+    )
+    simulate(model, plan, draws=20, seed=5)
+    lines = [line for line in capsys.readouterr().err.splitlines() if "subset" in line]
+    assert len(lines) == 10 and lines[-1].endswith("100%")

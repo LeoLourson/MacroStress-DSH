@@ -21,6 +21,7 @@ from dataclasses import dataclass
 import numpy as np
 
 from mst.macro.panel import shift
+from mst.model_sdk.checkpoint import report
 from mst.model_sdk.conditional import (
     SWEEPS,
     InfeasibleScenario,
@@ -332,7 +333,14 @@ def box_probabilities(
             rng=np.random.default_rng([seed, r, 1]),
         )
         logs.append(result.log_probability)
+        _progress("expert: subset price", r, groups)
     return np.asarray(logs, dtype=float)
+
+
+def _progress(label: str, done: int, total: int) -> None:
+    """A line on stderr at every tenth of the groups: a subset run takes a while each."""
+    if (done + 1) * 10 // total > done * 10 // total:
+        report(f"{label} {(done + 1) * 100 // total}%")
 
 
 def _dimension_of(model: Expert, chosen: _Plan) -> int:
@@ -475,6 +483,7 @@ def _simulate_subset(model: Expert, chosen: _Plan, draws: int, seed: int) -> Mac
                 flat += columns * horizon
                 total += contributions(model.tables[shock], inputs, horizon)[0]
             paths[r * chosen.inner + j] = centre + total
+        _progress("expert: subset imposition", r, draws)
     return MacroSimulation(
         ids=model.ids,
         months=[shift(model.months[-1], t) for t in range(horizon + 1)],

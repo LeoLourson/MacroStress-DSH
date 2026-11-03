@@ -197,8 +197,11 @@ def contributions(tables: ShockTables, inputs: np.ndarray, horizon: int) -> np.n
     if months < horizon:
         raise ValueError("the inputs cover fewer months than the horizon asks")
     occur = occurrences(tables, inputs)
-    profile = _response_profile(tables, inputs)
-    profile = profile * occur[..., None, None]
+    # Only the months with an occurrence have a profile: most months have none, and the
+    # profile is the cost of the whole contribution.
+    profile = np.zeros((*occur.shape, tables.variables, PROFILE))
+    if occur.any():
+        profile[occur] = _response_profile(tables, inputs[occur])
     path = np.zeros((inputs.shape[0], horizon + 1, tables.variables))
     for month in range(min(months, horizon)):
         span = horizon - month
