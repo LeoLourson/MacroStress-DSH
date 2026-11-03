@@ -78,10 +78,14 @@ class ExpertModel(MacroModel):
         return (*keys, MARKET) if self.base == "market" else keys
 
     def estimate(self, context: MacroEstimateContext) -> MacroEstimate:
-        raise NotImplementedError("the estimate of the expert model arrives with a later step")
+        from .estimate import estimate
+
+        return estimate(context, base=self.base)
 
     def load(self, meta: dict, arrays: dict):
-        raise NotImplementedError("loading the expert model arrives with a later step")
+        from .estimate import load as load_model
+
+        return load_model(meta, arrays)
 
     def simulate(
         self, model, plan: ScenarioPlan, *, draws: int, seed: int

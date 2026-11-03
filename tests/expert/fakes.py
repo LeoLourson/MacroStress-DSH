@@ -7,6 +7,7 @@ linear. No LLM is called and no real answer is written.
 """
 
 from datetime import date
+from pathlib import Path
 
 import numpy as np
 
@@ -60,13 +61,14 @@ def series_store(root) -> SeriesStore:
     return store
 
 
-def context(root, *, as_of: date = AS_OF, fragment=None) -> MacroEstimateContext:
+def context(root, *, as_of: date = AS_OF, fragment=None, inputs=None) -> MacroEstimateContext:
     """The estimate context of the fixture: the store, the registry and the date."""
     return MacroEstimateContext(
         store=series_store(root),
         registry=load_registry(),
         as_of=as_of,
         fragment=fragment,
+        inputs=inputs,
     )
 
 
@@ -77,6 +79,18 @@ def visible(fragment_id: str) -> bool:
 
 def _quantiles(centre: float, spread: float) -> dict:
     return {"q5": centre - spread, "q50": centre, "q95": centre + spread}
+
+
+def _scale_of(variable) -> float:
+    """The response scale of a variable: a hundredth of its history's monthly noise."""
+    _, _, noise = (
+        SCALES["log100"]
+        if variable.transform == "log100"
+        else SCALES["rate"]
+        if variable.lower is not None
+        else SCALES["free"]
+    )
+    return 0.01 * noise
 
 
 def shock_payload(shock_id: str, **changes) -> dict:
@@ -98,7 +112,13 @@ def shock_payload(shock_id: str, **changes) -> dict:
                 size = sizes[name]
                 # A response deliberately not proportional to the size: the factor
                 # 1 + 0.1 * index bends the line through the three nodes.
-                centre = 0.08 * size * (1 + 0.1 * index) * node * (1.0 + 0.02 * (k % 3))
+                centre = (
+                    _scale_of(variable)
+                    * size
+                    * (1 + 0.1 * index)
+                    * node
+                    * (1.0 + 0.02 * (k % 3))
+                )
                 by_node[name] = _quantiles(centre, abs(centre) * 0.25 + 0.01)
             by_horizon[str(horizon)] = by_node
         responses[variable.id] = by_horizon
@@ -151,3 +171,43 @@ def market_payload(**changes) -> dict:
 def full_answers() -> dict[str, dict]:
     """Every answer the market variant needs: the 18 shocks and the market."""
     return {**answers(), MARKET: market_payload()}
+
+
+def answers_context(root, *, base="rw", with_market=None, changes=None):
+    """A context with the fixture's answers written into its elicitation folder.
+
+    ``changes`` maps a key to a function that rewrites that answer's payload; the answers
+    are checked and stored the way the server does, in their normal forms.
+    """
+    from mst import inputs
+    from mst.plugins.expert import answers as answers_module
+
+    folder = Path(root) / "elicitation"
+    ctx = context(root, fragment=visible, inputs=folder)
+    payloads = full_answers() if base == "market" else answers()
+    if with_market is False:
+        payloads = answers()
+    for key, payload in payloads.items():
+        if changes and key in changes:
+            payload = changes[key](payload)
+        normal = answers_module.check(ctx, key, payload)
+        inputs.write(folder, AS_OF, key, normal)
+    return context(root, fragment=visible, inputs=folder)
+
+
+def quick_spec(**changes):
+    """The spec of the estimate tests: small grids, a short stream, the fixture's dates."""
+    from mst.plugins.expert.spec import Spec
+
+    values = {
+        "family": "pareto",
+        "alpha": 4.0,
+        "levels": 129,
+        "stream_draws": 12000,
+        "candidates": 16,
+        "subset_samples": 500,
+        "history_start": START,
+        "seed": 3,
+    }
+    values.update(changes)
+    return Spec.model_validate(values)

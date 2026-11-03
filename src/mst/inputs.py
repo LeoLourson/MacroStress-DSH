@@ -24,6 +24,11 @@ ANSWER = "answer"
 WRITTEN_AT = "written_at"
 
 
+def hash_of(normal: dict) -> str:
+    """The hash of a normal form: what a write returns and a model version records."""
+    return store.sha256_of(normal)
+
+
 def path(root: Path, as_of: date, key: str) -> Path:
     """``<root>/<as_of>/<key>.json``: where the answer of one key of one date lives."""
     return Path(root) / as_of.isoformat() / f"{key}.json"
