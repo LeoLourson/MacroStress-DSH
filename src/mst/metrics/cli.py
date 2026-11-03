@@ -3,8 +3,8 @@
 ::
 
   python -m mst.metrics backtest [MODEL_ID] --as-of DATE --store DIR --models DIR --episodes FILE
-      --corpus FILE [--drivers FILE] [--satellites] [--only ID ...] [--details FILE]
-      [--against REPORT.json] [--portfolio ID] [--mc-bootstrap] [--no-rolling]
+      [--drivers FILE] [--satellites] [--only ID ...] [--details FILE] [--against REPORT.json]
+      [--portfolio ID] [--mc-bootstrap] [--no-rolling]
   python -m mst.metrics rolling [MODEL_ID] --as-of DATE --store DIR --models DIR --episodes FILE
       [--dates YYYY-MM-DD ...] [--half tuning|validation] [--details FILE] [--against REPORT.json]
 
@@ -50,7 +50,6 @@ def main(argv: list[str] | None = None) -> int:
     check.add_argument("--store", type=Path, required=True)
     check.add_argument("--models", type=Path, required=True)
     check.add_argument("--episodes", type=Path, required=True, help=PLAN)
-    check.add_argument("--corpus", type=Path, required=True)
     check.add_argument("--drivers", type=Path, help="the driver catalog, with --satellites")
     check.add_argument("--satellites", action="store_true", help="score the drivers too")
     check.add_argument("--only", nargs="+", default=[], help="episode ids; all by default")
@@ -110,7 +109,6 @@ def main(argv: list[str] | None = None) -> int:
         store=args.store,
         models=args.models,
         episodes=args.episodes,
-        corpus=args.corpus,
         as_of=args.as_of,
         macro_id=args.model_id,
         drivers=args.drivers,

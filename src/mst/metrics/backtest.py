@@ -1,6 +1,6 @@
 """The episode backtest: CRPS, calibration and admission of the models on historical events.
 
-For an episode of the corpus the calculation date is the day before it starts; every model is
+For an episode of the plan the calculation date is the day before it starts; every model is
 estimated on the data known that day — the macro model as an episode version under
 ``<models>/backtest/``, cached by the state of the data and the model's configuration — and the
 scenario is what actually happened: the realized paths of the episode's variables, month by
@@ -138,7 +138,6 @@ def run(
     store: Path,
     models: Path,
     episodes: Path,
-    corpus: Path,
     as_of: date,
     macro_id: str | None = None,
     drivers: Path | None = None,
@@ -167,7 +166,6 @@ def run(
     leaves out the rolling check of the plan, which ``python -m mst.metrics rolling`` also runs.
     """
     from mst import models as models_pkg
-    from mst.corpus import manifest
 
     if portfolio is not None and not satellites:
         raise ValueError(
@@ -176,7 +174,6 @@ def run(
     plan = load_episodes(episodes)
     plugin = models_pkg.selected(macro_id)
     registry = load_registry()
-    starts = {e.id: e.start_month for e in manifest.load(corpus).episodes}
     data = SeriesStore(store)
     root = Path(models) / "backtest"
     problems: list[str] = []
@@ -184,11 +181,8 @@ def run(
     for check in plan.episodes:
         if only and check.id not in only:
             continue
-        if check.id not in starts:
-            problems.append(f"{check.id}: not in the corpus manifest {corpus}")
-            continue
         try:
-            episode = _episode(plugin, data, registry, plan, check, starts[check.id], root, as_of)
+            episode = _episode(plugin, data, registry, plan, check, root, as_of)
         except ValueError as error:
             problems.append(f"{check.id}: {error}")
             continue
@@ -241,11 +235,11 @@ def _episode(
     registry: Registry,
     plan: Episodes,
     check,
-    start: date,
     root: Path,
     known_on: date,
 ) -> Episode:
     """One episode: its macro version, its scenario from the facts, and the realized paths."""
+    start = check.start
     as_of = calculation_date(start)
     macro = _episode_macro(plugin, data, registry, as_of, root)
     unknown = [shock for shock in check.driving if shock not in macro.shocks]

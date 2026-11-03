@@ -896,8 +896,6 @@ def _backtest_argv(
         str(ws.models),
         "--episodes",
         str(EPISODE_PLAN),
-        "--corpus",
-        str(ws.corpus / "manifest.json"),
         "--drivers",
         str(ws.drivers / "catalog.json"),
     ]

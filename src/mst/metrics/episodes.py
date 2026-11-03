@@ -1,16 +1,18 @@
 """The episodes of the backtest: historical events the models are judged on.
 
-An episode names the variables whose realized paths fix the scenario (they are constrained
-month by month, exactly as they happened), the shocks the sources of the time held
-responsible, and the corpus keys of those sources. Each episode also names its ``half`` of the
-plan — tuning fits the models, validation checks them, both halves non-empty — and the
-``source`` of its scenario, ``manual`` or ``llm``, which the scenario utility reports apart.
-The set of episodes is a plan, not a fixed list: it grows as new historical events are carded,
-and the marks are data of this file, not code. The window ends ``after_months`` months after
-the start. An exclusion drops the months of a variable from its ``start`` on when the history
-ends before it — an index splice makes the realized level incomparable.
+An episode names its start month, the variables whose realized paths fix the scenario (they
+are constrained month by month, exactly as they happened), the shocks the sources of the time
+held responsible, and the corpus keys of those sources; ``card`` links it to the corpus card
+of the same event, which a test holds to the same start month. Each episode also names its
+``half`` of the plan — tuning fits the models, validation checks them, both halves non-empty —
+and the ``source`` of its scenario, ``manual`` or ``llm``, which the scenario utility reports
+apart. The set of episodes is a plan, not a fixed list: it grows as new historical events are
+carded, and the marks are data of the plan file, not code. The window ends ``after_months``
+months after the start. An exclusion drops the months of a variable from its ``start`` on when
+the history ends before it — an index splice makes the realized level incomparable.
 """
 
+import re
 import tomllib
 from datetime import date, timedelta
 from pathlib import Path
@@ -45,8 +47,20 @@ class Exclusion(Contract):
     _start = field_validator("start")(first_of_month)
 
 
+def year_month(value: object) -> date:
+    """The first day of the month a ``YYYY-MM`` string names."""
+    if not isinstance(value, str) or not re.fullmatch(r"\d{4}-\d{2}", value):
+        raise ValueError(f"{value!r} is not a month written as YYYY-MM")
+    year, month = map(int, value.split("-"))
+    return date(year, month, 1)
+
+
 class EpisodeCheck(Contract):
     id: Identifier
+    start: date
+    """The first month of the episode; the models are estimated on the day before it."""
+    card: Identifier | None = None
+    """The key of the corpus card of the same event, when it has one."""
     constrained: list[Identifier] = Field(min_length=1)
     driving: list[Identifier] = Field(min_length=1)
     half: Half
@@ -54,6 +68,8 @@ class EpisodeCheck(Contract):
     reason: Identifier
     """Why these shocks drove the episode, with the corpus keys of the sources of the time."""
     sources: list[Identifier] = Field(min_length=1)
+
+    _start = field_validator("start", mode="before")(year_month)
 
 
 class PriceEvent(Contract):

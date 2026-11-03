@@ -21,6 +21,8 @@ from mst.metrics.episodes import calculation_date, load_episodes
 from . import simulated
 
 KNOWN_ON = date(2030, 1, 1)
+STARTS = {"R1": "2023-06", "R2": "2024-03"}
+"""The start months of the episodes the tests plan."""
 PLAN = Path(__file__).resolve().parents[2] / "bench" / "model-backtest" / "episodes.toml"
 
 
@@ -28,41 +30,6 @@ PLAN = Path(__file__).resolve().parents[2] / "bench" / "model-backtest" / "episo
 def fast_intervals(monkeypatch):
     """A hundred repetitions keep the tests quick; the report uses a thousand."""
     monkeypatch.setattr(runner, "INTERVAL_REPETITIONS", 100)
-
-
-def manifest(tmp_path, episodes):
-    """A corpus manifest with the named episodes, each starting on its month."""
-    rows = [
-        {
-            "id": id_,
-            "start": f"{start:%Y-%m}",
-            "region": "ru",
-            "country": "RU",
-            "title": id_,
-            "factors": [],
-            "data": [],
-            "path": f"episodes/{id_}.md",
-            "status": "ready",
-        }
-        for id_, start in episodes
-    ]
-    file = tmp_path / "manifest.json"
-    file.write_text(
-        json.dumps(
-            {
-                "corpus_id": "c",
-                "version": "1",
-                "updated": "2026-10-29",
-                "description": "",
-                "vocabularies": {"factors": {}, "flags": {}},
-                "sources": [],
-                "data_series": [],
-                "episodes": rows,
-            }
-        ),
-        encoding="utf-8",
-    )
-    return file
 
 
 def plan_file(tmp_path, episodes, *, swap=False):
@@ -85,6 +52,7 @@ def plan_file(tmp_path, episodes, *, swap=False):
         text += [
             "[[episodes]]",
             f'id = "{id_}"',
+            f'start = "{STARTS[id_]}"',
             f'half = "{half}"',
             'source = "manual"',
             f'constrained = ["{variable}"]',
@@ -101,7 +69,7 @@ def plan_file(tmp_path, episodes, *, swap=False):
 
 @pytest.fixture
 def workspace(tmp_path, monkeypatch):
-    """A store, a corpus manifest, an episode plan and the fake models installed."""
+    """A store and the fake models installed."""
     store = simulated.series_store(tmp_path / "series")
     macro = simulated.FakeMacro()
     satellite = simulated.FakeSatellite()
@@ -122,14 +90,13 @@ def workspace(tmp_path, monkeypatch):
     }
 
 
-def run_episodes(workspace, corpus, plan, tmp_path, *, name="details.json", only=(), **extra):
+def run_episodes(workspace, plan, tmp_path, *, name="details.json", only=(), **extra):
     """Run the backtest and read its details file."""
     details = tmp_path / name
     code = runner.run(
         store=workspace["store"].root,
         models=workspace["models"],
         episodes=plan,
-        corpus=corpus,
         as_of=KNOWN_ON,
         only=list(only),
         details=details,
@@ -139,7 +106,6 @@ def run_episodes(workspace, corpus, plan, tmp_path, *, name="details.json", only
 
 
 def test_the_runner_scores_the_cells_of_every_episode(workspace, tmp_path, capsys):
-    corpus = manifest(tmp_path, [("R1", date(2023, 6, 1)), ("R2", date(2024, 3, 1))])
     plan = plan_file(
         tmp_path, [("R1", "gl.brent", "fake.demand"), ("R2", "ru.key_rate", "fake.rate")]
     )
@@ -148,7 +114,6 @@ def test_the_runner_scores_the_cells_of_every_episode(workspace, tmp_path, capsy
         store=workspace["store"].root,
         models=workspace["models"],
         episodes=plan,
-        corpus=corpus,
         as_of=KNOWN_ON,
     )
 
@@ -161,7 +126,6 @@ def test_the_runner_scores_the_cells_of_every_episode(workspace, tmp_path, capsy
 
 
 def test_the_episode_versions_are_cached_by_the_data(workspace, tmp_path):
-    corpus = manifest(tmp_path, [("R1", date(2023, 6, 1)), ("R2", date(2024, 3, 1))])
     plan = plan_file(
         tmp_path, [("R1", "gl.brent", "fake.demand"), ("R2", "ru.key_rate", "fake.rate")]
     )
@@ -169,7 +133,6 @@ def test_the_episode_versions_are_cached_by_the_data(workspace, tmp_path):
         store=workspace["store"].root,
         models=workspace["models"],
         episodes=plan,
-        corpus=corpus,
         as_of=KNOWN_ON,
     )
 
@@ -183,7 +146,6 @@ def test_the_episode_versions_are_cached_by_the_data(workspace, tmp_path):
 
 
 def test_an_unknown_driving_shock_is_reported_not_raised(workspace, tmp_path, capsys):
-    corpus = manifest(tmp_path, [("R1", date(2023, 6, 1)), ("R2", date(2024, 3, 1))])
     plan = plan_file(
         tmp_path, [("R1", "gl.brent", "no.such.shock"), ("R2", "ru.key_rate", "fake.rate")]
     )
@@ -192,7 +154,6 @@ def test_an_unknown_driving_shock_is_reported_not_raised(workspace, tmp_path, ca
         store=workspace["store"].root,
         models=workspace["models"],
         episodes=plan,
-        corpus=corpus,
         as_of=KNOWN_ON,
     )
 
@@ -200,34 +161,26 @@ def test_an_unknown_driving_shock_is_reported_not_raised(workspace, tmp_path, ca
     assert "the macro model knows no shocks no.such.shock" in capsys.readouterr().out
 
 
-def test_an_episode_missing_from_the_manifest_is_reported(workspace, tmp_path, capsys):
-    corpus = manifest(tmp_path, [("R2", date(2024, 3, 1))])
+def test_the_calculation_date_is_the_day_before_the_start_the_plan_names(workspace, tmp_path):
     plan = plan_file(
-        tmp_path, [("R9", "gl.brent", "fake.demand"), ("R2", "ru.key_rate", "fake.rate")]
+        tmp_path, [("R1", "gl.brent", "fake.demand"), ("R2", "ru.key_rate", "fake.rate")]
     )
 
-    code = runner.run(
-        store=workspace["store"].root,
-        models=workspace["models"],
-        episodes=plan,
-        corpus=corpus,
-        as_of=KNOWN_ON,
-    )
+    code, report = run_episodes(workspace, plan, tmp_path)
 
-    assert code == 1
-    assert "R9: not in the corpus manifest" in capsys.readouterr().out
+    assert code == 0
+    assert [row["as_of"] for row in report["episodes"]] == ["2023-05-31", "2024-02-29"]
 
 
 def test_a_run_without_a_single_episode_reports_it_instead_of_raising(
     workspace, tmp_path, capsys
 ):
-    corpus = manifest(tmp_path, [("R1", date(2023, 6, 1)), ("R2", date(2024, 3, 1))])
     # Unknown driving shocks drop both episodes: the report has no scored cells at all.
     plan = plan_file(
         tmp_path, [("R1", "gl.brent", "fake.one"), ("R2", "ru.key_rate", "fake.two")]
     )
 
-    code, report = run_episodes(workspace, corpus, plan, tmp_path)
+    code, report = run_episodes(workspace, plan, tmp_path)
 
     assert code == 1
     assert report["episodes"] == []
@@ -238,14 +191,13 @@ def test_a_run_without_a_single_episode_reports_it_instead_of_raising(
 
 
 def test_the_monte_carlo_option_moves_no_other_field(workspace, tmp_path):
-    corpus = manifest(tmp_path, [("R1", date(2023, 6, 1)), ("R2", date(2024, 3, 1))])
     plan = plan_file(
         tmp_path, [("R1", "gl.brent", "fake.demand"), ("R2", "ru.key_rate", "fake.rate")]
     )
 
-    _, plain = run_episodes(workspace, corpus, plan, tmp_path, name="plain.json")
+    _, plain = run_episodes(workspace, plan, tmp_path, name="plain.json")
     _, monte_carlo = run_episodes(
-        workspace, corpus, plan, tmp_path, name="mc.json", mc_bootstrap=True
+        workspace, plan, tmp_path, name="mc.json", mc_bootstrap=True
     )
 
     # The Monte-Carlo error is reported beside the sampling error, never in place of it.
@@ -258,12 +210,11 @@ def test_the_monte_carlo_option_moves_no_other_field(workspace, tmp_path):
 
 
 def test_the_details_file_holds_the_full_report(workspace, tmp_path):
-    corpus = manifest(tmp_path, [("R1", date(2023, 6, 1)), ("R2", date(2024, 3, 1))])
     plan = plan_file(
         tmp_path, [("R1", "gl.brent", "fake.demand"), ("R2", "ru.key_rate", "fake.rate")]
     )
 
-    code, report = run_episodes(workspace, corpus, plan, tmp_path)
+    code, report = run_episodes(workspace, plan, tmp_path)
 
     assert code == 0
     assert report["problems"] == []
@@ -285,12 +236,11 @@ def test_the_details_file_holds_the_full_report(workspace, tmp_path):
 def test_the_report_holds_the_aggregate_the_usefulness_and_the_halves(
     workspace, tmp_path, capsys
 ):
-    corpus = manifest(tmp_path, [("R1", date(2023, 6, 1)), ("R2", date(2024, 3, 1))])
     plan = plan_file(
         tmp_path, [("R1", "gl.brent", "fake.demand"), ("R2", "ru.key_rate", "fake.rate")]
     )
 
-    _, report = run_episodes(workspace, corpus, plan, tmp_path)
+    _, report = run_episodes(workspace, plan, tmp_path)
     out = capsys.readouterr().out
 
     aggregate = report["aggregate"]
@@ -318,13 +268,12 @@ def test_the_report_holds_the_aggregate_the_usefulness_and_the_halves(
 
 
 def test_the_full_table_does_not_depend_on_the_halves(workspace, tmp_path):
-    corpus = manifest(tmp_path, [("R1", date(2023, 6, 1)), ("R2", date(2024, 3, 1))])
     checks = [("R1", "gl.brent", "fake.demand"), ("R2", "ru.key_rate", "fake.rate")]
     plan = plan_file(tmp_path, checks)
-    _, first = run_episodes(workspace, corpus, plan, tmp_path, name="first.json")
+    _, first = run_episodes(workspace, plan, tmp_path, name="first.json")
 
     swapped = plan_file(tmp_path, checks, swap=True)
-    _, second = run_episodes(workspace, corpus, swapped, tmp_path, name="second.json")
+    _, second = run_episodes(workspace, swapped, tmp_path, name="second.json")
 
     # The final table is built over all episodes: the marks change the halves, nothing else.
     assert first["aggregate"]["levels"] == second["aggregate"]["levels"]
@@ -389,12 +338,11 @@ def test_the_tail_section_prints_the_horizon_and_the_dropped_episodes(capsys):
 
 
 def test_the_random_walk_is_not_the_base_run(workspace, tmp_path):
-    corpus = manifest(tmp_path, [("R1", date(2023, 6, 1)), ("R2", date(2024, 3, 1))])
     plan = plan_file(
         tmp_path, [("R1", "gl.brent", "fake.demand"), ("R2", "ru.key_rate", "fake.rate")]
     )
 
-    _, report = run_episodes(workspace, corpus, plan, tmp_path)
+    _, report = run_episodes(workspace, plan, tmp_path)
 
     row = report["quantities"]["ru.key_rate"]
     # The fake model ignores the scenario, so its base run is its conditional forecast.
@@ -409,13 +357,12 @@ def test_the_random_walk_is_not_the_base_run(workspace, tmp_path):
 
 
 def test_an_episode_scores_the_same_alone_and_with_others(workspace, tmp_path):
-    corpus = manifest(tmp_path, [("R1", date(2023, 6, 1)), ("R2", date(2024, 3, 1))])
     plan = plan_file(
         tmp_path, [("R1", "gl.brent", "fake.demand"), ("R2", "ru.key_rate", "fake.rate")]
     )
 
-    _, alone = run_episodes(workspace, corpus, plan, tmp_path, name="alone.json", only=["R1"])
-    _, together = run_episodes(workspace, corpus, plan, tmp_path, name="together.json")
+    _, alone = run_episodes(workspace, plan, tmp_path, name="alone.json", only=["R1"])
+    _, together = run_episodes(workspace, plan, tmp_path, name="together.json")
 
     def cells_of(report):
         return {
@@ -535,12 +482,11 @@ def test_the_constraint_gate_needs_more_than_one_percent():
 def test_a_fact_episode_reports_the_constraint_probability_as_not_applicable(
     workspace, tmp_path, capsys
 ):
-    corpus = manifest(tmp_path, [("R1", date(2023, 6, 1)), ("R2", date(2024, 3, 1))])
     plan = plan_file(
         tmp_path, [("R1", "gl.brent", "fake.demand"), ("R2", "ru.key_rate", "fake.rate")]
     )
 
-    code, report = run_episodes(workspace, corpus, plan, tmp_path)
+    code, report = run_episodes(workspace, plan, tmp_path)
     out = capsys.readouterr().out
 
     assert code == 0
@@ -575,12 +521,11 @@ def test_the_interval_resamples_the_reported_statistic():
 
 
 def test_the_report_meta_records_the_versions_and_the_vintage(workspace, tmp_path):
-    corpus = manifest(tmp_path, [("R1", date(2023, 6, 1)), ("R2", date(2024, 3, 1))])
     plan = plan_file(
         tmp_path, [("R1", "gl.brent", "fake.demand"), ("R2", "ru.key_rate", "fake.rate")]
     )
 
-    _, report = run_episodes(workspace, corpus, plan, tmp_path)
+    _, report = run_episodes(workspace, plan, tmp_path)
     meta = report["meta"]
 
     assert meta["draws"] == 40 and meta["seed"] == 3
@@ -693,7 +638,6 @@ def test_seasonal_facts_use_the_calculation_date_profile(tmp_path):
 
 
 def test_the_satellites_score_the_served_drivers(workspace, tmp_path):
-    corpus = manifest(tmp_path, [("R1", date(2023, 6, 1)), ("R2", date(2024, 3, 1))])
     plan = plan_file(
         tmp_path, [("R1", "gl.brent", "fake.demand"), ("R2", "ru.key_rate", "fake.rate")]
     )
@@ -710,7 +654,7 @@ def test_the_satellites_score_the_served_drivers(workspace, tmp_path):
     )
 
     code, report = run_episodes(
-        workspace, corpus, plan, tmp_path, drivers=catalog, satellites=True
+        workspace, plan, tmp_path, drivers=catalog, satellites=True
     )
 
     assert code == 0
@@ -727,7 +671,6 @@ def test_the_satellites_score_the_served_drivers(workspace, tmp_path):
 
 
 def test_the_portfolio_tail_is_reported_with_its_horizon(workspace, tmp_path, capsys):
-    corpus = manifest(tmp_path, [("R1", date(2023, 6, 1)), ("R2", date(2024, 3, 1))])
     plan = plan_file(
         tmp_path, [("R1", "gl.brent", "fake.demand"), ("R2", "ru.key_rate", "fake.rate")]
     )
@@ -757,7 +700,6 @@ def test_the_portfolio_tail_is_reported_with_its_horizon(workspace, tmp_path, ca
 
     _, report = run_episodes(
         workspace,
-        corpus,
         plan,
         tmp_path,
         name="tail.json",
@@ -774,14 +716,13 @@ def test_the_portfolio_tail_is_reported_with_its_horizon(workspace, tmp_path, ca
 
 
 def test_an_unknown_portfolio_is_a_named_error(workspace, tmp_path):
-    corpus = manifest(tmp_path, [("R1", date(2023, 6, 1)), ("R2", date(2024, 3, 1))])
     plan = plan_file(
         tmp_path, [("R1", "gl.brent", "fake.demand"), ("R2", "ru.key_rate", "fake.rate")]
     )
 
     # Without the driver paths there is nothing to value the positions on.
     with pytest.raises(ValueError, match="needs --satellites"):
-        run_episodes(workspace, corpus, plan, tmp_path, portfolio="absent")
+        run_episodes(workspace, plan, tmp_path, portfolio="absent")
 
     catalog = _catalog(tmp_path)
     grid = months_between(simulated.START, shift(simulated.START, 59))
@@ -794,16 +735,15 @@ def test_an_unknown_portfolio_is_a_named_error(workspace, tmp_path):
     )
     with pytest.raises(ValueError, match="no portfolio 'absent'"):
         run_episodes(
-            workspace, corpus, plan, tmp_path, drivers=catalog, satellites=True, portfolio="absent"
+            workspace, plan, tmp_path, drivers=catalog, satellites=True, portfolio="absent"
         )
 
 
 def test_the_decision_compares_two_reports_on_the_same_cells(workspace, tmp_path):
-    corpus = manifest(tmp_path, [("R1", date(2023, 6, 1)), ("R2", date(2024, 3, 1))])
     plan = plan_file(
         tmp_path, [("R1", "gl.brent", "fake.demand"), ("R2", "ru.key_rate", "fake.rate")]
     )
-    _, report = run_episodes(workspace, corpus, plan, tmp_path, name="incumbent.json")
+    _, report = run_episodes(workspace, plan, tmp_path, name="incumbent.json")
     against = tmp_path / "incumbent.json"
     halves = {episode["id"]: episode["half"] for episode in report["episodes"]}
 
@@ -845,7 +785,6 @@ def test_the_decision_compares_two_reports_on_the_same_cells(workspace, tmp_path
 
 
 def test_the_satellite_bundle_is_cached_by_its_own_inputs(workspace, tmp_path, monkeypatch):
-    corpus = manifest(tmp_path, [("R1", date(2023, 6, 1)), ("R2", date(2024, 3, 1))])
     plan = plan_file(
         tmp_path, [("R1", "gl.brent", "fake.demand"), ("R2", "ru.key_rate", "fake.rate")]
     )
@@ -868,14 +807,14 @@ def test_the_satellite_bundle_is_cached_by_its_own_inputs(workspace, tmp_path, m
 
     monkeypatch.setattr(models_pkg, "estimate_satellites", counted)
     _, first = run_episodes(
-        workspace, corpus, plan, tmp_path, name="first.json", drivers=catalog, satellites=True
+        workspace, plan, tmp_path, name="first.json", drivers=catalog, satellites=True
     )
     estimated = len(calls)
     # One bundle per episode: the episodes are estimated on different macro versions.
     assert estimated == 2
 
     _, second = run_episodes(
-        workspace, corpus, plan, tmp_path, name="second.json", drivers=catalog, satellites=True
+        workspace, plan, tmp_path, name="second.json", drivers=catalog, satellites=True
     )
 
     # The same inputs reuse both bundles: the estimation is not repeated.
@@ -965,7 +904,6 @@ def _catalog(tmp_path):
 def test_an_episode_the_satellite_estimation_cannot_serve_is_skipped_by_name(
     workspace, tmp_path, monkeypatch
 ):
-    corpus = manifest(tmp_path, [("R1", date(2023, 6, 1)), ("R2", date(2024, 3, 1))])
     plan = plan_file(
         tmp_path, [("R1", "gl.brent", "fake.demand"), ("R2", "ru.key_rate", "fake.rate")]
     )
@@ -984,7 +922,7 @@ def test_an_episode_the_satellite_estimation_cannot_serve_is_skipped_by_name(
     monkeypatch.setattr(models_pkg, "estimate_satellites", failing)
 
     code, report = run_episodes(
-        workspace, corpus, plan, tmp_path, name="late.json", drivers=catalog, satellites=True
+        workspace, plan, tmp_path, name="late.json", drivers=catalog, satellites=True
     )
 
     # The first episode is named and skipped; the check goes on with the second.
@@ -1018,6 +956,10 @@ def test_an_unmarked_or_misguided_plan_is_a_validation_error(tmp_path):
     check(text.replace('source = "manual"', 'source = "human"', 1))
     # A plan marked entirely as one half has nothing to check on.
     check(text.replace('half = "validation"', 'half = "tuning"'))
+    # An episode names its start month, written as YYYY-MM.
+    check(text.replace('start = "2023-06"\n', ""))
+    check(text.replace('start = "2023-06"', 'start = "2023-6"'))
+    check(text.replace('start = "2023-06"', "start = 2023-06-01"))
 
 
 def test_the_shipped_episodes_fit_the_shocked_variables():

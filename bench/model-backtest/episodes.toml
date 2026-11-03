@@ -1,6 +1,7 @@
 # Episodes of the check of the macro model (docs/concept/bvar-method-legacy.md, «Проверка»).
-# The calculation date is the day before the start month of the corpus card; the
-# constrained variables follow their realized monthly path up to the end of the card's window;
+# The calculation date is the day before the start month `start` of the episode; `card` names
+# the corpus card of the same event, which tests/test_bench.py holds to the same start. The
+# constrained variables follow their realized monthly path up to the end of the window;
 # the driving shocks are those the card's sources of the time name (registry.toml, [[shocks]]).
 # Each episode needs at least as many driving shocks as constrained variables, and a global
 # variable needs a global shock. R1-R12 are left out: their history from 2012-01 is shorter
@@ -36,6 +37,8 @@ reason = "сшивка индексов MOEX: международная шка�
 
 [[episodes]]
 id = "R13"
+start = "2014-03"
+card = "R13"
 half = "tuning"
 source = "manual"
 constrained = ["ru.usdrub", "ru.key_rate"]
@@ -45,6 +48,8 @@ sources = ["T1/2014-2", "S2/2014-1"]
 
 [[episodes]]
 id = "R14"
+start = "2014-07"
+card = "R14"
 half = "tuning"
 source = "manual"
 constrained = ["gl.brent", "ru.usdrub"]
@@ -54,6 +59,8 @@ sources = ["S2/2014-2", "T1/2014-4"]
 
 [[episodes]]
 id = "R15"
+start = "2014-11"
+card = "R15"
 half = "tuning"
 source = "manual"
 constrained = ["gl.brent", "ru.usdrub", "ru.key_rate"]
@@ -63,6 +70,8 @@ sources = ["T1/2014-4", "T1/2015-1"]
 
 [[episodes]]
 id = "R16"
+start = "2014-12"
+card = "R16"
 half = "tuning"
 source = "manual"
 constrained = ["ru.key_rate", "ru.usdrub"]
@@ -72,6 +81,8 @@ sources = ["S2/2015-1", "T1/2015-1"]
 
 [[episodes]]
 id = "R17"
+start = "2015-12"
+card = "R17"
 half = "tuning"
 source = "manual"
 constrained = ["gl.brent", "ru.usdrub"]
@@ -81,6 +92,8 @@ sources = ["S2/2016-1", "T1/2016-1"]
 
 [[episodes]]
 id = "R18"
+start = "2017-08"
+card = "R18"
 half = "tuning"
 source = "manual"
 constrained = ["ru.spread_bbb"]
@@ -90,6 +103,8 @@ sources = ["S2/2017-2", "S2/2018-1"]
 
 [[episodes]]
 id = "R19"
+start = "2018-04"
+card = "R19"
 half = "tuning"
 source = "manual"
 constrained = ["ru.usdrub"]
@@ -99,6 +114,8 @@ sources = ["T1/2018-2", "S2/2018-1"]
 
 [[episodes]]
 id = "R20"
+start = "2018-08"
+card = "R20"
 half = "tuning"
 source = "manual"
 constrained = ["ru.ofz_10y"]
@@ -108,6 +125,8 @@ sources = ["S2/2018-2", "T1/2018-3"]
 
 [[episodes]]
 id = "R21"
+start = "2018-09"
+card = "R21"
 half = "tuning"
 source = "manual"
 constrained = ["ru.key_rate", "ru.usdrub"]
@@ -117,6 +136,8 @@ sources = ["T1/2018-3", "T1/2018-2"]
 
 [[episodes]]
 id = "R22"
+start = "2019-06"
+card = "R22"
 half = "tuning"
 source = "manual"
 constrained = ["ru.key_rate", "ru.cpi"]
@@ -126,6 +147,8 @@ sources = ["T1/2019-3", "S1/2019"]
 
 [[episodes]]
 id = "R23"
+start = "2020-03"
+card = "R23"
 half = "tuning"
 source = "manual"
 constrained = ["gl.brent", "gl.vix", "ru.usdrub"]
@@ -135,6 +158,8 @@ sources = ["S2/2020-1", "T3/2020-03"]
 
 [[episodes]]
 id = "R24"
+start = "2020-04"
+card = "R24"
 half = "tuning"
 source = "manual"
 constrained = ["ru.key_rate"]
@@ -144,6 +169,8 @@ sources = ["S2/2020-2"]
 
 [[episodes]]
 id = "R25"
+start = "2021-03"
+card = "R25"
 half = "validation"
 source = "manual"
 constrained = ["ru.key_rate", "ru.cpi"]
@@ -153,6 +180,8 @@ sources = ["S1/2021", "T1/2021-2"]
 
 [[episodes]]
 id = "R26"
+start = "2021-12"
+card = "R26"
 half = "validation"
 source = "manual"
 constrained = ["ru.imoex", "ru.usdrub"]
@@ -162,6 +191,8 @@ sources = ["S2/2022-1", "T1/2022-1"]
 
 [[episodes]]
 id = "R27"
+start = "2022-02"
+card = "R27"
 half = "validation"
 source = "manual"
 constrained = ["ru.key_rate", "ru.usdrub"]
@@ -171,6 +202,8 @@ sources = ["S2/2022-1", "T1/2022-1"]
 
 [[episodes]]
 id = "R28"
+start = "2022-04"
+card = "R28"
 half = "validation"
 source = "manual"
 constrained = ["ru.key_rate", "ru.usdrub"]
@@ -180,6 +213,8 @@ sources = ["S1/2022", "T1/2022-2"]
 
 [[episodes]]
 id = "R29"
+start = "2022-09"
+card = "R29"
 half = "validation"
 source = "manual"
 constrained = ["ru.imoex"]
@@ -189,6 +224,8 @@ sources = ["S2/2022-2", "T1/2022-4"]
 
 [[episodes]]
 id = "R30"
+start = "2023-06"
+card = "R30"
 half = "validation"
 source = "manual"
 constrained = ["ru.usdrub"]
@@ -198,6 +235,8 @@ sources = ["S2/2023-2"]
 
 [[episodes]]
 id = "R31"
+start = "2023-08"
+card = "R31"
 half = "validation"
 source = "manual"
 constrained = ["ru.key_rate", "ru.usdrub"]
@@ -207,6 +246,8 @@ sources = ["S1/2023", "T1/2023-4"]
 
 [[episodes]]
 id = "R32"
+start = "2025-06"
+card = "R32"
 half = "validation"
 source = "manual"
 constrained = ["ru.key_rate", "ru.usdrub"]
