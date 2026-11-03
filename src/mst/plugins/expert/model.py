@@ -94,7 +94,15 @@ class ExpertModel(MacroModel):
         raise NotImplementedError("the law of the expert model arrives with a later step")
 
     def question(self, context: MacroEstimateContext, key: str) -> dict:
-        raise NotImplementedError("the questions of the expert model arrive with a later step")
+        from .answers import question
+
+        if key not in self.input_keys(context.as_of):
+            raise KeyError(f"the model declares no input {key!r}")
+        return question(context, key)
 
     def check_input(self, context: MacroEstimateContext, key: str, payload: dict) -> dict:
-        raise NotImplementedError("the answers of the expert model arrive with a later step")
+        from .answers import check
+
+        if key not in self.input_keys(context.as_of):
+            raise KeyError(f"the model declares no input {key!r}")
+        return check(context, key, payload)
