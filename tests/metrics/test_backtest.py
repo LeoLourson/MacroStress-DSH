@@ -233,6 +233,30 @@ def test_the_details_file_holds_the_full_report(workspace, tmp_path):
     assert constrained["constrained"] > 0
 
 
+def test_save_keeps_the_report_and_its_tables_beside_the_plan(workspace, tmp_path, capsys):
+    plan = plan_file(
+        tmp_path, [("R1", "gl.brent", "fake.demand"), ("R2", "ru.key_rate", "fake.rate")]
+    )
+
+    code, report = run_episodes(workspace, plan, tmp_path, save=True)
+
+    assert code == 0
+    saved = tmp_path / "results"
+    assert json.loads((saved / "fake.macro.json").read_text(encoding="utf-8")) == report
+    tables = (saved / "fake.macro.md").read_text(encoding="utf-8")
+    assert "## Episodes" in tables and tables in capsys.readouterr().out
+
+
+def test_a_part_of_the_plan_is_not_saved_as_its_result(workspace, tmp_path):
+    plan = plan_file(
+        tmp_path, [("R1", "gl.brent", "fake.demand"), ("R2", "ru.key_rate", "fake.rate")]
+    )
+
+    with pytest.raises(ValueError, match="--only"):
+        run_episodes(workspace, plan, tmp_path, only=["R1"], save=True)
+    assert not (tmp_path / "results").exists()
+
+
 def test_the_report_holds_the_aggregate_the_usefulness_and_the_halves(
     workspace, tmp_path, capsys
 ):

@@ -11,7 +11,7 @@
   python -m mst.corpus episodes [ID ...] [--dry-run] --corpus DIR --store DIR
   python -m mst.corpus index --corpus DIR
   python -m mst.corpus search QUERY --as-of DAY --corpus DIR
-  python -m mst.corpus eval --corpus DIR --questions FILE
+  python -m mst.corpus eval --corpus DIR --questions FILE [--save]
   python -m mst.corpus all --corpus DIR --store DIR
 
 ``--corpus`` is the corpus root (``workspace/corpus``): the manifest, ``series.toml``, the
@@ -237,10 +237,24 @@ def run_search(args) -> int:
 
 
 def run_eval(args) -> int:
+    from mst import bench
+
     items = questions(args.questions.read_text(encoding="utf-8"))
     value, unmarked = recall(Index.load(args.corpus / "index"), items)
-    print(f"questions: {len(items)}, marked up: {len(items) - len(unmarked)}")
-    print("recall@5: " + ("none, nothing marked up" if value is None else f"{value:.3f}"))
+    shown = "none, nothing marked up" if value is None else f"{value:.3f}"
+    summary = (
+        f"questions: {len(items)}, marked up: {len(items) - len(unmarked)}\n"
+        f"recall@5: {shown}\n"
+    )
+    print(summary, end="")
+    if args.save:
+        report = {
+            "questions": len(items),
+            "marked_up": len(items) - len(unmarked),
+            "recall_at_5": value,
+            "unmarked": unmarked,
+        }
+        bench.save_result(bench.results(args.questions.parent), "recall", report, summary)
     return 0
 
 
@@ -307,6 +321,9 @@ def main(argv: list[str] | None = None) -> int:
     command.set_defaults(run=run_search)
     command = commands.add_parser("eval", parents=[corpus])
     command.add_argument("--questions", type=Path, required=True, help="the check questions")
+    command.add_argument(
+        "--save", action="store_true", help="keep the recall in results/ beside the questions"
+    )
     command.set_defaults(run=run_eval)
     commands.add_parser("all", parents=[corpus, store]).set_defaults(run=run_all)
     args = parser.parse_args(argv)

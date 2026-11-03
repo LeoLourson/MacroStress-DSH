@@ -4,7 +4,7 @@
 
   python -m mst.metrics backtest [MODEL_ID] --as-of DATE --store DIR --models DIR --episodes FILE
       [--drivers FILE] [--satellites] [--only ID ...] [--details FILE] [--against REPORT.json]
-      [--portfolio ID] [--mc-bootstrap] [--no-rolling]
+      [--portfolio ID] [--mc-bootstrap] [--no-rolling] [--save]
   python -m mst.metrics rolling [MODEL_ID] --as-of DATE --store DIR --models DIR --episodes FILE
       [--dates YYYY-MM-DD ...] [--half tuning|validation] [--details FILE] [--against REPORT.json]
 
@@ -27,7 +27,9 @@ utility of the scenario split by the manual/llm mark, and the tuning/validation 
 ``--mc-bootstrap`` adds the Monte-Carlo interval of the aggregate, separated from the
 episode-sampling intervals. With ``--satellites`` the served drivers are scored too, on the
 bundle estimated on each episode's macro version. It exits with 1 when an episode could not be
-checked or an admission rule failed. Nothing is fetched.
+checked or an admission rule failed. ``--save`` keeps the JSON report and the tables in
+``results/<model>.json`` and ``results/<model>.md`` beside the plan, over the last result of the
+model. Nothing is fetched.
 """
 
 import argparse
@@ -76,6 +78,11 @@ def main(argv: list[str] | None = None) -> int:
     check.add_argument(
         "--no-rolling", action="store_true", help="leave out the rolling check of the plan"
     )
+    check.add_argument(
+        "--save",
+        action="store_true",
+        help="keep the report in results/ beside the plan, over the model's last result",
+    )
     grid = commands.add_parser("rolling", help="the forecast quality over a grid of dates")
     grid.add_argument("model_id", nargs="?", help="the macro model id; the only one installed")
     grid.add_argument("--as-of", type=date.fromisoformat, required=True)
@@ -120,6 +127,7 @@ def main(argv: list[str] | None = None) -> int:
         mc_bootstrap=args.mc_bootstrap,
         target_level=args.target_level,
         rolling=not args.no_rolling,
+        save=args.save,
     )
 
 

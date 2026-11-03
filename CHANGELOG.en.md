@@ -20,6 +20,12 @@ All notable changes to this project are documented here. The format follows [Kee
   the episode's `start` equal to the card's start month. The plan hash in the report
   (`meta.episodes_toml`) changed: `--against` with reports made before this change refuses, and
   the reference report has to be computed again.
+- **The results of the sets are kept beside them, in `bench/<set>/results/`.** `backtest --save`
+  writes the model's report and tables (without `--only`), `corpus eval --save` writes recall@5.
+  For `scenario-from-corpus` the MCP tool `scenario` gained the actions `bench` (the text of the
+  event and the start of the journal of `corpus` calls) and `bench_save` (the scenario, the
+  journal and an empty expert review `review.toml`); `python -m mst.bench scenarios` sums up the
+  verdicts.
 
 ## 1.0.2: macro models, satellites and a date-grid backtest (2026-11-03)
 

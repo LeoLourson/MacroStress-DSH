@@ -39,8 +39,10 @@ spoken only in the ``decision`` block behind ``--against``: the per-quantity tab
 descriptive, and ``meta["missing"]`` names no metric the report cannot compute.
 """
 
+import contextlib
 import hashlib
 import inspect
+import io
 import json
 from dataclasses import dataclass
 from datetime import date
@@ -149,6 +151,7 @@ def run(
     mc_bootstrap: bool = False,
     target_level: str = "macro",
     rolling: bool = True,
+    save: bool = False,
 ) -> int:
     """The backtest of every episode the plan names; prints Markdown tables, returns an exit code.
 
@@ -164,8 +167,14 @@ def run(
     ``target_level`` is the level whose aggregate the decision compares — the macro level by
     default, or a driver level (``driver/<quantity>``) with ``--satellites``. ``rolling`` off
     leaves out the rolling check of the plan, which ``python -m mst.metrics rolling`` also runs.
+    ``save`` keeps the report and its tables in ``results/`` beside the plan, as the last result
+    of the model; a part of the plan named by ``only`` is not saved.
     """
+    from mst import bench
     from mst import models as models_pkg
+
+    if save and only:
+        raise ValueError("--save keeps the result of the whole plan: leave out --only")
 
     if portfolio is not None and not satellites:
         raise ValueError(
@@ -217,15 +226,22 @@ def run(
         target_level=target_level,
         run_rolling=rolling,
     )
-    _print(report)
-    for problem in problems:
-        print(problem)
+    tables = io.StringIO()
+    with contextlib.redirect_stdout(tables):
+        _print(report)
+        for problem in problems:
+            print(problem)
+    print(tables.getvalue(), end="")
     report["problems"] = problems
     if details is not None:
         details.write_text(
             json.dumps(report, ensure_ascii=False, indent=1, default=_jsonable),
             encoding="utf-8",
         )
+    if save:
+        plain = json.loads(json.dumps(report, default=_jsonable))
+        folder = bench.results(plan.path.parent)
+        bench.save_result(folder, plugin.model_id, plain, tables.getvalue())
     return 1 if problems or report["admission_failed"] else 0
 
 

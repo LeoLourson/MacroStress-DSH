@@ -15,7 +15,7 @@ from fastmcp import FastMCP
 from mcp.types import ToolAnnotations
 from pydantic import Field
 
-from . import guides, models, runs, store
+from . import bench, guides, models, runs, store
 from . import jobs as tasks
 from .corpus import tool as corpus_tool
 from .data import sources
@@ -77,6 +77,8 @@ def _plugin_output_to_stderr() -> Iterator[None]:
 def build(ws: store.Workspace) -> FastMCP:
     """The server of one workspace; every tool closes over it."""
     server = FastMCP("macrostress", instructions=INSTRUCTIONS)
+    session: dict[str, Any] = {}
+    """The bench event the agent is building a scenario for, and its corpus calls so far."""
 
     @server.tool(
         annotations=ToolAnnotations(
@@ -331,8 +333,20 @@ def build(ws: store.Workspace) -> FastMCP:
 
         ``search`` and ``get`` read the index as it was on ``as_of``; ``list`` shows what the
         manifest holds; ``add`` registers a file downloaded by hand under its ``key``. ``index``
-        and ``fetch`` are tasks on the corpus resource.
+        and ``fetch`` are tasks on the corpus resource. Inside a bench session every call and
+        its answer go to the journal of the event.
         """
+        found = _corpus_call(
+            action, query, as_of, id, kind, region, factors, k, key, file, url, ids
+        )
+        if session:
+            session["calls"].append(
+                {"action": action, "query": query, "as_of": as_of, "id": id, "kind": kind,
+                 "region": region, "factors": factors, "k": k, "result": found}
+            )
+        return found
+
+    def _corpus_call(action, query, as_of, id, kind, region, factors, k, key, file, url, ids):
         if action == "search":
             return corpus_tool.search(
                 ws.corpus,
@@ -371,9 +385,23 @@ def build(ws: store.Workspace) -> FastMCP:
             str,
             Field(
                 description="What to do: list, get, save, validate or reverse. save "
-                "overwrites a scenario stored under the same id."
+                "overwrites a scenario stored under the same id. bench starts the "
+                "scenario of a bench event, bench_save keeps it in the bench results."
             ),
         ],
+        event: Annotated[
+            str | None,
+            Field(
+                description="The bench event bench and bench_save work on, like E017."
+            ),
+        ] = None,
+        notes: Annotated[
+            str | None,
+            Field(
+                description="What bench_save adds to the journal of the event: how the "
+                "numbers of the scenario were chosen."
+            ),
+        ] = None,
         id: Annotated[
             str | None,
             Field(
@@ -432,9 +460,26 @@ def build(ws: store.Workspace) -> FastMCP:
         exists, and reports how the elements are marked and what the scenario leaves unsaid
         under ``labels`` and ``warnings``. ``reverse`` searches the scenario's family on
         ``portfolio``: the worst loss under the price ``kappa``, or the lowest price whose loss
-        reaches ``level``.
+        reaches ``level``. ``bench`` returns the text of the bench ``event`` and starts its
+        journal of corpus calls; build the scenario by the guide, then ``bench_save`` checks
+        ``spec`` and keeps it with the journal and ``notes`` in the bench results, beside an
+        empty review the expert fills. A bench scenario is never approved and never computed.
         """
         with _plugin_output_to_stderr():
+            if action == "bench":
+                found = bench.event(_need(event, "event"))
+                session.clear()
+                session.update(event=found["event"], calls=[])
+                return found
+            if action == "bench_save":
+                if session.get("event") != _need(event, "event"):
+                    raise ValueError(
+                        f"scenario bench_save: the session builds {session.get('event')}, "
+                        f"not {event}; start it with action bench"
+                    )
+                saved = bench.save_scenario(event, _need(spec, "spec"), session["calls"], notes)
+                session.clear()
+                return saved
             if action == "list":
                 return scenario_tool.catalogue(ws.scenarios)
             if action == "get":
@@ -477,7 +522,8 @@ def build(ws: store.Workspace) -> FastMCP:
                     ws.scenarios, _need(id, "id"), ws.models, _indexed(ws)
                 )
             raise ValueError(
-                f"scenario: unknown action {action!r}, try list, get, save, reverse, validate"
+                f"scenario: unknown action {action!r}, try list, get, save, reverse, validate, "
+                "bench, bench_save"
             )
 
     @server.tool(
