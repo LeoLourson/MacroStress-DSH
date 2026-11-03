@@ -94,6 +94,7 @@ def test_an_interrupted_estimate_resumes_from_the_checkpoint(tmp_path, spec, mon
     from mst.plugins.expert import estimate as estimate_module
 
     broken = replace(fakes.answers_context(tmp_path), checkpoints=tmp_path / "checkpoints")
+    checkpoints = tmp_path / "checkpoints"
     original = estimate_module._shock_unit
     calls = []
 
