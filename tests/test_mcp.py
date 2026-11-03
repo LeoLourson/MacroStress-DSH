@@ -165,6 +165,13 @@ def test_the_backtest_is_started_on_the_plan_of_the_repository(tmp_path):
     assert plan.replace("\\", "/").endswith("bench/model-backtest/episodes.toml")
 
 
+def test_the_backtest_reads_the_answers_of_the_workspace(tmp_path):
+    ws = store.Workspace(tmp_path)
+    argv = mcp._backtest_argv(ws, "2026-10-01", "bvar.sv")
+
+    assert argv[argv.index("--inputs") + 1] == str(ws.elicitation)
+
+
 def test_a_backtest_without_the_plan_names_the_command_to_run(tmp_path, monkeypatch):
     monkeypatch.setattr(mcp, "EPISODE_PLAN", tmp_path / "absent.toml")
 

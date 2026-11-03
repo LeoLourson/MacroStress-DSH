@@ -133,7 +133,7 @@ python -m mst.models estimate-satellites --macro SHA256 --store DIR --models DIR
 python -m mst.models diagnose-satellites SHA256 --models DIR   # ро, эластичности, тяга к равновесию, причины отказов
 python -m mst.metrics backtest bvar.sv --as-of 2026-10-29 --store DIR --models DIR --episodes bench/model-backtest/episodes.toml [--satellites --drivers FILE]
     [--only ID ...] [--details FILE] [--against REPORT.json] [--target-level LEVEL]
-    [--portfolio ID] [--mc-bootstrap]
+    [--portfolio ID] [--mc-bootstrap] [--inputs DIR]
 
 # драйверы
 python -m mst.drivers update [QUANTITY ...] --store DIR --drivers FILE
@@ -164,8 +164,10 @@ python -m mst.scenario reverse ID --workspace DIR --portfolio ID --draws N --see
 и тех же ячейках и половине проверки; с `--portfolio` (требует `--satellites`) — секция хвоста
 Acerbi–Székely ($Z$, интервалы, усечение 1 %, выпавшие эпизоды); с `--mc-bootstrap` — интервал
 ошибки Монте-Карло отдельно от выборки по эпизодам; `--target-level` выбирает уровень, по
-которому сравниваются версии (по умолчанию `macro`). Полный отчёт — в `--details`. Версии
-эпизодов кэшируются в `<models>/backtest/` по состоянию данных, бандлы сателлитов — по
+которому сравниваются версии (по умолчанию `macro`); `--inputs` — папка ответов
+(`workspace/elicitation`) для модели с объявленными входами, каждый эпизод читает ответы своей
+даты расчёта. Полный отчёт — в `--details`. Версии
+эпизодов кэшируются в `<models>/backtest/` по состоянию данных и ответов, бандлы сателлитов — по
 дайджесту всех своих входов. Модели эпизодов пишутся в `<models>/backtest/`, а не в `<models>/macro/`;
 код выхода 1 — какой-то эпизод не проверен (нет в манифесте, короткая история, недопустимый
 сценарий) или нарушено условие допуска.

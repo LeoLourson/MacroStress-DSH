@@ -145,6 +145,45 @@ def test_the_episode_versions_are_cached_by_the_data(workspace, tmp_path):
     assert (workspace["models"] / "backtest" / "macro").is_dir()
 
 
+def test_a_model_with_inputs_reads_the_answers_of_each_episode_date(
+    workspace, tmp_path, monkeypatch
+):
+    from mst import inputs as answers
+
+    class Answered(simulated.FakeMacro):
+        def input_keys(self, as_of):
+            return ("q1",)
+
+        def estimate(self, context):
+            assert context.inputs is not None, "the backtest passes the answers folder"
+            assert answers.read(context.inputs, context.as_of)["q1"]
+            return super().estimate(context)
+
+    macro = Answered()
+    monkeypatch.setattr(models_pkg, "selected", lambda model_id=None: macro)
+    folder = tmp_path / "elicitation"
+    dates = [calculation_date(date.fromisoformat(start + "-01")) for start in STARTS.values()]
+    for as_of in dates:
+        answers.write(folder, as_of, "q1", {"value": 1.0})
+    arguments = dict(
+        store=workspace["store"].root,
+        models=workspace["models"],
+        episodes=plan_file(
+            tmp_path, [("R1", "gl.brent", "fake.demand"), ("R2", "ru.key_rate", "fake.rate")]
+        ),
+        as_of=KNOWN_ON,
+        inputs=folder,
+    )
+
+    assert runner.run(**arguments) == 0
+    assert sorted(macro.calls) == dates
+    assert runner.run(**arguments) == 0
+    assert sorted(macro.calls) == dates, "the same answers reuse the cached versions"
+    answers.write(folder, dates[0], "q1", {"value": 2.0})
+    assert runner.run(**arguments) == 0
+    assert sorted(macro.calls) == sorted([*dates, dates[0]]), "an edited answer is re-estimated"
+
+
 def test_an_unknown_driving_shock_is_reported_not_raised(workspace, tmp_path, capsys):
     plan = plan_file(
         tmp_path, [("R1", "gl.brent", "no.such.shock"), ("R2", "ru.key_rate", "fake.rate")]

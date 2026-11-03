@@ -34,6 +34,7 @@ The models of the grid are the same cached episode versions the backtest uses
 import json
 from dataclasses import dataclass, field
 from datetime import date
+from functools import partial
 from pathlib import Path
 
 import numpy as np
@@ -354,6 +355,7 @@ def run(
     half: str | None = None,
     details: Path | None = None,
     against: Path | None = None,
+    inputs: Path | None = None,
 ) -> int:
     """The rolling check from the command line; returns 1 when the model refused a date or no date
     could be judged."""
@@ -382,7 +384,7 @@ def run(
         root=Path(models) / "backtest",
         plan=plan,
         known_on=as_of,
-        macro_of=_episode_macro,
+        macro_of=partial(_episode_macro, inputs=inputs),
         only=only,
     )
     if against is not None and report["quality"]["rows"]:

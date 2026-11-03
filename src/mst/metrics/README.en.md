@@ -6,10 +6,10 @@ What is compared and by what rules is described in the [general scheme of the sy
 
 ```powershell
 python -m mst.metrics rolling [MODEL_ID] --as-of DATE --store DIR --models DIR --episodes FILE \
-  [--dates YYYY-MM-DD ...] [--half tuning|validation] [--details FILE] [--against REPORT.json]
+  [--dates YYYY-MM-DD ...] [--half tuning|validation] [--details FILE] [--against REPORT.json]   [--inputs DIR]
 python -m mst.metrics backtest [MODEL_ID] --as-of DATE --store DIR --models DIR --episodes FILE \
   [--drivers FILE] [--satellites] [--only ID ...] [--details FILE] \
-  [--against REPORT.json] [--target-level LEVEL] [--portfolio ID] [--mc-bootstrap] [--no-rolling]
+  [--against REPORT.json] [--target-level LEVEL] [--portfolio ID] [--mc-bootstrap] [--no-rolling]   [--inputs DIR]
 ```
 
 ## Two questions and two checks

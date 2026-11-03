@@ -51,7 +51,8 @@ def main(argv: list[str] | None = None) -> int:
         "--inputs",
         type=Path,
         default=None,
-        help="the folder of the model's answers, workspace/elicitation by default",
+        help="the folder of the model's answers (workspace/elicitation); needed by a model "
+        "that declares inputs",
     )
     bundle = commands.add_parser(
         "estimate-satellites", help="assemble the satellite bundle of a macro version"
