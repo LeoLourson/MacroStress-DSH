@@ -196,3 +196,28 @@ def test_the_expert_model_prices_a_named_shock_without_the_residual(tmp_path_fac
         seed=11,
     )
     assert np.array_equal(logs, again)
+
+
+def test_two_constraints_are_priced_and_imposed_together():
+    model = _linear_model()
+    bounds = ((1, 100.6, 101.4), (2, 101.0, 104.0))
+    plan = ScenarioPlan(
+        horizon=2,
+        constraints=tuple(
+            LinearConstraint(
+                terms=(LinearTerm(variable="ru.cpi", month=month, weight=1.0),),
+                low=low,
+                high=high,
+            )
+            for month, low, high in bounds
+        ),
+        causes=("gl.oil",),
+    )
+    low = np.array([low for _, low, _ in bounds])
+    high = np.array([high for _, _, high in bounds])
+    logs = box_probabilities(model, plan, low, high, draws=2, seed=3)
+    assert logs is not None and np.all(np.isfinite(logs)) and np.all(logs < 0.0)
+    found = simulate(model, plan, draws=2, seed=3)
+    for month, low, high in bounds:
+        values = found.paths[:, month, 0]
+        assert np.all((values >= low - 1e-9) & (values <= high + 1e-9))

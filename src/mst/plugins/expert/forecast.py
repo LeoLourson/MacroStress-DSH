@@ -399,7 +399,7 @@ def _scales(chosen: _Plan, low, high) -> np.ndarray:
     high = np.asarray(high, dtype=float)
     width = np.where(np.isfinite(low) & np.isfinite(high), high - low, np.inf)
     tolerance = np.asarray(chosen.tolerances or (0.0,), dtype=float)
-    return np.where(width > 0, width, np.where(tolerance > 0, tolerance, 1.0))[:, None]
+    return np.where(width > 0, width, np.where(tolerance > 0, tolerance, 1.0))
 
 
 def _simulate_free(model: Expert, chosen: _Plan, draws: int, seed: int) -> MacroSimulation:
