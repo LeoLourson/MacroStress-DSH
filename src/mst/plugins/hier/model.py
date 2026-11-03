@@ -16,7 +16,8 @@ from datetime import date
 import numpy as np
 
 from mst.drivers.history import History, history
-from mst.model_sdk import Check
+from mst.model_sdk import Check, checkpoint
+from mst.model_sdk.checkpoint import report
 from mst.model_sdk.contracts import (
     AdditiveImpact,
     DriverPaths,
@@ -77,36 +78,69 @@ class HierModel(SatelliteModel):
         residual_series: dict[str, np.ndarray] = {}
         for quantity in context.quantities:
             hist = history(context.registry, quantity, context.panel, context.store, context.as_of)
-            fit_ = fit(hist, spec)
-            checks = check(hist, spec)
-            parts[quantity] = SatellitePart(
-                meta={
-                    "quantity": hist.quantity.model_dump(mode="json", by_alias=True),
-                    "months": [m.isoformat() for m in hist.months],
-                    "nodes": hist.nodes,
-                    "parent": hist.parent.tolist(),
-                    "classes": hist.classes,
-                    "driver": hist.driver,
-                    "rows": fit_.rows.tolist(),
-                    "train_low": _bounds_list(fit_.train_low),
-                    "train_high": _bounds_list(fit_.train_high),
-                    "checks": {
-                        str(node): _check_dict(item) for node, item in checks.items()
-                    },
-                    "spec": spec.model_dump(mode="json"),
-                },
-                arrays={
-                    "gamma": fit_.gamma,
-                    "sigma": fit_.sigma,
-                    "d": hist.d,
-                    "approximate": hist.approximate,
-                    "x": hist.x,
-                },
-            )
-            for node, driver in enumerate(hist.driver):
-                if driver is not None and fit_.rows[node] > 0:
-                    residual_series[driver] = residuals(fit_, node)
+            name = self._checkpoint_key(hist, spec)
+            kept = checkpoint.load(context.checkpoints, name)
+            if kept is None:
+                kept = self._estimate_quantity(hist, spec)
+                checkpoint.save(context.checkpoints, name, *kept)
+                report(f"{quantity}: done")
+            else:
+                report(f"{quantity}: taken from the checkpoint")
+            parts[quantity], residuals_of = kept
+            residual_series.update(residuals_of)
         return SatelliteEstimate(parts=parts, residuals=residual_series)
+
+    def _checkpoint_key(self, hist: History, spec: Spec) -> str:
+        """Everything the part of a quantity depends on: the model, the spec and the history."""
+        return checkpoint.key(
+            {
+                "model": self.model_id,
+                "version": self.version,
+                "spec": spec.model_dump(mode="json"),
+                "quantity": hist.quantity.model_dump(mode="json", by_alias=True),
+                "months": [m.isoformat() for m in hist.months],
+                "nodes": hist.nodes,
+                "parent": hist.parent.tolist(),
+                "classes": hist.classes,
+                "driver": hist.driver,
+            },
+            {"d": hist.d, "approximate": hist.approximate, "x": hist.x},
+        )
+
+    def _estimate_quantity(
+        self, hist: History, spec: Spec
+    ) -> tuple[SatellitePart, dict[str, np.ndarray]]:
+        quantity = hist.quantity.id
+        fit_ = fit(hist, spec, progress=f"{quantity}: fit")
+        checks = check(hist, spec, progress=f"{quantity}: check")
+        part = SatellitePart(
+            meta={
+                "quantity": hist.quantity.model_dump(mode="json", by_alias=True),
+                "months": [m.isoformat() for m in hist.months],
+                "nodes": hist.nodes,
+                "parent": hist.parent.tolist(),
+                "classes": hist.classes,
+                "driver": hist.driver,
+                "rows": fit_.rows.tolist(),
+                "train_low": _bounds_list(fit_.train_low),
+                "train_high": _bounds_list(fit_.train_high),
+                "checks": {str(node): _check_dict(item) for node, item in checks.items()},
+                "spec": spec.model_dump(mode="json"),
+            },
+            arrays={
+                "gamma": fit_.gamma,
+                "sigma": fit_.sigma,
+                "d": hist.d,
+                "approximate": hist.approximate,
+                "x": hist.x,
+            },
+        )
+        residual_series = {
+            driver: residuals(fit_, node)
+            for node, driver in enumerate(hist.driver)
+            if driver is not None and fit_.rows[node] > 0
+        }
+        return part, residual_series
 
     def load(self, parts: dict[str, SatellitePart]) -> HierSatellites:
         from mst.drivers.registry import Quantity

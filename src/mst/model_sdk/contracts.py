@@ -23,6 +23,7 @@ import math
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from datetime import date
+from pathlib import Path
 from typing import Protocol
 
 import numpy as np
@@ -351,7 +352,9 @@ class SatelliteEstimateContext:
     ``mst.drivers.history`` builds the standard inputs of a quantity from it and the panel.
     ``upper_history`` carries, for every quantity of the levels above the model's own, its
     observed rows in the model scale — the inputs of a quantity that reads quantities instead
-    of macro variables are built from these, not from the panel.
+    of macro variables are built from these, not from the panel. ``checkpoints`` is a folder
+    of the model's own where it may keep each finished quantity (``mst.model_sdk.checkpoint``),
+    so a restarted estimate resumes from it; ``None`` keeps nothing.
     """
 
     store: SeriesStoreLike
@@ -362,6 +365,7 @@ class SatelliteEstimateContext:
     macro: str
     quantities: tuple[str, ...]
     upper_history: dict[str, UpperHistory] = field(default_factory=dict)
+    checkpoints: Path | None = None
 
 
 @dataclass(frozen=True)

@@ -13,6 +13,8 @@ the context each plugin estimates on and store what it returns, untouched beyond
 model SDK names.
 """
 
+import shutil
+import time
 from collections.abc import Mapping
 from datetime import date
 from pathlib import Path
@@ -22,6 +24,7 @@ from mst.drivers import bundle as satellite_bundle
 from mst.drivers.registry import load_registry as load_drivers_registry
 from mst.macro import version as macro_version
 from mst.macro.registry import load_registry as load_macro_registry
+from mst.model_sdk.checkpoint import report
 from mst.model_sdk.contracts import (
     MacroModel,
     SatelliteEstimate,
@@ -150,6 +153,10 @@ def estimate_satellites(
     where the bundle is written — the workspace models directory by default, the episode
     directory of a backtest for its cached bundles. ``registry`` overrides the driver registry
     (an episode reads the one the backtest built); ``drivers`` names its catalog file.
+
+    Every model gets its own checkpoint folder, ``<root>/.checkpoints/<macro>/<model_id>``:
+    an interrupted estimate started again resumes from what the models kept there, and the
+    folder is removed once the bundle is saved. The progress goes to stderr.
     """
     panel, as_of = macro_version.panel_of(models, macro)
     if registry is None:
@@ -177,6 +184,8 @@ def estimate_satellites(
 
     series = SeriesStore(store)
     rows: dict[str, UpperHistory] = {}
+    target = Path(root if root is not None else models)
+    kept = target / ".checkpoints" / macro
 
     def upper_history_of(level: int) -> dict[str, UpperHistory]:
         found = {}
@@ -200,6 +209,8 @@ def estimate_satellites(
         for model_id in sorted(by_model, key=lambda m: (level_of[m], m)):
             if level_of[model_id] != level:
                 continue
+            started = time.monotonic()
+            report(f"{model_id}: level {level}, {', '.join(by_model[model_id])}")
             estimates[model_id] = satellites()[model_id].estimate(
                 SatelliteEstimateContext(
                     store=series,
@@ -209,12 +220,15 @@ def estimate_satellites(
                     macro=macro,
                     quantities=tuple(by_model[model_id]),
                     upper_history=dict(upper_history),
+                    checkpoints=kept / model_id,
                 )
             )
+            report(f"{model_id}: estimated in {time.monotonic() - started:.0f} s")
     meta, arrays = satellite_bundle.assemble(
         registry, macro, as_of, estimates, unserved=unserved
     )
-    name = satellite_bundle.save(meta, arrays, root if root is not None else models)
+    name = satellite_bundle.save(meta, arrays, target)
+    shutil.rmtree(kept, ignore_errors=True)
     return name, _checks_table(meta)
 
 

@@ -36,6 +36,7 @@ from scipy.linalg import cho_solve_banded, cholesky_banded, solve_banded
 from scipy.special import ndtr, ndtri
 
 from mst.drivers.history import History
+from mst.model_sdk.checkpoint import report
 
 from .spec import Spec
 
@@ -285,8 +286,17 @@ def level_bounds(
     return low, high
 
 
-def fit(hist: History, spec: Spec, *, until: int | None = None, seed: int | None = None) -> Fit:
+def fit(
+    hist: History,
+    spec: Spec,
+    *,
+    until: int | None = None,
+    seed: int | None = None,
+    progress: str | None = None,
+) -> Fit:
     """Posterior draws of the satellite parameters of one quantity, months ``<= until``.
+
+    With ``progress`` the sampler reports every tenth of its steps under that label.
 
     A quantity named in ``spec.differences`` is fitted on monthly changes: ``d`` and ``x`` are
     differenced before the sampler, so ``gamma`` reads ``Δd`` against ``Δx`` with the same
@@ -333,7 +343,8 @@ def fit(hist: History, spec: Spec, *, until: int | None = None, seed: int | None
 
     kept_gamma = np.empty((spec.sampler.draws, n, k))
     kept_sigma = np.full((spec.sampler.draws, n), np.nan)
-    for step in range(spec.sampler.burn + spec.sampler.draws):
+    steps = spec.sampler.burn + spec.sampler.draws
+    for step in range(steps):
         data = {i: scaled(i) for i in paths}
         for i in range(n):
             above = top[cls[i]] if hist.parent[i] < 0 else gamma[hist.parent[i]]
@@ -370,6 +381,8 @@ def fit(hist: History, spec: Spec, *, until: int | None = None, seed: int | None
         if step >= spec.sampler.burn:
             kept_gamma[step - spec.sampler.burn] = gamma
             kept_sigma[step - spec.sampler.burn] = np.sqrt(sigma2)
+        if progress is not None and (step + 1) * 10 // steps > step * 10 // steps:
+            report(f"{progress} {(step + 1) * 100 // steps}%")
 
     original = kept_gamma / spread
     original[..., 0] = kept_gamma[..., 0] - (kept_gamma[..., 1:] * centre[1:] / spread[1:]).sum(-1)

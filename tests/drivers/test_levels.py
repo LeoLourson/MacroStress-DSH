@@ -10,6 +10,7 @@ the paths of its model called directly.
 """
 
 import json
+import shutil
 from dataclasses import dataclass, replace
 from datetime import date
 from pathlib import Path
@@ -474,6 +475,39 @@ def test_a_bundle_of_one_level_matches_its_model_called_directly(estimated):
         stream=1,
     )
     assert np.array_equal(found.paths, direct.paths)
+
+
+def test_a_saved_bundle_leaves_no_checkpoints(estimated):
+    _, _, name, _, root = estimated
+    assert not (root / ".checkpoints" / name).exists()
+
+
+def test_an_interrupted_estimate_keeps_the_checkpoints_of_each_model(
+    estimated, tmp_path, monkeypatch
+):
+    from mst import models as models_pkg
+    from mst.plugins.hier.model import HierModel
+
+    data, _, name, _, root = estimated
+    seen = []
+
+    def interrupted(self, context):
+        seen.append(context.checkpoints)
+        context.checkpoints.mkdir(parents=True, exist_ok=True)
+        raise KeyboardInterrupt
+
+    monkeypatch.setattr(HierModel, "estimate", interrupted)
+    with pytest.raises(KeyboardInterrupt):
+        models_pkg.estimate_satellites(
+            name,
+            store=data.store.root,
+            models=root,
+            registry=data.registry,
+            overrides={"price": "hier.gibbs", "exposure": "reflevel2.regression"},
+        )
+    assert seen == [root / ".checkpoints" / name / "hier.gibbs"]
+    assert seen[0].is_dir()
+    shutil.rmtree(root / ".checkpoints")
 
 
 def bundle_name_of(root):

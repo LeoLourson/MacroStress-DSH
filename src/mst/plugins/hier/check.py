@@ -70,10 +70,10 @@ def _forecasts(hist: History, node: int, cut: int, reach: int, gamma, alpha, rho
     return mine, base
 
 
-def check(hist: History, spec: Spec) -> dict[int, Check]:
-    """The check of every node with a driver, by node index."""
+def check(hist: History, spec: Spec, *, progress: str | None = None) -> dict[int, Check]:
+    """The check of every node with a driver, by node index; ``progress`` labels the sampler."""
     cut = len(hist.months) - 1 - spec.holdout
-    trained = fit(hist, spec, until=cut)
+    trained = fit(hist, spec, until=cut, progress=progress)
     x = difference(hist.x) if trained.differenced else hist.x
     out = {}
     for node, driver in enumerate(hist.driver):
