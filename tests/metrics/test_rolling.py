@@ -334,6 +334,26 @@ def test_the_parameter_part_of_the_price_is_reported(tmp_path, monkeypatch):
         assert row["parameter_part"] == pytest.approx(0.0, abs=1e-6)
 
 
+class Unreachable(WalkMacro):
+    """A macro that measures its own boxes and gives the event no probability anywhere."""
+
+    def constraint_law(self, model, plan, *, draws, seed):
+        return None
+
+    def log_box_probability(self, model, plan, low, high, *, draws, seed):
+        return np.full(draws, -np.inf)
+
+
+def test_an_event_the_model_cannot_reach_is_scored_not_dropped(tmp_path, monkeypatch):
+    # A date where the model gives the event no probability is its worst miss: it stays in
+    # the score with P(S) = 0, as it does when the probability comes from a law.
+    found = report_of(
+        tmp_path, monkeypatch, Unreachable(), events=[("brent-up", 1, 460.5, 1e6)], months=120
+    )
+    rows = found["price"]["rows"]
+    assert rows and all(row["pi"] == 0.0 for row in rows)
+
+
 def test_the_block_bootstrap_is_wider_on_an_autocorrelated_series():
     rng = np.random.default_rng(5)
     keys = [f"d{k // 2}" for k in range(240)]

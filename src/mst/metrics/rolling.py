@@ -513,10 +513,9 @@ def _price(grid: Grid, plan: Episodes, known_on: date) -> dict:
     difference ``dist + log P(S)`` reports the part of the price the parameter uncertainty
     carries.
     """
-    from scipy.special import logsumexp
-
     from mst.model_sdk.contracts import LinearConstraint, LinearTerm, ScenarioPlan
     from mst.model_sdk.dist import DIST_STREAM, price_of_law
+    from mst.scenario.build import _price_of_logs
 
     rows = []
     for event in plan.rolling.price_events:
@@ -548,11 +547,9 @@ def _price(grid: Grid, plan: Episodes, known_on: date) -> dict:
                 )
                 if logs is None:
                     continue
-                logs = np.asarray(logs, dtype=float)
-                if np.any(np.isneginf(logs)):
-                    continue
-                distance = float(-logs.mean())
-                log_probability = float(logsumexp(logs) - np.log(len(logs)))
+                # A value of R without probability gives P(S) = 0, as price_of_law does:
+                # the miss stays in the score.
+                distance, log_probability, _ = _price_of_logs(logs)
             else:
                 distance, log_probability, _ = price_of_law(
                     law,
