@@ -40,7 +40,7 @@ def test_the_guide_tool_lists_and_returns_every_guide(tmp_path):
 
     listed, one = session(store.Workspace(tmp_path), work)
     assert {item["name"] for item in listed["guides"]} == {
-        "scenario-from-corpus", "run-report", "drivers",
+        "scenario-from-corpus", "run-report", "drivers", "model-inputs",
     }
     assert all(item["description"] and "content" not in item for item in listed["guides"])
     assert 'corpus(action="search"' in one["content"] and not one["content"].startswith("---")

@@ -79,6 +79,11 @@ def main(argv: list[str] | None = None) -> int:
         "--no-rolling", action="store_true", help="leave out the rolling check of the plan"
     )
     check.add_argument(
+        "--inputs",
+        type=Path,
+        help="the folder of the answers a model with declared inputs reads (workspace/elicitation)",
+    )
+    check.add_argument(
         "--save",
         action="store_true",
         help="keep the report in results/ beside the plan, over the model's last result",
@@ -95,6 +100,11 @@ def main(argv: list[str] | None = None) -> int:
     grid.add_argument("--half", choices=("tuning", "validation"), help="only this half of the grid")
     grid.add_argument("--details", type=Path, help="write the full report as JSON here")
     grid.add_argument("--against", type=Path, help="the incumbent's rolling report as JSON")
+    grid.add_argument(
+        "--inputs",
+        type=Path,
+        help="the folder of the answers a model with declared inputs reads (workspace/elicitation)",
+    )
     args = parser.parse_args(argv)
 
     if hasattr(sys.stdout, "reconfigure"):
@@ -111,6 +121,7 @@ def main(argv: list[str] | None = None) -> int:
             half=args.half,
             details=args.details,
             against=args.against,
+            inputs=args.inputs,
         )
     return run(
         store=args.store,
@@ -127,6 +138,7 @@ def main(argv: list[str] | None = None) -> int:
         mc_bootstrap=args.mc_bootstrap,
         target_level=args.target_level,
         rolling=not args.no_rolling,
+        inputs=args.inputs,
         save=args.save,
     )
 

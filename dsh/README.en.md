@@ -8,7 +8,7 @@ The DSH plugin package `dsh-macrostress`. It connects the MCP server `macrostres
 | `cordis.patch.yml` | A patch of the profile tree: it inserts `@deepseek-ai/dsh-mcp-client` with the server `uvx macrostress` and the plugin itself. It holds no path of any machine |
 | `index.js` | The plugin: on start it registers the skills from `skills/*.md` and the prompt section `macrostress` of five lines from `workspace.json`; on shutdown it removes the skills |
 | `locale/` | The plugin's name and description in Russian and English |
-| `skills/` | Three agent skills: `scenario-from-corpus`, `run-report`, `drivers` |
+| `skills/` | Four agent skills: `scenario-from-corpus`, `run-report`, `drivers`, `model-inputs` |
 | `test/smoke.mjs` | A check without DSH: a fake context, the skills, five lines from a temporary `workspace.json`, the one-line fallback, the rereading of the file and the removal of the skills |
 
 The server and `index.js` find the data directory by one rule: `MACROSTRESS_WORKSPACE`, else the first existing of `~/.macrostress/workspace`, the user data directory of the OS (`%LOCALAPPDATA%\macrostress\workspace` on Windows, `~/Library/Application Support/macrostress/workspace` on macOS, `$XDG_DATA_HOME/macrostress/workspace` or `~/.local/share/macrostress/workspace` on Linux) and `./workspace` in the start directory. If none exists, the server creates the user data directory of the OS, and `./workspace` when it cannot write outside the project. Settings of one machine go in the profile patch, see [../docs/howto/install.en.md](../docs/howto/install.en.md).
@@ -19,4 +19,4 @@ A check of the plugin without starting DSH:
 node dsh/test/smoke.mjs
 ```
 
-It calls `apply` with a fake context and checks the three skills, the card in both locales, the five section lines from a temporary `workspace.json`, the one-line fallback, the rereading of the file and the removal of the skills on shutdown. After a DSH restart the skills are visible in the list, the section in the system prompt, and the plugin card in Settings → Plugins.
+It calls `apply` with a fake context and checks the four skills, the card in both locales, the five section lines from a temporary `workspace.json`, the one-line fallback, the rereading of the file and the removal of the skills on shutdown. After a DSH restart the skills are visible in the list, the section in the system prompt, and the plugin card in Settings → Plugins.

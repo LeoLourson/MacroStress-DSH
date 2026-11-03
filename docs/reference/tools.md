@@ -45,7 +45,10 @@
 
 ### `corpus`
 
-Корень корпуса — `<workspace>/corpus`. `search` и `get` читают индекс и сети не требуют.
+Корень корпуса — `<workspace>/corpus`; параметр `corpus="model"` работает с корпусом
+моделей `<workspace>/corpus-model` (эпизоды, состояние на дату, обзоры трансмиссии,
+рыночные ожидания — вид источника `market`) во всех действиях. `search` и `get` читают
+индекс и сети не требуют.
 
 | `action` | Аргументы | Результат |
 |---|---|---|
@@ -107,6 +110,10 @@
 | `satellites` | `list` | — | Версии сателлитов (бандлы) |
 | `satellites` | `describe` | `version` | Обслуживаемые драйверы и отклонённые с причиной |
 | `satellites` | `estimate` | `version` — хеш макроверсии, `assignment` (величина → модель) | Задача на `models`: `python -m mst.models estimate-satellites` собирает бандл — своя модель на каждую величину |
+| `inputs` | `list` | `as_of`, `model_id` | Ключи ответов модели на дату: записан или нет, хеш и время; отсутствующие первыми |
+| `inputs` | `question` | `as_of`, `model_id`, `key` | Текст вопроса и JSON-схема ответа; модель задаёт форму |
+| `inputs` | `write` | `as_of`, `model_id`, `key`, `payload` | Проверяет форму и записывает нормальную форму в `workspace/elicitation/<дата>/<ключ>.json`; отказ называет поле. Ответы пишет сам агент, человек их не утверждает — гайд `model-inputs` |
+| `inputs` | `status` | `as_of`, `model_id` | Что ещё не записано; когда ничего — можно оценивать |
 | `catalog` | `list` | — | Установленные плагины моделей: макро-, сателлитные, позиционные, и какая модель обслуживает каждую величину |
 
 ## Команды
@@ -126,7 +133,7 @@ python -m mst.models estimate-satellites --macro SHA256 --store DIR --models DIR
 python -m mst.models diagnose-satellites SHA256 --models DIR   # ро, эластичности, тяга к равновесию, причины отказов
 python -m mst.metrics backtest bvar.sv --as-of 2026-10-29 --store DIR --models DIR --episodes bench/model-backtest/episodes.toml [--satellites --drivers FILE]
     [--only ID ...] [--details FILE] [--against REPORT.json] [--target-level LEVEL]
-    [--portfolio ID] [--mc-bootstrap]
+    [--portfolio ID] [--mc-bootstrap] [--inputs DIR]
 
 # драйверы
 python -m mst.drivers update [QUANTITY ...] --store DIR --drivers FILE
@@ -157,8 +164,10 @@ python -m mst.scenario reverse ID --workspace DIR --portfolio ID --draws N --see
 и тех же ячейках и половине проверки; с `--portfolio` (требует `--satellites`) — секция хвоста
 Acerbi–Székely ($Z$, интервалы, усечение 1 %, выпавшие эпизоды); с `--mc-bootstrap` — интервал
 ошибки Монте-Карло отдельно от выборки по эпизодам; `--target-level` выбирает уровень, по
-которому сравниваются версии (по умолчанию `macro`). Полный отчёт — в `--details`. Версии
-эпизодов кэшируются в `<models>/backtest/` по состоянию данных, бандлы сателлитов — по
+которому сравниваются версии (по умолчанию `macro`); `--inputs` — папка ответов
+(`workspace/elicitation`) для модели с объявленными входами, каждый эпизод читает ответы своей
+даты расчёта. Полный отчёт — в `--details`. Версии
+эпизодов кэшируются в `<models>/backtest/` по состоянию данных и ответов, бандлы сателлитов — по
 дайджесту всех своих входов. Модели эпизодов пишутся в `<models>/backtest/`, а не в `<models>/macro/`;
 код выхода 1 — какой-то эпизод не проверен (нет в манифесте, короткая история, недопустимый
 сценарий) или нарушено условие допуска.

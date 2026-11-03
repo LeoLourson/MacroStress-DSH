@@ -67,20 +67,37 @@ def selected(model_id: str | None = None) -> MacroModel:
 
 
 def estimate_macro(
-    model_id: str | None, *, store: Path, models: Path, as_of: date
+    model_id: str | None,
+    *,
+    store: Path,
+    models: Path,
+    as_of: date,
+    inputs: Path | None = None,
 ) -> str:
-    """Estimate the macro model on the history known on ``as_of``; returns the version hash."""
+    """Estimate the macro model on the history known on ``as_of``; returns the version hash.
+
+    ``inputs`` is the folder of the model's answers in the workspace
+    (``workspace/elicitation``): a model that declares inputs reads them from there, a model
+    that declares none ignores the folder. Every macro model gets its own checkpoint folder,
+    ``<models>/.checkpoints/macro/<model_id>``: an interrupted estimate started again resumes
+    from what the model kept there, and the folder is removed once the version is saved.
+    """
     from mst.model_sdk.contracts import MacroEstimateContext
 
     model = selected(model_id)
+    checkpoints = Path(models) / ".checkpoints" / "macro" / model.model_id
     estimate = model.estimate(
         MacroEstimateContext(
             store=SeriesStore(store),
             registry=load_macro_registry(),
             as_of=as_of,
+            inputs=inputs,
+            checkpoints=checkpoints,
         )
     )
-    return macro_version.save(model.model_id, estimate.meta, estimate.arrays, models)
+    name = macro_version.save(model.model_id, estimate.meta, estimate.arrays, models)
+    shutil.rmtree(checkpoints, ignore_errors=True)
+    return name
 
 
 def assignment(

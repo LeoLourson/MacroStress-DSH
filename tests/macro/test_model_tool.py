@@ -98,7 +98,9 @@ def test_the_catalog_lists_the_model_plugins(tmp_path):
     assert "bvar" in [row["plugin"] for row in answer["plugins"]]
     bvar = next(row for row in answer["plugins"] if row["plugin"] == "bvar")
     assert [model["model_id"] for model in bvar["macro"]] == ["bvar.sv"]
-    assert answer["macro"] == ["bvar.sv", "msvar.markov"]
+    assert answer["macro"] == [
+        "bvar.sv", "expert.elicited.market", "expert.elicited.rw", "msvar.markov",
+    ]
 
 
 def test_a_loaded_version_comes_from_its_plugin(tmp_path):

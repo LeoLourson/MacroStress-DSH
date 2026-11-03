@@ -1,6 +1,6 @@
 # Macro model from expert elicitation
 
-The `expert` plugin provides one level-0 macro model, `expert.elicited`. It is chosen explicitly, alongside the other macro models; it does not replace the default model. This text was written before the code and states what the code must do, so where they disagree the code is fixed.
+The `expert` plugin provides two level-0 macro models, `expert.elicited.rw` and `expert.elicited.market`. They are chosen explicitly, alongside the other macro models; they do not replace the default model. This text was written before the code and states what the code must do, so where they disagree the code is fixed.
 
 ## Why this model
 
@@ -31,7 +31,7 @@ $$
 \omega^0=(\theta,\varepsilon,u),
 $$
 
-where $\theta$ holds the expert's answers and the estimates from history, $\varepsilon=(\varepsilon_{j\tau})$ the shocks of the horizon, $u=(u_1,\dots,u_H)$ the residuals. The expert answers once, so $\theta$ is constant for a given model version. The scenario's causes are chosen among the coordinates $\varepsilon_{j\tau}$: a scenario may name a shock together with its month.
+where $\theta$ holds the expert's answers and the estimates from history, $\varepsilon=(\varepsilon_{j\tau})$ the shocks of the horizon, $u=(u_1,\dots,u_H)$ the residuals. The expert answers once, so $\theta$ is constant for a given model version. A cause of a scenario is the name of a shock of the $J$ set or `residual`: naming a shock puts the inputs of that shock of every month of the horizon, $\varepsilon_{j,\tau}$ at every $\tau$, into $D$; naming `residual` puts the residual $u$ there. With no causes at all, $D$ holds every shock and the residual.
 
 ## Shocks
 
@@ -79,7 +79,7 @@ The server hands out the question and the model corpus material through MCP tool
 
 An answer gives three quantiles of every quantity, while the model needs the law of the whole path. Below is what the plugin adds and why.
 
-Shock stream. In every month of the horizon shock $j$ occurs with probability $1-e^{-\lambda_j/12}$, at most once, independently of other months and shocks. One occurrence per month is needed so that a scenario naming a shock together with its month names one event. A Poisson stream with the same frequency would give two occurrences in a month with probability about 1 % at $\lambda_j=2$, so the restriction takes almost nothing from frequent shocks and nothing from rare ones.
+Shock stream. In every month of the horizon shock $j$ occurs with probability $1-e^{-\lambda_j/12}$, at most once, independently of other months and shocks. One occurrence per month is needed so that a scenario naming a shock names one event a month. A Poisson stream with the same frequency would give two occurrences in a month with probability about 1 % at $\lambda_j=2$, so the restriction takes almost nothing from frequent shocks and nothing from rare ones.
 
 Law from three quantiles. The size of a shock and every response are given by quantiles $q_5$, $q_{50}$, $q_{95}$, and the answer says nothing about what lies beyond 5 and 95 %. So the tails are set by our assumption, and there is one for the whole model: the tail index $\alpha$ from the plugin's specification, 4 by default. It exceeds 2 so that the responses have a variance: without it $\Sigma_{\text{shocks}}$ in the section "Residual" cannot be computed. The family is chosen in the specification and recorded in the version; the backtest compares versions with different families. There are two:
 
@@ -98,12 +98,12 @@ The $t$ copula is the standard replacement of the gaussian copula (McNeil, Frey,
 
 ## Model corpus
 
-The model has its own corpus, separate from the scenario corpus. The agent sees only material published before the calculation date. Four parts:
+The model has its own corpus, separate from the scenario corpus — `workspace/corpus-model` with a manifest and an index of its own; the `corpus` tool picks it with `corpus="model"`. The agent sees only material published before the calculation date. Four parts:
 
 1. Historical episodes of the shocks with the actual responses of the series: calibration material for frequencies and responses.
 2. The state at the date: the latest values of the 23 series, central bank decisions and forecasts, budget parameters.
 3. Transmission reviews: central bank and IMF material on how the rate, the exchange rate and commodities act on the economy.
-4. Market expectations: futures, forwards, the OFZ curve, the analysts' consensus from the central bank survey.
+4. Market expectations: futures, forwards, the OFZ curve, the analysts' consensus from the central bank survey — the `market` kind of source in the manifest.
 
 ## Base path
 
@@ -112,7 +112,7 @@ The model comes in two variants that differ only in $b_t$:
 - `expert.elicited.market` takes market expectations at the calculation date where they exist (oil from futures, the exchange rate from forwards or rate parity, the policy rate from the OFZ curve and ROISfix, inflation and GDP from the consensus), and a random walk with drift for the other variables;
 - `expert.elicited.rw` takes a random walk with drift for every variable.
 
-Random walk with drift: $b_t=x_0+t\mu$, where $\mu$ is the variable's mean monthly change over history up to the calculation date, as in the `random_walk` benchmark of `mst.metrics.baselines`.
+Random walk with drift: $b_t=x_0+t(\hat\mu-\mu_{\text{shocks}})$, where $\hat\mu$ is the variable's mean monthly change over history up to the calculation date, as in the `random_walk` benchmark of `mst.metrics.baselines`, and $\mu_{\text{shocks}}$ is the mean monthly change the shocks produce according to the expert's answers, from the same simulation as $\Sigma_{\text{shocks}}$. Without the subtraction the mean movement of the shocks enters the law twice — once from history through $\hat\mu$, once from the answers — just as the covariance would be counted twice without the subtraction of the section "Residual". At $\lambda_j=0$ for every shock $\mu_{\text{shocks}}=0$ and the model coincides with the `random_walk` benchmark.
 
 The same agent writes the market expectations in the same elicitation, because the series store holds no futures, forwards, OFZ curve or consensus. For every variable that has expectations, the answer holds the expected value 1, 3, 6 and 12 months out in the model scale and the fragment of the model corpus the number comes from; between horizons the values are interpolated linearly. The server refuses an answer without a fragment: a market number that is not in the corpus is the expert's judgement, and judgements enter the model only through the shocks.
 
@@ -140,7 +140,12 @@ Two other options were rejected. A bootstrap of historical changes cleaned of th
 
 ## Imposing a scenario
 
-The imposition is the general case of section 4 of the general scheme. Under a support condition $R=(\theta,\varepsilon_{\bar D},u)$ keeps its base law, and the named shocks $\varepsilon_D$ are drawn from $P(d\varepsilon_D\mid R,S)$. The law of $\varepsilon_D$ given $S$ has no closed form, because the $r_j$ are nonlinear, and is drawn numerically by MCMC at every value of $R$. If no causes are named, $\varepsilon_D$ is every shock and residual of the horizon. The impact $O$ is added to the path, as for any model.
+The imposition is the general case of section 4 of the general scheme. Under a support condition $R=(\theta,\varepsilon_{\bar D},u)$ keeps its base law, and the coordinates of $D$ are drawn from $P(d\varepsilon_D\mid R,S)$. If no causes are named, $D$ is every shock and residual of the horizon. The impact $O$ is added to the path, as for any model.
+
+The law of $\varepsilon_D$ given $R$ depends on whether the residual is named:
+
+- `residual` among the causes: given $R$ the path is gaussian, $y=b+c+u$ with a random walk $u$. The law is built as candidate rows of the shocks of $D$ — the mean term carries the candidate's contribution, the covariance term the walk of the residual — the imposition picks a candidate by the probability its law gives the constraint box and draws the residual from the box-truncated normal (Antolin-Diaz, Petrella, Rubio-Ramirez, 2021);
+- the causes name shocks only: given $R$ the constraint functionals are a deterministic nonlinear function of the named shocks' standard normal inputs, which no mixture of gaussian rows carries. The probability of the box at every value of $R$ is computed by subset simulation (Au, Beck, 2001): a Markov chain in the standard normal space of the inputs estimates a small probability level by level and leaves samples inside the box. The price of the scenario is the mean of $-\log P(S\mid R)$ over the values of $R$ (the `log_box_probability` method of the model SDK), and the imposition resamples the samples inside the box to the repetitions of the group.
 
 ## Checks
 
