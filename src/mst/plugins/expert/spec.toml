@@ -1,0 +1,26 @@
+# The specification of the expert model (src/mst/plugins/expert/README.md, the section
+# "How the answers become a law"). A model version stores this file as it was.
+
+# How the law is built from the three quantiles of an answer. "pareto" reproduces the
+# answer exactly with Pareto tails beyond 5 and 95 %; "skew_t" fits Azzalini's skew t,
+# smooth but approximate. The backtest compares versions with different families.
+family = "pareto"
+# The tail index: the Pareto index of the "pareto" family and the degrees of freedom of
+# the t copula and the "skew_t" family. Above 2 the responses have a variance, without
+# which the covariance of the shocks cannot be computed.
+alpha = 4.0
+# The level grid of the quantile tables, uniform in the normal score between 0.0005 and
+# 0.9995: how finely the laws of the answers are tabulated.
+levels = 513
+# Months of the stationary shock stream simulated for the covariance and the mean the
+# shocks contribute; one path per shock, in blocks.
+stream_draws = 200000
+# Candidates of the named causes drawn per value of R when the residual is among them.
+candidates = 64
+# Samples per level of subset simulation, the imposition and the price when the causes
+# name shocks without the residual.
+subset_samples = 2000
+# T0: the first month of the history the drift and the covariance of the changes read.
+history_start = 2012-01-01
+# The seed of the shock stream: the same answers and spec give the same version.
+seed = 20261103

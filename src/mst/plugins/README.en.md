@@ -10,6 +10,7 @@ Models as extensions, of three kinds. Each subpackage is a plugin: `plugin.py` w
 | [`housing`](housing/plugin.py) | position | `housing.paths.v1` | `real_estate`, drivers `housing_price_*` |
 | [`bvar`](bvar/plugin.py) | macro | `bvar.sv` | level 0: 23 variables, 5 named shocks |
 | [`msvar`](msvar/plugin.py) | macro | `msvar.markov` | level 0: the same 23 variables, 5 named shocks and 2 regime elements |
+| [`expert`](expert/plugin.py) | macro | `expert.elicited.rw`, `expert.elicited.market` | level 0: the same 23 variables, 18 shocks from the agent's elicitation and `residual` |
 | [`hier`](hier/plugin.py) | satellite | `hier.gibbs` | all quantities of the driver registry by default |
 | [`reflevel2`](reflevel2/plugin.py) | satellite | `reflevel2.regression` | the reference of the second level; no quantity of the main registry, assigned explicitly |
 

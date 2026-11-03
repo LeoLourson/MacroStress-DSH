@@ -162,3 +162,86 @@ def test_add_registers_a_file_by_hand(tmp_path, monkeypatch):
     assert added["raw"] == str(root / "raw" / "S1" / "S1.pdf")
     assert (root / "raw" / "S1" / "S1.pdf").read_bytes() == b"%PDF-1.4 body"
     assert "S1" in json.loads((root / "downloads.json").read_text(encoding="utf-8"))
+
+
+def test_the_model_corpus_is_searched_apart_from_the_scenario_one(tmp_path, monkeypatch):
+    ws = store.Workspace(tmp_path)
+    corpus_root(tmp_path, monkeypatch)
+    monkeypatch.setattr(tool, "Index", Bm25Only)
+
+    # The corpus of the models: a market-expectations source of its own.
+    root = ws.model_corpus
+    (root / "sources").mkdir(parents=True)
+    m.save(
+        m.Manifest.model_validate(
+            {
+                **MANIFEST,
+                "corpus_id": "model",
+                "sources": [
+                    {
+                        **MANIFEST["sources"][0],
+                        "id": "M1",
+                        "kind": "market",
+                        "title": "Фьючерсы на нефть",
+                        "path": "sources/M1.md",
+                    }
+                ],
+            }
+        ),
+        root / "manifest.json",
+    )
+    (root / "sources" / "M1.md").write_text(DOC, encoding="utf-8")
+    built = ix.build(m.load(root / "manifest.json"), root)
+    ix.write(built.chunks, root / "index")
+
+    in_model = call(
+        ws,
+        "corpus",
+        {"action": "search", "query": "нефть", "as_of": "2024-01-01", "corpus": "model"},
+    ).data
+    in_scenario = call(
+        ws, "corpus", {"action": "search", "query": "нефть", "as_of": "2024-01-01"}
+    ).data
+    assert [chunk["doc_id"] for chunk in in_model["chunks"]]
+    assert all(
+        chunk["doc_id"].startswith("M1") for chunk in in_model["chunks"]
+    ), "the model corpus holds its own source"
+    assert not any(
+        chunk["doc_id"].startswith("M1") for chunk in in_scenario["chunks"]
+    ), "the scenario corpus does not see the model corpus"
+    listed = call(ws, "corpus", {"action": "list", "corpus": "model"}).data
+    assert [source["id"] for source in listed["sources"]] == ["M1"]
+    assert listed["sources"][0]["kind"] == "market"
+
+
+def test_the_model_corpus_hides_fragments_published_after_the_day(tmp_path, monkeypatch):
+    ws = store.Workspace(tmp_path)
+    monkeypatch.setattr(tool, "Index", Bm25Only)
+    root = ws.model_corpus
+    (root / "sources").mkdir(parents=True)
+    m.save(m.Manifest.model_validate(MANIFEST), root / "manifest.json")
+    (root / "sources" / "S1.md").write_text(DOC, encoding="utf-8")
+    built = ix.build(m.load(root / "manifest.json"), root)
+    ix.write(built.chunks, root / "index")
+
+    before = call(
+        ws,
+        "corpus",
+        {"action": "search", "query": "нефть", "as_of": "2023-11-09", "corpus": "model"},
+    ).data
+    after = call(
+        ws,
+        "corpus",
+        {"action": "search", "query": "нефть", "as_of": "2023-11-11", "corpus": "model"},
+    ).data
+    assert before["chunks"] == []
+    assert len(after["chunks"]) == 1
+    try:
+        call(
+            ws,
+            "corpus",
+            {"action": "get", "id": after["chunks"][0]["chunk_id"], "as_of": "2023-11-09",
+             "corpus": "model"},
+        )
+    except Exception as error:
+        assert "published on" in str(error)

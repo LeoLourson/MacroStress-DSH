@@ -44,10 +44,12 @@ import inspect
 import json
 from dataclasses import dataclass
 from datetime import date
+from functools import partial
 from pathlib import Path
 
 import numpy as np
 
+from mst import inputs as answers
 from mst.data.store import SeriesStore
 from mst.macro import version as macro_version
 from mst.macro.panel import seasonal_profile, shift
@@ -149,6 +151,7 @@ def run(
     mc_bootstrap: bool = False,
     target_level: str = "macro",
     rolling: bool = True,
+    inputs: Path | None = None,
 ) -> int:
     """The backtest of every episode the plan names; prints Markdown tables, returns an exit code.
 
@@ -164,6 +167,8 @@ def run(
     ``target_level`` is the level whose aggregate the decision compares — the macro level by
     default, or a driver level (``driver/<quantity>``) with ``--satellites``. ``rolling`` off
     leaves out the rolling check of the plan, which ``python -m mst.metrics rolling`` also runs.
+    ``inputs`` is the folder of the answers a model with declared inputs reads
+    (``workspace/elicitation``): every episode reads the answers of its own calculation date.
     """
     from mst import models as models_pkg
 
@@ -182,7 +187,7 @@ def run(
         if only and check.id not in only:
             continue
         try:
-            episode = _episode(plugin, data, registry, plan, check, root, as_of)
+            episode = _episode(plugin, data, registry, plan, check, root, as_of, inputs)
         except ValueError as error:
             problems.append(f"{check.id}: {error}")
             continue
@@ -216,6 +221,7 @@ def run(
         mc_bootstrap=mc_bootstrap,
         target_level=target_level,
         run_rolling=rolling,
+        inputs=inputs,
     )
     _print(report)
     for problem in problems:
@@ -237,11 +243,12 @@ def _episode(
     check,
     root: Path,
     known_on: date,
+    inputs: Path | None = None,
 ) -> Episode:
     """One episode: its macro version, its scenario from the facts, and the realized paths."""
     start = check.start
     as_of = calculation_date(start)
-    macro = _episode_macro(plugin, data, registry, as_of, root)
+    macro = _episode_macro(plugin, data, registry, as_of, root, inputs)
     unknown = [shock for shock in check.driving if shock not in macro.shocks]
     if unknown:
         raise ValueError(f"the macro model knows no shocks {', '.join(unknown)}")
@@ -339,15 +346,23 @@ def _profile(history: np.ndarray, months: list[date]) -> np.ndarray | None:
         return None
 
 
-def _episode_macro(plugin, data: SeriesStore, registry: Registry, as_of: date, root: Path):
+def _episode_macro(
+    plugin,
+    data: SeriesStore,
+    registry: Registry,
+    as_of: date,
+    root: Path,
+    inputs: Path | None = None,
+):
     """The macro version of an episode, cached under ``root`` by the state of the data.
 
     The estimate itself is deterministic but expensive; the cache key covers the model, its
-    version, its configuration files and every value the registry names as known on the date,
-    so a rerun with the same data loads the version instead of estimating again, and an edited
-    spec, sign table or model package never reuses a stale one.
+    version, its configuration files, every value the registry names as known on the date and
+    the hash of every answer the model declares for the date, so a rerun with the same data
+    loads the version instead of estimating again, and an edited spec, sign table, model
+    package or answer never reuses a stale one.
     """
-    key = _data_key(plugin, data, registry, as_of)
+    key = _data_key(plugin, data, registry, as_of, inputs)
     pointer = root / key
     installed = {plugin.model_id: plugin}
     if pointer.exists():
@@ -357,7 +372,7 @@ def _episode_macro(plugin, data: SeriesStore, registry: Registry, as_of: date, r
     from mst.model_sdk.contracts import MacroEstimateContext
 
     estimate = plugin.estimate(
-        MacroEstimateContext(store=data, registry=registry, as_of=as_of)
+        MacroEstimateContext(store=data, registry=registry, as_of=as_of, inputs=inputs)
     )
     name = macro_version.save(plugin.model_id, estimate.meta, estimate.arrays, root)
     pointer.parent.mkdir(parents=True, exist_ok=True)
@@ -401,7 +416,9 @@ def _configuration_digest(plugin) -> str:
     return digest.hexdigest()
 
 
-def _data_key(plugin, data: SeriesStore, registry: Registry, as_of: date) -> str:
+def _data_key(
+    plugin, data: SeriesStore, registry: Registry, as_of: date, inputs: Path | None = None
+) -> str:
     digest = hashlib.sha256()
     digest.update(_configuration_digest(plugin).encode())
     digest.update(as_of.isoformat().encode())
@@ -410,6 +427,11 @@ def _data_key(plugin, data: SeriesStore, registry: Registry, as_of: date) -> str
             digest.update(
                 f"{variable.id}|{row.month}|{row.value}|{row.published}|{row.approximate}".encode()
             )
+    keys = plugin.input_keys(as_of)
+    written = answers.read(inputs, as_of) if keys and inputs is not None else {}
+    for key in keys:
+        found = written.get(key)
+        digest.update(f"{key}|{'missing' if found is None else answers.hash_of(found)}".encode())
     return digest.hexdigest()
 
 
@@ -525,6 +547,7 @@ def _report(
     mc_bootstrap: bool = False,
     target_level: str = "macro",
     run_rolling: bool = True,
+    inputs: Path | None = None,
 ) -> dict:
     """The scores of every quantity over the episodes, with the gates, intervals and metadata."""
     cells: list[Cell] = []
@@ -643,7 +666,7 @@ def _report(
             root=root,
             plan=plan,
             known_on=known_on,
-            macro_of=_episode_macro,
+            macro_of=partial(_episode_macro, inputs=inputs),
         )
     report = {
         "meta": _meta(

@@ -34,6 +34,7 @@ The models of the grid are the same cached episode versions the backtest uses
 import json
 from dataclasses import dataclass, field
 from datetime import date
+from functools import partial
 from pathlib import Path
 
 import numpy as np
@@ -354,6 +355,7 @@ def run(
     half: str | None = None,
     details: Path | None = None,
     against: Path | None = None,
+    inputs: Path | None = None,
 ) -> int:
     """The rolling check from the command line; returns 1 when the model refused a date or no date
     could be judged."""
@@ -382,7 +384,7 @@ def run(
         root=Path(models) / "backtest",
         plan=plan,
         known_on=as_of,
-        macro_of=_episode_macro,
+        macro_of=partial(_episode_macro, inputs=inputs),
         only=only,
     )
     if against is not None and report["quality"]["rows"]:
@@ -513,6 +515,7 @@ def _price(grid: Grid, plan: Episodes, known_on: date) -> dict:
     """
     from mst.model_sdk.contracts import LinearConstraint, LinearTerm, ScenarioPlan
     from mst.model_sdk.dist import DIST_STREAM, price_of_law
+    from mst.scenario.build import _price_of_logs
 
     rows = []
     for event in plan.rolling.price_events:
@@ -525,20 +528,35 @@ def _price(grid: Grid, plan: Episodes, known_on: date) -> dict:
             version = grid.versions[when]
             if not set(term.variable for term in terms) <= set(version.ids):
                 continue
+            the_plan = ScenarioPlan(horizon=event.horizon, constraints=(constraint,))
             law = version.plugin.constraint_law(
                 version.model,
-                ScenarioPlan(horizon=event.horizon, constraints=(constraint,)),
+                the_plan,
                 draws=max(plan.draws // 4, 100),
                 seed=plan.seed,
             )
             if law is None:
-                continue
-            distance, log_probability, _ = price_of_law(
-                law,
-                np.array([constraint.low]),
-                np.array([constraint.high]),
-                rng=np.random.default_rng([plan.seed, DIST_STREAM]),
-            )
+                # A model that measures its own box probabilities still has a price.
+                logs = version.plugin.log_box_probability(
+                    version.model,
+                    the_plan,
+                    np.array([constraint.low]),
+                    np.array([constraint.high]),
+                    draws=max(plan.draws // 4, 100),
+                    seed=plan.seed,
+                )
+                if logs is None:
+                    continue
+                # A value of R without probability gives P(S) = 0, as price_of_law does:
+                # the miss stays in the score.
+                distance, log_probability, _ = _price_of_logs(logs)
+            else:
+                distance, log_probability, _ = price_of_law(
+                    law,
+                    np.array([constraint.low]),
+                    np.array([constraint.high]),
+                    rng=np.random.default_rng([plan.seed, DIST_STREAM]),
+                )
             happened = _happened(grid, when, terms, constraint)
             if happened is None:
                 continue

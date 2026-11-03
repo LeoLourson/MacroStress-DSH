@@ -27,6 +27,7 @@ from datetime import date
 from pathlib import Path
 
 import numpy as np
+from scipy.special import logsumexp
 
 from ..corpus.index import sources_missing
 from ..drivers.bundle import SatelliteBundle
@@ -266,18 +267,33 @@ def dist_of(
     plan = plan_with_impacts(spec, macro)
     if not plan.constraints and not plan.causes and plan.regime_event is None:
         return None
-    law = macro.plugin.constraint_law(macro.model, plan, draws=draws, seed=seed)
-    if law is None:
-        return None
     low = np.array([constraint.low for constraint in plan.constraints])
     high = np.array([constraint.high for constraint in plan.constraints])
-    rng = np.random.default_rng([seed, dist_sdk.DIST_STREAM])
-    distance, log_probability, standard_error = dist_sdk.price_of_law(
-        law, low, high, rng=rng
-    )
-    one_sided = (
-        None if _names_drivers(spec) else _one_sided_of(spec, plan, law, low, high, seed=seed)
-    )
+    law = macro.plugin.constraint_law(macro.model, plan, draws=draws, seed=seed)
+    if law is not None:
+        rng = np.random.default_rng([seed, dist_sdk.DIST_STREAM])
+        distance, log_probability, standard_error = dist_sdk.price_of_law(
+            law, low, high, rng=rng
+        )
+        one_sided = (
+            None if _names_drivers(spec) else _one_sided_of(spec, plan, law, low, high, seed=seed)
+        )
+    else:
+        # No mixture of gaussian rows carries the law: the model may still measure the
+        # box probability of every value of R itself, and the price is the mean of
+        # ``-log P(S | R)`` over the values it returns.
+        logs = macro.plugin.log_box_probability(
+            macro.model, plan, low, high, draws=draws, seed=seed
+        )
+        if logs is None:
+            return None
+        distance, log_probability, standard_error = _price_of_logs(logs)
+        one_sided = (
+            None
+            if _names_drivers(spec)
+            else _one_sided_by_probabilities(spec, plan, macro, low, high, draws=draws,
+                                             seed=seed)
+        )
     return Dist(
         distance=distance,
         log_probability=log_probability,
@@ -293,6 +309,69 @@ def dist_of(
             if not np.isfinite(distance)
             else None
         ),
+    )
+
+
+def _price_of_logs(logs) -> tuple[float, float, float]:
+    """``(distance, log_probability, standard_error)`` of a model's own log probabilities."""
+    logs = np.asarray(logs, dtype=float)
+    count = len(logs)
+    if np.any(np.isneginf(logs)):
+        return float("inf"), float("-inf"), float("inf")
+    terms = -logs
+    return (
+        float(terms.mean()),
+        float(logsumexp(logs) - np.log(count)),
+        float(terms.std(ddof=1) / np.sqrt(count)) if count > 1 else 0.0,
+    )
+
+
+def _one_sided_by_probabilities(
+    spec: Spec, plan: ScenarioPlan, macro: MacroVersion, low, high, *, draws: int, seed: int
+):
+    """``dist+(s)`` for a model that measures its own box probabilities.
+
+    The medians decide the side, and they come from the model's unconstrained simulation
+    with the same causes: no law carries them, but the paths of an unconstrained draw are
+    exactly what the medians of the functionals are read from.
+    """
+    if not plan.constraints or spec.expectations or spec.probabilities:
+        return None
+    unconstrained = replace(plan, constraints=())
+    simulation = macro.plugin.simulate(
+        macro.model, unconstrained, draws=min(draws, dist_sdk.GHK_SAMPLES * 8), seed=seed
+    )
+    index = {id_: k for k, id_ in enumerate(simulation.ids)}
+    medians = np.array(
+        [
+            np.median(
+                sum(
+                    term.weight * simulation.paths[:, term.month, index[term.variable]]
+                    for term in constraint.terms
+                )
+            )
+            for constraint in plan.constraints
+        ]
+    )
+    side_low, side_high, kept = dist_sdk.one_sided_box(low, high, medians)
+    dropped = tuple(
+        int(k) + 1 for k in range(len(low)) if k not in set(kept.tolist())
+    )
+    if not len(kept):
+        return OneSided(distance=0.0, log_probability=0.0, standard_error=0.0, dropped=dropped)
+    # The rays cover the kept coordinates only, so the plan is sliced to match them.
+    sliced = replace(plan, constraints=tuple(plan.constraints[k] for k in kept))
+    logs = macro.plugin.log_box_probability(
+        macro.model, sliced, side_low, side_high, draws=draws, seed=seed
+    )
+    if logs is None:
+        return None
+    distance, log_probability, standard_error = _price_of_logs(logs)
+    return OneSided(
+        distance=distance,
+        log_probability=log_probability,
+        standard_error=standard_error,
+        dropped=dropped,
     )
 
 

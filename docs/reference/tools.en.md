@@ -39,7 +39,7 @@ These are the same texts the DSH plugin registers as skills.
 
 ### `corpus`
 
-The corpus root is `<workspace>/corpus`. `search` and `get` read the index and need no network.
+The corpus root is `<workspace>/corpus`; the `corpus="model"` parameter works with the corpus of the models, `<workspace>/corpus-model` (episodes, the state at the date, transmission reviews, market expectations — the `market` source kind), in every action. `search` and `get` read the index and need no network.
 
 | `action` | Arguments | Result |
 |---|---|---|
@@ -98,6 +98,10 @@ A portfolio is `portfolios/<id>.json`: the base currency (the ruble: models calc
 | `satellites` | `list` | none | Satellite versions (bundles) |
 | `satellites` | `describe` | `version` | Served drivers and rejected ones with the reason |
 | `satellites` | `estimate` | `version` (the macro version hash), `assignment` (quantity → model) | A job on `models`: `python -m mst.models estimate-satellites` assembles the bundle, with its own model for each quantity |
+| `inputs` | `list` | `as_of`, `model_id` | The answer keys of the model for the date: written or missing, the hash and the time; the missing ones first |
+| `inputs` | `question` | `as_of`, `model_id`, `key` | The text of the question and the JSON Schema of the answer; the model fixes the form |
+| `inputs` | `write` | `as_of`, `model_id`, `key`, `payload` | Checks the form and stores the normal form in `workspace/elicitation/<date>/<key>.json`; a refusal names the field. The agent itself writes the answers and no human approves them — see the `model-inputs` guide |
+| `inputs` | `status` | `as_of`, `model_id` | What is still missing; when nothing is, the estimate may run |
 | `catalog` | `list` | none | Installed model plugins: macro, satellite, position, and which model serves each quantity |
 
 ## Commands
@@ -114,7 +118,7 @@ python -m mst.models estimate-satellites --macro SHA256 --store DIR --models DIR
 python -m mst.models diagnose-satellites SHA256 --models DIR   # rho, elasticities, the pull to the level, the check's reasons
 python -m mst.metrics backtest bvar.sv --as-of 2026-10-29 --store DIR --models DIR --episodes bench/model-backtest/episodes.toml [--satellites --drivers FILE]
     [--only ID ...] [--details FILE] [--against REPORT.json] [--target-level LEVEL]
-    [--portfolio ID] [--mc-bootstrap]
+    [--portfolio ID] [--mc-bootstrap] [--inputs DIR]
 
 # drivers
 python -m mst.drivers update [QUANTITY ...] --store DIR --drivers FILE
@@ -135,4 +139,4 @@ python -m mst.scenario reverse ID --workspace DIR --portfolio ID --draws N --see
 
 Here `--store` is `<workspace>/series`, `--models` is `<workspace>/models`, `--drivers` is `<workspace>/drivers/catalog.json`, `--corpus` is `<workspace>/corpus/manifest.json` (for `mst.corpus` it is the root `<workspace>/corpus`).
 
-`backtest` prints the tables of episodes, admission, the "level × horizon" aggregate, the value of the scenario, the halves and the quantities: the normalized CRPS of the conditional forecast beside the random walk, the base calculation and the naive forecast, the coverage at $p_5/p_{50}/p_{95}$, sharpness and admission (the band within the admissible area and no wider than the historical range, the probability of a condition in the base calculation above 1 %). With `--against` it prints the verdict by two standard errors on the same cells and the validation half; with `--portfolio` (requires `--satellites`) the Acerbi–Székely tail section ($Z$, intervals, the 1 % trimming, dropped episodes); with `--mc-bootstrap` the Monte Carlo error interval separately from the sampling over episodes; `--target-level` selects the level versions are compared on (`macro` by default). The full report goes to `--details`. Episode versions are cached in `<models>/backtest/` by the state of the data, satellite bundles by a digest of all their inputs. Episode models are written to `<models>/backtest/`, not `<models>/macro/`. Exit code 1 means some episode was not checked (absent from the manifest, short history, an inadmissible scenario) or an admission condition was broken.
+`backtest` prints the tables of episodes, admission, the "level × horizon" aggregate, the value of the scenario, the halves and the quantities: the normalized CRPS of the conditional forecast beside the random walk, the base calculation and the naive forecast, the coverage at $p_5/p_{50}/p_{95}$, sharpness and admission (the band within the admissible area and no wider than the historical range, the probability of a condition in the base calculation above 1 %). With `--against` it prints the verdict by two standard errors on the same cells and the validation half; with `--portfolio` (requires `--satellites`) the Acerbi–Székely tail section ($Z$, intervals, the 1 % trimming, dropped episodes); with `--mc-bootstrap` the Monte Carlo error interval separately from the sampling over episodes; `--target-level` selects the level versions are compared on (`macro` by default); `--inputs` names the folder of answers (`workspace/elicitation`) a model with declared inputs reads, each episode reading the answers of its own calculation date. The full report goes to `--details`. Episode versions are cached in `<models>/backtest/` by the state of the data and the answers, satellite bundles by a digest of all their inputs. Episode models are written to `<models>/backtest/`, not `<models>/macro/`. Exit code 1 means some episode was not checked (absent from the manifest, short history, an inadmissible scenario) or an admission condition was broken.

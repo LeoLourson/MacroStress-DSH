@@ -32,6 +32,7 @@ def test_the_installed_packages_are_the_position_models_and_the_models():
         "bvar",
         "credit",
         "equity",
+        "expert",
         "hier",
         "housing",
         "msvar",
@@ -44,7 +45,12 @@ def test_the_installed_packages_are_the_position_models_and_the_models():
         "housing.paths.v1",
     ]
     assert registry.owner["equity.paths.v1"] == "equity"
-    assert sorted(registry.macro) == ["bvar.sv", "msvar.markov"]
+    assert sorted(registry.macro) == [
+        "bvar.sv",
+        "expert.elicited.market",
+        "expert.elicited.rw",
+        "msvar.markov",
+    ]
     assert registry.macro_owner["bvar.sv"] == "bvar"
     assert sorted(registry.satellites) == ["hier.gibbs", "reflevel2.regression"]
     assert registry.quantity_model["share_price"] == ["hier.gibbs"]

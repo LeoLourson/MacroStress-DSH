@@ -128,8 +128,22 @@ def test_the_shocks_argument_is_a_required_keyword_of_a_satellite_simulate():
 
 
 def test_the_plugin_ranges_are_checked_against_the_model_sdk_version():
-    assert MODEL_SDK_VERSION == "3.0.0"
+    assert MODEL_SDK_VERSION == "3.1.0"
     assert model_compatible(">=3.0,<4.0")
     assert model_compatible(">=3.0")
+    assert model_compatible(">=3.1,<4.0")
     assert not model_compatible(">=2.0,<3.0")
     assert not model_compatible(">=2.1,<3.0")
+
+
+def test_a_macro_model_that_declares_no_inputs_has_none():
+    from datetime import date as day
+
+    from tests.plugins import fakes
+
+    model = fakes.DemoMacroModel()
+    assert model.input_keys(day(2026, 1, 1)) == ()
+    with pytest.raises(KeyError, match="declares no input"):
+        model.question(object(), "market")
+    with pytest.raises(KeyError, match="declares no input"):
+        model.check_input(object(), "market", {})
