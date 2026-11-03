@@ -1,8 +1,5 @@
 """The conditional forecast and the price when the residual is among the causes."""
 
-import tempfile
-from pathlib import Path
-
 import numpy as np
 import pytest
 from scipy.stats import norm
@@ -156,7 +153,7 @@ def test_a_named_large_shock_makes_a_large_move_cheaper(tmp_path_factory):
     def prepared(frequency):
         found = estimate(
             fakes.answers_context(
-                Path(tempfile.mkdtemp()),
+                tmp_path_factory.mktemp("series"),
                 changes={"gl.oil": answer(120.0, frequency)},
             ),
             base="rw",
