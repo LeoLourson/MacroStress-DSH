@@ -20,3 +20,8 @@ docs/local/
 workspace/
 # The thesis concept stays local; it is not part of the published repository.
 docs/thesis.md
+
+# Local Claude Code setup: machine paths to Python and the venv.
+.mcp.json
+.claude/settings.local.json
+CLAUDE.md
