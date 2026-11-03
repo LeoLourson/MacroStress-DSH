@@ -466,6 +466,23 @@ class MacroModel(ABC):
         """
         return None
 
+    def log_box_probability(
+        self, model, plan: ScenarioPlan, low, high, *, draws: int, seed: int
+    ) -> np.ndarray | None:
+        """``(draws,)`` log box probabilities given ``R``, when no law can carry them.
+
+        A model whose law of the constraint functionals given ``R`` is no mixture of
+        gaussian rows — the causes name shocks whose inputs enter the functionals
+        nonlinearly — may still measure the probability of the box at every value of
+        ``R``, by subset simulation or another numerical method. ``low`` and ``high`` are
+        the bounds of every constraint, the plan's own with the level-0 impacts taken
+        out, and a bound may be infinite on one side (the one-sided price). The platform
+        calls this instead of ``constraint_law`` when that returns ``None``: the price and
+        its error are the mean and the spread of ``-log P(S | R)`` over the values. The
+        default ``None`` says the model does not measure them.
+        """
+        return None
+
     def input_keys(self, as_of: date) -> tuple[str, ...]:
         """The inputs the model needs for a date, by key; the empty tuple declares none.
 

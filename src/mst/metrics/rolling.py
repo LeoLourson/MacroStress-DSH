@@ -511,6 +511,8 @@ def _price(grid: Grid, plan: Episodes, known_on: date) -> dict:
     difference ``dist + log P(S)`` reports the part of the price the parameter uncertainty
     carries.
     """
+    from scipy.special import logsumexp
+
     from mst.model_sdk.contracts import LinearConstraint, LinearTerm, ScenarioPlan
     from mst.model_sdk.dist import DIST_STREAM, price_of_law
 
@@ -525,20 +527,37 @@ def _price(grid: Grid, plan: Episodes, known_on: date) -> dict:
             version = grid.versions[when]
             if not set(term.variable for term in terms) <= set(version.ids):
                 continue
+            the_plan = ScenarioPlan(horizon=event.horizon, constraints=(constraint,))
             law = version.plugin.constraint_law(
                 version.model,
-                ScenarioPlan(horizon=event.horizon, constraints=(constraint,)),
+                the_plan,
                 draws=max(plan.draws // 4, 100),
                 seed=plan.seed,
             )
             if law is None:
-                continue
-            distance, log_probability, _ = price_of_law(
-                law,
-                np.array([constraint.low]),
-                np.array([constraint.high]),
-                rng=np.random.default_rng([plan.seed, DIST_STREAM]),
-            )
+                # A model that measures its own box probabilities still has a price.
+                logs = version.plugin.log_box_probability(
+                    version.model,
+                    the_plan,
+                    np.array([constraint.low]),
+                    np.array([constraint.high]),
+                    draws=max(plan.draws // 4, 100),
+                    seed=plan.seed,
+                )
+                if logs is None:
+                    continue
+                logs = np.asarray(logs, dtype=float)
+                if np.any(np.isneginf(logs)):
+                    continue
+                distance = float(-logs.mean())
+                log_probability = float(logsumexp(logs) - np.log(len(logs)))
+            else:
+                distance, log_probability, _ = price_of_law(
+                    law,
+                    np.array([constraint.low]),
+                    np.array([constraint.high]),
+                    rng=np.random.default_rng([plan.seed, DIST_STREAM]),
+                )
             happened = _happened(grid, when, terms, constraint)
             if happened is None:
                 continue

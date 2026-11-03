@@ -195,7 +195,22 @@ def test_the_same_seed_gives_the_same_paths_and_price(model):
     assert np.array_equal(law.means, again.means)
 
 
-def test_causes_without_the_residual_are_refused_for_now(model):
-    with pytest.raises(NotImplementedError, match="subset"):
-        simulate(model, plan(causes=("ru.monetary",)), draws=2, seed=1)
-    assert constraint_law(model, plan(causes=("ru.monetary",)), draws=2, seed=1) is None
+def test_causes_without_the_residual_go_to_subset_simulation(model):
+    from mst.model_sdk.dist import ContradictsModels
+    from mst.plugins.expert.forecast import box_probabilities
+
+    chosen = plan(causes=("ru.monetary",))
+    assert constraint_law(model, chosen, draws=2, seed=1) is None, "no law carries them"
+    assert (
+        box_probabilities(model, chosen, np.array([0.0]), np.array([1.0]), draws=2, seed=1)
+        is None
+    ), "a plan with nothing to price has no box probabilities either"
+    # A box the quiet shock cannot reach contradicts the models: the imposition of these
+    # plans is the subset machinery, which test_subset checks on a speaking model.
+    level = model.base_path[2, model.ids.index("ru.key_rate")]
+    far = plan(
+        constraints=[([("ru.key_rate", 2, 1.0)], level + 1.0, level + 1.1)],
+        causes=("ru.monetary",),
+    )
+    with pytest.raises(ContradictsModels):
+        simulate(model, far, draws=2, seed=1)

@@ -34,10 +34,12 @@ from mst.model_sdk.contracts import (
     MacroSimulation,
     ScenarioPlan,
 )
+from mst.model_sdk.dist import ContradictsModels
 
 from .estimate import HORIZON, Expert
 from .model import RESIDUAL
 from .stream import contributions, draw
+from .subset import subset
 
 #: The GHK draws behind the weight of one candidate, as many as ``msvar`` uses.
 CANDIDATE_SAMPLES = 64
@@ -54,6 +56,7 @@ class _Plan:
     driving: tuple[int, ...]
     """The indices of the shocks in ``D``; the residual joins them through ``residual``."""
     residual: bool
+    tolerances: tuple[float, ...]
     inner: int
 
 
@@ -95,6 +98,7 @@ def _split(model: Expert, plan: ScenarioPlan) -> _Plan:
         high=np.array([c.high for c in plan.constraints]),
         driving=driving,
         residual=residual,
+        tolerances=tuple(c.tolerance for c in plan.constraints),
         inner=plan.inner,
     )
 
@@ -206,10 +210,9 @@ def simulate(
     """
     chosen = _split(model, plan)
     if not chosen.residual:
-        raise NotImplementedError(
-            "the causes name shocks without the residual: the imposition arrives with "
-            "subset simulation"
-        )
+        if not chosen.terms:
+            return _simulate_free(model, chosen, draws, seed)
+        return _simulate_subset(model, chosen, draws, seed)
     horizon, n = chosen.horizon, len(model.ids)
     weights = _weights(chosen, n)
     base = model.base_path[: horizon + 1]
@@ -291,3 +294,192 @@ def _ess_summary(ess: list[float], candidates: int) -> dict:
             "max": float(values.max()),
         },
     }
+
+
+#: How many values of R the subset price measures: the cost of one subset run bounds the
+#: count, and the standard error of the price reads the spread over these values.
+SUBSET_GROUPS = 32
+
+
+def box_probabilities(
+    model: Expert,
+    plan: ScenarioPlan,
+    low: np.ndarray,
+    high: np.ndarray,
+    *,
+    draws: int,
+    seed: int,
+) -> np.ndarray | None:
+    """``(groups,)`` log box probabilities given R, by subset simulation.
+
+    The causes name shocks without the residual, so given R — the parameters, the other
+    shocks' inputs and the residual's path, drawn once per group — the functionals are a
+    deterministic nonlinear function of the named shocks' standard normal inputs. The
+    streams match ``simulate``: the same seed reproduces the same groups, the same chains
+    and the same samples inside the box.
+    """
+    chosen = _split(model, plan)
+    if not chosen.terms or chosen.residual:
+        return None
+    groups = min(draws, SUBSET_GROUPS)
+    logs = []
+    for r in range(groups):
+        centre, function = _subset_group(model, chosen, r, seed, low, high)
+        result = subset(
+            function,
+            _dimension_of(model, chosen),
+            samples=model.subset_samples,
+            rng=np.random.default_rng([seed, r, 1]),
+        )
+        logs.append(result.log_probability)
+    return np.asarray(logs, dtype=float)
+
+
+def _dimension_of(model: Expert, chosen: _Plan) -> int:
+    """The width of the named shocks' standard normal inputs over the horizon."""
+    return sum(
+        2 + model.tables[j].variables + 1 for j in chosen.driving
+    ) * chosen.horizon
+
+
+def _subset_group(model: Expert, chosen: _Plan, r: int, seed: int, low, high):
+    """``(centre, function)``: the R part of one group and its violation function.
+
+    The R part holds the base path, the contributions of the shocks the causes do not
+    name and the residual's random walk, drawn once from the group's own stream. The
+    violation of the box, each constraint scaled by its width, is the performance
+    function subset simulation walks on.
+    """
+    horizon, n = chosen.horizon, len(model.ids)
+    rng = np.random.default_rng([seed, r, 0])
+    outside = tuple(j for j in range(len(model.tables)) if j not in chosen.driving)
+    centre = model.base_path[: horizon + 1] + _contributions_of(
+        model, chosen, rng, 1, outside
+    )[0]
+    eta = rng.standard_normal((horizon, n))
+    centre = centre + np.vstack(
+        [np.zeros((1, n)), np.cumsum(eta @ model.chol_u.T, axis=0)]
+    )
+    weights = _weights(chosen, n)
+    columns = list(_columns_of(model, chosen))
+    scales = _scales(chosen, low, high)
+
+    def function(x: np.ndarray) -> np.ndarray:
+        total = np.zeros((len(x), horizon + 1, n))
+        for offset, width, j in columns:
+            inputs = x[
+                :, offset * horizon : (offset + width) * horizon
+            ].reshape(-1, horizon, width)
+            total += contributions(model.tables[j], inputs, horizon)
+        values = _functional(weights, centre[None] + total)
+        below = np.where(np.isfinite(low), (low - values) / scales, -np.inf)
+        above = np.where(np.isfinite(high), (values - high) / scales, -np.inf)
+        return np.maximum(np.maximum(below, above), 0.0).max(axis=-1)
+
+    return centre, function
+
+
+def _columns_of(model: Expert, chosen: _Plan):
+    """``(offset, width, shock)`` of every named shock's inputs in the flat vector."""
+    offset = 0
+    for j in chosen.driving:
+        width = 2 + model.tables[j].variables + 1
+        yield offset, width, j
+        offset += width
+
+
+def _scales(chosen: _Plan, low, high) -> np.ndarray:
+    """The scale of every constraint's violation: its width, its tolerance, or one.
+
+    A ray of the one-sided price has an infinite side, and a point-fixed constraint
+    carries its tolerance; either gives the violation a scale the level selection of
+    subset simulation can read.
+    """
+    low = np.asarray(low, dtype=float)
+    high = np.asarray(high, dtype=float)
+    width = np.where(np.isfinite(low) & np.isfinite(high), high - low, np.inf)
+    tolerance = np.asarray(chosen.tolerances or (0.0,), dtype=float)
+    return np.where(width > 0, width, np.where(tolerance > 0, tolerance, 1.0))[:, None]
+
+
+def _simulate_free(model: Expert, chosen: _Plan, draws: int, seed: int) -> MacroSimulation:
+    """The paths with nothing to impose: every coordinate drawn from its own stream.
+
+    The one-sided price reads the medians of the functionals from this simulation, with
+    the causes of the plan kept: their law stays as it was, only the box is gone.
+    """
+    horizon, n = chosen.horizon, len(model.ids)
+    rng = np.random.default_rng([seed, 0, 3])
+    inputs = rng.standard_normal((draws * chosen.inner, horizon, n))
+    walk = np.concatenate(
+        [
+            np.zeros((draws * chosen.inner, 1, n)),
+            np.cumsum(inputs @ model.chol_u.T, axis=1),
+        ],
+        axis=1,
+    )
+    every = tuple(range(len(model.tables)))
+    total = np.zeros((draws * chosen.inner, horizon + 1, n))
+    for j in every:
+        drawn = draw(
+            model.tables[j],
+            np.random.default_rng([seed, 1, 3, j]),
+            horizon,
+            draws * chosen.inner,
+        )
+        total += contributions(model.tables[j], drawn, horizon)
+    paths = model.base_path[: horizon + 1][None] + total + walk
+    return MacroSimulation(
+        ids=model.ids,
+        months=[shift(model.months[-1], t) for t in range(horizon + 1)],
+        paths=paths,
+        history=None,
+        diagnostics={},
+        group=np.repeat(np.arange(draws), chosen.inner),
+    )
+
+
+def _simulate_subset(model: Expert, chosen: _Plan, draws: int, seed: int) -> MacroSimulation:
+    """The imposition when the causes name shocks without the residual.
+
+    Every group runs subset simulation on its own value of R and resamples the samples
+    inside the box to the plan's repetitions; a group whose box no sample reaches
+    contradicts the models.
+    """
+    horizon, n = chosen.horizon, len(model.ids)
+    paths = np.empty((draws * chosen.inner, horizon + 1, n))
+    group = np.repeat(np.arange(draws), chosen.inner)
+    dimension = _dimension_of(model, chosen)
+    for r in range(draws):
+        centre, function = _subset_group(
+            model, chosen, r, seed, chosen.low, chosen.high
+        )
+        result = subset(
+            function,
+            dimension,
+            samples=model.subset_samples,
+            rng=np.random.default_rng([seed, r, 1]),
+        )
+        if not len(result.inside):
+            raise ContradictsModels()
+        rng_pick = np.random.default_rng([seed, r, 2])
+        for j in range(chosen.inner):
+            sample = result.inside[int(rng_pick.integers(len(result.inside)))]
+            total = np.zeros((horizon + 1, n))
+            flat = 0
+            for shock in chosen.driving:
+                columns = 2 + model.tables[shock].variables + 1
+                inputs = sample[flat : flat + columns * horizon].reshape(
+                    1, horizon, columns
+                )
+                flat += columns * horizon
+                total += contributions(model.tables[shock], inputs, horizon)[0]
+            paths[r * chosen.inner + j] = centre + total
+    return MacroSimulation(
+        ids=model.ids,
+        months=[shift(model.months[-1], t) for t in range(horizon + 1)],
+        paths=paths,
+        history=None,
+        diagnostics={"subset_samples": model.subset_samples},
+        group=group,
+    )

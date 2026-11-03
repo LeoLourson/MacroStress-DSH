@@ -101,6 +101,15 @@ class ExpertModel(MacroModel):
 
         return constraint_law(model, plan, draws=draws, seed=seed)
 
+    def log_box_probability(
+        self, model, plan: ScenarioPlan, low, high, *, draws: int, seed: int
+    ):
+        from .forecast import box_probabilities
+
+        return box_probabilities(
+            model, plan, low, high, draws=draws, seed=seed
+        )
+
     def question(self, context: MacroEstimateContext, key: str) -> dict:
         from .answers import question
 

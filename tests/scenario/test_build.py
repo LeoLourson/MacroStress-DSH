@@ -224,7 +224,7 @@ class FixedLaw:
 
 
 class NoLaw:
-    """A macro plugin that simulates but does not measure the constraint law."""
+    """A macro plugin that simulates but measures neither the law nor its own boxes."""
 
     def __init__(self, inner):
         self._inner = inner
@@ -233,6 +233,9 @@ class NoLaw:
         return self._inner.simulate(model, plan, draws=draws, seed=seed)
 
     def constraint_law(self, model, plan, *, draws, seed):
+        return None
+
+    def log_box_probability(self, model, plan, low, high, *, draws, seed):
         return None
 
 
@@ -738,3 +741,103 @@ def test_the_paths_carry_the_size_of_the_driving_shocks(versions):
     target = float(versions.data.y[-1, 0] + 5.0)
     paths = paths_of(versions, scenario(versions, constraints=[fixed("gl.brent", 3, target)]))
     assert len(paths.diagnostics["driving_sd"]["median_by_month"]) == HORIZON
+
+
+class MeasuredBoxes:
+    """A macro plugin that measures its own box probabilities and reports no law.
+
+    Its functionals move with the shocks the causes name, so no mixture of gaussian rows
+    carries their law: the price comes from ``log_box_probability``, here the logarithm of
+    a known gaussian probability around a fixed mean.
+    """
+
+    def __init__(self, inner, mean=0.0, sigma=1.0, logs=None):
+        self._inner = inner
+        self._mean = mean
+        self._sigma = sigma
+        self._logs = logs
+        self.seen = []
+
+    def simulate(self, model, plan, *, draws, seed):
+        # Constant zero paths: the medians of the one-sided price are zero, whatever
+        # the inner model would have simulated.
+        from datetime import date
+
+        from mst.model_sdk.contracts import MacroSimulation
+
+        variables = sorted({term.variable for c in plan.constraints for term in c.terms})
+        if not variables:
+            variables = ["gl.brent"]
+        return MacroSimulation(
+            ids=variables,
+            months=[date(2026, 10, 1)] * (plan.horizon + 1),
+            paths=np.zeros((draws, plan.horizon + 1, len(variables))),
+        )
+
+    def constraint_law(self, model, plan, *, draws, seed):
+        return None
+
+    def log_box_probability(self, model, plan, low, high, *, draws, seed):
+        self.seen.append((np.asarray(low, dtype=float), np.asarray(high, dtype=float)))
+        if self._logs is not None:
+            return np.asarray(self._logs, dtype=float)
+        low = np.asarray(low, dtype=float)
+        high = np.asarray(high, dtype=float)
+        from scipy.stats import norm
+
+        probability = norm.cdf((high[0] - self._mean) / self._sigma) - norm.cdf(
+            (low[0] - self._mean) / self._sigma
+        )
+        return np.full(draws, float(np.log(probability)))
+
+
+def test_a_model_measuring_its_own_boxes_is_priced_by_them(versions):
+    from scipy.stats import norm
+
+    # The two-sided price is the mean of -log P(S | R) over the values returned.
+    plugin = MeasuredBoxes(versions.loaded.plugin, mean=0.0, sigma=2.0)
+    measured = replace(versions.loaded, plugin=plugin)
+    spec = scenario(versions, constraints=[interval("gl.brent", 2, 0.0, 2.0)])
+    found = dist_of(spec, measured, draws=8, seed=SEED)
+    exact = -np.log(norm.cdf(1.0) - norm.cdf(0.0))
+    assert found.distance == pytest.approx(exact)
+    assert found.log_probability == pytest.approx(np.log(norm.cdf(1.0) - norm.cdf(0.0)))
+    assert found.standard_error == 0.0
+    assert found.message is None
+
+
+def test_a_model_measuring_its_own_boxes_has_a_one_sided_price(versions):
+    from scipy.stats import norm
+
+    # The medians of the unconstrained simulation decide the side: an interval above the
+    # median opens upwards, and the one-sided price is the ray's own probability.
+    plugin = MeasuredBoxes(versions.loaded.plugin, mean=0.0, sigma=2.0)
+    measured = replace(versions.loaded, plugin=plugin)
+    spec = scenario(versions, constraints=[interval("gl.brent", 2, 1.0, 2.0)])
+    found = dist_of(spec, measured, draws=8, seed=SEED)
+    assert found.one_sided is not None and len(plugin.seen) >= 2
+    ray = plugin.seen[-1]
+    assert ray[0] == pytest.approx(1.0) and np.isposinf(ray[1]), "the ray opens upwards"
+    assert found.one_sided.distance == pytest.approx(-np.log(1.0 - norm.cdf(0.5)))
+    assert found.one_sided.dropped == ()
+
+
+def test_a_model_whose_boxes_are_impossible_has_an_infinite_price(versions):
+    plugin = MeasuredBoxes(versions.loaded.plugin, logs=[float("-inf"), 0.0])
+    measured = replace(versions.loaded, plugin=plugin)
+    spec = scenario(versions, constraints=[interval("gl.brent", 2, 1.0, 2.0)])
+    found = dist_of(spec, measured, draws=8, seed=SEED)
+    assert found.distance == float("inf")
+    assert "contradicts the models" in found.message
+
+
+def test_a_model_without_a_law_and_without_boxes_has_no_price(versions):
+    class Neither(MeasuredBoxes):
+        def log_box_probability(self, model, plan, low, high, *, draws, seed):
+            return None
+
+    stripped = replace(
+        versions.loaded, plugin=Neither(versions.loaded.plugin)
+    )
+    spec = scenario(versions, constraints=[interval("gl.brent", 2, 1.0, 3.0)])
+    assert dist_of(spec, stripped, draws=DRAWS, seed=SEED) is None
