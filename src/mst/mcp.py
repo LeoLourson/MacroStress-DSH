@@ -1036,7 +1036,21 @@ def main(argv: list[str] | None = None) -> None:
     _create(root)
     ws = store.Workspace(root.resolve())
     store.write_state(ws)
+    _load_compiled_code()
     build(ws).run()
+
+
+def _load_compiled_code() -> None:
+    """Import the plugins and scipy before the stdio transport starts reading stdin.
+
+    On Windows the first load of scipy's compiled extensions inside a running server never
+    returned while the transport's thread waited on stdin, so the first tool that loaded them
+    hung until the client closed the pipe. Loaded here, they are in memory before any call.
+    """
+    from mst import plugins
+    from mst.scenario import overlay  # noqa: F401  scipy.optimize
+
+    plugins.registry()
 
 
 if __name__ == "__main__":
