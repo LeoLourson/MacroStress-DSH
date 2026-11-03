@@ -90,12 +90,16 @@ class ExpertModel(MacroModel):
     def simulate(
         self, model, plan: ScenarioPlan, *, draws: int, seed: int
     ) -> MacroSimulation:
-        raise NotImplementedError("the simulation of the expert model arrives with a later step")
+        from .forecast import simulate
+
+        return simulate(model, plan, draws=draws, seed=seed)
 
     def constraint_law(
         self, model, plan: ScenarioPlan, *, draws: int, seed: int
     ) -> ConstraintLaw | None:
-        raise NotImplementedError("the law of the expert model arrives with a later step")
+        from .forecast import constraint_law
+
+        return constraint_law(model, plan, draws=draws, seed=seed)
 
     def question(self, context: MacroEstimateContext, key: str) -> dict:
         from .answers import question
