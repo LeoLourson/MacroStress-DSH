@@ -289,7 +289,8 @@ def build(ws: store.Workspace) -> FastMCP:
             str | None,
             Field(
                 description="The kind of fragment search limits itself to: methodology, "
-                "scenario_set, transmission or episode."
+                "scenario_set, transmission, episode or market (market expectations, the "
+                "model corpus alone)."
             ),
         ] = None,
         region: Annotated[
@@ -327,16 +328,31 @@ def build(ws: store.Workspace) -> FastMCP:
                 "missing one when omitted."
             ),
         ] = None,
+        corpus: Annotated[
+            str,
+            Field(
+                description='Which corpus to work with: "scenario", the default, or '
+                '"model" — the corpus of the models, with its own manifest and index.'
+            ),
+        ] = "scenario",
     ) -> dict:
-        """The scenario corpus. Actions: search, get, list, add, index, fetch.
+        """The scenario corpus and the model corpus. Actions: search, get, list, add, index, fetch.
 
+        ``corpus="model"`` works with the corpus of the models — the material a model's
+        elicitation reads: episodes, the state at the date, transmission reviews, market
+        expectations — which has its own manifest and index under ``corpus-model/``.
         ``search`` and ``get`` read the index as it was on ``as_of``; ``list`` shows what the
         manifest holds; ``add`` registers a file downloaded by hand under its ``key``. ``index``
         and ``fetch`` are tasks on the corpus resource.
         """
+        root = ws.corpus if corpus == "scenario" else ws.model_corpus
+        if corpus not in {"scenario", "model"}:
+            raise ValueError(
+                f"corpus: unknown corpus {corpus!r}, try scenario or model"
+            )
         if action == "search":
             return corpus_tool.search(
-                ws.corpus,
+                root,
                 _need(query, "query"),
                 _day(_need(as_of, "as_of")),
                 kind=kind,
@@ -345,15 +361,15 @@ def build(ws: store.Workspace) -> FastMCP:
                 k=k,
             )
         if action == "get":
-            return corpus_tool.get(ws.corpus, _need(id, "id"), _day(_need(as_of, "as_of")))
+            return corpus_tool.get(root, _need(id, "id"), _day(_need(as_of, "as_of")))
         if action == "list":
-            return corpus_tool.catalogue(ws.corpus)
+            return corpus_tool.catalogue(root)
         if action == "add":
-            return corpus_tool.add(ws.corpus, _need(key, "key"), Path(_need(file, "file")), url)
+            return corpus_tool.add(root, _need(key, "key"), Path(_need(file, "file")), url)
         if action == "index":
-            return _start(ws, "corpus", _corpus_argv(ws, "index"))
+            return _start(ws, "corpus", _corpus_argv(ws, "index", root=root))
         if action == "fetch":
-            return _start(ws, "corpus", _corpus_argv(ws, "fetch", *(ids or [])))
+            return _start(ws, "corpus", _corpus_argv(ws, "fetch", *(ids or []), root=root))
         raise ValueError(
             f"corpus: unknown action {action!r}, try search, get, list, add, index, fetch"
         )
@@ -910,9 +926,18 @@ def _model_fragment(ws: store.Workspace, day: date):
     return visible
 
 
-def _corpus_argv(ws: store.Workspace, command: str, *ids: str) -> list[str]:
+def _corpus_argv(
+    ws: store.Workspace, command: str, *ids: str, root: Path | None = None
+) -> list[str]:
     """The command line of ``python -m mst.corpus`` for this workspace."""
-    return ["-m", "mst.corpus", command, *ids, "--corpus", str(ws.corpus)]
+    return [
+        "-m",
+        "mst.corpus",
+        command,
+        *ids,
+        "--corpus",
+        str(root if root is not None else ws.corpus),
+    ]
 
 
 async def _wait_for_job(ws: store.Workspace, job_id: str, timeout_sec: float) -> dict:

@@ -14,7 +14,10 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-Kind = Literal["methodology", "scenario_set", "transmission", "episode"]
+Kind = Literal["methodology", "scenario_set", "transmission", "episode", "market"]
+"""The kind of a corpus fragment; ``market`` names market expectations — futures, forwards,
+the OFZ curve, the consensus survey — the material the model corpus holds apart from the
+scenario corpus."""
 Region = Literal["ru", "em", "dm"]
 SourceStatus = Literal["planned", "raw", "ready"]
 """``planned``: no text yet. ``raw``: text extracted from the original by ``mst.corpus convert``
@@ -56,7 +59,7 @@ class FileSpec(Model):
 
 class Source(Model):
     id: str = Field(pattern=r"^[MST]\d+$")
-    kind: Literal["methodology", "scenario_set", "transmission"]
+    kind: Literal["methodology", "scenario_set", "transmission", "market"]
     title: str
     publisher: str
     authors: list[str] = []
