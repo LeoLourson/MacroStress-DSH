@@ -11,7 +11,7 @@ after that job.
 | Folder | What it measures | Metric and command |
 |---|---|---|
 | [`corpus-search/`](corpus-search/questions.md) | the corpus search: does it find the fragments that hold the answer to a question asked on the day `as_of` | recall@5, `python -m mst.corpus eval --corpus workspace/corpus --questions bench/corpus-search/questions.md` |
-| `scenario-from-corpus/` | how the agent builds a scenario from the text of an event, as the skill `scenario-from-corpus` tells it; the events never happened, so the agent cannot know the outcome | the set is being built |
+| [`scenario-from-corpus/`](scenario-from-corpus/events.toml) | how the agent builds a scenario from the text of an event, as the skill `scenario-from-corpus` tells it; 100 events that never happened, so the agent cannot know the outcome | no metric until the expected decisions are added |
 
 ## Rules
 
@@ -19,7 +19,7 @@ after that job.
   from (the corpus, series, scenarios in the workspace) does not go here.
 - The inputs of a set and its right answers may live apart. When an agent with access to the
   repository takes the set, the answers are kept outside its working folder: an agent that has
-  read the answer makes the check worthless. For `scenario-from-corpus/` the repository will hold
+  read the answer makes the check worthless. For `scenario-from-corpus/` the repository holds only
   the texts of the events, and the expected decisions are added separately.
 - A new set gets a folder named after the job it measures, and the description of its format,
   metric and command in the head of its file or in the folder's README.

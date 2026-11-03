@@ -22,6 +22,7 @@
 | `test_series_tool.py` | Инструмент `series`, импорт рядов из каталога CSV, задача загрузки |
 | `test_corpus_tool.py` | Инструмент `corpus`: `search`, `get` и `list` читают индекс, `index` и `fetch` запускают задачу |
 | `test_runs.py` | `mst.runs`: запрос, мета, пути и результаты в `runs/<id>/`, инструмент `run` |
+| `test_bench.py` | Наборы `bench/`: событие `scenario-from-corpus` — только `id` и текст, `id` не повторяется |
 | [data/](data/README.md) | Загрузчики и хранилище рядов |
 | [macro/](macro/README.md) | Реестр, панель, оценка, идентификация, прогноз, версии, бэктест, инструмент `model` |
 | [drivers/](drivers/README.md) | Каталоги, сателлиты, их проверка и пути, инструмент `model(kind="satellites")` |

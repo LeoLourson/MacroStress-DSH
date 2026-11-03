@@ -20,6 +20,7 @@ pytest tests; none goes to the network: source answers are substituted, and mode
 | `test_series_tool.py` | The tool `series`, import of series from a CSV directory, a download job |
 | `test_corpus_tool.py` | The tool `corpus`: `search`, `get` and `list` read the index, `index` and `fetch` start a job |
 | `test_runs.py` | `mst.runs`: request, meta, paths and results in `runs/<id>/`, the tool `run` |
+| `test_bench.py` | The sets of `bench/`: an event of `scenario-from-corpus` is only an `id` and a text, and no `id` repeats |
 | [data/](data/README.en.md) | Series loaders and the store |
 | [macro/](macro/README.en.md) | Registry, panel, versions, the tool `model` |
 | [bvar/](bvar/README.en.md), `msvar/` | Estimation, identification, forecast and the law of the conditions of the macro models |
