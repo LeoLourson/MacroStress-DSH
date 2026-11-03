@@ -145,3 +145,33 @@ def test_the_levels_stay_inside_the_table_and_the_size_matches_its_law():
     assert abs(share - rate) < 4 * np.sqrt(rate * (1 - rate) / inputs[..., 0].size)
     assert np.isfinite(contributions(model, inputs, 3)).all()
     assert 0.0 < ndtr(0.0) < 1.0
+
+
+def test_the_copula_keeps_uniform_margins_and_the_asked_correlation():
+    count, rho = 23, 0.5
+    inputs = np.random.default_rng(5).standard_normal((200000, count + 3))
+    found = levels(inputs, rho, ALPHA)
+    margins = np.quantile(found[:, 0], [0.05, 0.5, 0.95])
+    assert np.allclose(margins, [0.05, 0.5, 0.95], atol=0.004)
+    # Kendall's tau from disjoint pairs of draws; an elliptical copula gives 2/pi asin(rho).
+    tau = np.mean(
+        np.sign(found[1::2, 0] - found[::2, 0]) * np.sign(found[1::2, 1] - found[::2, 1])
+    )
+    assert abs(tau - 2.0 / np.pi * np.arcsin(rho)) < 0.01
+
+
+def _at_size(model, size):
+    """The month-1 response of variable 0 to an occurrence of the given size at the median level."""
+    level = np.interp(size, model.size_table, model.levels)
+    return contributions(model, forced(size_level=level, months=1), 1)[0, 1, 0]
+
+
+def test_a_two_sided_size_law_reads_the_broken_line_through_the_origin():
+    cells = [
+        [(-4.0, -3.0, -2.0), (0.5, 1.0, 1.5), (7.0, 8.0, 9.0)] * 4,
+        [(-2.0, -1.0, -0.2)] * 12,
+    ]
+    model = tables(sizes=(-10.0, 2.0, 20.0), cells=cells)
+    expected = {-5.0: -1.5, -1.0: -0.3, 1.0: 0.5, 11.0: 4.5}
+    for size, response in expected.items():
+        assert np.isclose(_at_size(model, size), response, atol=1e-6), size

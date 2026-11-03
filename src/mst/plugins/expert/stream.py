@@ -108,8 +108,11 @@ def levels(inputs: np.ndarray, rho: float, alpha: float) -> np.ndarray:
     """
     count = inputs.shape[-1] - 3
     base = inputs[..., 2 : 2 + count]
+    # base·(sqrt(1-rho) I + a/n 11') has covariance (1-rho) I + rho 11' when
+    # (sqrt(1-rho) + a)^2 = 1 - rho + n rho, so every column stays standard normal.
     common = base.mean(axis=-1, keepdims=True)
-    gaussian = np.sqrt(count * rho) * common + np.sqrt(1.0 - rho) * base
+    loading = np.sqrt(1.0 - rho + count * rho) - np.sqrt(1.0 - rho)
+    gaussian = loading * common + np.sqrt(1.0 - rho) * base
     scale = chi2_distribution.ppf(
         np.clip(ndtr(inputs[..., -1]), 1e-15, 1.0 - 1e-15), alpha
     )
@@ -134,19 +137,20 @@ def _node_values(tables: ShockTables, inputs: np.ndarray) -> np.ndarray:
 
 
 def _size_knots(tables: ShockTables) -> tuple[np.ndarray, list[int | None]]:
-    """The knot sizes of the broken line and the size node each knot reads, `(0, 0)` first.
+    """The knot sizes of the broken line in increasing order and the size node each reads.
 
-    A size node of zero size is dropped: the model puts the response at size zero at zero.
+    The origin ``(0, 0)`` is a knot, read as no response; a size node of zero size is
+    dropped there, since the model puts the response at size zero at zero.
     """
-    knots: list[float] = [0.0]
-    nodes: list[int | None] = [None]
-    for size_node, size in enumerate(tables.sizes):
-        if size == 0.0 or size == knots[-1]:
-            if size != 0.0:
-                nodes[-1] = size_node
+    asked = [(float(size), node) for node, size in enumerate(tables.sizes) if size != 0.0]
+    knots: list[float] = []
+    nodes: list[int | None] = []
+    for size, node in sorted([(0.0, None), *asked], key=lambda knot: knot[0]):
+        if knots and size == knots[-1]:
+            nodes[-1] = node  # an equal size: the later size node is read
             continue
-        knots.append(float(size))
-        nodes.append(size_node)
+        knots.append(size)
+        nodes.append(node)
     return np.array(knots), nodes
 
 
