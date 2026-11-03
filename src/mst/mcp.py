@@ -888,10 +888,16 @@ def _model_inputs(
         inputs=ws.elicitation,
         fragment=_model_fragment(ws, day),
     )
-    if action == "question":
-        return model.question(context, _need(key, "key"))
-    if action == "write":
+    if action in {"question", "write"}:
+        # The key becomes a file name: only the model's own keys reach the folder.
         the_key = _need(key, "key")
+        if the_key not in model.input_keys(day):
+            raise ValueError(
+                f"model: {model.model_id} declares no input {the_key!r} on {day.isoformat()}"
+            )
+    if action == "question":
+        return model.question(context, the_key)
+    if action == "write":
         normal = model.check_input(context, the_key, _need(payload, "payload"))
         digest = model_inputs.write(ws.elicitation, day, the_key, normal)
         found = model_inputs.status(ws.elicitation, model, day)

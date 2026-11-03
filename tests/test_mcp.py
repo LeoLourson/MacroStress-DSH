@@ -247,3 +247,27 @@ def test_a_refused_answer_writes_nothing_and_names_the_field(tmp_path, monkeypat
     except Exception as error:
         assert "value" in str(error)
     assert not (ws.elicitation / "2026-11-01").exists()
+
+
+def test_the_inputs_tool_refuses_a_key_the_model_does_not_declare(tmp_path, monkeypatch):
+    from mst import plugins
+    from tests.plugins import fakes
+
+    class Permissive(fakes.InputMacroModel):
+        def check_input(self, context, key, payload):
+            return dict(payload)
+
+    registry = plugins.build([fakes.model_plugin(macro=(Permissive(),))])
+    monkeypatch.setattr(plugins, "registry", lambda: registry)
+    ws = store.Workspace(tmp_path)
+    arguments = {
+        "kind": "inputs",
+        "action": "write",
+        "as_of": "2026-11-01",
+        "key": "../outside",
+        "payload": {"value": 1.0},
+    }
+    with pytest.raises(Exception, match="declares no input"):
+        call(ws, "model", arguments)
+    assert not (tmp_path / "elicitation" / "outside.json").exists()
+    assert not list(tmp_path.rglob("outside.json"))
