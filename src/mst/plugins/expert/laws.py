@@ -110,7 +110,7 @@ def skew_t_fit(q5, q50, q95, nu):
         width = q95.flat[cell] - q5.flat[cell]
         target = np.array([q5.flat[cell], q50.flat[cell], q95.flat[cell]])
 
-        def residual(beta):
+        def residual(beta, target=target, width=width):
             values = beta[0] + np.exp(beta[1]) * quantiles(beta[2])
             return (values - target) / width
 
