@@ -8,7 +8,7 @@ range blocks start-up rather than failing in the middle of a run.
 from ..sdk_version import compatible as _compatible
 from ..sdk_version import parse
 
-SDK_VERSION = "1.0.0"
+SDK_VERSION = "1.1.0"
 
 __all__ = ["SDK_VERSION", "compatible", "parse"]
 

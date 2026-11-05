@@ -110,6 +110,11 @@ def shock_payload(shock_id: str, **changes) -> dict:
             by_node = {}
             for index, name in enumerate(("q5", "q50", "q95")):
                 size = sizes[name]
+                if size == 0.0:
+                    # A zero size has no occurrence to respond to: all three quantiles are
+                    # zero, the rule the question states and the model reads.
+                    by_node[name] = {"q5": 0.0, "q50": 0.0, "q95": 0.0}
+                    continue
                 # A response deliberately not proportional to the size: the factor
                 # 1 + 0.1 * index bends the line through the three nodes.
                 centre = (

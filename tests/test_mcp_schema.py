@@ -22,6 +22,10 @@ ACTIONS = {
     "run": ("start", "status", "result", "list"),
     "portfolio": ("list", "get", "save", "delete", "check", "exposure"),
     "model": ("list", "describe", "base", "estimate", "backtest"),
+    "elicit": ("list", "question", "write", "status", "next", "answer"),
+    "interview": (
+        "progress", "claim", "release", "audit", "accept", "reopen", "history", "journal",
+    ),
 }
 """Every action the tool's dispatch knows; the description of the field must name them all."""
 
@@ -48,7 +52,7 @@ def test_every_parameter_of_every_tool_carries_a_description(tmp_path):
 
 def test_every_tool_declares_the_hints_a_client_reads(tmp_path):
     found = tools(tmp_path)
-    assert len(found) == 8, sorted(found)
+    assert len(found) == 10, sorted(found)
     problems = []
     for name, tool in sorted(found.items()):
         annotations = tool.annotations

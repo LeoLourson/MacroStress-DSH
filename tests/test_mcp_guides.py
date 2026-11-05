@@ -41,9 +41,24 @@ def test_the_guide_tool_lists_and_returns_every_guide(tmp_path):
     listed, one = session(store.Workspace(tmp_path), work)
     assert {item["name"] for item in listed["guides"]} == {
         "scenario-from-corpus", "run-report", "drivers", "model-inputs",
+        "elicitation-orchestration",
     }
     assert all(item["description"] and "content" not in item for item in listed["guides"])
     assert 'corpus(action="search"' in one["content"] and not one["content"].startswith("---")
+
+
+def test_the_orchestration_guide_is_served_and_named_by_the_instructions(tmp_path):
+    async def work(client):
+        told = client.initialize_result.instructions
+        orchestration = await client.call_tool(
+            "guide", {"name": "elicitation-orchestration"}
+        )
+        return told, orchestration.data
+
+    told, orchestration = session(store.Workspace(tmp_path), work)
+    assert 'guide(name="elicitation-orchestration")' in told
+    assert 'interview(action="progress"' in orchestration["content"]
+    assert "model-inputs" in orchestration["content"]
 
 
 def test_an_unknown_guide_names_the_guides_that_exist():

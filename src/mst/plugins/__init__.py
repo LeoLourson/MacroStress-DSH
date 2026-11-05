@@ -188,6 +188,23 @@ def _declaration_problems(plugin: Plugin) -> list[str]:
         cases = plugin.demo
     if models and not cases:
         fail("a plugin with position models must ship a demo case")
+    if not isinstance(plugin.guides, tuple | list):
+        fail(f"guides must be a tuple of paths, got {type(plugin.guides).__name__}")
+    else:
+        from ..guides import parse as parse_guide
+
+        for path in plugin.guides:
+            path = Path(path)
+            if not path.is_file():
+                fail(f"guide {path.name!r} does not exist")
+                continue
+            try:
+                name = parse_guide(path.read_text(encoding="utf-8"))["name"]
+            except (KeyError, ValueError) as error:
+                fail(f"guide {path.name!r} has no readable frontmatter: {error}")
+                continue
+            if name != path.stem:
+                fail(f"guide {path.name!r} declares the name {name!r}")
 
     model_ids = [
         model.model_id for model in models if isinstance(getattr(model, "model_id", None), str)
@@ -451,9 +468,23 @@ def build(plugins: Iterable[Plugin]) -> Registry:
     """Check the declarations together and index them; raise ``PluginError`` on any problem."""
     registry = Registry()
     problems: list[str] = []
+    from .. import guides
+
+    guide_owner = {path.stem: "the server" for path in guides.ROOT.glob("*.md")}
     for plugin in plugins:
         problems += declaration_problems(plugin)
         plugin_id = getattr(plugin, "plugin_id", "?")
+        declared = (
+            plugin.guides if isinstance(getattr(plugin, "guides", None), tuple | list) else ()
+        )
+        for path in declared:
+            name = Path(path).stem
+            if name in guide_owner:
+                problems.append(
+                    f"guide {name!r} is declared by {guide_owner[name]} and {plugin_id}"
+                )
+            else:
+                guide_owner[name] = plugin_id
         if plugin_id in registry.plugins:
             problems.append(f"plugin {plugin_id!r} is declared twice")
             continue

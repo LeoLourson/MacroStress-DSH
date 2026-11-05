@@ -502,6 +502,54 @@ class MacroModel(ABC):
         """
         raise KeyError(f"the model declares no input {key!r}")
 
+    def input_steps(self, context: MacroEstimateContext, key: str) -> list[dict]:
+        """The ordered answer parts, each with an ``id``, English ``text`` and ``schema``.
+
+        The default keeps the complete question as one ``answer`` step. A model may split
+        a large answer without changing the full payload accepted by ``check_input``.
+        """
+        question = self.question(context, key)
+        return [{"id": "answer", "text": question["text"], "schema": question["schema"]}]
+
+    def input_step_context(
+        self, context: MacroEstimateContext, key: str, step: str, parts: dict[str, dict]
+    ) -> dict:
+        """Bounded saved judgements needed to answer a step in a fresh agent context."""
+        return {}
+
+    def check_input_step(
+        self, context: MacroEstimateContext, key: str, step: str, payload: dict
+    ) -> dict:
+        """Validate one small answer before it is persisted; default is the full answer."""
+        return self.check_input(context, key, payload)
+
+    def assemble_input(
+        self, context: MacroEstimateContext, key: str, parts: dict[str, dict]
+    ) -> dict:
+        """Combine answered parts into the full payload for ``check_input`` to validate."""
+        return parts["answer"]
+
+    def input_parts(
+        self, context: MacroEstimateContext, key: str, payload: dict
+    ) -> dict[str, dict]:
+        """The full answer split back into its answered parts, inverse of ``assemble_input``.
+
+        The interview reopens named steps with it: a published answer is split, the named
+        parts are dropped and asked again. The default keeps a single-step answer whole.
+        """
+        return {"answer": payload}
+
+    def audit_input(
+        self, context: MacroEstimateContext, key: str, payload: dict
+    ) -> list[dict]:
+        """Advisory findings about a published answer: a code, a message and the cells.
+
+        They never block publication: the orchestrating agent reads them and either accepts
+        the answer with a reason or reopens the steps they name. The default finds nothing.
+        Each finding is ``{"code", "severity": "warning", "message", "cells"}``.
+        """
+        return []
+
     def check_input(
         self, context: MacroEstimateContext, key: str, payload: dict
     ) -> dict:

@@ -128,7 +128,7 @@ def test_the_shocks_argument_is_a_required_keyword_of_a_satellite_simulate():
 
 
 def test_the_plugin_ranges_are_checked_against_the_model_sdk_version():
-    assert MODEL_SDK_VERSION == "3.1.0"
+    assert MODEL_SDK_VERSION == "3.2.0"
     assert model_compatible(">=3.0,<4.0")
     assert model_compatible(">=3.0")
     assert model_compatible(">=3.1,<4.0")

@@ -6,6 +6,16 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## Unreleased
 
+- **The expert interview got an orchestrator, a gate and answer history.** The interview
+  engine moved from `mst/elicitation.py` to `mst/plugin_sdk/interview/` and serves any model
+  that declares questions: tickets, parts, publication, shock ownership, the journal, the
+  versions. The new MCP tool `interview` — `progress`, `claim`, `release`, `audit`, `accept`,
+  `reopen`, `history`, `journal`; `elicit` stays the answer plane. The form is checked hard,
+  the economic audit (`audit.toml`) gives warnings, and a shock with findings is not accepted
+  without `accept` or `reopen`. The questions are fixed: the shock size is printed in the
+  response's scale, a zero size requires zeros, and the reference response is not a value to
+  copy. The guides `model-inputs` and `elicitation-orchestration` belong to the plugin. SDK:
+  3.2.0 and 1.1.0.
 - **The check sets are gathered in `bench/`.** The folder splits by the job a set measures.
   `corpus-search/questions.md` holds the questions of the search check, moved from
   `corpus/eval/`; `python -m mst.corpus eval` reads them through the required

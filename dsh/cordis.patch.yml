@@ -15,7 +15,7 @@
         command: uvx
         args:
           - '--from'
-          - 'macrostress>=1.0.2'
+          - 'macrostress>=1.1.0'
           - 'macrostress'
         env:
           PYTHONUTF8: '1'

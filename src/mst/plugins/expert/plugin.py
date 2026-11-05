@@ -1,8 +1,12 @@
 """The declaration of the expert plugin and its exports."""
 
+from pathlib import Path
+
 from mst.plugin_sdk import Plugin
 
 from .model import ExpertModel
+
+GUIDES = Path(__file__).parent / "guides"
 
 plugin = Plugin(
     plugin_id="expert",
@@ -15,4 +19,8 @@ plugin = Plugin(
         "откликов, их t-связку и гауссов остаток как разность ковариаций."
     ),
     macro=(ExpertModel("rw"), ExpertModel("market")),
+    guides=(
+        GUIDES / "model-inputs.md",
+        GUIDES / "elicitation-orchestration.md",
+    ),
 )

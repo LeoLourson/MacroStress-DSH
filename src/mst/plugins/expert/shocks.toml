@@ -8,88 +8,106 @@
 id = "gl.oil"
 meaning = "Oil price from supply: OPEC+, production outages"
 size_unit = "percent change of the Brent price over the month"
+size_scale = "percent_change"
 
 [[shocks]]
 id = "gl.oil_demand"
 meaning = "Oil price from world demand: recession, China"
 size_unit = "percent change of the Brent price over the month"
+size_scale = "percent_change"
 
 [[shocks]]
 id = "gl.gas"
 meaning = "Gas prices and gas exports"
 size_unit = "percent change of the gas price over the month"
+size_scale = "percent_change"
 
 [[shocks]]
 id = "gl.metals"
 meaning = "Prices of metals and fertilisers"
 size_unit = "percent change of the metals and fertilisers price index over the month"
+size_scale = "percent_change"
 
 [[shocks]]
 id = "gl.grain"
 meaning = "World prices of grain and food"
 size_unit = "percent change of the world grain and food price index over the month"
+size_scale = "percent_change"
 
 [[shocks]]
 id = "gl.financial"
 meaning = "Flight from risk, widening spreads"
 size_unit = "points of the VIX added in the month"
+size_scale = "index_points"
 
 [[shocks]]
 id = "gl.us_rates"
 meaning = "Fed rate and US yields"
 size_unit = "percentage points of the Fed rate beyond the market's path"
+size_scale = "percentage_points"
 
 [[shocks]]
 id = "gl.dollar"
 meaning = "Dollar against world currencies, the yuan included"
 size_unit = "percent change of the dollar index over the month"
+size_scale = "percent_change"
 
 [[shocks]]
 id = "ru.monetary"
 meaning = "Central bank decision beyond its rule"
 size_unit = "percentage points of the key rate beyond its rule"
+size_scale = "percentage_points"
 
 [[shocks]]
 id = "ru.inflation"
 meaning = "Supply-side inflation: harvest, tariffs"
 size_unit = "percentage points of month-on-month inflation"
+size_scale = "percentage_points"
 
 [[shocks]]
 id = "ru.inflation_expect"
 meaning = "Shift of inflation expectations without a change in costs"
 size_unit = "percentage points of the inflation-expectations survey"
+size_scale = "percentage_points"
 
 [[shocks]]
 id = "ru.fx_risk"
 meaning = "Capital outflow, demand for foreign currency"
 size_unit = "percent change of the rouble exchange rate in the month"
+size_scale = "percent_change"
 
 [[shocks]]
 id = "ru.sanctions_trade"
 meaning = "Export and import restrictions, price cap"
 size_unit = "percent of exports under restriction"
+size_scale = "percent_of_stock"
 
 [[shocks]]
 id = "ru.sanctions_finance"
 meaning = "Payment restrictions, asset freezes, bank disconnections"
 size_unit = "percent of the banking system cut off from payments"
+size_scale = "percent_of_stock"
 
 [[shocks]]
 id = "ru.fiscal"
 meaning = "Budget spending and taxes beyond plan"
 size_unit = "percent of GDP of extra budget spending or taxes"
+size_scale = "percent_of_stock"
 
 [[shocks]]
 id = "ru.credit"
 meaning = "Credit impulse: subsidised programmes, macroprudential limits"
 size_unit = "percent change of the credit stock in the month"
+size_scale = "percent_change"
 
 [[shocks]]
 id = "ru.labor"
 meaning = "Labour shortage, mobilisation, migration"
 size_unit = "percent of the labour force"
+size_scale = "percent_of_stock"
 
 [[shocks]]
 id = "ru.capital_controls"
 meaning = "Currency controls and mandatory sale of export proceeds"
 size_unit = "percent of export proceeds subject to mandatory sale"
+size_scale = "percent_of_stock"

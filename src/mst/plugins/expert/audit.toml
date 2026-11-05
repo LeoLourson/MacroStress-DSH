@@ -1,0 +1,79 @@
+# The economic expectations of the expert answers (src/mst/plugins/expert/audit.py).
+# Each rule is advisory: a broken rule becomes a warning of a published answer, and the
+# orchestrating agent accepts the answer with a reason or reopens the parts the rule names.
+# `value` is the bound of `le`, `ge` and the multiplier of `at_most_times`; `min_abs` skips
+# an `opposite_sign` when the first variable barely moved; `other` is the second variable of
+# the sign and ratio rules. `shock = "any"` applies to every shock of the set. Responses are
+# read at the median size, at the median of the response. Directional bounds (`le`, `ge`)
+# describe positive sizes: reverse the response sign for negative sizes, skip zero sizes.
+
+[[rule]]
+id = "oil_supply_rouble"
+shock = "gl.oil"
+variable = "ru.usdrub"
+horizon = 1
+op = "le"
+value = 0.0
+note = "an oil supply shock lifts the oil price, so the rouble strengthens and the dollar rate falls; a rise of the dollar rate here reverses the channel"
+
+[[rule]]
+id = "dollar_shock_rouble"
+shock = "gl.dollar"
+variable = "ru.usdrub"
+horizon = 1
+op = "ge"
+value = 0.0
+note = "a stronger dollar against world currencies makes the dollar more expensive in roubles"
+
+[[rule]]
+id = "us_rates_rouble"
+shock = "gl.us_rates"
+variable = "ru.usdrub"
+horizon = 3
+op = "ge"
+value = 0.0
+note = "higher US rates pull capital to the dollar, so the dollar rate in roubles rises"
+
+[[rule]]
+id = "mortgage_pass_through"
+shock = "ru.monetary"
+variable = "ru.mortgage_rate"
+horizon = "all"
+op = "at_most_times"
+other = "ru.key_rate"
+value = 1.5
+note = "a mortgage rate that reacts more than one and a half times the key rate is not a pass-through of the decision"
+
+[[rule]]
+id = "tightening_output"
+shock = "ru.monetary"
+variable = "ru.output"
+horizon = 12
+op = "le"
+value = 0.0
+note = "a tightening beyond the rule suppresses output within a year"
+
+[[rule]]
+id = "one_dollar_two_quotes"
+variable = "ru.usdrub"
+horizon = "all"
+op = "same_sign"
+other = "ru.cnyrub"
+note = "the dollar and yuan rates in roubles usually share the rouble channel; opposite signs need a cross-currency explanation"
+
+[[rule]]
+id = "okun"
+variable = "ru.output"
+horizon = "all"
+op = "opposite_sign"
+other = "ru.unemployment"
+min_abs = 0.5
+note = "output and unemployment move in opposite directions; both rising or both falling is not a transmission"
+
+[[rule]]
+id = "one_yield_curve"
+variable = "ru.ofz_5y"
+horizon = "all"
+op = "same_sign"
+other = "ru.ofz_10y"
+note = "the five- and ten-year yields belong to one curve and do not move in opposite directions"

@@ -139,6 +139,8 @@ def check(context, key: str, payload: dict) -> dict:
     if key not in shocks:
         raise KeyError(f"the model declares no input {key!r}")
     answer = _parse(ShockAnswer, payload, key)
+    if shocks[key].size_scale == "percent_change" and answer.size.q5 <= -100.0:
+        raise ValueError("size.q5: a percentage change of a price must be greater than -100")
     if answer.shock != key:
         raise ValueError(f"shock: the answer names {answer.shock!r}, the key is {key!r}")
     missing = [variable for variable in known if variable not in answer.responses]
@@ -147,6 +149,18 @@ def check(context, key: str, payload: dict) -> dict:
     unknown = sorted(set(answer.responses) - set(known))
     if unknown:
         raise ValueError(f"responses: no variables {', '.join(unknown)} in the registry")
+    sizes = {node: getattr(answer.size, node) for node in NODES}
+    for variable, by_horizon in answer.responses.items():
+        for horizon, by_node in by_horizon.items():
+            for node, size in sizes.items():
+                if size != 0.0:
+                    continue
+                cell = by_node[node]
+                if (cell.q5, cell.q50, cell.q95) != (0.0, 0.0, 0.0):
+                    raise ValueError(
+                        f"responses.{variable}.{horizon}.{node}: the size is zero, so all "
+                        "three response quantiles must be zero"
+                    )
     if linear(answer):
         raise ValueError(
             "responses: the response is proportional to the size everywhere; proportionality "
@@ -201,6 +215,15 @@ def _shock_question(context, shock: Shock) -> str:
   Search the corpus with corpus(action="search", corpus="model", as_of=\
 {context.as_of.isoformat()}, query=...).
 
+The shape of the answer: an object with `shock`, `frequency`, `size`, `rho`, `nonlinearity`,
+`sources` and `responses`; `responses[<variable>][<horizon>][<size node>]` names a quantiles
+object, where the horizon keys are `"1"`, `"3"`, `"6"` and `"12"`, the size node keys are
+`"q5"`, `"q50"`, `"q95"` in the order of your `size`, and a quantiles object is
+`{{"q5": -3.1, "q50": 0.4, "q95": 3.9}}`. Every one of the {len(context.registry.variables)}
+variables of the table below needs its four horizons and every horizon its three nodes. At
+least one response must depart from proportionality to the size: a table where every number is
+one response times the ratio of the sizes is refused as linear.
+
 The variables, their unit, their model scale and the last value known on the date:
 
 {state}"""
@@ -218,6 +241,17 @@ of the model corpus fragment the number comes from. A value without a fragment i
 a market number that is not in the corpus is the expert's judgement, and judgements enter
 the model only through the shocks. Between the horizons the values are interpolated
 linearly; the variables without a market value keep the random walk with drift.
+
+The shape of the answer: `values[<variable>]` is
+`{{"horizons": {{"1": <value>, "3": <value>, "6": <value>, "12": <value>}}, "fragment": <id>}}`.
+
+Every fragment comes from the model corpus `workspace/corpus-model`: when that corpus is there,
+index and fetch it — corpus(action="index", corpus="model"), then
+corpus(action="fetch", corpus="model") — and search it with
+corpus(action="search", corpus="model", as_of={context.as_of.isoformat()}, kind="market",
+query=...). Without the index no fragment can be cited and every market answer is refused;
+without the corpus the variant cannot be estimated — expert.elicited.rw asks about the shocks
+only.
 
 Only these variables may enter `values`: {known}."""
 

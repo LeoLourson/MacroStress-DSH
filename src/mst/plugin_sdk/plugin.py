@@ -10,6 +10,7 @@ model's requirement resolves to. It needs no workspace, no network and no model 
 """
 
 from dataclasses import dataclass, field
+from pathlib import Path
 
 from ..model_sdk.contracts import MacroModel, SatelliteModel
 from .model import CalculationModel, Position
@@ -54,6 +55,9 @@ class Plugin:
     satellites: tuple[SatelliteModel, ...] = ()
     #: The model SDK versions the macro and satellite models work with.
     model_sdk: str = ""
+    #: Markdown guides the plugin gives every client: the file's frontmatter ``name`` is the
+    #: guide's name and equals the file stem. They are served beside the guides of the server.
+    guides: tuple[Path, ...] = ()
 
     def namespaced(self, identifier: str) -> bool:
         return identifier.startswith(self.plugin_id + ".")

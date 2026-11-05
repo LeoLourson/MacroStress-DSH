@@ -38,6 +38,9 @@ class Shock:
     id: str
     meaning: str
     size_unit: str
+    #: How to read the size: ``percent_change`` of a price, ``percentage_points``, a share of
+    #: a stock or ``points`` of an index. Only a percent change converts to log100.
+    size_scale: str = ""
 
 
 def load_shocks(path: Path = SHOCKS_PATH) -> tuple[Shock, ...]:
@@ -117,9 +120,57 @@ class ExpertModel(MacroModel):
             raise KeyError(f"the model declares no input {key!r}")
         return question(context, key)
 
+    def input_steps(self, context: MacroEstimateContext, key: str) -> list[dict]:
+        from .steps import input_steps
+
+        if key not in self.input_keys(context.as_of):
+            raise KeyError(f"the model declares no input {key!r}")
+        return input_steps(context, key)
+
+    def input_step_context(
+        self, context: MacroEstimateContext, key: str, step: str, parts: dict[str, dict]
+    ) -> dict:
+        from .steps import step_context
+
+        return step_context(context, key, step, parts)
+
+    def check_input_step(
+        self, context: MacroEstimateContext, key: str, step: str, payload: dict
+    ) -> dict:
+        from .steps import check_part
+
+        return check_part(context, key, step, payload)
+
+    def assemble_input(
+        self, context: MacroEstimateContext, key: str, parts: dict[str, dict]
+    ) -> dict:
+        from .steps import assemble_input
+
+        if key not in self.input_keys(context.as_of):
+            raise KeyError(f"the model declares no input {key!r}")
+        return assemble_input(context, key, parts)
+
     def check_input(self, context: MacroEstimateContext, key: str, payload: dict) -> dict:
         from .answers import check
 
         if key not in self.input_keys(context.as_of):
             raise KeyError(f"the model declares no input {key!r}")
         return check(context, key, payload)
+
+    def input_parts(
+        self, context: MacroEstimateContext, key: str, payload: dict
+    ) -> dict[str, dict]:
+        from .steps import input_parts
+
+        if key not in self.input_keys(context.as_of):
+            raise KeyError(f"the model declares no input {key!r}")
+        return input_parts(context, key, payload)
+
+    def audit_input(
+        self, context: MacroEstimateContext, key: str, payload: dict
+    ) -> list[dict]:
+        from .audit import findings
+
+        if key not in self.input_keys(context.as_of):
+            raise KeyError(f"the model declares no input {key!r}")
+        return findings(context, key, payload)

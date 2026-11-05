@@ -45,8 +45,10 @@ def test_the_skills_are_the_guides_of_the_server():
     skills = [path for path in found if not path.name.startswith("README")]
     assert [path.stem for path in skills] == [item["name"] for item in guides.catalogue()]
     for path in skills:
-        own = (guides.ROOT / path.name).read_text(encoding="utf-8")
-        assert path.read_text(encoding="utf-8").replace("\r\n", "\n") == own.replace("\r\n", "\n")
+        own = guides.source(path.stem).read_text(encoding="utf-8")
+        assert path.read_text(encoding="utf-8").replace("\r\n", "\n") == own.replace(
+            "\r\n", "\n"
+        )
 
 
 def test_the_default_workspace_follows_the_rule_of_the_plugin(monkeypatch, tmp_path):

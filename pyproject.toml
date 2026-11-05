@@ -1,6 +1,6 @@
 [project]
 name = "macrostress"
-version = "1.0.2"
+version = "1.1.0"
 description = "Portfolio stress testing over macroeconomic scenarios, as an MCP server"
 readme = "README.md"
 license = "MIT"

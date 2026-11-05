@@ -35,8 +35,25 @@ consequences.
 Read a guide before the work it covers: guide(name="scenario-from-corpus") when the user names \
 an event or asks what happens if it occurs, even without the words scenario or corpus; \
 guide(name="run-report") before a calculation or its report; guide(name="drivers") before work \
-on drivers and satellites; guide(name="model-inputs") before estimating a model that declares \
-inputs, when answers of its elicitation are still missing. guide() lists them.
+on drivers and satellites; guide(name="model-inputs") before answering the questions of a model \
+that declares inputs; guide(name="elicitation-orchestration") before running that interview with \
+several agents, one per shock. guide() lists them.
+
+When the user asks you to answer a model's questions or to act as its expert, start with \
+elicit(action="next", as_of=..., model_id=...). It gives ONE small question with its schema \
+and answer_call. Copy answer_call, add payload with your own answer object and call elicit \
+again. Each answer saves a part and returns the next question; continue until complete=true. \
+Do not ask the human for numbers, substitute placeholders, or build a full shock table. \
+Partial answers survive restarts but cannot be estimated until all parts pass the full check. \
+elicit(action="list", ...) lists input keys and action="status" says which are complete. \
+Full question/write actions remain under model(kind="inputs"). When complete, \
+model(kind="macro", action="estimate", ...) builds the version from the answers. \
+The questions and the answers live in that tool: reading sources or searching the files of the \
+workspace does not answer them, and several installed models that ask questions need model_id. \
+The agent is the expert of that interview: the numbers are its own quantitative judgements from \
+the state table the question prints and from the model corpus; it does not ask the human for \
+them and does not take them from tests or fixtures. The market variant reads the model corpus, \
+so its answers need that corpus indexed and fetched first.
 
 Search the corpus before writing any number of a scenario. Mark a condition or an impact with \
 "event" when the text of the event states its number, with a corpus fragment only when the \
@@ -835,12 +852,14 @@ def build(ws: store.Workspace) -> FastMCP:
         ``version`` is the version hash ``describe`` and ``base`` read and the macro version the
         satellites of an ``estimate`` are built on; ``list`` takes no version.
 
-        ``inputs`` works with the answers a model declares for a date: ``list`` and ``status``
-        name every key written or missing, ``question`` gives the text the agent reads before
-        answering and ``write`` checks the answer's form and stores it. The inputs are written
-        by the agent itself and no human approves them — read guide(name="model-inputs")
-        first — and ``model_id`` and ``as_of`` name the model and the date; a refused answer
-        comes back with the field it was refused for.
+        ``inputs`` is the elicitation a model that declares inputs is estimated from; the
+        ``elicit`` tool serves the same four actions and is the one to call when the user asks
+        for the answers of a model's questions. ``list`` and ``status`` name every key written
+        or missing, ``question`` gives the text the agent reads before answering and ``write``
+        checks the answer's form and stores it. The inputs are written by the agent itself and
+        no human approves them — read guide(name="model-inputs") first — and ``model_id`` and
+        ``as_of`` name the model and the date; a refused answer comes back with the field it
+        was refused for.
         """
         with _plugin_output_to_stderr():
             if kind == "catalog":
@@ -868,7 +887,9 @@ def build(ws: store.Workspace) -> FastMCP:
             if action == "list":
                 return {"versions": macro_version.catalogue(ws.models)}
             if action == "describe":
-                return macro_version.describe(ws.models, _need(version, "version"))
+                return macro_version.describe(
+                    ws.models, version or _newest_version(ws, model_id)
+                )
             if action == "base":
                 from mst import plugins as _plugins
 
@@ -898,9 +919,274 @@ def build(ws: store.Workspace) -> FastMCP:
             raise ValueError(
                 f"model: unknown action {action!r}, "
                 "try list, describe, base, estimate, backtest"
+                + (
+                    '; the answers of a model\'s questions are the elicit tool, or kind="inputs" '
+                    "with action list, question, write or status"
+                    if action in {"inputs", "question", "write", "status", "elicit"}
+                    else ""
+                )
+            )
+
+    @server.tool(
+        annotations=ToolAnnotations(
+            title="The questions of a model and the answers the agent writes",
+            readOnlyHint=False,
+            destructiveHint=False,
+            idempotentHint=False,
+            openWorldHint=False,
+        )
+    )
+    def elicit(
+        action: Annotated[
+            str,
+            Field(
+                description="Use next to start or resume one small question; answer saves its "
+                "payload using the returned ticket and gives the next question. list and status "
+                "only report completed inputs. Do not request full question/write here."
+            ),
+        ],
+        as_of: Annotated[
+            str | None,
+            Field(
+                description="The calculation date, YYYY-MM-DD: required for next and list; "
+                "answer reads the date from its ticket."
+            ),
+        ] = None,
+        model_id: Annotated[
+            str | None,
+            Field(
+                description="The macro model that asks the questions; every installed model "
+                "that does when omitted and one of them when several."
+            ),
+        ] = None,
+        key: Annotated[
+            str | None,
+            Field(
+                description="The input key question and write read: one of the keys list names."
+            ),
+        ] = None,
+        agent: Annotated[
+            str | None,
+            Field(
+                description="The name of the answering agent: it is written to the journal "
+                "and to the claim of the key, so progress names its owner."
+            ),
+        ] = None,
+        payload: Annotated[
+            dict[str, Any] | None,
+            Field(
+                description="The answer object write checks and stores, as the question's "
+                "schema asks; the object itself, not a string of JSON."
+            ),
+        ] = None,
+        ticket: Annotated[
+            str | None,
+            Field(description="Copy the ticket from next's answer_call unchanged; it addresses "
+                  "the model, date, shock and exact step without repeating those fields."),
+        ] = None,
+    ) -> dict:
+        """Answer a macro model's questions in small resumable steps.
+
+        Start with ``next`` and model_id/as_of. It gives one small question, its schema and
+        answer_call. Copy answer_call with your answer object as payload to ``answer``;
+        the result saves it and gives the next question. Continue until complete=true.
+        Each response step asks nine numbers, not a full shock table. Partial answers survive
+        a restart and never count as a completed input. Never substitute placeholders or ask
+        the human for numbers. ``next`` resumes the first missing step.
+
+        A model that declares inputs is estimated from the agent's own answers, not from the
+        series: ``list`` names every input key on the date and ``status`` repeats the summary.
+        Full question/write operations belong to model(kind="inputs"), not this interview.
+        The agent is the expert: the numbers are its own judgements, not the
+        human's and not the fixtures of the tests. When nothing is missing, build the version:
+        model(kind="macro", action="estimate", model_id=..., as_of=...) starts a job, and
+        jobs(action="wait", id=...) holds until it ends. The same actions are kind="inputs" of
+        the model tool.
+        """
+        with _plugin_output_to_stderr():
+            from mst.plugin_sdk import interview
+
+            if action in {"next", "question"}:
+                return _interview(ws, as_of, model_id, key).next(key, agent)
+            if action in {"answer", "write"}:
+                found = interview.address(ws.elicitation, ticket)
+                model = models.selected(found["model"])
+                day = date.fromisoformat(found["date"])
+                return interview.Session(model, _macro_context(ws, day)).answer(
+                    ticket, payload, agent
+                )
+            return _model_inputs(ws, action, model_id, as_of, key, payload)
+
+    @server.tool(
+        annotations=ToolAnnotations(
+            title="The interview of a model: who answers which input and how far",
+            readOnlyHint=False,
+            destructiveHint=False,
+            idempotentHint=False,
+            openWorldHint=False,
+        )
+    )
+    def interview(
+        action: Annotated[
+            str,
+            Field(
+                description="progress, claim, release, audit, accept, reopen, history or "
+                "journal: the state of an elicitation, not its answers."
+            ),
+        ],
+        as_of: Annotated[
+            str,
+            Field(description="The calculation date, YYYY-MM-DD: the interview of this date."),
+        ],
+        model_id: Annotated[
+            str,
+            Field(
+                description="The macro model that asks the questions, for example "
+                "expert.elicited.rw; model(kind=\"catalog\") lists the installed ones."
+            ),
+        ],
+        key: Annotated[
+            str | None,
+            Field(
+                description="The input key, one shock or market: named by every action that "
+                "touches one answer, left out by progress and by the whole-model audit."
+            ),
+        ] = None,
+        agent: Annotated[
+            str | None,
+            Field(
+                description="The name of the answering agent: it owns the claim and is "
+                "written to the journal; required by claim."
+            ),
+        ] = None,
+        steps: Annotated[
+            list[str] | None,
+            Field(
+                description="The parts to ask again, by step id from the question; required "
+                "by reopen and refused when a step is unknown."
+            ),
+        ] = None,
+        reason: Annotated[
+            str | None,
+            Field(
+                description="Why a published answer is accepted or reopened: written to the "
+                "journal and to the accepted record."
+            ),
+        ] = None,
+        minutes: Annotated[
+            int,
+            Field(description="How many minutes a claim stays alive without renewal, 45 by "
+                  "default; a stopped agent does not block its shock forever."),
+        ] = 45,
+        limit: Annotated[
+            int,
+            Field(description="How many last journal events journal returns, 50 by default."),
+        ] = 50,
+    ) -> dict:
+        """Track the interview of a model: ownership, progress, review and corrections.
+
+        ``progress`` names every input key with its state, owner, answered parts and
+        publication; call it before handing a shock to an agent. ``claim`` gives one key to
+        one agent; a live claim of another agent refuses a second writer. ``release`` drops
+        the caller's claim. ``audit`` lists the advisory findings of one published answer or
+        of every one. ``accept`` records that the warnings were reviewed, with the reason;
+        ``reopen`` asks named parts again, keeps the old answer as a version and makes the
+        key missing until it is complete again. ``history`` lists the versions of one answer
+        and ``journal`` the last events of the interview.
+
+        This tool never writes an answer: the numbers come only through ``elicit``. The
+        orchestrating agent owns the process: it hands one shock to one subagent, reads the
+        warnings and either accepts the answer or reopens the steps they name.
+        """
+        with _plugin_output_to_stderr():
+            day = _day(as_of)
+            model = models.selected(model_id)
+            if not model.input_keys(day):
+                raise ValueError(
+                    f"model {model_id!r} declares no inputs on {day.isoformat()}: it is "
+                    "estimated from the series alone, so it has no interview"
+                )
+            from mst.plugin_sdk.interview import Session
+
+            session = Session(model, _macro_context(ws, day))
+            if action == "progress":
+                return session.progress()
+            if action == "claim":
+                return session.claim(
+                    _named(key, "claim", "key"), _named(agent, "claim", "agent"), minutes
+                )
+            if action == "release":
+                return session.release(
+                    _named(key, "release", "key"), _named(agent, "release", "agent")
+                )
+            if action == "journal":
+                return session.journal(key, limit)
+            if action == "audit":
+                return session.audit(key)
+            if action == "accept":
+                return session.accept(
+                    _named(key, "accept", "key"),
+                    _named(agent, "accept", "agent"),
+                    _named(reason, "accept", "reason"),
+                )
+            if action == "history":
+                return session.history(_named(key, "history", "key"))
+            if action == "reopen":
+                return session.reopen(
+                    _named(key, "reopen", "key"),
+                    _named(steps, "reopen", "steps"),
+                    _named(agent, "reopen", "agent"),
+                    _named(reason, "reopen", "reason"),
+                )
+            raise ValueError(
+                f"interview: unknown action {action!r}, try progress, claim, release, audit, "
+                "accept, reopen, history or journal"
             )
 
     return server
+
+
+def _named(value, action: str, field: str) -> str:
+    """A field one action cannot work without; the message names both."""
+    if not value:
+        raise ValueError(f"interview: {action} needs {field}")
+    return value
+
+
+def _macro_context(ws: store.Workspace, day: date):
+    """The context a model's questions and checks see: series, registry, date, answers, corpus.
+
+    It is the one an estimate builds, so a question never depends on a second definition.
+    """
+    from mst.macro.registry import load_registry as load_macro_registry
+    from mst.model_sdk.contracts import MacroEstimateContext
+
+    return MacroEstimateContext(
+        store=SeriesStore(ws.series),
+        registry=load_macro_registry(),
+        as_of=day,
+        inputs=ws.elicitation,
+        fragment=_model_fragment(ws, day),
+    )
+
+
+def _interview(ws: store.Workspace, as_of, model_id, key):
+    """The interview session of the model the caller named, or of the only one asking."""
+    from mst.plugin_sdk.interview import Session
+
+    if not as_of:
+        raise ValueError("as_of is required for next: the calculation date YYYY-MM-DD")
+    day = _day(as_of)
+    if model_id is None:
+        candidates = [model for model in models.registry().values() if model.input_keys(day)]
+        if len(candidates) != 1:
+            raise ValueError("next needs model_id: " + ", ".join(m.model_id for m in candidates))
+        model = candidates[0]
+    else:
+        model = models.selected(model_id)
+    if key is not None and key not in model.input_keys(day):
+        raise ValueError(f"model declares no input {key!r}")
+    return Session(model, _macro_context(ws, day))
 
 
 def _model_inputs(
@@ -913,31 +1199,63 @@ def _model_inputs(
     answers and the visibility of the model corpus fragments on that date.
     """
     from mst import inputs as model_inputs
-    from mst.macro.registry import load_registry as load_macro_registry
-    from mst.model_sdk.contracts import MacroEstimateContext
 
     if action not in {"list", "question", "write", "status"}:
         raise ValueError(
             f"model: unknown action {action!r} for inputs, try list, question, write, status"
         )
-    day = _day(_need(as_of, "as_of"))
-    model = models.selected(model_id)
+    if not as_of:
+        raise ValueError(
+            "model: as_of is required for inputs: the calculation date, YYYY-MM-DD"
+        )
+    day = _day(as_of)
+    declaring = [model for model in models.registry().values() if model.input_keys(day)]
+    if model_id is not None:
+        model = models.selected(model_id)
+        if model.model_id not in {candidate.model_id for candidate in declaring}:
+            raise ValueError(
+                f"model: {model.model_id} declares no inputs on {day.isoformat()}: it is "
+                "estimated from the series alone; the models that ask questions are "
+                + (", ".join(candidate.model_id for candidate in declaring) or "none installed")
+            )
+    elif len(declaring) == 1:
+        model = declaring[0]
+    elif not declaring:
+        raise ValueError(
+            f"model: no installed macro model declares inputs on {day.isoformat()}"
+        )
+    elif action == "list":
+        # The caller asks what there is to answer: name every model that asks and its keys.
+        return {
+            "as_of": day.isoformat(),
+            "models": [
+                {
+                    "model": candidate.model_id,
+                    **model_inputs.status(ws.elicitation, candidate, day),
+                }
+                for candidate in declaring
+            ],
+        }
+    else:
+        raise ValueError(
+            f"model: several macro models declare inputs on {day.isoformat()}, name one with "
+            "model_id: " + ", ".join(candidate.model_id for candidate in declaring)
+        )
     if action == "list":
         return {
             "model": model.model_id,
             "as_of": day.isoformat(),
             **model_inputs.status(ws.elicitation, model, day),
         }
-    context = MacroEstimateContext(
-        store=SeriesStore(ws.series),
-        registry=load_macro_registry(),
-        as_of=day,
-        inputs=ws.elicitation,
-        fragment=_model_fragment(ws, day),
-    )
+    context = _macro_context(ws, day)
     if action in {"question", "write"}:
         # The key becomes a file name: only the model's own keys reach the folder.
-        the_key = _need(key, "key")
+        if not key:
+            raise ValueError(
+                "model: key is required for question and write: a key of "
+                'model(kind="inputs", action="list")'
+            )
+        the_key = key
         if the_key not in model.input_keys(day):
             raise ValueError(
                 f"model: {model.model_id} declares no input {the_key!r} on {day.isoformat()}"
@@ -945,7 +1263,12 @@ def _model_inputs(
     if action == "question":
         return model.question(context, the_key)
     if action == "write":
-        normal = model.check_input(context, the_key, _need(payload, "payload"))
+        if payload is None:
+            raise ValueError(
+                "model: payload is required for write: the answer object the question's "
+                'schema describes, not a string of it'
+            )
+        normal = model.check_input(context, the_key, payload)
         digest = model_inputs.write(ws.elicitation, day, the_key, normal)
         found = model_inputs.status(ws.elicitation, model, day)
         return {
@@ -1090,6 +1413,30 @@ def _meta(ws: store.Workspace, run_id: str) -> dict | None:
         return None
 
 
+def _newest_version(ws: store.Workspace, model_id: str | None) -> str:
+    """The newest installed version, of ``model_id`` when it is named.
+
+    ``describe`` reads it when the caller names no version: the catalogue is newest first, so
+    the first row of the model is the one a description of that model means. A model that asks
+    questions has no version until its answers are estimated, and the error says so.
+    """
+    rows = macro_version.catalogue(ws.models)
+    if model_id is not None:
+        rows = [row for row in rows if row["model"] == model_id]
+    if rows:
+        return rows[0]["version"]
+    if model_id is None:
+        raise ValueError(
+            "model: no macro version is installed yet: estimate one with "
+            'model(kind="macro", action="estimate", as_of=...)'
+        )
+    raise ValueError(
+        f"model: no version of {model_id!r} is installed yet: if that model asks questions, "
+        f'answer them first — elicit(action="list", as_of=..., model_id={model_id!r}) — and '
+        "build the version with model(kind=\"macro\", action=\"estimate\", ...)"
+    )
+
+
 def _need(value: Any, name: str) -> Any:
     """The argument an action cannot work without."""
     if value is None or value == "":
@@ -1167,8 +1514,13 @@ def _update(ws: store.Workspace, ids: list[str]) -> dict:
 
 
 def _start(ws: store.Workspace, resource: str, argv: list[str]) -> dict:
-    """Start ``argv`` as a task on ``resource`` and name it."""
-    return {"job": tasks.start(ws, resource, argv), "argv": argv}
+    """Start ``argv`` as a task on ``resource`` and name it.
+
+    The record carries the call that awaits the job: this server's jobs are not the background
+    jobs of the client, so an agent that has just started one is told how to wait for it.
+    """
+    job = tasks.start(ws, resource, argv)
+    return {"job": job, "argv": argv, "wait": f'jobs(action="wait", id="{job}")'}
 
 
 LOCAL_WORKSPACE = Path("workspace")
