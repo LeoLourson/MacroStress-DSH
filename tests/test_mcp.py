@@ -185,6 +185,70 @@ def _one_input_model(monkeypatch):
     monkeypatch.setattr(plugins, "registry", lambda: registry)
 
 
+def _two_input_models(monkeypatch):
+    from mst import plugins
+    from tests.plugins import fakes
+
+    class Second(fakes.InputMacroModel):
+        model_id = "gmodel.inputs.v2"
+
+    registry = plugins.build(
+        [fakes.model_plugin(macro=(fakes.InputMacroModel(), Second()))]
+    )
+    monkeypatch.setattr(plugins, "registry", lambda: registry)
+
+
+def test_the_elicit_tool_lists_questions_and_writes_the_answer(tmp_path, monkeypatch):
+    _one_input_model(monkeypatch)
+    ws = store.Workspace(tmp_path)
+    listed = call(ws, "elicit", {"action": "list", "as_of": "2026-11-01"}).data
+    assert listed["model"] == "gmodel.inputs.v1"
+    assert [row["key"] for row in listed["keys"]] == ["q1", "q2"]
+    question = call(
+        ws, "elicit", {"action": "question", "as_of": "2026-11-01", "key": "q1"}
+    ).data
+    assert question["key"] == "q1" and "text" in question and "schema" in question
+    written = call(
+        ws,
+        "elicit",
+        {**question["answer_call"], "payload": {"value": 2.0}},
+    ).data
+    assert written["key"] == "q2" and written["step"] == "answer"
+    found = call(ws, "elicit", {"action": "status", "as_of": "2026-11-01"}).data
+    assert found["written"] == ["q1"]
+
+
+def test_the_elicit_list_names_every_model_that_asks_questions(tmp_path, monkeypatch):
+    _two_input_models(monkeypatch)
+    ws = store.Workspace(tmp_path)
+    listed = call(ws, "elicit", {"action": "list", "as_of": "2026-11-01"}).data
+    assert {row["model"] for row in listed["models"]} == {
+        "gmodel.inputs.v1",
+        "gmodel.inputs.v2",
+    }
+    assert all([row["key"] for row in found["keys"]] == ["q1", "q2"] for found in listed["models"])
+    with pytest.raises(Exception, match="needs model_id"):
+        call(ws, "elicit", {"action": "question", "as_of": "2026-11-01", "key": "q1"})
+
+
+def test_describe_without_a_version_reads_the_newest_of_the_named_model(tmp_path, monkeypatch):
+    from mst.macro import version as macro_version
+
+    monkeypatch.setattr(
+        macro_version,
+        "catalogue",
+        lambda root: [
+            {"version": "newest", "model": "expert.elicited.rw"},
+            {"version": "older", "model": "bvar.sv"},
+        ],
+    )
+    ws = store.Workspace(tmp_path)
+    assert mcp._newest_version(ws, "expert.elicited.rw") == "newest"
+    assert mcp._newest_version(ws, None) == "newest"
+    with pytest.raises(ValueError, match="elicit"):
+        mcp._newest_version(ws, "msvar.markov")
+
+
 def test_the_inputs_tool_lists_questions_and_refuses_an_unknown_action(tmp_path, monkeypatch):
     _one_input_model(monkeypatch)
     ws = store.Workspace(tmp_path)
@@ -196,6 +260,21 @@ def test_the_inputs_tool_lists_questions_and_refuses_an_unknown_action(tmp_path,
         call(ws, "model", {"kind": "inputs", "action": "nope", "as_of": "2026-11-01"})
     except Exception as error:
         assert "unknown action" in str(error)
+
+
+def test_the_inputs_tool_says_which_argument_is_missing(tmp_path, monkeypatch):
+    _one_input_model(monkeypatch)
+    ws = store.Workspace(tmp_path)
+    with pytest.raises(Exception, match="as_of is required"):
+        call(ws, "model", {"kind": "inputs", "action": "list"})
+    with pytest.raises(Exception, match="key is required"):
+        call(ws, "model", {"kind": "inputs", "action": "question", "as_of": "2026-11-01"})
+    with pytest.raises(Exception, match="payload is required"):
+        call(
+            ws,
+            "model",
+            {"kind": "inputs", "action": "write", "as_of": "2026-11-01", "key": "q1"},
+        )
 
 
 def test_the_inputs_tool_gives_the_question_and_writes_the_answer(tmp_path, monkeypatch):

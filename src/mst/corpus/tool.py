@@ -26,7 +26,7 @@ def search(
     k: int = 8,
 ) -> dict:
     """The ``k`` best chunks visible on ``as_of``, with their provenance."""
-    index = Index.load(root / "index")
+    index = _load(root)
     return {
         "query": query,
         "as_of": as_of.isoformat(),
@@ -36,7 +36,7 @@ def search(
 
 def get(root: Path, chunk_id: str, as_of: date) -> dict:
     """One chunk by id, if it is visible on ``as_of``."""
-    index = Index.load(root / "index")
+    index = _load(root)
     for chunk in index.chunks:
         if chunk.chunk_id == chunk_id:
             if chunk.visible_from > as_of.isoformat():
@@ -105,6 +105,17 @@ def add(root: Path, key: str, file: Path, url: str | None = None) -> dict:
     records[document.key] = add_by_hand(document, Path(file), address, root / "raw")
     save_downloads(records, root / "downloads.json")
     return {"key": document.key, "raw": str(document.raw_path(root / "raw"))}
+
+
+def _load(root: Path) -> Index:
+    """The index of ``root``; a corpus without one is named with what to do instead of Errno."""
+    try:
+        return Index.load(root / "index")
+    except FileNotFoundError:
+        raise ValueError(
+            f"the corpus {root} is not indexed: build the index with corpus(action=\"index\") "
+            'first, or corpus(action="index", corpus="model") for the corpus of the models'
+        ) from None
 
 
 def _chunk(chunk) -> dict:

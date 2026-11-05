@@ -124,6 +124,22 @@ def test_the_question_names_the_unit_the_values_and_nothing_later(tmp_path):
     assert "777" not in row and "80" not in row
 
 
+def test_the_question_states_the_shape_of_the_responses(ctx):
+    text = question(ctx, "gl.oil")["text"]
+    for horizon in ("1", "3", "6", "12"):
+        assert f'"{horizon}"' in text, "the horizons are named as the keys of responses"
+    for node in ("q5", "q50", "q95"):
+        assert f'"{node}"' in text, "the size nodes are named as the keys of a horizon"
+    assert "quantiles object" in text, "one cell is described in words"
+    assert "proportional" in text, "the linear answer is named before it is refused"
+
+
+def test_the_market_question_names_the_corpus_the_fragments_come_from(ctx):
+    text = question(ctx, MARKET)["text"]
+    assert "corpus-model" in text, "the market answer names the corpus it needs"
+    assert 'corpus(action="index", corpus="model")' in text
+
+
 def test_the_market_question_names_the_fragment_rule(ctx):
     asked = question(ctx, MARKET)
     assert asked["key"] == MARKET

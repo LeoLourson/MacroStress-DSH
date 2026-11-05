@@ -3,6 +3,7 @@
 __pycache__/
 .pytest_cache/
 .pytest-tmp/
+.tmp/
 # pytest's own temp tree when the system temp directory is not writable (it falls back to the
 # working directory): generated packages must never be linted or committed.
 pytest-of-*/
