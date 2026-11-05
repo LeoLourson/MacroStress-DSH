@@ -58,6 +58,10 @@ Never repeat a failed call unchanged. A stale ticket answers `step already answe
 conversation. If the last part is refused by the full check, the answer is asked again with
 the same ticket.
 
+A run that stops mid-key loses nothing: the saved parts stay, and the orchestrator restarts
+the same agent. Call `next` again and continue from the first missing part; never re-answer a
+saved part and never continue under another agent name.
+
 ## 5. When the key is complete
 
 The publication returns `published` with the hash and the advisory findings. Do not accept

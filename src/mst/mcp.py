@@ -1030,8 +1030,8 @@ def build(ws: store.Workspace) -> FastMCP:
         action: Annotated[
             str,
             Field(
-                description="progress, claim, release, audit, accept, reopen, history or "
-                "journal: the state of an elicitation, not its answers."
+                description="progress, claim, release, restart, audit, accept, reopen, history "
+                "or journal: the state of an elicitation, not its answers."
             ),
         ],
         as_of: Annotated[
@@ -1088,7 +1088,10 @@ def build(ws: store.Workspace) -> FastMCP:
         ``progress`` names every input key with its state, owner, answered parts and
         publication; call it before handing a shock to an agent. ``claim`` gives one key to
         one agent; a live claim of another agent refuses a second writer. ``release`` drops
-        the caller's claim. ``audit`` lists the advisory findings of one published answer or
+        the caller's claim. ``restart`` resumes an agent whose run stopped — a network error,
+        a timeout, a crashed client: it renews that agent's claim and returns the first
+        missing part, so the same agent continues where the saved parts end and nothing is
+        asked twice. ``audit`` lists the advisory findings of one published answer or
         of every one. ``accept`` records that the warnings were reviewed, with the reason;
         ``reopen`` asks named parts again, keeps the old answer as a version and makes the
         key missing until it is complete again. ``history`` lists the versions of one answer
@@ -1119,6 +1122,10 @@ def build(ws: store.Workspace) -> FastMCP:
                 return session.release(
                     _named(key, "release", "key"), _named(agent, "release", "agent")
                 )
+            if action == "restart":
+                return session.restart(
+                    _named(key, "restart", "key"), _named(agent, "restart", "agent"), minutes
+                )
             if action == "journal":
                 return session.journal(key, limit)
             if action == "audit":
@@ -1139,8 +1146,8 @@ def build(ws: store.Workspace) -> FastMCP:
                     _named(reason, "reopen", "reason"),
                 )
             raise ValueError(
-                f"interview: unknown action {action!r}, try progress, claim, release, audit, "
-                "accept, reopen, history or journal"
+                f"interview: unknown action {action!r}, try progress, claim, release, restart, "
+                "audit, accept, reopen, history or journal"
             )
 
     return server

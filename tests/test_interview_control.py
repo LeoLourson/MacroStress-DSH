@@ -103,6 +103,35 @@ def test_an_expired_claim_does_not_block(ws):
     assert interview(ws, "claim", key="q1", agent="demand")["claim"]["agent"] == "demand"
 
 
+def test_restart_resumes_the_same_agent_after_a_stop(ws):
+    interview(ws, "claim", key="q1", agent="oil", minutes=0)
+    current = elicit(ws, action="next", key="q1", agent="oil")
+    elicit(ws, action="answer", ticket=current["answer_call"]["ticket"],
+           payload={"value": 1}, agent="oil")
+
+    restarted = interview(ws, "restart", key="q1", agent="oil")
+
+    assert restarted["step"] == "second"
+    assert restarted["progress"] == {"answered": 1, "total": 2}
+    assert restarted["claim"]["agent"] == "oil"
+    events = interview(ws, "journal", key="q1")["events"]
+    assert "restart" in [event["action"] for event in events]
+
+
+def test_restart_refuses_a_second_agent_and_a_complete_key(ws):
+    interview(ws, "claim", key="q1", agent="oil")
+    with pytest.raises(Exception, match="claimed by oil"):
+        interview(ws, "restart", key="q1", agent="demand")
+
+    current = elicit(ws, action="next", key="q1", agent="oil")
+    first = elicit(ws, action="answer", ticket=current["answer_call"]["ticket"],
+                   payload={"value": 1}, agent="oil")
+    elicit(ws, action="answer", ticket=first["answer_call"]["ticket"],
+           payload={"value": 2}, agent="oil")
+    with pytest.raises(Exception, match="nothing to restart"):
+        interview(ws, "restart", key="q1", agent="oil")
+
+
 def test_progress_counts_the_parts_and_the_owner(ws):
     interview(ws, "claim", key="q1", agent="oil")
     current = elicit(ws, action="next", key="q1", agent="oil")

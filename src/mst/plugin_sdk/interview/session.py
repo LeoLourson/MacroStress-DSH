@@ -297,6 +297,23 @@ class Session:
             )
             return self.next(key, agent)
 
+    def restart(self, key, agent, minutes=45):
+        """Resume the same agent after its run stopped: keep its parts, ask the first missing."""
+        self._declared(key)
+        if not agent:
+            raise ValueError("restart needs agent: the name of the agent being restarted")
+        if key in inputs.read(self.context.inputs, self.context.as_of):
+            raise ValueError(
+                f"input {key!r} is already published: nothing to restart, review it instead"
+            )
+        with LOCK:
+            self._touch(key, agent)
+            journal.record(self.folder, "restart", key=key, agent=agent)
+            result = self.next(key, agent)
+            if key not in inputs.read(self.context.inputs, self.context.as_of):
+                result["claim"] = state.claim(self.folder, key, agent, minutes)
+            return result
+
     def next(self, key=None, agent=None):
         """The first missing part of the model, or of one key; no selection survives a call."""
         day = self.context.as_of
