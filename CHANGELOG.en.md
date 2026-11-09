@@ -6,6 +6,8 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## Unreleased
 
+## 1.1.0: the expert interview with an orchestrator and the check sets (2026-11-09)
+
 - **The expert interview got an orchestrator, a gate and answer history.** The interview
   engine moved from `mst/elicitation.py` to `mst/plugin_sdk/interview/` and serves any model
   that declares questions: tickets, parts, publication, shock ownership, the journal, the
@@ -36,6 +38,13 @@ All notable changes to this project are documented here. The format follows [Kee
   event and the start of the journal of `corpus` calls) and `bench_save` (the scenario, the
   journal and an empty expert review `review.toml`); `python -m mst.bench scenarios` sums up the
   verdicts.
+- **A stopped agent resumes its shock under the same name.** A network error, a timeout or a
+  crashed client stopped an agent with parts saved, and the orchestrator had no recorded way
+  to continue that agent. `interview(action="restart", key=..., agent=..., minutes=...)` renews
+  that agent's claim, records a `restart` event in the journal and returns the first missing
+  part; saved parts are never asked again. A live claim of another agent and an already
+  published key are refused. Both guides and the plugin README say to restart the same agent
+  rather than replace it.
 
 ## 1.0.2: macro models, satellites and a date-grid backtest (2026-11-03)
 

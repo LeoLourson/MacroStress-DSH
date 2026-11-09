@@ -34,6 +34,14 @@ For every key that is `missing` or `in_progress`:
 3. Record the key and the agent name. A claim expires after 45 minutes without renewal;
    `progress` shows the owner and the expiry, so a stopped agent does not hide its shock.
 
+An agent stops for reasons the interview does not see: a network error, a timeout, a crashed
+client. Its saved parts stay, so restart the same agent instead of replacing it:
+`interview(action="restart", key=<key>, agent=<the same name>, as_of=..., model_id=...)`
+renews its claim and returns the first missing part. Start the new process with the same brief
+and the same agent name; it calls `next` and continues where the saved parts end. Do not hand
+the key to a second name and do not answer its missing parts yourself: saved parts are never
+asked again, and a publication interrupted by the stop is finished by the next call.
+
 Keep the interview out of the parent context: the orchestrator needs the key, the progress and
 the findings, not the numbers.
 
@@ -75,6 +83,6 @@ Estimate only when every key is `accepted`:
 ## 6. Reading the journal
 
 `interview(action="journal", key=..., limit=..., ...)` returns the last events: `claim`,
-`release`, `next`, `answer`, `publish`, `warn`, `accept` and `reopen`, with the agent, the
-step, the hash and the number of findings. `interview(action="history", key=...)` lists the
-kept versions of a reopened answer with their hashes.
+`release`, `restart`, `next`, `answer`, `publish`, `warn`, `accept` and `reopen`, with the
+agent, the step, the hash and the number of findings. `interview(action="history", key=...)`
+lists the kept versions of a reopened answer with their hashes.
