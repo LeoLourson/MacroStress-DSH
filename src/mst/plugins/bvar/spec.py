@@ -5,7 +5,7 @@ from datetime import date
 from pathlib import Path
 from typing import Annotated, Literal
 
-from pydantic import Field, field_validator
+from pydantic import Field, field_validator, model_validator
 
 from mst.contracts import Contract, Positive
 
@@ -64,10 +64,28 @@ class Spec(Contract):
     """The floor of the degrees-of-freedom grid of the Student tails (stochastic only).
     The shipped 5 sits above the kurtosis boundary at 4; the versions estimated before the
     field carried the 3."""
+    differences: list[str] = []
+    """The variables whose equation runs on monthly changes ``y_t - y_{t-1}`` against the
+    changes of the others in the list and the levels of the rest. Their unit root is exact
+    instead of a near-one root the sampling noise pushes above one, and the constant of their
+    equation is a monthly drift. The version stores the equivalent VAR in levels with one
+    lag more, so forecasting, conditions and identification read it unchanged. Empty keeps
+    every equation in levels, as the versions estimated before the field."""
     sampler: Sampler
     dummies: list[Dummy] = []
 
     _start = field_validator("start")(first_of_month)
+
+    @model_validator(mode="after")
+    def _dummy_rows_act_on_levels(self):
+        # The dummy rows state a no-change forecast at the levels of the first months; on a
+        # variable in changes they would state it about the changes and pull its drift.
+        if self.differences and (self.mu is not None or self.delta is not None):
+            raise ValueError(
+                "differences and the dummy rows mu, delta do not mix: the rows are written "
+                "for levels; set mu and delta off when variables run on changes"
+            )
+        return self
 
 
 def load_spec(path: Path = SPEC_PATH) -> Spec:

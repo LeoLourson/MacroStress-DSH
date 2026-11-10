@@ -1,0 +1,35 @@
+{
+  "approved_by": null,
+  "causes": [],
+  "constraints": [
+    {
+      "basis": "event",
+      "high": 454.03,
+      "low": 453.93,
+      "terms": [
+        {
+          "month": 3,
+          "variable": "ru.retail",
+          "weight": 1.0
+        }
+      ],
+      "value": null
+    }
+  ],
+  "expectations": [],
+  "horizon": 12,
+  "impacts": [],
+  "inner": 1,
+  "macro": "1de403bd3b7f63182636b83b5051228b9a4f7ea8c9484053de203786390953ab",
+  "narrative": "Вводится налог с продаж 5 % в рознице. Розничные продажи за два месяца после введения падают на 8 %.",
+  "probabilities": [],
+  "regime_event": null,
+  "satellites": "d1915d6f20863d81c5b63301b10184598a8a97e3052f2411c98904f9e2797a5d",
+  "sources": [
+    "T1/2020-2#5.3/5",
+    "T1/2022-1#5.1/1",
+    "T3/2019-05#0/12",
+    "T3/2018-05#0/9",
+    "S2/2016-1#4.1/1"
+  ]
+}

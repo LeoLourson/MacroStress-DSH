@@ -20,7 +20,7 @@ from mst.model_sdk.contracts import (
     ScenarioPlan,
 )
 
-from .estimate import Posterior, estimate
+from .estimate import Posterior, dummy_columns, estimate
 from .forecast import constraint_law as constraint_law_bvar
 from .forecast import simulate as simulate_bvar
 from .identify import identify
@@ -29,6 +29,18 @@ from .spec import Spec, load_spec
 
 #: The arrays of a version, in the order the posterior holds them.
 ARRAYS = ("const", "lags", "dummy", "chol", "logvar", "volvol", "dof", "history", "rotation")
+
+
+def _dummies(spec: Spec, meta: dict, arrays: dict) -> list:
+    """The dummy regressors a saved version was estimated with.
+
+    With differences a version also reads the changes of the spec's dummies; a version
+    estimated before they were added holds a coefficient for the spec's own dummies only.
+    """
+    columns = dummy_columns(spec, date.fromisoformat(meta["months"][-1]))
+    if arrays["dummy"].shape[-1] != len(columns):
+        return list(spec.dummies)
+    return columns
 
 
 def parts(model: Posterior, spec: Spec, panel, as_of: date) -> MacroEstimate:
@@ -98,8 +110,9 @@ class BvarModel(MacroModel):
             ids=meta["ids"],
             n_global=meta["n_global"],
             months=[date.fromisoformat(m) for m in meta["months"]],
-            lags_count=spec.lags,
-            dummies=list(spec.dummies),
+            # A version with differences keeps its levels form, one lag longer than the spec.
+            lags_count=arrays["lags"].shape[1],
+            dummies=_dummies(spec, meta, arrays),
             diagnostics=meta["diagnostics"],
             shocks=meta["shocks"],
             **{key: arrays[key] for key in ARRAYS},

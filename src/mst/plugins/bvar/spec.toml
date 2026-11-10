@@ -6,7 +6,9 @@ start = 2012-01-01
 # p: months of the past each variable depends on.
 lags = 3
 # lambda: the Minnesota tightness; smaller pulls the coefficients harder to the prior.
-tightness = 0.2
+# 0.1 won the screening rolling check of 2026-11-10 on the tuning half of the grid (relative
+# CRPS 0.898 against 0.996 at 0.2 and 0.920 at 0.05, with the differences below).
+tightness = 0.1
 # "constant" is the conjugate BVAR (s_j = 0, nu_j = infinity); "stochastic" adds stochastic
 # volatility and Student tails.
 volatility = "stochastic"
@@ -29,15 +31,21 @@ rotation_tries = 20000
 # further, and a condition on a path multiplies the effect. The filter keeps the posterior
 # restricted to the stable region, as the identification filter does.
 rho_max = 1.005
-# The weight of the dummy rows of Sims and Zha (1998) and Giannone, Lenza and Primiceri
-# (2015): `mu` — sum-of-coefficients, `delta` — the initial observation. They act on
-# levels, where the Minnesota prior weighs little (the audit of 2026-10-30), and pull
-# the sums of own-lag coefficients toward one — unit roots — and away from explosive
-# roots. The candidate grid of the plan (tightness in {0.05, 0.1, 0.2} with mu = delta
-# in {1, 5}, the present prior as the reference) is selected by the backtest on the
-# tuning half of the episodes; 1 and 1 are the values Sims and Zha recommend.
-mu = 1.0
-delta = 1.0
+# The variables whose equation runs on monthly changes; the version keeps the equivalent VAR
+# in levels with one lag more. Every variable but the VIX and the spreads, which the prior
+# returns to their mean. In levels the posterior of 2026-11-02 kept 62 stable draws of 4000,
+# every one with a radius above one, and half the 12-month variance of IMOEX was the spread
+# of the mean forecast across draws: the levels of rates, four to seven points above their
+# sample means, entered the equations of prices through collinear coefficients. On changes
+# every unit root is exact and the drift is a monthly one. The dummy rows `mu` and `delta`
+# of Sims and Zha (1998) are written for levels and are off: on this panel they pushed the
+# largest root above one (stable draws 1-7 % with them, about 40 % without).
+differences = [
+    "gl.brent", "gl.fed_rate", "gl.ust_10y",
+    "ru.key_rate", "ru.ruonia", "ru.ofz_1y", "ru.ofz_5y", "ru.ofz_10y",
+    "ru.usdrub", "ru.cnyrub", "ru.cpi", "ru.output", "ru.unemployment", "ru.real_wage",
+    "ru.retail", "ru.credit", "ru.mortgage_rate", "ru.housing_price", "ru.imoex",
+]
 # The floor of the degrees-of-freedom grid of the Student tails: variance is infinite at
 # 2 and kurtosis at 4, and for rates that sit still and then step the floor at 3 absorbs
 # what the volatility process should carry — the median draw sat at it for the Fed rate,

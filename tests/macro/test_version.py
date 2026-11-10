@@ -123,6 +123,7 @@ def test_estimate_macro_publishes_a_version_from_the_store(tmp_path, monkeypatch
         update={
             "start": sim.START,
             "stationary": ids,
+            "differences": [],
             "dummies": [],
             "volatility": "constant",
             "sampler": sim.spec(draws=5).sampler,

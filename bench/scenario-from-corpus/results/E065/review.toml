@@ -1,0 +1,5 @@
+# The expert's review of the scenario of E065, filled by hand after comparing it with
+# the expected decision of the event. verdict: "match", "partial" or "mismatch".
+verdict = ""
+comment = """
+"""

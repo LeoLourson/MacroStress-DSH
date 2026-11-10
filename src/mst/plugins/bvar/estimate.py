@@ -45,7 +45,7 @@ from scipy import sparse
 from scipy.linalg import solve_triangular
 from scipy.stats import invwishart
 
-from mst.macro.panel import Panel
+from mst.macro.panel import Panel, shift
 
 from . import sv
 from .spec import Dummy, Spec
@@ -152,7 +152,90 @@ def _observation_rows(
     return np.array(responses), np.array(regressors)
 
 
-def minnesota(panel: Panel, spec: Spec) -> Prior:
+def differenced(panel: Panel, spec: Spec) -> np.ndarray:
+    """``s`` (n,): one for a variable whose equation runs on monthly changes, else nought."""
+    unknown = set(spec.differences) - set(panel.ids)
+    if unknown:
+        raise ValueError(f"differences names unknown variables: {', '.join(sorted(unknown))}")
+    return np.array([float(id_ in spec.differences) for id_ in panel.ids])
+
+
+def changes(y: np.ndarray, s: np.ndarray) -> np.ndarray:
+    """``w_t = y_t - s y_{t-1}`` from the second month on: changes where ``s`` is one, levels
+    elsewhere. Without differences ``y`` itself, every month kept."""
+    if not s.any():
+        return y
+    return y[1:] - s * y[:-1]
+
+
+def levels_form(coefficients: np.ndarray, s: np.ndarray, p: int) -> np.ndarray:
+    """The VAR in levels with ``p + 1`` lags equivalent to ``p`` lags on ``w = changes(y, s)``.
+
+    ``y_t = S y_{t-1} + c + sum_k G_k (y_{t-k} - S y_{t-k-1})``, so ``A_1 = S + G_1``,
+    ``A_k = G_k - G_{k-1} S`` and ``A_{p+1} = -G_p S``; the constant and the dummy terms are
+    those of ``w``. Without differences the coefficients are returned as they are.
+    """
+    if not s.any():
+        return coefficients
+    const, lags, dummy = split(coefficients, p)
+    n = len(const)
+    scale = np.diag(s)
+    levels = np.zeros((p + 1, n, n))
+    levels[0] = scale + lags[0]
+    for k in range(1, p):
+        levels[k] = lags[k] - lags[k - 1] @ scale
+    levels[p] = -lags[p - 1] @ scale
+    return np.hstack([const[:, None], *levels, dummy])
+
+
+def dummy_columns(spec: Spec, last: date) -> list[Dummy]:
+    """The dummy regressors of a version: the spec's own, then, with differences, their
+    changes for the equations on changes.
+
+    A dummy of the spec states an effect on the level. On changes a level step in month
+    ``m`` is one impulse in ``m``, and a level impulse in ``m`` is impulses in ``m`` and
+    ``m + 1``; read as it is, a step would bend the drift for good. The derived impulses
+    after ``last``, the last month of the panel, are left out, as the spec's own are.
+    """
+    columns = list(spec.dummies)
+    if not spec.differences:
+        return columns
+    derived: list[date] = []
+    for dummy in spec.dummies:
+        months = [dummy.month] if dummy.kind == "step" else [dummy.month, shift(dummy.month, 1)]
+        derived += [m for m in months if m <= last and m not in derived]
+    return columns + [
+        Dummy(month=m, kind="impulse", note="change of a level dummy") for m in derived
+    ]
+
+
+def _dummy_mask(panel: Panel, spec: Spec, columns: list[Dummy], s: np.ndarray) -> np.ndarray:
+    """``(n, d)`` True where an equation reads a dummy column.
+
+    An equation in levels reads the spec's own dummies, an equation on changes their
+    changes. A column is left out of an equation where it is nought over every month the
+    equation observes: no data fix its coefficient there, and a drawn value of it would move
+    the drawn months — on changes, for good. Without differences every column stays, as in
+    the versions estimated before.
+    """
+    n, d = len(panel.ids), len(columns)
+    if not s.any():
+        return np.ones((n, d), dtype=bool)
+    own = len(spec.dummies)
+    values = dummy_matrix(panel.months, columns) != 0
+    known = np.isfinite(panel.y)
+    mask = np.zeros((n, d), dtype=bool)
+    for i in range(n):
+        observed = known[:, i].copy()
+        if s[i]:
+            observed[1:] &= known[:-1, i]
+            observed[0] = False
+        reads = slice(own, d) if s[i] else slice(0, own)
+        mask[i, reads] = (values[:, reads] & observed[:, None]).any(axis=0)
+    return mask
+
+
+def minnesota(panel: Panel, spec: Spec, dummy_mask: np.ndarray | None = None) -> Prior:
     n, p, d = len(panel.ids), spec.lags, len(spec.dummies)
     unknown = set(spec.stationary) - set(panel.ids)
     if unknown:
@@ -161,16 +244,21 @@ def minnesota(panel: Panel, spec: Spec) -> Prior:
     mean = np.zeros((n, 1 + n * p + d))
     var = np.full(mean.shape, LOOSE)
     for i, id_ in enumerate(panel.ids):
-        mean[i, 1 + i] = 0.0 if id_ in spec.stationary else 1.0
+        # A change has no own persistence to carry by default; a level keeps its last value.
+        level_walk = id_ not in spec.stationary and id_ not in spec.differences
+        mean[i, 1 + i] = 1.0 if level_walk else 0.0
     for lag in range(1, p + 1):
         block = slice(1 + (lag - 1) * n, 1 + lag * n)
         var[:, block] = (spec.tightness / (lag * sigma[None, :])) ** 2
     rows = _observation_rows(panel.y, p, 1 + n * p + d, spec.mu, spec.delta)
+    mask = allowed(n, panel.n_global, p, d)
+    if dummy_mask is not None:
+        mask[:, 1 + n * p :] &= dummy_mask
     return Prior(
         mean,
         var * sigma[:, None] ** 2,
         sigma,
-        allowed(n, panel.n_global, p, d),
+        mask,
         *(rows if rows else (None, None)),
     )
 
@@ -294,8 +382,19 @@ def estimate(panel: Panel, spec: Spec) -> Posterior:
         raise ValueError(f"the panel starts in {panel.months[0]}, the spec in {spec.start}")
     if not 0 < panel.n_global < len(panel.ids):
         raise ValueError("the model needs both a global and a Russian block")
-    prior = minnesota(panel, spec)
-    dummies = dummy_matrix(panel.months, spec.dummies)
+    s = differenced(panel, spec)
+    columns = dummy_columns(spec, panel.months[-1])
+    if s.any() and columns and spec.volatility == "constant":
+        # The conjugate sampler gives every Russian equation the same regressors, so it
+        # cannot keep a level dummy out of an equation on changes.
+        raise ValueError(
+            "differences with regime dummies need volatility = \"stochastic\": the "
+            "conjugate sampler cannot give the equations on changes their own dummies"
+        )
+    mask = _dummy_mask(panel, spec, columns, s)
+    spec = spec.model_copy(update={"dummies": columns})
+    prior = minnesota(panel, spec, mask)
+    dummies = dummy_matrix(panel.months, columns)
     rng = np.random.default_rng(spec.sampler.seed)
     sampler = _constant if spec.volatility == "constant" else _stochastic
     return sampler(panel, spec, prior, dummies, rng)
@@ -308,14 +407,15 @@ def _keep(spec: Spec):
         yield keep
 
 
-def _posterior(panel, spec, saved, diagnostics) -> Posterior:
+def _posterior(panel, spec, saved, diagnostics, q) -> Posterior:
+    """The saved draws; ``q`` is the lag count of their levels form."""
     stacked = {name: np.array([draw[name] for draw in saved]) for name in saved[0]}
-    const, lags, dummy = zip(*(split(c, spec.lags) for c in stacked["coefficients"]), strict=True)
+    const, lags, dummy = zip(*(split(c, q) for c in stacked["coefficients"]), strict=True)
     return Posterior(
         ids=panel.ids,
         n_global=panel.n_global,
         months=panel.months,
-        lags_count=spec.lags,
+        lags_count=q,
         dummies=spec.dummies,
         const=np.array(const),
         lags=np.array(lags),
@@ -331,14 +431,22 @@ def _posterior(panel, spec, saved, diagnostics) -> Posterior:
 
 def _constant(panel, spec, prior, dummies, rng) -> Posterior:
     p, n = spec.lags, len(panel.ids)
+    s = differenced(panel, spec)
+    # The sampler fits p lags of w = changes(y, s); the levels form has q lags and is what the
+    # unknown months are drawn on and what the version keeps.
+    q = p + 1 if s.any() else p
+    w_dummies = dummies[q - p :]
     missing = np.isnan(panel.y)
     y = fill(panel.y)
-    equations = len(y) - p
+    equations = len(y) - q
     saved = []
     for keep in _keep(spec):
-        coefficients, sigma = conjugate_step(y, dummies, prior, p, panel.n_global, rng)
+        coefficients, sigma = conjugate_step(
+            changes(y, s), w_dummies, prior, p, panel.n_global, rng
+        )
+        coefficients = levels_form(coefficients, s, p)
         y = impute(
-            panel.y, missing, coefficients, [np.linalg.inv(sigma)] * equations, dummies, p, rng
+            panel.y, missing, coefficients, [np.linalg.inv(sigma)] * equations, dummies, q, rng
         )
         if keep:
             chol, logvar = unit_lower(sigma)
@@ -349,20 +457,30 @@ def _constant(panel, spec, prior, dummies, rng) -> Posterior:
                     "logvar": np.tile(logvar, (equations, 1)),
                     "volvol": np.zeros(n),
                     "dof": np.full(n, np.inf),
-                    "history": y[-p:],
+                    "history": y[-q:],
                 }
             )
-    return _posterior(panel, spec, saved, {"missing": int(missing.sum())})
+    return _posterior(panel, spec, saved, {"missing": int(missing.sum())}, q)
 
 
 def _stochastic(panel, spec, prior, dummies, rng) -> Posterior:
     p, n = spec.lags, len(panel.ids)
+    s = differenced(panel, spec)
+    # ``coefficients`` are those of p lags on w = changes(y, s), the state of the Gibbs
+    # steps; ``levels`` their levels form with q lags, which the unknown months are drawn on
+    # and the version keeps. Without differences the two coincide.
+    q = p + 1 if s.any() else p
+    w_dummies = dummies[q - p :]
     missing = np.isnan(panel.y)
     y = fill(panel.y)
-    coefficients, sigma = conjugate_step(y, dummies, prior, p, panel.n_global, rng)
+    coefficients, sigma = conjugate_step(changes(y, s), w_dummies, prior, p, panel.n_global, rng)
+    # The conjugate start gives the Russian equations every column; the Gibbs steps draw
+    # only the allowed ones and would keep the others at their start.
+    coefficients = np.where(prior.mask, coefficients, 0.0)
+    levels = levels_form(coefficients, s, p)
     chol, h_start = unit_lower(sigma)
     a = np.linalg.inv(chol)
-    equations = len(y) - p
+    equations = len(y) - q
     h = np.tile(h_start, (equations, 1))
     omega = np.ones((equations, n))
     s2 = np.full(n, spec.volvol_mean)
@@ -375,8 +493,9 @@ def _stochastic(panel, spec, prior, dummies, rng) -> Posterior:
     for keep in _keep(spec):
         variance = np.exp(h) * omega
         precisions = np.einsum("ji,tj,jk->tik", a, 1 / variance, a)
-        y = impute(panel.y, missing, coefficients, precisions, dummies, p, rng)
-        x, target = regressors(y, dummies, p), y[p:]
+        y = impute(panel.y, missing, levels, precisions, dummies, q, rng)
+        w = changes(y, s)
+        x, target = regressors(w, w_dummies, p), w[p:]
         # The dummy rows weigh in the coefficient draw at the a-priori error scale of each
         # equation; the volatility steps and the triangle read history alone.
         if prior.observation_y is None:
@@ -391,6 +510,7 @@ def _stochastic(panel, spec, prior, dummies, rng) -> Posterior:
                 prior,
                 rng,
             )
+        levels = levels_form(coefficients, s, p)
         u = target - x @ coefficients.T
         a = _triangle(u, variance, a_var, rng)
         e = u @ a.T
@@ -403,16 +523,16 @@ def _stochastic(panel, spec, prior, dummies, rng) -> Posterior:
         if keep:
             saved.append(
                 {
-                    "coefficients": coefficients.copy(),
+                    "coefficients": levels.copy(),
                     # A triangular solve keeps the zeros above the diagonal exact.
                     "chol": solve_triangular(a, np.eye(n), lower=True, unit_diagonal=True),
                     "logvar": h.copy(),
                     "volvol": np.sqrt(s2),
                     "dof": nu.copy(),
-                    "history": y[-p:],
+                    "history": y[-q:],
                 }
             )
-    return _posterior(panel, spec, saved, {"missing": int(missing.sum())})
+    return _posterior(panel, spec, saved, {"missing": int(missing.sum())}, q)
 
 
 def _coefficients(target, x, coefficients, a, variance, prior, rng):
