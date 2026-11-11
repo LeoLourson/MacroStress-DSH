@@ -463,6 +463,24 @@ def _constant(panel, spec, prior, dummies, rng) -> Posterior:
     return _posterior(panel, spec, saved, {"missing": int(missing.sum())}, q)
 
 
+def _start_without_dummies(w, w_dummies, prior, p, panel, rng):
+    """The start of the Gibbs steps on changes: the conjugate draw without the dummy columns,
+    whose coefficients start at nought.
+
+    With differences an equation in levels and an equation on changes read different dummy
+    columns, and two of them can coincide (a level impulse and the change of another). The
+    conjugate step gives every Russian equation every column, so coinciding columns would
+    start with large coefficients of opposite signs; masking one of them would leave the
+    other far from any value the data support, and the burn-in does not bring it back.
+    """
+    k = 1 + len(panel.ids) * p
+    trimmed = Prior(prior.mean[:, :k], prior.var[:, :k], prior.scale, prior.mask[:, :k])
+    head, sigma = conjugate_step(w, w_dummies[:, :0], trimmed, p, panel.n_global, rng)
+    coefficients = np.zeros(prior.mean.shape)
+    coefficients[:, :k] = head
+    return coefficients, sigma
+
+
 def _stochastic(panel, spec, prior, dummies, rng) -> Posterior:
     p, n = spec.lags, len(panel.ids)
     s = differenced(panel, spec)
@@ -473,10 +491,12 @@ def _stochastic(panel, spec, prior, dummies, rng) -> Posterior:
     w_dummies = dummies[q - p :]
     missing = np.isnan(panel.y)
     y = fill(panel.y)
-    coefficients, sigma = conjugate_step(changes(y, s), w_dummies, prior, p, panel.n_global, rng)
-    # The conjugate start gives the Russian equations every column; the Gibbs steps draw
-    # only the allowed ones and would keep the others at their start.
-    coefficients = np.where(prior.mask, coefficients, 0.0)
+    if s.any():
+        coefficients, sigma = _start_without_dummies(
+            changes(y, s), w_dummies, prior, p, panel, rng
+        )
+    else:
+        coefficients, sigma = conjugate_step(y, dummies, prior, p, panel.n_global, rng)
     levels = levels_form(coefficients, s, p)
     chol, h_start = unit_lower(sigma)
     a = np.linalg.inv(chol)

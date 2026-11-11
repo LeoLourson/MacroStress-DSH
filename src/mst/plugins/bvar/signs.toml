@@ -9,6 +9,12 @@ id = "ru.monetary"
 label = "денежно-кредитный"
 rises = ["ru.key_rate", "ru.ruonia", "ru.ofz_1y"]
 falls = ["ru.usdrub", "ru.imoex", "ru.cpi"]
+# At least a tenth of the key rate's surprise in the month of the shock. With signs alone
+# the median draw of version 6ad8d758 (2026-11-10) gave the shock 4.5 % of it and 0.06 pp
+# of the rate per standard deviation; a 1 pp cut then weakened the rouble by 12 % (median)
+# to 116 % (p95), and a 5 pp cut was refused by the admission check. With the bound 89 % of
+# those draws admit a rotation and the rouble moves 5 % (median) to 17 % (p95) per 1 pp.
+shares = { "ru.key_rate" = 0.1 }
 
 [[shocks]]
 id = "ru.inflation"

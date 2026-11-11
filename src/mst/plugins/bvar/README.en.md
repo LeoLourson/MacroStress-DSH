@@ -14,6 +14,8 @@ $$
 
 The forecast, the conditions, the identification and the core therefore read the version unchanged, the unit roots are exact, and the constant of a change equation is a monthly drift. The dummy rows `mu` and `delta` are written for levels and are refused together with `differences`. A regime dummy of the spec shifts a level, so a change equation reads its change: a step in month $m$ as an impulse in $m$, an impulse in $m$ as impulses in $m$ and $m+1$. Read as it is, a step would bend the drift for good. A dummy stays out of an equation whose variable is unobserved in every month where the dummy is non-zero, since no data fix its coefficient there. The choice of the list and of `tightness` is recorded in the comments of `spec.toml`.
 
+Signs alone admit rotations in which a named shock barely moves the variable it is named after. The optional `shares` of a shock in `signs.toml` bound that: for each listed variable, the least share of its impact-month variance within the block that the shock carries, a bound on the size of the response in the manner of Kilian and Murphy (2012). The monetary shock carries at least a tenth of the key rate's surprise; without the bound a 5 pp cut needed a monetary shock of 20–30 standard deviations and was refused by the admission check. The numbers are in the comment of `signs.toml`.
+
 | File | What it does |
 |---|---|
 | `plugin.py` | The plugin declaration: one macro model `bvar.sv` |

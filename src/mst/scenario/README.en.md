@@ -21,6 +21,7 @@ The checks of `validate`:
 - the connection of conditions: a row the causes cannot move on their own is a refusal with the condition number;
 - an impact on a variable absent from the macro version, and on a driver the bundle does not serve, with the refusal reason;
 - satellites of another macro version, with both months;
-- a corpus fragment named in the scenario and published after the calculation date, if the corpus index is built.
+- a corpus fragment named in the scenario and published after the calculation date, if the corpus index is built;
+- a warning about the scale: a bound of a condition on a `log100` variable, with weights summing to one, stands more than five times from the last observed level. This is how a percentage written as a level and a percentage applied to a value in the scale look. Rates in their own units are not checked; the warning breaks no contract, and the scenario is computed.
 
 Tests are in [../../../tests/scenario](../../../tests/scenario/README.en.md).

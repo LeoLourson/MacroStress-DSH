@@ -566,6 +566,71 @@ def test_validate_accepts_a_scenario_the_model_can_compute(versions):
     assert report["ok"] is True and report["problems"] == []
 
 
+def _last(versions, variable: str) -> float:
+    """The last observed value of a variable in the model scale: what the scale check reads."""
+    column = versions.data.y[:, versions.data.ids.index(variable)]
+    return float(column[np.isfinite(column)][-1])
+
+
+def _scale_warnings(versions, **changes) -> list[str]:
+    spec = scenario(versions, **changes)
+    report = validate(spec, versions.loaded, versions.satellite, as_of=versions.data.months[-1])
+    return [warning for warning in report["warnings"] if "check the scale" in warning]
+
+
+def test_validate_warns_about_a_level_far_from_the_last_observed_one(versions):
+    # 200 points of 100 ln X is a level 7.4 times the last one: a percentage applied twice.
+    level = _last(versions, "gl.brent") + 200
+    found = _scale_warnings(versions, constraints=[fixed("gl.brent", 2, level)])
+    assert len(found) == 1
+    assert "constraint on gl.brent in month 2" in found[0] and "7.39 times" in found[0]
+
+
+def test_validate_keeps_quiet_about_a_stress_within_five_times_the_level(versions):
+    # Brent from 114 to 45 dollars is 2.5 times: a stress, not a scale error.
+    level = _last(versions, "gl.brent") - 100 * np.log(114 / 45)
+    assert _scale_warnings(versions, constraints=[fixed("gl.brent", 2, level)]) == []
+
+
+def test_validate_does_not_read_the_scale_of_a_rate(versions):
+    # A rate keeps its own units: its level is a percentage, so any number may be meant.
+    level = _last(versions, "ru.key_rate") + 500
+    assert _scale_warnings(versions, constraints=[fixed("ru.key_rate", 2, level)]) == []
+
+
+def test_validate_warns_about_a_one_sided_bound_written_as_a_percentage(versions):
+    # A fall of 45 per cent written as the level -45: the mean is above it on every path, so the
+    # condition holds trivially, and the bound alone gives the error away.
+    bound = _last(versions, "gl.brent") - 100 * np.log(1 / 0.0003)
+    expectation = {
+        "terms": [{"variable": "gl.brent", "month": 2, "weight": 1.0}],
+        "low": bound,
+        "basis": "assumption",
+    }
+    found = _scale_warnings(versions, expectations=[expectation], inner=2)
+    assert len(found) == 1 and found[0].startswith("expectation on gl.brent in month 2")
+
+
+def test_validate_does_not_read_the_scale_of_a_change_between_months(versions):
+    # Weights 1 and -1 make a move, not a level: 300 points of move is the event's business.
+    assert _scale_warnings(versions, constraints=[change("gl.brent", 3, 1, 300.0)]) == []
+
+
+def test_validate_reads_a_mean_over_two_months_as_one_level(versions):
+    level = _last(versions, "gl.brent") - 200
+    mean = {
+        "terms": [
+            {"variable": "gl.brent", "month": 2, "weight": 0.5},
+            {"variable": "gl.brent", "month": 3, "weight": 0.5},
+        ],
+        "low": level - 1,
+        "high": level + 1,
+        "basis": "assumption",
+    }
+    found = _scale_warnings(versions, constraints=[mean])
+    assert len(found) == 1 and "gl.brent in months 2, 3" in found[0]
+
+
 def test_validate_names_a_scenario_without_an_approver(versions):
     spec = scenario(versions, constraints=[fixed("gl.brent", 2, 1.0)], approved_by="")
     report = validate(spec, versions.loaded, versions.satellite, as_of=versions.data.months[-1])

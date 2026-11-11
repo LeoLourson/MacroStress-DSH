@@ -152,6 +152,15 @@ def test_a_constraint_needs_a_basis():
     assert Impact.model_validate(impact(basis="assumption")).basis == "assumption"
 
 
+def test_a_word_inside_a_list_of_fragments_is_refused_by_name():
+    # Left as a list, the word would pass the contract and fail later as a missing fragment.
+    for word in ("event", "assumption"):
+        with pytest.raises(ValidationError, match=f"the word {word} inside a list"):
+            Constraint.model_validate(rate_at(3, 21.0) | {"basis": [word, "S1/2020#1/1"]})
+    # A word alone in a list is still that word.
+    assert Constraint.model_validate(rate_at(3, 21.0) | {"basis": ["event"]}).basis == "event"
+
+
 def test_causes_are_unique():
     with pytest.raises(ValidationError, match=r"ru.inflation is named twice"):
         Spec.model_validate(spec(causes=["ru.inflation", "ru.inflation"]))

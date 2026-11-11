@@ -18,12 +18,19 @@ SIGNS_PATH = Path(__file__).with_name("signs.toml")
 
 
 class Shock(Contract):
-    """A named shock moves ``rises`` up and ``falls`` down when it occurs."""
+    """A named shock moves ``rises`` up and ``falls`` down when it occurs.
+
+    ``shares`` bounds magnitudes: for each listed variable, the least share of its
+    impact-month variance within the block that the shock carries. Signs alone admit a
+    monetary shock that barely moves the key rate, and a condition on the rate then needs
+    an outsized shock that moves everything else.
+    """
 
     id: BlockId
     label: Identifier
     rises: list[BlockId] = []
     falls: list[BlockId] = []
+    shares: dict[BlockId, float] = {}
 
     @model_validator(mode="after")
     def consistent_signs(self):
@@ -35,6 +42,13 @@ class Shock(Contract):
             for moved in self.rises + self.falls:
                 if block_of(moved) == "gl":
                     raise ValueError(f"Russian shock {self.id} cannot move {moved}")
+        for variable, share in self.shares.items():
+            if variable not in self.rises + self.falls:
+                raise ValueError(
+                    f"{self.id} bounds the share of {variable}, which it does not sign"
+                )
+            if not 0.0 < share <= 1.0:
+                raise ValueError(f"{self.id}: the share of {variable} is {share}, not in (0, 1]")
         return self
 
 

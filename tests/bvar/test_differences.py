@@ -184,6 +184,53 @@ def test_a_saved_version_reads_back_its_dummy_columns():
     assert loaded.dummy.shape[-1] == 2
 
 
+@pytest.mark.slow
+def test_coinciding_dummy_columns_keep_the_drift():
+    # A level impulse in month m is read by ru.c in levels; ru.b on changes reads impulses in
+    # m and m + 1, and the first of them is the same column. The posterior still recovers the
+    # drift of ru.b, and its dummy coefficients stay on the scale of the data.
+    rng = np.random.default_rng(11)
+    y = _walk(240, rng)
+    impulse = sim.START.replace(year=sim.START.year + 15)
+    spec = sim.spec(
+        volatility="stochastic",
+        stationary=["gl.a", "ru.c"],
+        differences=["ru.b"],
+        dummies=[{"month": impulse, "kind": "impulse"}],
+        draws=200,
+        burn=50,
+        seed=12,
+    )
+    posterior = estimate(sim.panel(y), spec)
+    assert np.abs(posterior.dummy[:, 1, :]).max() < 20.0
+    low, high = np.quantile(_drift_of(posterior, 1), [0.005, 0.995])
+    assert low <= DRIFT[1] <= high
+
+
+def test_the_start_on_changes_reads_no_dummy_column():
+    # Coinciding dummy columns make the conjugate start arbitrary along their difference;
+    # the start on changes leaves every dummy coefficient at nought and does not depend on
+    # how many such columns there are.
+    from mst.plugins.bvar.estimate import _start_without_dummies, minnesota
+
+    y = _walk(120, np.random.default_rng(13))
+    panel = sim.panel(y)
+    s = np.array([0.0, 1.0, 0.0])
+    w = y[1:] - s * y[:-1]
+    starts = []
+    for d in (1, 3):
+        spec = sim.spec(dummies=[{"month": sim.START, "kind": "impulse"}] * d)
+        column = np.zeros((len(w), 1))
+        column[60] = 1.0
+        dummies = np.repeat(column, d, axis=1)
+        start, _ = _start_without_dummies(
+            w, dummies, minnesota(panel, spec), 1, panel, np.random.default_rng(1)
+        )
+        assert np.all(start[:, 1 + 3 :] == 0.0)
+        starts.append(start[:, : 1 + 3])
+    assert np.array_equal(starts[0], starts[1])
+
+
 def test_differences_with_dummies_need_the_stochastic_sampler():
     y = sim.simulate(60, np.random.default_rng(3))
     spec = sim.spec(differences=["ru.b"], dummies=[{"month": sim.START, "kind": "step"}])

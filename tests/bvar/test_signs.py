@@ -56,3 +56,21 @@ def test_an_unknown_variable_is_named_at_load(tmp_path):
     )
     with pytest.raises(ValueError, match=r"ru\.monetary restricts unknown variable ru\.key_rat"):
         load_signs(path)
+
+
+def test_the_monetary_shock_carries_a_share_of_the_key_rate_surprise():
+    monetary = load_signs().shocks[0]
+    assert monetary.shares == {"ru.key_rate": 0.1}
+
+
+def test_a_share_needs_a_signed_variable():
+    row = shock("ru.monetary", rises=["ru.key_rate"]) | {"shares": {"ru.cpi": 0.1}}
+    with pytest.raises(ValidationError, match=r"ru\.monetary bounds the share of ru\.cpi"):
+        signs([row])
+
+
+@pytest.mark.parametrize("share", [0.0, 1.5])
+def test_a_share_lies_in_the_unit_interval(share):
+    row = shock("ru.monetary", rises=["ru.key_rate"]) | {"shares": {"ru.key_rate": share}}
+    with pytest.raises(ValidationError, match=r"share of ru\.key_rate .* in \(0, 1\]"):
+        signs([row])

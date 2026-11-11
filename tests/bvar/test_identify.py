@@ -101,3 +101,23 @@ def test_identify_filters_stability_before_the_rotation_search(posterior):
     assert model.diagnostics["estimated"] == posterior.draws
     assert model.diagnostics["stable"] <= posterior.draws
     assert model.diagnostics["identified"] <= model.diagnostics["stable"]
+
+
+def test_a_share_keeps_only_columns_that_carry_it():
+    # Uncorrelated unit errors and no lags: the shock's impact on the first variable is the
+    # first entry of its column, and its share of that variable's impact variance is the
+    # entry squared. Without the bound a third of the admissible columns fall below 0.8.
+    rng = np.random.default_rng(0)
+    signs = np.array([[1.0, 1.0]])
+    bounded = [rotate(np.eye(2)[None], signs, 100, rng, np.array([[0.8, 0.0]])) for _ in range(500)]
+    free = [rotate(np.eye(2)[None], signs, 100, rng) for _ in range(500)]
+    assert all(q[0, 0] ** 2 >= 0.8 and q[1, 0] > 0 for q in bounded)
+    assert np.mean([q[0, 0] ** 2 < 0.8 for q in free]) > 0.25
+
+
+def test_identify_reads_the_shares_of_the_shocks(posterior):
+    chosen = [Shock(id="ru.t", label="ru.t", rises=["ru.b"], shares={"ru.b": 0.9})]
+    model = identify(posterior, chosen, sign_lag=1, tries=5000, seed=0)
+    for draw in range(model.draws):
+        b = impact(model, draw) @ model.rotation[draw]
+        assert b[1, 1] ** 2 >= 0.9 * (b[1, 1:] ** 2).sum() - 1e-12

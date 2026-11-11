@@ -25,7 +25,7 @@ The models compute the consequences of the event. The scenario states only the e
 3. `model(kind="satellites", action="describe", version=...)`: scales and regressors `quantities`, drivers `served`, and `rejected` with the reason.
 4. `model(kind="macro", action="base", version=..., horizon=..., only=[...])`: the base path under $s_0$ by month, `p5`, `p50`, `p95` in the model scale. This is not a calculation and needs no approval.
 
-**Calendar.** Month $t=0$ is `origin.month`, not the month of `as_of`. Scenario month $k$ is $t=0$ plus $k$ calendar months. With `as_of` 2026-10-29 and `origin.month` 2026-09, month 1 is October 2026 even though it has passed. An event with no date starts in the first month after `as_of`, here month 2, never in a month that has passed. Convert the dates of the event to month numbers by this rule and list the mapping in the report.
+**Calendar.** Month $t=0$ is `origin.month`, not the month of `as_of`. Scenario month $k$ is $t=0$ plus $k$ calendar months. With `as_of` 2026-10-29 and `origin.month` 2026-09, month 1 is October 2026 even though it has passed. An event with no date starts in the first month after `as_of`, here month 2, never in a month that has passed. Convert the dates of the event to month numbers by this rule and list the mapping in the report. A named meeting or date gets its own month only when the event, the corpus or the version gives its calendar; otherwise keep the month of this rule and write in the narrative that it is the default, not a calendar fact.
 
 ## 2. What the event asserts
 
@@ -71,6 +71,8 @@ A condition records the event, or its scale and duration taken from the corpus. 
 
 **A deviation from the base.** A condition sets a level. To say that output is 1.2 % below the base in month 6, read `p50` of `ru.output` in month 6 from `base`, subtract 1.2 in the `log100` scale, and put the interval around that number. Take its width from your uncertainty about the size, not from the price. A move of a level over several months is a condition with weights on two months of the variable.
 
+**Duration.** When the text gives a duration (for six months, until the end of the year, the whole horizon), the elements that carry the event cover those months: a condition on each of them or on their mean, or an impact whose path is that long. A single month for a six-month event describes another event. If the effect decays earlier, say why in the narrative.
+
 - `month` runs from 1 to `horizon`. Month 0 cannot appear in a condition.
 - A variable with a month appears once in a condition, and a weight is not zero.
 - `terms` read either macro variables only or drivers `<quantity>:<object>` only: a mixed condition is refused.
@@ -79,6 +81,8 @@ A condition records the event, or its scale and duration taken from the corpus. 
 **Scale.** Bounds are in the model scale $y=g(X)$. `variables` gives the scale of each variable and `quantities` of each quantity: `identity` is own units, `log100` is $100\ln X$, `logit` is $\ln\big(d/(1-d)\big)$ for a share $d$.
 
 Measure a shift from `origin.last`, which holds the last value of each variable in the model scale and its month. Values from `series` do not work for this: the model reads variables with `seasonal: true` seasonally adjusted, so a raw series gives another number in their scale.
+
+**Convert a per cent once.** Under `log100` a move of $p$ per cent is $100\ln(1+p/100)$ added to the level in the model scale: a rise of 25 % of `ru.usdrub` from 444.39 is $444.39+22.31=466.70$. Do not apply the per cent to a value already in the model scale and convert the result again ($100\ln(444.39\times1.25)=632.05$ is 556 roubles to the dollar, not a 25 % rise), do not write the per cent itself as a bound (`-45` for a fall of 45 %), and do not write an inflation rate for `ru.cpi`: it is $100\ln$ of a price index, near 560. Under `identity` the number of the event is already in the scale: a rate of 2 % is `2.0`. `validate` warns when a bound under `log100` stands more than five times from the last observed level.
 
 **Comparability.** The price grows as an interval narrows, and for exact values as $-k\log(2\tau)$, where $k$ is the number of such conditions. Scenarios are comparable only at equal tolerances, so take the width from the spread of the source and do not tune it.
 
@@ -111,7 +115,7 @@ Causes are the coordinates through which the scenario explains the event: shocks
 
 ## 7. Labels
 
-Each element of $O$ and $\mathcal C$ is marked in `basis` with the word `event`, a source, or the word `assumption`.
+Each element of $O$ and $\mathcal C$ is marked in `basis` with the word `event`, a list of fragment ids, or the word `assumption`. A word inside the list is refused: `["event", "<chunk_id>"]` is not a label.
 
 - Use `event` when the text of the event states the number or a direct conversion to it, for example Brent at 130 dollars or a cut of 5 points from the current rate.
 - Use a source only if the fragment gives the number of that element or a direct conversion to it.
@@ -123,7 +127,7 @@ Each element of $O$ and $\mathcal C$ is marked in `basis` with the word `event`,
 
 ## 8. Save and check
 
-`narrative` is the full text of $N$: what happened, which outcome was chosen and why. Write it in the language of the user.
+`narrative` is the full text of $N$: what happened, which outcome was chosen and why. Write it in the language of the user. A number in the narrative is the number of the field it explains, or the narrative names its units: 444.73 in the text and 444.10 in the condition are two answers to one question.
 
 ```json
 {
@@ -143,7 +147,7 @@ Each element of $O$ and $\mathcal C$ is marked in `basis` with the word `event`,
 1. `scenario(action="save", id="...", spec={...})` checks the contract and writes the file. An id is lowercase letters, digits and hyphens. Do not write the file around `scenario`.
 2. `scenario(action="validate", id="...")` checks the versions, causes, impacts, the feasibility of the conditions and the visibility of fragments. At this stage the only item left in `problems` should be the missing approver. Do not change the content of a scenario only to pass the check without saying so.
 
-`labels` shows how many elements carry the event, a source and an assumption, and `warnings` what the scenario leaves unsupported and where its impacts do not go. Act on a warning about reach or say why you keep the element. Carry both into the report.
+`labels` shows how many elements carry the event, a source and an assumption, and `warnings` what the scenario leaves unsupported and where its impacts do not go. Act on a warning about reach or scale, or say why you keep the element. Carry both into the report.
 
 Fill `approved_by` only with a name the human gave, after their explicit consent. Then call `save` and `validate` again.
 

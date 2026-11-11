@@ -21,8 +21,21 @@ Month = Annotated[int, Field(strict=True, ge=1, le=360)]
 
 
 def _the_word(value):
-    """A word in a list is still the word: left as a list it would read as a corpus fragment."""
-    return value[0] if value in (["assumption"], ["event"]) else value
+    """A word in a list is still the word: left as a list it would read as a corpus fragment.
+
+    A word beside fragments is refused: the list would carry it as a fragment id, and only
+    ``validate`` with the corpus would notice, as a fragment that does not exist.
+    """
+    if value in (["assumption"], ["event"]):
+        return value[0]
+    if isinstance(value, list):
+        for word in ("event", "assumption"):
+            if word in value:
+                raise ValueError(
+                    f"the word {word} inside a list of fragments: basis is the word event, "
+                    "the word assumption, or a list of fragment ids"
+                )
+    return value
 
 
 #: What an element of ``O`` or ``C`` rests on: the word ``event`` when the text of the event

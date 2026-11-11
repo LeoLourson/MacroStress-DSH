@@ -853,8 +853,80 @@ def validate(
         "ok": not problems,
         "problems": problems,
         "labels": marks["labels"],
-        "warnings": marks["warnings"] + _reach(spec, satellites),
+        "warnings": marks["warnings"] + _reach(spec, satellites) + _scale_warnings(spec, macro),
     }
+
+
+#: How many times a level under ``log100`` may stand from the last observed one before
+#: ``validate`` asks about the scale. On the 100 scenarios of the bench the legitimate stresses
+#: reach 3.8 times (VIX up from 16 to 60, Brent down to a quarter) and the scale errors start
+#: at 6.5.
+SCALE_RATIO = 5.0
+
+
+def _scale_warnings(spec: Spec, macro: MacroVersion) -> list[str]:
+    """Bounds on prices, indices and volumes far from the last observed level.
+
+    Under ``log100`` a bound is ``100 ln X``, so a percentage written as a level (``-45`` for a
+    fall of 45 per cent) or a percentage applied to a value already in the scale lands many
+    times away from the level. Only conditions whose weights sum to one read a level; a
+    condition with weights 1 and -1 is a move. Rates and spreads keep their own units, where a
+    level is itself a percentage, so the number cannot tell a level from a move and they are
+    not read. Every bound is read, also one the base already satisfies: such a bound is the
+    trace of the error, and the condition holds trivially.
+    """
+    transforms = {variable.id: variable.transform for variable in load_registry().variables}
+    last = _last_levels(macro)
+    warnings = []
+    for kind, elements in (
+        ("constraint", spec.constraints),
+        ("expectation", spec.expectations),
+        ("probability", spec.probabilities),
+    ):
+        for element in elements:
+            terms = element.terms
+            if any(
+                transforms.get(term.variable) != "log100" or term.variable not in last
+                for term in terms
+            ) or abs(sum(term.weight for term in terms) - 1) > 1e-9:
+                continue
+            level = sum(term.weight * last[term.variable] for term in terms)
+            bounds = [
+                bound
+                for bound in (getattr(element, "value", None), element.low, element.high)
+                if bound is not None
+            ]
+            far = max(bounds, key=lambda bound: abs(bound - level))
+            if abs(far - level) <= 100 * np.log(SCALE_RATIO):
+                continue
+            warnings.append(
+                f"{kind} on {_named(terms)} names {far:.2f} where the last observed value is "
+                f"{level:.2f}: that is {np.exp((far - level) / 100):.3g} times the level, so "
+                "check the scale: a bound is 100 ln X, and a move of p per cent from the level "
+                "is 100 ln(1 + p/100) added to it once"
+            )
+    return warnings
+
+
+def _last_levels(macro: MacroVersion) -> dict[str, float]:
+    """The last finite value of each variable of the panel, in the model scale."""
+    last = {}
+    for k, id_ in enumerate(macro.panel.ids):
+        known = macro.panel.y[np.isfinite(macro.panel.y[:, k]), k]
+        if known.size:
+            last[id_] = float(known[-1])
+    return last
+
+
+def _named(terms) -> str:
+    """``gl.brent in month 2`` or ``gl.brent in months 2, 3``: the terms by variable."""
+    months: dict[str, list[int]] = {}
+    for term in terms:
+        months.setdefault(term.variable, []).append(term.month)
+    return ", ".join(
+        f"{variable} in month{'s' if len(found) > 1 else ''} {', '.join(map(str, found))}"
+        for variable, found in months.items()
+    )
 
 
 def _marked(spec: Spec) -> list:

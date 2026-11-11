@@ -4,10 +4,11 @@ For a parameter draw the impact matrix at the calculation month is ``B = C diag(
 Q``; any orthogonal ``Q`` fits the data equally well. ``Q`` is block diagonal, global block
 first, so Russian shocks never move global variables. Within a block, ``Q`` is drawn from the
 uniform (Haar) distribution until the column of each named shock moves its variables in the
-required direction in the impact month and ``sign_lag`` months after it; a column may change
-sign, which leaves the distribution uniform. Only the named columns are drawn by rejection,
-the others complete them uniformly. A draw without an admissible ``Q`` after ``tries``
-rotations is dropped.
+required direction in the impact month and ``sign_lag`` months after it, and carries at least
+its ``shares`` of the impact-month variance of the variables it bounds; a column may change
+sign, which leaves the distribution uniform on the admissible set. Only the named columns are
+drawn by rejection, the others complete them uniformly. A draw without an admissible ``Q``
+after ``tries`` rotations is dropped.
 
 Columns are ordered by block, named shocks first in registry order; the rest are unnamed.
 """
@@ -75,14 +76,26 @@ def complete(columns: np.ndarray, rng) -> np.ndarray:
     return q
 
 
-def rotate(response: np.ndarray, signs: np.ndarray, tries: int, rng) -> np.ndarray | None:
+def rotate(
+    response: np.ndarray,
+    signs: np.ndarray,
+    tries: int,
+    rng,
+    shares: np.ndarray | None = None,
+) -> np.ndarray | None:
     """An admissible ``Q`` of one block, or None.
 
     ``response`` (months, n, size) moves each variable per unit of each orthogonal shock of the
-    block; ``signs`` (named, n) holds +1 / -1 for a restricted variable and 0 otherwise.
+    block; ``signs`` (named, n) holds +1 / -1 for a restricted variable and 0 otherwise;
+    ``shares`` (named, n) the least share of each variable's impact variance in the block a
+    shock carries, 0 where unbounded.
     """
     size = response.shape[2]
     named = len(signs)
+    if shares is None:
+        shares = np.zeros_like(signs)
+    # The impact variance of a variable within the block does not depend on the rotation.
+    floor = shares * (response[0] ** 2).sum(axis=1)[None, :]
     for start in range(0, tries, BATCH):
         q = haar_columns(size, named, min(BATCH, tries - start), rng)
         moved = np.einsum("hvn,bnk->bhvk", response, q)
@@ -93,6 +106,7 @@ def rotate(response: np.ndarray, signs: np.ndarray, tries: int, rng) -> np.ndarr
             value = moved[:, :, restricted, j] * sign[restricted]
             up, down = (value > 0).all(axis=(1, 2)), (value < 0).all(axis=(1, 2))
             ok &= up | down
+            ok &= (moved[:, 0, :, j] ** 2 >= floor[j]).all(axis=1)
             flips[:, j] = np.where(up, 1.0, -1.0)
         if ok.any():
             first = int(np.argmax(ok))
@@ -122,12 +136,15 @@ def identify(
     index = {id_: i for i, id_ in enumerate(ids)}
     blocks = {"gl": range(0, g), "ru": range(g, n)}
     named = {block: [s for s in shocks if block_of(s.id) == block] for block in blocks}
-    signs = {}
+    signs, shares = {}, {}
     for block, chosen in named.items():
         signs[block] = np.zeros((len(chosen), n))
+        shares[block] = np.zeros((len(chosen), n))
         for j, shock in enumerate(chosen):
             signs[block][j, [index[v] for v in shock.rises]] = 1.0
             signs[block][j, [index[v] for v in shock.falls]] = -1.0
+            for variable, share in shock.shares.items():
+                shares[block][j, index[variable]] = share
         if len(chosen) > len(blocks[block]):
             raise ValueError(f"more named {block} shocks than {block} variables")
     labels = []
@@ -139,7 +156,9 @@ def identify(
     kept, rotations = [], []
     for draw in range(posterior.draws):
         psi = responses(posterior.lags[draw], sign_lag + 1) @ impact(posterior, draw)
-        parts = [rotate(psi[:, :, list(c)], signs[b], tries, rng) for b, c in blocks.items()]
+        parts = [
+            rotate(psi[:, :, list(c)], signs[b], tries, rng, shares[b]) for b, c in blocks.items()
+        ]
         if all(part is not None for part in parts):
             kept.append(draw)
             rotations.append(block_diag(*parts))

@@ -6,6 +6,15 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## Unreleased
 
+- **Scenario: a scale warning and five rules of the guide.** `validate` warns when a bound
+  of a condition on a price, an index or a volume stands more than five times from the last
+  observed level: on the 100 bench scenarios these are exactly six defects, among them E013,
+  where a 25 % rise of the exchange rate from 85 roubles to the dollar was written as 556. Rates
+  are not checked: their level is itself a percentage. The contract refuses the word `event`
+  or `assumption` inside a list of fragments in `basis`. The guide `scenario-from-corpus`
+  got rules on converting a per cent, the duration of the event, the month of a named
+  meeting, the form of `basis` and the agreement of the narrative numbers with the fields.
+
 ## 1.1.0: the expert interview with an orchestrator and the check sets (2026-11-09)
 
 - **The expert interview got an orchestrator, a gate and answer history.** The interview
