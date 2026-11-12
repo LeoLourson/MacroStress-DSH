@@ -1,163 +1,176 @@
 ---
 name: scenario-from-corpus
-description: Turn an event described in text into a stress-test scenario s=(N,m,O,D,C) using the corpus and hand it to a human for approval
+description: Turn an event described in text into a stress-test scenario s=(N,I,A) of interventions and observations, using the corpus, and hand it to a human for approval
 whenToUse: when the user names an event or asks what happens if it occurs and no scenario file exists yet, even without the words scenario or corpus
 ---
 
 # Scenario from an event
 
-Input: an event described in text, with or without numbers. Output: a scenario $s=(N,m,O,D,\mathcal C)$ saved with the `scenario` tool and shown to a human. A human approves the scenario; the agent does not compute it and does not start `run`.
+Input: the event in text, with or without numbers. Output: a scenario $s=(N,I,\mathcal A)$ saved with the `scenario` tool and shown to a human. A human approves it; the agent does not compute it and does not start `run`.
 
 | Element | Meaning | File field |
 |---|---|---|
 | $N$ | the event in text with links to sources | `narrative`, `sources` |
-| $m$ | the model versions | `macro`, `satellites` |
-| $\mathcal C$ | requirements on the measure $Q$: the event $A$ written on paths | `constraints`, `expectations`, `probabilities` |
-| $D$ | the causes of the event: coordinates of $\omega$ other than parameters | `causes`, `regime_event` |
-| $O$ | effects absent from the models: given shifts of paths | `impacts` |
+| $I$ | values that a subject outside the models sets | `interventions` |
+| $\mathcal A$ | outcomes stated or expected about the world | `observations` |
 
-The models compute the consequences of the event. The scenario states only the event itself and what the models lack.
+The file states the event alone. It names no model, no horizon and no number of paths: the calculation request carries them, and the same file is computed on any model system.
 
-## 1. Versions and the start month
+## 1. Split the clauses: intervention or observation
 
-1. `jobs(action="state")`: the versions to use and the state of the corpus. Take the macro and satellite versions it names. Take another version only if the user asks; `model(kind=..., action="list")` shows them.
-2. `model(kind="macro", action="describe", version=...)`: `as_of`, shocks `shocks`, hidden coordinates `latents`, variable scales `variables`, the start point `origin`.
-3. `model(kind="satellites", action="describe", version=...)`: scales and regressors `quantities`, drivers `served`, and `rejected` with the reason.
-4. `model(kind="macro", action="base", version=..., horizon=..., only=[...])`: the base path under $s_0$ by month, `p5`, `p50`, `p95` in the model scale. This is not a calculation and needs no approval.
+Read the event as a list of statements and give each one a kind.
 
-**Calendar.** Month $t=0$ is `origin.month`, not the month of `as_of`. Scenario month $k$ is $t=0$ plus $k$ calendar months. With `as_of` 2026-10-29 and `origin.month` 2026-09, month 1 is October 2026 even though it has passed. An event with no date starts in the first month after `as_of`, here month 2, never in a month that has passed. Convert the dates of the event to month numbers by this rule and list the mapping in the report. A named meeting or date gets its own month only when the event, the corpus or the version gives its calendar; otherwise keep the month of this rule and write in the narrative that it is the default, not a calendar fact.
+A statement is an **intervention** when a subject outside the models sets the value and the value would not follow from the other quantities: a central bank sets the key rate at its meeting, a regulator sets a tariff, a company announces a buyback, a strait closure sets the price of Brent for the Russian economy.
 
-## 2. What the event asserts
+A statement is an **observation** when it asserts an outcome that the system produces itself: the rouble does not weaken past 100, output falls by 2 % by the end of the year, inflation stays near 4 %.
 
-Numbers come from the event and the corpus, not from memory.
+The test is who chose the value, not which quantity it names. Brent at 130 dollars "because the strait closed" is an intervention for the Russian economy; Brent at 130 dollars "amid a global boom" is an observation, and the two have different consequences.
 
-**Clauses.** Split the event into clauses and make a table for the report: each clause, then the element of the scenario that carries it, or "not expressed" with the reason. A clause with no quantity of its own needs the nearest proxy among `served`, for example the shares of gold miners for the price of gold, or a stated reason why no proxy fits. Scale, duration and start that the event leaves open are listed there too.
+| Clause of the event | Kind | How it is written |
+|---|---|---|
+| the Bank of Russia raises the key rate to 18 % at the meeting on 2026-12-18 | intervention | `ru.key_rate`, month `2026-12`, `unit: level`, value 18 |
+| the regulator raises the regulated price by 9 % from 2027-01 | intervention | the regulated price quantity (or the nearest proxy), months from `2027-01`, `unit: percent`, value 9 |
+| the company announces a buyback on 2027-02 | intervention on the quantity the decision controls; where the models carry only the share price, the announced price move is the intervention and the model carries it to the other quantities | `share_price:<object>`, month `2027-02` |
+| the rouble does not weaken past 100 in 2027 | observation | a band on `ru.usdrub` with `high: 100`; an interval needs both bounds, so the lower one comes from the event, the corpus or the last observed value |
+| inflation stays near 4 % in 2027 | observation | a path of `ru.cpi` in its own units; the registry holds the price index, not the inflation rate |
 
-**Outcomes.** Name the main quantity the event moves and the sign of its move, with the reason. If the event, the corpus and the models do not fix the sign, the outcomes exclude each other: build one scenario per sign, each computed separately, with ids ending in `-a` and `-b`. Uncertainty about scale alone is the width of an interval, not a new scenario.
+A clause with no quantity of its own takes the nearest proxy among the served drivers, for example the shares of gold miners for the price of gold, or a stated reason in the narrative why no proxy fits. A clause with no number in the event and no number in the corpus gets a proposed number from the nearest episode, marked `assumption` by section 6.
 
-## 3. Corpus
+## 2. Write values in the quantity's own units and calendar months
+
+Months are calendar months `YYYY-MM`, one for each value. Names such as "in three months", "month 4" or "the second quarter" are not written into the file: the platform counts horizon months from the last month of the model panel, never from the calculation date.
+
+- If the event gives a delay ("within three months"), count it from the month the event names. If the event names no month at all, take the month after the calculation date, say so in the narrative, and mark the element `assumption`.
+- A month before the last month of the panel cannot be stated: the panel already holds it, and `validate` names the month. Do not convert dates to month numbers yourself.
+- The number is the one the event gives, in the quantity's own units: a rate of 18 is 18, an exchange rate of 100 is 100, a price of 95.4 is 95.4. It is never the model scale (no $100\ln X$).
+
+| `unit` | The number is | Example |
+|---|---|---|
+| `level` | the value itself, in the quantity's own units | the key rate is cut to 11.5: `11.5` |
+| `change` | the move from the last known value, in the same units | a cut of 5 p.p. from 16.5: `-5` |
+| `percent` | the relative move in per cent; prices and indices only, which the registry keeps in `log100` | the rouble weakens by 25 %: `25` |
+
+A 25 % rise of `ru.usdrub` is written `percent: 25`, and the platform applies it once to the last observed level: the result is that level times 1.25. Do not pre-convert it, do not write the resulting level yourself, and do not apply the per cent to a value you have already converted into the model scale. `percent` on a quantity the registry keeps in its own units (`ru.key_rate`, `ru.unemployment`) is refused: write such a move as `level` or `change`.
+
+## 3. Collect the evidence and the quantity names
 
 Searching the corpus is mandatory, even when the event looks clear.
 
-`corpus(action="search", query="...", as_of=<as_of of the version>, k=8)` searches the index and does not use the network. Corpus texts are in Russian, so query in Russian. Make several queries: the event, its mechanism, similar episodes, also with the `kind` filter. Read a fragment in full before citing it: `corpus(action="get", id=<chunk_id>, as_of=...)`. Report every number the fragment gives; do not call a number absent after reading only part of the text.
+`jobs(action="state")` gives the macro and satellite versions the platform will use and the date of the corpus index. `corpus(action="search", query="...", as_of=<that date>, k=8)` searches the index and does not use the network; corpus texts are in Russian, so query in Russian. Make several queries: the event, its mechanism, similar episodes, also with the `kind` filter. Read a fragment in full before citing it: `corpus(action="get", id=<chunk_id>, as_of=...)`. Report every number the fragment gives; do not call a number absent after reading only part of the text.
 
-The history of a quantity in its own units is available with `series(action="get", id=..., as_of=...)`, for a macro variable (`ru.usdrub`) and for a driver (`share_price:sibn`). Compare the event with the base forecast in the corpus: if it already contains a similar path, say so in the report.
+`series(action="get", id=..., as_of=...)` gives the history of a quantity in its own units, for a macro variable (`ru.usdrub`) and for a driver (`share_price:sibn`): the last observed value is what the percentage and the change are counted from, and the report shows it beside the imposed value.
+
+Quantity names come from the registry `src/mst/macro/registry.toml` and the driver catalog `workspace/drivers/catalog.json`; `guide(name="drivers")` explains them. Do not read `model(kind=..., action="describe")` and do not choose or name a model version: the file has no versions, and the calculation request names them. Do not read the model scale of a quantity, either: values are written in own units.
 
 **When there is no number.** You build the scenario, and the human approves or corrects it. Questions to the user come after the scenario and do not replace it. For each quantity that neither the event nor the corpus gives:
 
 1. Find the nearest episode in the corpus, even with other payers or another trigger.
-2. Propose a scale, duration and interval width from it. When the text gives no number, measure the move of the quantity around the episode date with `series(action="get", ...)`.
-3. Record the measurement next to the number: in `reason` for an impact, in `narrative` for a condition. Write the episode, the values before and after from `series`, and what else was in force in those months. Without any episode, write "no episode" and your reasoning. The same placeholder percentage on every driver is not a proposal: each number needs its own reasoning.
-4. Set `"basis": "assumption"` as a string, add the fragment of the episode to `sources`, and name in the report how the episode differs from the event.
+2. Propose a value from it. When the text gives no number, measure the move of the quantity around the episode date with `series(action="get", ...)`.
+3. Record the measurement in the `reason` of an intervention or in `narrative` for an observation: the episode, the values before and after from `series`, and what else was in force in those months. Without any episode, write "no episode" and your reasoning. The same placeholder percentage on every quantity is not a proposal: each number needs its own reasoning.
+4. Set `"basis": "assumption"`, add the fragment of the episode to `sources`, and name in the report how the episode differs from the event.
 
-If the event has no variable of its own in the models, write its consequences in the quantities that exist, by the rule in section 5.
+A scenario with no interventions and no observations is the base $s_0$ and records no event. Work on an event cannot end there: if `validate` warns about this, the scenario is not finished.
 
-A scenario with no conditions and no impacts is the base $s_0$ and records no event. Work on an event cannot end there: if `validate` warns about this, the scenario is not finished.
+## 4. Interventions
 
-## 4. Conditions $\mathcal C$
-
-A condition records the event, or its scale and duration taken from the corpus. Do not set as a condition what the models must derive: that is the result of the calculation, not its input. A quantity fixed by a condition matches the forecast up to the tolerance, so it cannot serve as a target.
-
-| What the event asserts | Field |
-|---|---|
-| a quantity lies within bounds | `constraints`, `low` and `high` |
-| an exact value | `constraints`, `value`; the platform expands it to `value ± tau`, where `tau` is a tenth of the typical monthly move |
-| only a mean | `expectations`, `low` and/or `high` |
-| only a probability | `probabilities`, `low`, `high`, `at_least` |
+An intervention sets or shifts the value of one quantity in the months named. A decision is written as a `set`: the quantity takes that value, and the model's own value in those months is discarded. A `shift` displaces the model's own value by an amount; use it when the event adds a displacement to the path, not when the event chooses the value.
 
 ```json
-{"terms": [{"variable": "ru.key_rate", "month": 1, "weight": 1.0}], "low": 17.0, "high": 18.0, "basis": ["<chunk_id>"]}
+{"quantity": "ru.key_rate", "months": ["2026-12"], "kind": "set", "values": [18.0],
+ "unit": "level", "reason": "unscheduled meeting raises the rate", "basis": ["<chunk_id>"]}
 ```
-
-**A deviation from the base.** A condition sets a level. To say that output is 1.2 % below the base in month 6, read `p50` of `ru.output` in month 6 from `base`, subtract 1.2 in the `log100` scale, and put the interval around that number. Take its width from your uncertainty about the size, not from the price. A move of a level over several months is a condition with weights on two months of the variable.
-
-**Duration.** When the text gives a duration (for six months, until the end of the year, the whole horizon), the elements that carry the event cover those months: a condition on each of them or on their mean, or an impact whose path is that long. A single month for a six-month event describes another event. If the effect decays earlier, say why in the narrative.
-
-- `month` runs from 1 to `horizon`. Month 0 cannot appear in a condition.
-- A variable with a month appears once in a condition, and a weight is not zero.
-- `terms` read either macro variables only or drivers `<quantity>:<object>` only: a mixed condition is refused.
-- Conditions on drivers and conditions on means and probabilities need `inner` of at least 2.
-
-**Scale.** Bounds are in the model scale $y=g(X)$. `variables` gives the scale of each variable and `quantities` of each quantity: `identity` is own units, `log100` is $100\ln X$, `logit` is $\ln\big(d/(1-d)\big)$ for a share $d$.
-
-Measure a shift from `origin.last`, which holds the last value of each variable in the model scale and its month. Values from `series` do not work for this: the model reads variables with `seasonal: true` seasonally adjusted, so a raw series gives another number in their scale.
-
-**Convert a per cent once.** Under `log100` a move of $p$ per cent is $100\ln(1+p/100)$ added to the level in the model scale: a rise of 25 % of `ru.usdrub` from 444.39 is $444.39+22.31=466.70$. Do not apply the per cent to a value already in the model scale and convert the result again ($100\ln(444.39\times1.25)=632.05$ is 556 roubles to the dollar, not a 25 % rise), do not write the per cent itself as a bound (`-45` for a fall of 45 %), and do not write an inflation rate for `ru.cpi`: it is $100\ln$ of a price index, near 560. Under `identity` the number of the event is already in the scale: a rate of 2 % is `2.0`. `validate` warns when a bound under `log100` stands more than five times from the last observed level.
-
-**Comparability.** The price grows as an interval narrows, and for exact values as $-k\log(2\tau)$, where $k$ is the number of such conditions. Scenarios are comparable only at equal tolerances, so take the width from the spread of the source and do not tune it.
-
-## 5. Impacts $O$
-
-An impact records an effect absent from the models that stays where you put it, for example an export ban that hits one company. Test: if the models carry this effect from the conditions, no impact is needed, and a shift on top of such a channel counts the effect twice.
-
-**Macro effects are conditions.** An impact on a macro variable moves that variable alone: the other macro variables do not react, and it reaches only the satellites with it in `regressors`. `ru.cpi` and `ru.output`, for example, move no share price. So when an effect on a macro variable must spread through the economy, or the event asserts the path of a macro variable, write a condition: the models then derive the other variables, and the scenario gets a price. This holds even when the models do not know the cause of the effect. Use an impact on a macro variable only if you want no reaction, and say why in `reason`. `validate` warns which quantities read each macro variable you shift.
 
 ```json
-{"target": "share_price:<object>", "start": 1, "values": [-10.54, -8.0, -5.0], "reason": "why", "basis": ["<chunk_id>"]}
+{"quantity": "share_price:lkoh", "months": ["2027-02"], "kind": "shift", "values": [-10.0],
+ "unit": "percent", "reason": "export duty effect absent from the model", "basis": "assumption"}
 ```
 
-- `values` are in the model scale of the quantity: a 10 % fall under `log100` is $100\ln 0.9\approx -10.54$, not $-0.1$. `values[k]` is added in month `start + k`; a constant shift is one value repeated.
-- An impact on a macro variable enters the path before the satellites and reaches only those with it in `regressors`.
-- An impact on a driver shifts that driver alone. A sector shift (`share_price:oil_gas`) does not reach the shares of its companies (`share_price:lkoh`): to move the companies, list them, and give each its own number when the event hits them differently. `validate` names the served drivers a shift does not reach. Lower levels feel a shift only through their models. The driver must be in `served`; name in the report any important driver found in `rejected`.
-- An impact is a path: it acts in the months `start .. start + len(values) - 1` and vanishes entirely after. An impact has no dynamics of its own, so write aftereffects as nonzero values after the event and hold a lasting effect until the end of the horizon. A gap inside the path is a written `0.0`.
-- Overlapping impacts on one target add up. Write a measure phased in over months as one path with the values of each month, not as several constant shifts.
-- A condition on the same quantity holds on the final path: do not add the impact to the bounds by hand.
-- An impact is not random and has no price of its own. A scenario of impacts alone has $Q=P$, so its price is zero, may be missing from the result, and says nothing about how plausible the scenario is. Say so in the report.
+- `months` and `values` have one entry per month each and the same length; a constant value over several months is repeated, not written once.
+- The pair (quantity, month) belongs to at most one intervention: write one intervention with several months, never two on the same month.
+- A value may carry its law instead of a single number: `{"uniform": [low, high]}` draws the number per group of paths, and `{"with_probability": p, "value": x}` imposes `x` in a share `p` of the groups. The law is drawn from the seed of the calculation, so the scenario price averages it and the report shows in how many groups the intervention was active. Write a law when the event states a range or a chance ("a cut of 3 to 5 p.p.", "with a probability of one half"); a number the event states stays a number.
+- In the default form the seeded value does not move the other macro variables of the same month; later months read it through the model's lags. When the event states the reaction of the market, write that reaction as its own intervention or observation instead of expecting the same-month spread.
+- `reason` is a short identifier of the decision, `basis` the label of section 6.
 
-## 6. Causes $D$
+## 5. Observations
 
-Causes are the coordinates through which the scenario explains the event: shocks from `shocks` and hidden coordinates from `latents`. The laws of the other coordinates and of the parameters stay as they were.
+An observation is a requirement on the measure over outcomes: a quantity lies in a band, a mean lies in a band, or a probability is at least some value.
 
-- With no causes named, `causes` is empty and $\omega_D$ holds everything except the parameters. Only then does the price split by level in `dist.by_level`.
-- Name a cause only if the event or the corpus points to it. Fewer causes make the explanation more expensive, so do not tune `causes` to the price or to pass the check.
-- If the event is unreachable at some value of the remaining coordinates, the scenario contradicts the models. `validate` or the calculation will say so; report it instead of silently removing the condition.
-- `regime_event` is a regime the event itself asserts over the whole horizon, for example `regime.stress` of `msvar.markov`. That differs from naming a regime among the causes. It needs `regime_path` among the causes, or empty `causes`.
+| What the event asserts | `kind` | Fields |
+|---|---|---|
+| a quantity lies within bounds in a month | `constraint` | `low` and `high` |
+| a quantity has an exact value | `constraint` | `value`; the platform expands it to `value ± tau`, where `tau` is a tenth of the typical monthly move |
+| only a mean over several months lies within bounds | `expectation` | `low` and/or `high` |
+| a quantity falls in a band with a probability of at least $p$ | `probability` | `low`, `high`, `at_least` |
 
-## 7. Labels
+```json
+{"kind": "constraint", "terms": [{"quantity": "ru.usdrub", "month": "2027-06", "weight": 1.0}],
+ "unit": "level", "low": 90.0, "high": 100.0, "basis": ["<chunk_id>"]}
+```
 
-Each element of $O$ and $\mathcal C$ is marked in `basis` with the word `event`, a list of fragment ids, or the word `assumption`. A word inside the list is refused: `["event", "<chunk_id>"]` is not a label.
+```json
+{"kind": "expectation", "terms": [
+   {"quantity": "ru.key_rate", "month": "2027-01", "weight": 1.0},
+   {"quantity": "ru.key_rate", "month": "2027-02", "weight": 1.0}],
+ "unit": "level", "low": 14.0, "high": 16.0, "basis": "assumption"}
+```
 
-- Use `event` when the text of the event states the number or a direct conversion to it, for example Brent at 130 dollars or a cut of 5 points from the current rate.
-- Use a source only if the fragment gives the number of that element or a direct conversion to it.
-- If the fragment confirms only the mechanism or the direction and you chose the size, use `assumption` and add the fragment to `sources`.
+- `terms` is the functional: `weight` times the quantity in that month, summed over the terms. A statement about one quantity in one month has one term with weight 1.0. A statement about several quantities or months is one weighted sum, not several observations.
+- Every observation names its `kind`: `constraint`, `expectation` or `probability`.
+- A quantity with a month appears once in an observation, and a weight is not zero.
+- `terms` read either macro variables only or drivers `<quantity>:<object>` only: a mixed observation is refused.
+- A `constraint` needs both `low` and `high`. A one-sided statement ("not weaker than 100") becomes a band, and the second bound comes from the event, the corpus or the last observed value; when you chose it, it is part of the `assumption`. Only an `expectation` takes a single bound, and it bounds the mean over the months, not every path.
+- For quantities in `log100`, the weights of one observation sum to one (an aggregate level, in `level` or `change`) or to zero (a ratio, in `percent`); any other sum is refused. A statement about a change of an index over time is usually such a ratio.
+- An exact `value` is expanded to a tolerance, so its price grows as the band narrows. Prefer the interval the source gives; do not tune the width to the price. An `expectation` is available for quantities the registry keeps in their own units; on `log100` quantities the mean of the logarithm is not the logarithm of the mean and is refused.
+- An observation on a driver, on a mean or on a probability needs `inner` of at least 2 in the calculation request: those requirements are met by reweighting the paths inside a group of one parameter draw.
+- Do not add an observation of a quantity in a month where an intervention sets it: the platform substitutes the installed value, and an observation outside it contradicts the models at every path.
+- A statement about a period covers its months: an observation on each month or on their mean, or a stated reason in the narrative why the effect ends earlier. A single month for a year-long event describes another event.
+
+## 6. Labels
+
+Each intervention and observation is marked in `basis` with the word `event`, a list of fragment ids, or the word `assumption`. A word inside the list is refused: `["event", "<chunk_id>"]` is not a label.
+
+- `event` when the text of the event states the number or a direct conversion to it, for example Brent at 130 dollars or a cut of 5 p.p. from the current rate.
+- A fragment id only when the fragment gives the number of that element or a direct conversion to it.
+- `assumption` when you chose the number, even if a fragment fixes the mechanism or the direction: then add the fragment to `sources`.
 - A number from another event is an analogy: name the episode in the report and how it differs.
-- `validate` checks that fragments are visible on the calculation date. Nobody but the human checks that the labels are true.
 
-`assumption` is an honest label on a number you propose, not a refusal to propose it. A scenario of assumptions only is allowed, but the report must show it.
+`assumption` is an honest label on a number you propose, not a refusal to propose it. A scenario of assumptions only is allowed, but the report must show it. `validate` checks that cited fragments are visible on the calculation date; nobody but the human checks that the labels are true.
 
-## 8. Save and check
+## 7. Save, check and approve
 
-`narrative` is the full text of $N$: what happened, which outcome was chosen and why. Write it in the language of the user. A number in the narrative is the number of the field it explains, or the narrative names its units: 444.73 in the text and 444.10 in the condition are two answers to one question.
+`narrative` is the full text of $N$: what happened, which statements were classified how and why. Write it in the language of the user. A number in the narrative is the number of the field it explains, or the narrative names its units: 444.73 in the text and 444.10 in the observation are two answers to one question.
 
 ```json
 {
   "narrative": "The Bank of Russia raises the key rate at an unscheduled meeting ...",
   "sources": ["<chunk_id>"],
-  "horizon": 12,
-  "macro": "<64 hex>",
-  "satellites": "<64 hex>",
-  "constraints": [],
-  "expectations": [],
-  "probabilities": [],
-  "causes": [],
-  "impacts": []
+  "interventions": [
+    {"quantity": "ru.key_rate", "months": ["2026-12"], "kind": "set", "values": [18.0],
+     "unit": "level", "reason": "unscheduled meeting", "basis": "event"}
+  ],
+  "observations": [],
+  "approved_by": null
 }
 ```
 
 1. `scenario(action="save", id="...", spec={...})` checks the contract and writes the file. An id is lowercase letters, digits and hyphens. Do not write the file around `scenario`.
-2. `scenario(action="validate", id="...")` checks the versions, causes, impacts, the feasibility of the conditions and the visibility of fragments. At this stage the only item left in `problems` should be the missing approver. Do not change the content of a scenario only to pass the check without saying so.
+2. `scenario(action="validate", id="...")` checks the quantity names, the units, the calendar months, that every observation translates into one scale, the corpus fragments and the approval. It runs on the newest finished macro version and the satellites estimated on it, over twelve months and one inner path, so a statement later than that horizon is reported as a problem even though a run whose request names a longer horizon computes it. The calculation request carries the horizon, the models and `inner` the run will really use.
+3. At this stage the only item left in `problems` should be the missing approver. A month, a name or a unit the platform refuses is a mistake in the file: correct it. Do not change the content of a scenario only to pass the check without saying so.
 
-`labels` shows how many elements carry the event, a source and an assumption, and `warnings` what the scenario leaves unsupported and where its impacts do not go. Act on a warning about reach or scale, or say why you keep the element. Carry both into the report.
+`labels` shows how many elements carry the event, a source and an assumption; `warnings` says when the narrative cites no source, when every element is an assumption and when the file records no event at all. Carry both into the report.
 
-Fill `approved_by` only with a name the human gave, after their explicit consent. Then call `save` and `validate` again.
+Show the scenario to the human. Fill `approved_by` only with a name the human gave, after their explicit consent: the scenario is approved by a person, never by the agent. Then call `save` and `validate` again.
 
-## 9. Report to the human
+The horizon, the macro model and the satellites are chosen in the calculation request, not here. The same file is computed unchanged on another model, and the difference between the runs shows how much the conclusion depends on the choice.
+
+## 8. Report to the human
 
 Write in the language of the user. For each scenario show:
 
-- $N$ and the mapping of month numbers to the calendar;
-- the table of clauses and the main quantity with the sign of its move;
-- a table of the elements of $\mathcal C$ and $O$: own units, model scale, months, the event, the source and what it says, or `assumption` with its measurement or "no episode";
-- $D$ and why these causes;
-- how many elements rest on the event, on a number from a source, and only on a mechanism or an assumption;
-- where confidence is lowest.
+- $N$ and the calendar months it names, with what happens in each;
+- the table of clauses: each clause, whether it is an intervention or an observation, the element that carries it, the number with its unit and month, or "not expressed" with the reason;
+- for each intervention, the last observed value from `series` beside the imposed one, so the move is visible;
+- the elements that rest on the event, on a number from a source and only on an assumption;
+- where confidence is lowest, and which statements the models cannot express at all.
+
+The calculation report shows how far each intervention stood from the base forecast (`alpha` in the `interventions` block) and calls an intervention-only scenario's price zero; do not promise either number before the run.

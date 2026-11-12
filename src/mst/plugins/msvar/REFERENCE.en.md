@@ -90,7 +90,7 @@ $$
 x_{i,t}=\max(s_{i,t},\text{lower}_i).
 $$
 
-Lags, impacts, conditions and the price use the shadow, so the gaussian linear machinery is unchanged; after a fall below the bound, a later rise starts from the shadow.
+Lags, interventions, observations and the price use the shadow, so the gaussian linear machinery is unchanged; after a fall below the bound, a later rise starts from the shadow.
 
 ## 4. Estimation
 
@@ -145,58 +145,43 @@ The data determine $\Sigma(k)$ but not $B(k)$. In each regime $k$ set $B(k)=C(k)
 
 `ru.cpi` was added to `falls` of `ru.monetary` because after a rate cut inflation stayed below base for months in both models. The five names match `bvar.sv`, so scenarios carry over between models. The remaining $n-5$ columns are unnamed (`gl.unnamed_k`, `ru.unnamed_k` in `bvar.sv`). The number of rotation attempts per version and a block structure of $Q(k)$ are not set by the design for `msvar.markov`.
 
-Regime elements. The version's set $J$ (key `shocks`) holds the five economic shocks, the unnamed shocks and two regime elements, `regime.calm` and `regime.stress`. The latent coordinate is the regime path $\zeta$, declared by the class attribute `latents`; a scenario names it as the cause `regime_path`.
+Regime elements. The version's set $J$ (key `shocks`) holds the five economic shocks, the unnamed shocks and two regime elements, `regime.calm` and `regime.stress`. The latent coordinate is the regime path $\zeta$, declared by the class attribute `latents`; a scenario does not name it, and observations reweight its candidates.
 
 ## 6. Forecast
 
-The scenario plan (`ScenarioPlan`) holds the horizon $H$, constraints $\mathbf a\le W\mathbf y\le\mathbf b$ on the path $\mathbf y=(y_1^\top,\dots,y_H^\top)^\top$, the causes $D$, the regime event `regime_event`, and `inner`, the number of cause draws per value of $R$. An exact value widens to an interval of half-width $\tau$; the platform sets $\tau$, not this document. Impacts $O$ on macro variables are already taken out of the bounds: each bound of a term with weight $w$ is lowered by $w\,o_t$, and the impact is added to the paths after the draw.
+The scenario plan (`ScenarioPlan`) holds the horizon $H$, observations $\mathbf a\le W\mathbf y\le\mathbf b$ on the path $\mathbf y=(y_1^\top,\dots,y_H^\top)^\top$, the realized interventions (one row per group of paths), and `inner`, the number of paths per draw of the parameters and the interventions. An exact value widens to an interval of half-width $\tau$; the platform sets $\tau$, not this document. The model declares the default form, so the platform executes the interventions: a set puts the value after the draw (`apply_default`), a shift adds, and the set cells are substituted into the observations (`constraints_under_default`).
 
 Given $\theta$ and $\zeta$ the path is linear in the shocks:
 
 $$
-\mathbf y=c(\theta,\zeta)+\Phi(\theta,\zeta)\,\mathbf z,\qquad W\mathbf y=Wc+Z_D\mathbf z_D+Z_{\bar D}\mathbf z_{\bar D},
+\mathbf y=c(\theta,\zeta)+\Phi(\theta,\zeta)\,\mathbf z,\qquad W\mathbf y=Wc^\psi+Z^\psi\mathbf z_{\text{free}},
 $$
 
-where $c$ is the zero-shock forecast along the regime path $\zeta$, and $Z_D=W\Phi_D$, $Z_{\bar D}=W\Phi_{\bar D}$ are the responses of the constraint rows to the causes and to the other shocks.
+where $c$ is the zero-shock forecast along the regime path $\zeta$, and $Z^\psi=W\Phi^\psi$ are the responses of the observation rows to the free shocks after the interventions are substituted.
 
 Unconditional forecast (scenario $s_0$): for each draw $r$, $\theta^{(r)}$ comes from the sample, $\zeta$ from $\pi_\theta$, $\mathbf z\sim N(0,I)$. The regime mixture is realised path by path: each draw carries its own $\zeta$.
 
-Conditional forecast. The causes are drawn from the normal law truncated to
+Conditional forecast. The free shocks are drawn from the normal law truncated to the bounds after the interventions are substituted,
 
 $$
-\mathbf a-Wc-Z_{\bar D}\mathbf z_{\bar D}\le Z_D\mathbf z_D\le\mathbf b-Wc-Z_{\bar D}\mathbf z_{\bar D},
+\mathbf a-Wc^\psi\le Z^\psi\mathbf z_{\text{free}}\le\mathbf b-Wc^\psi,
 $$
 
-by the Gibbs sampler for the truncated normal (Geweke, 1991), 50 passes for interval constraints (Antolín-Díaz, Petrella, Rubio-Ramírez, 2021). A constraint is dependent if the causes move it beyond the rows already fixed by less than $10^{-9}$ of how much all shocks move it; the scenario is then rejected with the constraint numbers. Four cases for the regime path follow from the general scheme:
+by the Gibbs sampler for the truncated normal (Geweke, 1991), 50 passes for interval constraints (Antolín-Díaz, Petrella, Rubio-Ramírez, 2021). A row wholly determined by the set values leaves the system; its value outside the bounds means the scenario contradicts the model. A row linearly dependent on the rows already fixed (threshold $10^{-9}$ of how much all shocks move it) is rejected with `InfeasibleScenario` and the constraint numbers.
 
-| Case | $R$ | Regime path |
-|---|---|---|
-| no causes named | $\theta$ | latent coordinate: 64 candidates (`LATENT_CANDIDATES`) from $\pi_\theta$, candidate weight $\propto P(S\mid\theta,\zeta)$, so $P_s(\zeta\mid\theta)\propto\pi_\theta(\zeta)P(S\mid\theta,\zeta)$ |
-| causes are shocks $\mathbf z_D$ | $(\theta,\zeta,\mathbf z_{\bar D})$ | base law $\pi_\theta$, unchanged by the conditions |
-| causes are shocks and `regime_path` | $(\theta,\mathbf z_{\bar D})$ | candidates from $\pi_\theta$ weighted $\propto P(S\mid R,\zeta)$ |
-| `regime_event` $=k$ | — | $\zeta=(k,\dots,k)$ over the whole horizon |
+The regime path is a latent coordinate, not a scenario field. Under observations it is chosen from 64 candidates (`LATENT_CANDIDATES`) drawn from $\pi_\theta$: the candidate weight is $\propto P(S\mid\theta,\zeta)$, so $P_s(\zeta\mid\theta)\propto\pi_\theta(\zeta)P(S\mid\theta,\zeta)$. Without observations $\zeta$ is drawn from the base transition law. If with positive probability some $n$ has $n^\top Z=0$, then $P(S\mid R)=0$ with positive probability and the scenario contradicts the models.
 
-If with named shocks some $n$ has $n^\top Z_D=0$ and $n^\top Z_{\bar D}\ne0$ on a set of positive probability, then $P(S\mid R)=0$ with positive probability and the scenario contradicts the models.
-
-The regime event `regime_event` names `regime.stress` or `regime.calm` and fixes the regime path over the whole horizon, with or without conditions; the conditions are then met by the causes at the fixed regime. With no conditions on $y$ and no named causes the shocks keep their base law, and the price is
-
-$$
-\mathrm{dist}(s)=\mathbb E_P\big[-\log\pi_\theta(k,\dots,k)\big].
-$$
-
-How the price of a regime event combines with conditions on $y$ is not set by the design (open questions).
-
-Constraint law (`constraint_law`): given $R$ the model returns the gaussian law of the rows of $W\mathbf y$ (means and covariances), grouped by the value of $R$, with latent candidates and log weights. The platform turns a group's rows into $P(S\mid R)$ with the GHK sampler and averages over groups:
+Constraint law (`constraint_law`): given $R=(\theta,\psi)$ — the parameters and the realized interventions — the model returns the gaussian law of the rows of $W\mathbf y$ **after the interventions**, grouped by the value of $R$, with latent candidates and log weights. The platform turns a group's rows into $P(S\mid R)$ with the GHK sampler and averages over groups:
 
 $$
 \mathrm{dist}(s)=\mathbb E_P\big[-\log P(S\mid R)\big].
 $$
 
-The platform imposes conditions on means and probabilities by exponential tilting within groups.
+The platform imposes observations on means and probabilities by exponential tilting within groups.
 
-Diagnostics: the size of the needed driving shock in standard deviations per month, the effective size of the candidate weights, the counts `estimated`, `stable`, `identified`.
+Diagnostics: the size of the shock the observations need in standard deviations per month, the effective size of the candidate weights, the counts `estimated`, `stable`, `identified`.
 
-Bounds apply to the final paths after impacts and tilting: the output is $\max(s,\text{lower})$ in model scale, conditions are on the shadow, and an exact condition at the bound ("Fed at zero") means the shadow within $\tau$ of the bound.
+Bounds apply to the final paths after interventions and tilting: the output is $\max(s,\text{lower})$ in model scale, conditions are on the shadow, and an exact condition at the bound ("Fed at zero") means the shadow within $\tau$ of the bound.
 
 ## 7. Parameters
 
@@ -223,7 +208,7 @@ Bounds apply to the final paths after impacts and tilting: the output is $\max(s
 
 ## 8. Inputs and outputs
 
-Declaration: `plugin = Plugin(...)` with `macro=(MODEL,)`, `model_id` `msvar.markov`, a `model_sdk` range compatible with Model SDK 3.0 (impacts as paths, `AdditiveImpact`). The core gets the model only from the `mst.plugins` registry. The plugin imports only `mst.model_sdk`, `mst.contracts`, `mst.macro.panel`, `mst.macro.registry` and its own package.
+Declaration: `plugin = Plugin(...)` with `macro=(MODEL,)`, `model_id` `msvar.markov`, a `model_sdk` range compatible with Model SDK 4.0 (interventions `Intervention`, the default form). The core gets the model only from the `mst.plugins` registry. The plugin imports only `mst.model_sdk`, `mst.contracts`, `mst.macro.panel`, `mst.macro.registry` and its own package.
 
 - `estimate(context) → (meta, arrays)`: input is the series store, the registry, the date `as_of` and the specification. Required keys: `as_of`, `ids` (variable order, global block first), `months`, `shocks` (the set $J$: economic shocks and regime elements), `panel_y`, `panel_approximate`. The platform writes the key `model`. The arrays hold $\theta^{(r)}$; `lags` has shape `(M, S, p, n, n)` and under `"mean_covariance"` holds equal copies across regimes.
 - `load(meta, arrays) → model of the version`; only this plugin reads it.
@@ -271,27 +256,27 @@ Estimation command: `python -m mst.models estimate-macro msvar.markov --as-of ..
 23. The model declares the regime path in `latents`.
 24. `lags` in the arrays has shape `(M, S, p, n, n)`.
 25. `simulate` is a pure function of the seed: two calls with one seed give bitwise equal paths.
-26. Without conditions each draw carries its own regime path, and regime shares on the horizon agree with $\pi_\theta$.
-27. With no causes named, regime path candidates (64 per group $R$) are weighted in proportion to $P(S\mid\theta,\zeta)$.
-28. With shocks as causes and no `regime_path`, the law of the regime path under conditions equals the base law.
-29. Under `regime_event = regime.k` every horizon month of every draw is in regime $k$, and without conditions the price equals $\mathbb E_P[-\log\pi_\theta(k,\dots,k)]$ within its error (checked against the closed form).
-30. Interval conditions hold on every path, up to the tolerance $\tau$.
-31. A scenario with dependent constraints is rejected with the constraint numbers.
-32. `constraint_law` returns a law of the rows of $W\mathbf y$ consistent with the paths of `simulate`: the share of paths in the box equals $P(S\mid R)$ within Monte Carlo error.
+26. Without observations each draw carries its own regime path, and regime shares on the horizon agree with $\pi_\theta$.
+27. Under observations regime path candidates (64 per group $R$) are weighted in proportion to $P(S\mid\theta,\zeta)$.
+28. Without observations the regime path is drawn from the base transition law.
+29. A set replaces only its own cell in its month, a shift moves only its own path; other months and variables do not change.
+30. Interval observations hold on every path, up to the tolerance $\tau$.
+31. A scenario with dependent rows is rejected with the constraint numbers.
+32. `constraint_law` returns a law of the rows of $W\mathbf y$ after the interventions, consistent with the paths of `simulate`: the share of paths in the box equals $P(S\mid R)$ within Monte Carlo error.
 33. No output path of a variable with `lower` lies below its bound; the shadow continues below the bound, and a later rise starts from it.
 34. Conditions hold on the shadow; without `lower`, paths equal the paths without bounds.
 35. `ru.spread_aa` and `ru.spread_a` get no bound.
-36. The size of the driving shock in standard deviations per month is written to the calculation diagnostics.
-37. An impact on a macro variable shifts only that variable's path and only in the impact months; a condition on an impacted variable holds on the final path.
+36. The size of the shock the observations need in standard deviations per month is written to the calculation diagnostics.
+37. The model does not rewrite the paths under interventions: the platform applies them once after the draw.
 
 ## 11. Open questions and contradictions
 
 1. What switches. The plugin README describes switching of the intercept, lags and covariance; `plans/macro-models.md` makes `"mean_covariance"` with common lags the default. Which value the released version uses is unknown.
 2. "Mean" or intercept. The plan calls the step "regimes switch the mean and covariance", while estimation switches the intercept $\mu(k)$; with common lags the unconditional mean of a regime is $(I-\sum_jA_j)^{-1}\mu(k)$, undefined at unit roots.
 3. Bound of `ru.spread_bbb`. The registry and the README set `lower = 0` (history minimum +0.99), while `plans/macro-models-results.md` says all three spreads were left unbounded.
-4. Who applies bounds. The plan: both `simulate` functions on the final paths; the README: the platform after impacts and tilting.
-5. The law of $\zeta_0$ and the starting regime of the forecast, whether the last regime of the version's posterior path or the filtered probability, is not stated; $\pi_\theta$ and the regime event price depend on it.
-6. Price of a regime event together with conditions on $y$: the README fixes the path and meets conditions by causes, while the canon prices only a regime event without conditions.
+4. Who applies bounds. The plan: both `simulate` functions on the final paths; the README: the platform after interventions and tilting.
+5. The law of $\zeta_0$ and the starting regime of the forecast, whether the last regime of the version's posterior path or the filtered probability, is not stated; $\pi_\theta$ and the reweighting of candidates under observations depend on it.
+6. The scenario no longer holds a regime event: the regime path is a latent coordinate, observations reweight its candidates, and the scenario carries no separate regime price.
 7. Block exogeneity of the global block is not mentioned for `msvar.markov`; `bvar.sv` has it.
 8. The response used for signs in regime $k$, with the regime held fixed or with transitions, is not set.
 9. Convention for `mu`, `delta`: whether a larger weight means a stronger pull (Sims, Zha, 1998) or a weaker one (Giannone, Lenza, Primiceri, 2015), and which regime's intercept the initial-observation dummy uses.

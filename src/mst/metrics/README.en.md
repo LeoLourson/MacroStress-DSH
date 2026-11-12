@@ -38,7 +38,7 @@ Both checks are limited by the data: the series of the store start in 2012-01, t
 
 **Benchmarks.** Two are calculated on the same cells: a random walk with drift (for all quantities) and a naive forecast, the value a year earlier with a trend (for target indicators). A model must beat the benchmark, otherwise it adds nothing to a simple "tomorrow like yesterday".
 
-**Base calculation**: the same calculation without conditions, shocks and impacts, that is, the model's unconditional forecast on the episode. A scenario is useful if the forecast under it is more accurate than the base calculation.
+**Base calculation**: the same calculation without observations and interventions, that is, the model's unconditional forecast on the episode. A scenario is useful if the forecast under it is more accurate than the base calculation.
 
 **Admission.** A version is admitted to comparison if fewer than 5 % of the evaluated cells break each of two conditions: the band $[p_5,p_{95}]$ lies within the admissible values of the quantity, and the band's width is no larger than the range of its history. The shares of each rule are counted separately; the union of the rules and the split by quantities are given for reference.
 
@@ -69,7 +69,7 @@ Both reports are matched by cells: an incomplete pair is an error with a list, n
 
 **Leaving the training sample.** The share of a satellite's paths outside the range of a node's training sample must be below 1 %. The bounds are written into the version at estimation (`train_low` / `train_high`); a part without them is not read. A quantity with an unverified tail is marked in the report.
 
-**Sensitivity to the causes and the rolling check.** Uniformity of $u$ is counted on the calculation without named causes, and the sensitivity to the choice of causes is the block `cause_sensitivity`. The rolling block (uniformity at $s_0$ over all dates and the check of the price on the event family `[[price_events]]`) appears when the plan carries `[rolling]`.
+**Observations and interventions, and the rolling check.** An episode states the decisions of the event as interventions and the other quantities as observations, and it is calculated once: there is no sensitivity to a choice of causes any more, and the cells under an intervention are excluded from the CRPS the way the cells of exact observations are. The rolling block (uniformity at $s_0$ over all dates and the check of the price on the event family `[[price_events]]`) appears when the plan carries `[rolling]`.
 
 ## What the report prints
 

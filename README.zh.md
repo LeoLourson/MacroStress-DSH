@@ -7,15 +7,16 @@
 [![Python 3.12+](https://img.shields.io/badge/python-3.12%2B-blue.svg)](pyproject.toml)
 
 MacroStress 预测：在给定事件发生时，投资组合的目标指标会如何变化。事件被形式化为情景
-$(N, D, C, O)$ —— 叙述、驱动冲击、约束、直接作用。基于历史上估计的模型进行计算，得到条件预测：
+$(N, I, \mathcal A)$ —— 叙述、干预、观察。基于历史上估计的模型进行计算，得到条件预测：
 目标指标在预测期内逐月的分布。沿同一路径还可以得到组合的损失分布：$P_5$、$P_{50}$、$P_{95}$、
 ES95，以及情景的价格 $\mathrm{dist}(s)$。
 
 目标指标位于模型链的最后一层。第 0 层是宏观变量：其路径由在历史上估计的宏观模型生成。更上层是
-各类对象的量：股票价格、债券利差、行业不良率、房价，由卫星模型生成。情景改变驱动冲击 $D$ 的分布，
-使约束 $C$ 得到满足；直接作用 $O$ 补充那些不经由上层传导的效应，例如针对某一行业的出口禁令。模型
-质量通过历史情节（episode）上的回测检验。回测情节及其他带已知答案的检验集见
-[bench/](bench/README.en.md)（英文）。
+各类对象的量：股票价格、债券利差、行业不良率、房价，由卫星模型生成。情景把事件的决定记为干预：
+某个主体设定或移动一个数值，数值不精确时给出其分布；其余要求记为观察：对路径、均值或概率的
+条件。平台在模型声明的结构形式中执行干预，然后尽量小地改变其余坐标的分布，使观察成立，改变的
+大小就是情景的价格。模型质量通过历史情节（episode）上的回测检验。回测情节及其他带已知答案的
+检验集见 [bench/](bench/README.en.md)（英文）。
 
 总体方案及定义见 [docs/concept/formalization.md](docs/concept/formalization.md)（俄文）。
 
@@ -42,7 +43,7 @@ flowchart TB
 | 宏观模型 | `mst.macro` 和插件 `bvar.sv`：带随机波动率的 BVAR、按符号识别冲击、条件预测 |
 | 卫星模型 | `mst.drivers` 和插件：对象目录、分层卫星模型、样本外检验、共享抽样上的驱动因子路径 |
 | 语料库 | `mst.corpus`：清单、文本、情节卡片、片段与搜索 |
-| 情景 | `mst.scenario`：$(N, D, C, O)$ 文件、可行性校验、情景路径 |
+| 情景 | `mst.scenario`：$(N, I, \mathcal A)$ 文件、校验、情景路径 |
 | 按模型计算 | `mst.engine`、`mst.runs` 和插件中的持仓模型：股票、债券、信贷、存款、房地产 |
 | 条件预测 | `mst.runs`、`mst.portfolio`：目标指标逐月分位数，以及带 ES95、情景价格和覆盖率的组合报告 |
 | 质量指标 | `mst.metrics`：情节回测、CRPS、校准、版本准入 |
@@ -82,7 +83,7 @@ uv run macrostress --workspace C:/data/macrostress
 1. `series(action="update")` —— 历史序列。
 2. `model(kind="macro", action="estimate", as_of=...)` —— 宏观模型，第 0 层。
 3. `series(action="update", quantity=...)` 和 `model(kind="satellites", action="estimate", version=...)` —— 卫星模型，更上层。
-4. `scenario(action="save")` 和 `scenario(action="validate")` —— 情景 $(N, D, C, O)$。
+4. `scenario(action="save")` 和 `scenario(action="validate")` —— 情景 $(N, I, \mathcal A)$。
 5. `run(action="start")` 和 `run(action="result")` —— 计算、条件预测、组合报告。
 
 ## 文档
@@ -111,8 +112,9 @@ uv run macrostress --workspace C:/data/macrostress
 | 层 | 从一般到具体的可观测量的分组 $l=0,\dots,L$：第 0 层 —— 宏观变量，更上层 —— 对象的量 |
 | 宏观模型 | 冲击的分布与传递 $G_0$：生成第 0 层的路径；版本是带哈希的文件 |
 | 卫星模型 | 传递 $G_1,\dots,G_L$：由上层生成对象的量；层中的量称为驱动因子 |
-| 情景 | 事件的形式化记录：叙述 $N$、驱动冲击 $D$、约束 $C$、直接作用 $O$ |
-| 直接作用 | 对某层轨迹的加项，用于不经上层传导的效应 |
+| 情景 | 事件的形式化记录：叙述 $N$、干预 $I$、观察 $\mathcal A$ |
+| 干预 | 由模型之外的主体决定的数值：设定或移动，带值在不确定时的分布 |
+| 观察 | 对结果的要求：对路径、均值或概率的条件 |
 | 目标指标 | 最后一层的轨迹 $v=x^L$ |
 | 条件预测 | 情景下目标指标的分布：由 $R$ 次抽样得到的逐月分位数 |
 | 路径 | $R$ 次抽样 × $H$ 个月：原始单位的宏观变量与量 |
@@ -122,7 +124,7 @@ uv run macrostress --workspace C:/data/macrostress
 
 ## 状态
 
-0.2.0，beta。1.0 之前接口可能变化。数据源是俄罗斯市场（MOEX、俄罗斯央行、Rosstat），全球序列来自
+1.1.0，beta。1.0 之前接口可能变化。数据源是俄罗斯市场（MOEX、俄罗斯央行、Rosstat），全球序列来自
 FRED。
 
 ## 检查

@@ -30,27 +30,33 @@ step is also a command.
 ## Event and scenario
 
 An event is what a person expects to happen, said in words and possibly without numbers. The
-models cannot compute words: they need to know which paths are allowed, which shocks produce
-them, and what lies outside the models. The agent writes this down as a scenario
-$s=(N,m,O,D,\mathcal C)$:
+models cannot compute words: they need to know which values the event decides and which outcomes
+it requires. The agent writes this down as a scenario $s=(N,I,\mathcal A)$:
 
-| Part | What it holds | For "the policy rate stays at 21 % for a year" |
+| Part | What it holds | For "the policy rate is cut to 16 % in December" |
 |---|---|---|
-| $N$ | the event in text, with links to the sources of its numbers | the text and the regulator's press release |
-| $m$ | the model versions the scenario is computed on | the current macro and satellite versions |
-| $\mathcal C$ | conditions on the paths of any level: a value with a tolerance, a range, a mean or a probability | the policy rate between 20.5 % and 21.5 % in months 1 to 12 |
-| $D$ | causes: the model shocks allowed to produce the event | the monetary policy shock |
-| $O$ | impacts: shifts of a level's path for effects the models lack | none; for an export ban, the fall in one industry's sales |
+| $N$ | the event in text, with links to the sources of its numbers | the text and the regulator's statement |
+| $I$ | interventions: decisions of a subject outside the models, a value set or shifted, with a law when the number is not exact | the key rate set at 16 % in months 1 to 3 |
+| $\mathcal A$ | observations: what the event requires of the outcome, a condition on a path, a mean or a probability | the rouble down 10 % by month 3 |
 
-Every number in $\mathcal C$ and $O$ is labelled by its origin: the event itself, a named source,
+A statement is an intervention when a subject outside the models fixes the value: a decision on
+the policy rate, an export ban, the price of oil for an economy it acts on from outside. It is an
+observation when it names an outcome the system itself produces: the exchange rate after
+sanctions, the fall of output. The same number can be either, and the difference changes the
+consequences.
+
+Every number in $I$ and $\mathcal A$ is labelled by its origin: the event itself, a named source,
 or an explicit assumption. If the event leaves the direction of a move open, the agent writes one
 scenario per direction, and each is computed separately. The agent does not start the
 calculation until the person approves the scenario.
 
-The platform changes the distribution of the causes $D$ as little as possible so that the
-conditions $\mathcal C$ hold, then adds the impacts $O$. The size of that change,
-$\mathrm{dist}(s)=\mathrm{KL}(P_s\Vert P)$, is reported as the scenario price: the higher it is,
-the less the scenario agrees with the models.
+The platform executes the interventions in the structural form the model declares: in the default
+form a set value replaces only its own cell and a shift moves only its own path. Then it changes
+the law of the other coordinates as little as possible so that the observations hold. The size of
+that change, $\mathrm{dist}(s)=\mathrm{KL}(P_s\Vert P)$, is reported as the scenario price: the
+higher it is, the less the scenario agrees with the models. A scenario names no model versions,
+horizon or number of paths: the calculation request names them, so one file is computed on any
+system of models, and the spread of the results shows how much the answer depends on that choice.
 
 ## Levels of the economy
 

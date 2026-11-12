@@ -32,7 +32,7 @@ flowchart LR
 | `mst.macro` | Stores the macro variable registry, builds the panel on a date and stores macro model versions; the model itself is a plugin | [src/mst/macro](../../src/mst/macro/README.en.md) |
 | `mst.drivers` | Finds the objects of quantities, downloads their series, prepares a quantity's history on the panel, assembles the satellite version bundle and builds driver paths level by level | [src/mst/drivers](../../src/mst/drivers/README.en.md) |
 | `mst.corpus` | Stores the corpus manifest, downloads originals, converts them to Markdown, writes episode cards, cuts the corpus into fragments and searches them | [src/mst/corpus](../../src/mst/corpus/README.en.md) |
-| `mst.scenario` | Stores the scenario, checks it and builds the paths: the conditional forecast under the conditions, the tilt for conditions on means, driver paths on the same draws, the reverse problem | [src/mst/scenario](../../src/mst/scenario/README.en.md) |
+| `mst.scenario` | Stores the scenario, checks it and builds the paths: it translates units and calendar months into the plan, executes the interventions in the model's structural form, builds the conditional forecast under the observations, the tilt for observations on means, driver paths on the same draws and the reverse problem | [src/mst/scenario](../../src/mst/scenario/README.en.md) |
 | `mst.plugin_sdk` | The surface of a position model: what it declares, reads from the paths and returns; `plugin_sdk.testing` is the conformance check and demo calculation | [src/mst/plugin_sdk](../../src/mst/plugin_sdk/README.en.md) |
 | `mst.model_sdk` | The contracts of macro and satellite models: the scenario plan, the macro simulation, version parts, estimation contexts and the common conditional machinery | [src/mst/model_sdk](../../src/mst/model_sdk/README.en.md) |
 | `mst.engine` | The model catalog, input preparation, position calculation and the check of what a model returned; no branching by asset type | [src/mst/engine](../../src/mst/engine/README.en.md) |
@@ -67,7 +67,7 @@ workspace/
   corpus/raw/, corpus/text/, corpus/series/  originals, summaries, daily series D1–D5
   corpus/downloads.json   what was downloaded: address, hash, size, date
   corpus/index/           chunks.jsonl, vectors.npy, vectors.json, state.json
-  scenarios/<id>.json     scenario: narrative, causes, conditions, impacts, versions, approver
+  scenarios/<id>.json     scenario: narrative, interventions, observations, approver
   portfolios/<id>.json    portfolio: base currency and positions (type, currency, notional, codes, terms)
   runs/<id>/request.json  what to run: scenario, number of draws, seed, portfolio or positions
   runs/<id>/meta.json     versions, calculation date, horizon, seed, variables and drivers, status

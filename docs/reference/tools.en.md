@@ -4,7 +4,7 @@ The general scheme is in [../concept/formalization.en.md](../concept/formalizati
 
 ## MCP tools
 
-The server `macrostress` (`src/mst/mcp.py`) gives eight tools, the prompt `scenario_from_event(event)` and instructions that any client receives when it connects. They send the agent to the `guide` tool before it starts work. An argument error comes back as a call error whose text lists the allowed values. A tool that starts a job returns its id at once, without waiting for the end (`run start` also returns the run id). To wait for the end, `jobs(action="wait", id=...)` holds the call until the job ends or the timeout passes, and the job's record comes back in the same call.
+The server `macrostress` (`src/mst/mcp.py`) gives ten tools, the prompt `scenario_from_event(event)` and instructions that any client receives when it connects. They send the agent to the `guide` tool before it starts work. An argument error comes back as a call error whose text lists the allowed values. A tool that starts a job returns its id at once, without waiting for the end (`run start` also returns the run id). To wait for the end, `jobs(action="wait", id=...)` holds the call until the job ends or the timeout passes, and the job's record comes back in the same call.
 
 ### `guide`
 
@@ -52,25 +52,25 @@ The corpus root is `<workspace>/corpus`; the `corpus="model"` parameter works wi
 
 ### `scenario`
 
-A scenario is `scenarios/<id>.json`; `validate` reads both versions the file names and calculates nothing over the network.
+A scenario is `scenarios/<id>.json`: the narrative with its sources, the interventions, the observations and the name of the person who approved it. It carries no model versions, no horizon and no path count; the calculation request names them, so one file runs on any model system. Numbers are written in the quantity's own units (`level`, `change`, `percent`) and in calendar months `YYYY-MM`; `percent` is accepted only for quantities in the `log100` scale, and a pair (quantity, month) belongs to at most one intervention. A value may carry its law: `uniform` draws a number per group of paths, `with_probability` imposes the stated value with the given probability. `validate` checks quantity names, units, months and the visibility of corpus fragments on the newest finished pair of versions, and calculates nothing over the network.
 
 | `action` | Arguments | Result |
 |---|---|---|
-| `list` | none | Scenarios with versions, horizon, the number of conditions and impacts; a file that fails the contract is named separately |
+| `list` | none | Scenarios with the narrative, the number of observations and interventions and the approver; a file that fails the contract is named separately |
 | `get` | `id` | The scenario file as it is |
 | `save` | `id`, `spec` | Checks the contract and writes `scenarios/<id>.json`; the id is lowercase letters, digits, hyphens |
-| `validate` | `id` | `ok`, `problems`, `labels` (how many elements of $O$ and $\mathcal C$ are marked with the event, a source and an assumption) and `warnings` (no sources, everything on assumptions, a shift of a macro variable with the quantities that read it, a sector shift with the companies it does not reach, an impact that ends before the horizon and stays out of the loss at its end, no conditions and so a zero price, neither conditions nor impacts and so the base $s_0$, a bound of a condition on a price, an index or a volume (scale `log100`) more than five times from the last observed level; none of them stops a calculation). `problems` names each problem: an unknown variable or cause, a condition the causes cannot reach, a regime event without a hidden coordinate among the causes, a missing approver, an impact on an unserved driver or a path beyond the horizon, satellites of another macro version, a corpus fragment cited by the narrative, a condition or an impact and published after the calculation date (if the index is built) |
+| `validate` | `id` | `ok`, `problems`, `labels` (how many observations and interventions are marked with the event, a source and an assumption) and `warnings` (no sources, everything on assumptions, neither observations nor interventions and so the base $s_0$). `problems` names each problem: a missing approver, an unknown quantity, a month before the last panel month or beyond the horizon of the check, `percent` on a quantity outside the `log100` scale, no last known value, an observation that does not translate into one scale (macro variables together with drivers, mixed scales, a mean on a `log100` quantity, weights of the wrong sum), satellites of another macro version, a corpus fragment cited by the narrative, an observation or an intervention and published after the calculation date (if the index is built) |
 | `reverse` | `id`, `portfolio`, `draws`, `seed`, `kappa` or `level` | Searches the scenario's family: the worst loss under the price `kappa`, or the lowest price whose loss reaches `level`; returns the answer and every point of the search, each with its `estimated` mark. A point whose price carries an error above a tenth of it is treated as one that does not qualify, so the answer never rests on noise |
 
 ### `run`
 
-A run is `runs/<id>/`: the request, the meta, the paths, the position contributions and, for a portfolio, the report. The same request with the same seed gives the same numbers.
+A run is `runs/<id>/`: the request, the meta, the paths, the position contributions and, for a portfolio, the report. The request names the scenario, the number of parameter draws, the seed, the horizon, `inner` and the model versions; the same request with the same seed gives the same numbers.
 
 | `action` | Arguments | Result |
 |---|---|---|
-| `start` | `scenario`, `draws`, `seed`, `portfolio` or `positions`, `targets` (empty means all drivers), `base_currency` (RUB, for `positions`), `contributions` | Writes the request and starts a job on `runs` (`python -m mst.runs`); returns `run` and `job` |
-| `status` | `id` | The run meta (status, scenario, versions, horizon) and the job record |
-| `result` | `id` | The meta, the result of each position (status, metrics, reason), the conditional forecast of the target indicators (`forecast.json`: P5/P50/P95 by month, in own units) and the portfolio report: P5/P50/P95 and ES95 at the end of the horizon, the loss by month and over the whole path (`losses_by_month`), the comparison with the base $s_0$ (`comparison`), the price with its `estimated` mark and the one-sided price, the admission of the calculation and the coverage |
+| `start` | `scenario`, `draws`, `seed`, `portfolio` or `positions`, `horizon` (12, and never shorter than the last month a statement names), `inner` (1), `macro`, `satellites`, `targets` (empty means all drivers), `base_currency` (RUB, for `positions`), `contributions` | Writes the request and starts a job on `runs` (`python -m mst.runs`); returns `run` and `job`. Without `macro` and `satellites` the newest finished pair of the workspace is used; `draws * inner` is the number of paths |
+| `status` | `id` | The run meta (status, scenario, versions, horizon, the structural forms of the models) and the job record |
+| `result` | `id` | The meta (including the structural forms of the macro model and of every satellite model), the result of each position (status, metrics, reason), the conditional forecast of the target indicators (`forecast.json`: P5/P50/P95 by month, in own units) and the portfolio report: P5/P50/P95 and ES95 at the end of the horizon, the loss by month and over the whole path (`losses_by_month`), the comparison with the base $s_0$ (`comparison`), the price with its `estimated` mark and the one-sided price, the `interventions` block (quantity, month, `set` or `shift`, the share of groups with the intervention, the remoteness `alpha` and its spread), the admission of the calculation and the coverage. A scenario of interventions alone has a price of zero, written as zero |
 | `list` | none | Runs, newest first: status, scenario, horizon, the number of draws and positions |
 
 ### `portfolio`
@@ -83,7 +83,7 @@ A portfolio is `portfolios/<id>.json`: the base currency (the ruble: models calc
 | `get` | `id` | The portfolio file as it is |
 | `save` | `id`, `spec` | Checks the contract and writes `portfolios/<id>.json` |
 | `delete` | `id` | Deletes the file; a missing portfolio is an error |
-| `check` | `id`, `scenario` | `{"ok": true, "problems": []}` or each reason by name: problems of the scenario itself (unreachable conditions, a foreign satellite version, corpus fragments after the date), an unknown asset type, `terms` the model does not read, a currency with no exchange rate path, a macro variable missing from the version, an object no driver covers, and a driver rejected by the satellite check, with its reason. When the scenario impacts a macro variable the answer also carries `warnings` — one per position whose driver reads that variable: the driver's long-run loading (below 0.1 it "barely reacts") and the regressors it loads on most — the way a shock that reaches a position in name only is seen |
+| `check` | `id`, `scenario` | `{"ok": true, "problems": []}` or each reason by name: problems of the scenario itself as `scenario validate` names them, an unknown asset type, `terms` the model does not read, a currency with no exchange rate path, a macro variable missing from the version, an object no driver covers, and a driver rejected by the satellite check, with its reason. When the scenario intervenes on a macro variable the answer also carries `warnings`: one per position whose driver reads that variable, with the driver's long-run loading (below 0.1 it "barely reacts") and the regressors it loads on most, so an intervention that reaches a position in name only is seen |
 | `exposure` | `id`, `scenario` | The value of each position in the calculation month of the macro version: notional, exchange rate, value in the base currency |
 
 ### `model`
@@ -92,7 +92,7 @@ A portfolio is `portfolios/<id>.json`: the base currency (the ruble: models calc
 |---|---|---|---|
 | `macro` | `list` | none | Macro model versions, newest first |
 | `macro` | `describe` | `version` | The version metadata: model, date, variables, shocks and the share of draws that passed the sign restrictions |
-| `macro` | `base` | `version`, `horizon` (default 12), `only` | The base path under $s_0$ by month: `p5`, `p50`, `p95` in the model scale; conditions are written against it. It computes no drivers and starts no job |
+| `macro` | `base` | `version`, `horizon` (default 12), `only` | The base path under $s_0$ by month: `p5`, `p50`, `p95` in the model scale; observations are written against it. It computes no drivers and starts no job |
 | `macro` | `estimate` | `as_of`, `model_id` (may be omitted if only one is installed) | A job on `models`: `python -m mst.models estimate-macro` |
 | `macro` | `backtest` | `as_of`, `model_id`, `only` | A job on `models`: `python -m mst.metrics backtest`: cells, CRPS, band coverage, admission, the aggregate by level and horizon, and the tuning and validation halves |
 | `satellites` | `list` | none | Satellite versions (bundles) |
@@ -133,10 +133,15 @@ python -m mst.corpus search QUERY --as-of DAY --corpus DIR
 # calculation
 python -m mst.runs <id> --workspace DIR
 
+# migration of old scenarios
+python -m mst.scenario migrate DIR --workspace DIR
+
 # reverse problem
 python -m mst.scenario reverse ID --workspace DIR --portfolio ID --draws N --seed S (--kappa K | --level L)
 ```
 
 Here `--store` is `<workspace>/series`, `--models` is `<workspace>/models`, `--drivers` is `<workspace>/drivers/catalog.json`, `--corpus` is `<workspace>/corpus/manifest.json` (for `mst.corpus` it is the root `<workspace>/corpus`).
+
+`migrate` reads a file of the old format and rewrites it in the new format; where a scenario named causes, it also leaves the list `<DIR>-migration-causes.txt`: a human or an agent reclassifies those scenarios by the `scenario-from-corpus` guide. The old causes stay as a line in the scenario's narrative. A file that does not convert without losing a number stops the migration with its name, and the other files stay unchanged.
 
 `backtest` prints the tables of episodes, admission, the "level × horizon" aggregate, the value of the scenario, the halves and the quantities: the normalized CRPS of the conditional forecast beside the random walk, the base calculation and the naive forecast, the coverage at $p_5/p_{50}/p_{95}$, sharpness and admission (the band within the admissible area and no wider than the historical range, the probability of a condition in the base calculation above 1 %). With `--against` it prints the verdict by two standard errors on the same cells and the validation half; with `--portfolio` (requires `--satellites`) the Acerbi–Székely tail section ($Z$, intervals, the 1 % trimming, dropped episodes); with `--mc-bootstrap` the Monte Carlo error interval separately from the sampling over episodes; `--target-level` selects the level versions are compared on (`macro` by default); `--inputs` names the folder of answers (`workspace/elicitation`) a model with declared inputs reads, each episode reading the answers of its own calculation date. The full report goes to `--details`. Episode versions are cached in `<models>/backtest/` by the state of the data and the answers, satellite bundles by a digest of all their inputs. Episode models are written to `<models>/backtest/`, not `<models>/macro/`. Exit code 1 means some episode was not checked (absent from the manifest, short history, an inadmissible scenario) or an admission condition was broken.

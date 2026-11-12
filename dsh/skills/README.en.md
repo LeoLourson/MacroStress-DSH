@@ -16,7 +16,7 @@ The text of the skill.
 
 | File | What it covers |
 |---|---|
-| `scenario-from-corpus.md` | How to turn an event into a scenario $s=(N,m,O,D,\mathcal C)$ from the corpus: the calendar, conditions, impacts, causes, labels and human approval |
+| `scenario-from-corpus.md` | How to turn an event into a scenario $s=(N,I,\mathcal A)$ from the corpus: the calendar, interventions, observations, labels and human approval |
 | `run-report.md` | How to start a run and read $P_5$/$P_{50}$/$P_{95}$, ES95, the price, the coverage and the flags |
 | `drivers.md` | How to update the catalog, estimate satellites and what "satellite rejected" means |
 | `model-inputs.md` | How to answer the questions of a model with inputs in small parts: units, the size in the response's scale, a zero size, the reference response, failures |

@@ -31,11 +31,11 @@ $$
 \omega^0=(\theta,\varepsilon,u),
 $$
 
-where $\theta$ holds the expert's answers and the estimates from history, $\varepsilon=(\varepsilon_{j\tau})$ the shocks of the horizon, $u=(u_1,\dots,u_H)$ the residuals. The expert answers once, so $\theta$ is constant for a given model version. A cause of a scenario is the name of a shock of the $J$ set or `residual`: naming a shock puts the inputs of that shock of every month of the horizon, $\varepsilon_{j,\tau}$ at every $\tau$, into $D$; naming `residual` puts the residual $u$ there. With no causes at all, $D$ holds every shock and the residual.
+where $\theta$ holds the expert's answers and the estimates from history, $\varepsilon=(\varepsilon_{j\tau})$ the shocks of the horizon, $u=(u_1,\dots,u_H)$ the residuals. The expert answers once, so $\theta$ is constant for a given model version. A scenario names no shocks: an intervention fixes a quantity and its value, and the observations are met by every shock and the residual of the horizon — in the default form the model solves them against the paths into which the installed values are already substituted.
 
 ## Shocks
 
-The set of shocks is fixed and the same for every calculation date, so that scenarios of different dates name the same causes. $J=18$.
+The set of shocks is fixed and the same for every calculation date. $J=18$.
 
 | Shock | Meaning |
 |---|---|
@@ -58,7 +58,7 @@ The set of shocks is fixed and the same for every calculation date, so that scen
 | `ru.labor` | Labour shortage, mobilisation, migration |
 | `ru.capital_controls` | Currency controls and mandatory sale of export proceeds |
 
-The shocks `gl.oil`, `gl.financial`, `ru.monetary`, `ru.inflation` and `ru.fx_risk` carry the same names as in the other macro models, so corpus scenarios that name them fit this model unchanged.
+The shocks `gl.oil`, `gl.financial`, `ru.monetary`, `ru.inflation` and `ru.fx_risk` carry the same names as in the other macro models: the names serve the diagnostics and the report of contributions, and a scenario does not refer to them.
 
 ## Elicitation
 
@@ -89,7 +89,7 @@ The economic rules live in `audit.toml` and each carries its note; they are warn
 
 An answer gives three quantiles of every quantity, while the model needs the law of the whole path. Below is what the plugin adds and why.
 
-Shock stream. In every month of the horizon shock $j$ occurs with probability $1-e^{-\lambda_j/12}$, at most once, independently of other months and shocks. One occurrence per month is needed so that a scenario naming a shock names one event a month. A Poisson stream with the same frequency would give two occurrences in a month with probability about 1 % at $\lambda_j=2$, so the restriction takes almost nothing from frequent shocks and nothing from rare ones.
+Shock stream. In every month of the horizon shock $j$ occurs with probability $1-e^{-\lambda_j/12}$, at most once, independently of other months and shocks. One occurrence per month keeps the size of a month's event single. A Poisson stream with the same frequency would give two occurrences in a month with probability about 1 % at $\lambda_j=2$, so the restriction takes almost nothing from frequent shocks and nothing from rare ones.
 
 Law from three quantiles. The size of a shock and every response are given by quantiles $q_5$, $q_{50}$, $q_{95}$, and the answer says nothing about what lies beyond 5 and 95 %. So the tails are set by our assumption, and there is one for the whole model: the tail index $\alpha$ from the plugin's specification, 4 by default. It exceeds 2 so that the responses have a variance: without it $\Sigma_{\text{shocks}}$ in the section "Residual" cannot be computed. The family is chosen in the specification and recorded in the version; the backtest compares versions with different families. There are two:
 
@@ -100,7 +100,7 @@ An answer with $q_5=q_{50}=q_{95}$ gives a number without uncertainty, such as a
 
 Months in between. Every quantile of a response is interpolated linearly between $k=0,2,5,11$, that is between the answers 1, 3, 6 and 12 months out. Linear interpolation keeps the order $q_5\le q_{50}\le q_{95}$, while a spline may break it between the nodes.
 
-Response between sizes. At a given quantile level the response as a function of the shock size is a broken line through the point $(0,0)$ and the three sizes asked; beyond the outermost points it is constant. The expert said nothing beyond the 5 and 95 % size quantiles, and a constant response invents no continuation: a scenario naming a shock larger than any asked gets the response to the largest one asked, and the rest of its condition falls on other coordinates. For a one-sided shock, whose three sizes have one sign, the outermost point on the other side is $(0,0)$, and a size of the opposite sign from the tail of the law gives no response.
+Response between sizes. At a given quantile level the response as a function of the shock size is a broken line through the point $(0,0)$ and the three sizes asked; beyond the outermost points it is constant. The expert said nothing beyond the 5 and 95 % size quantiles, and a constant response invents no continuation: a shock larger than any asked gets the response to the largest one asked, and the rest of the observation falls on other coordinates. For a one-sided shock, whose three sizes have one sign, the outermost point on the other side is $(0,0)$, and a size of the opposite sign from the tail of the law gives no response.
 
 Dependence of the responses. The expert gives the law of every response separately, and the answer does not say how their departures from the medians are related, so the model sets the dependence. At every occurrence of shock $j$ a level $v_i\in(0,1)$ is drawn for every variable $i$ from a $t$ copula with $\nu=\alpha$ degrees of freedom and the same correlation $\rho_j$ between all pairs of variables. The level means the strength of the response: a cell (horizon, size) with a nonnegative median takes the quantile $v_i$, one with a negative median takes the quantile $1-v_i$, so a high $v_i$ moves the whole response of the variable away from zero whichever way it goes. The level is shared by all horizons and sizes of one variable, so the response stays one curve. Occurrences and shocks are independent.
 
@@ -150,12 +150,9 @@ Two other options were rejected. A bootstrap of historical changes cleaned of th
 
 ## Imposing a scenario
 
-The imposition is the general case of section 4 of the general scheme. Under a support condition $R=(\theta,\varepsilon_{\bar D},u)$ keeps its base law, and the coordinates of $D$ are drawn from $P(d\varepsilon_D\mid R,S)$. If no causes are named, $D$ is every shock and residual of the horizon. The impact $O$ is added to the path, as for any model.
+The imposition is the general case of section 4 of the general scheme. Under observations $R=(\theta,\psi)$ keeps its base law, and the other coordinates — every shock of the horizon and the residual $u$ — are drawn from $P(\varepsilon,u\mid R,S)$. The interventions arrive realized: the installed values are substituted into the constraints and put on the paths after the draw.
 
-The law of $\varepsilon_D$ given $R$ depends on whether the residual is named:
-
-- `residual` among the causes: given $R$ the path is gaussian, $y=b+c+u$ with a random walk $u$. The law is built as candidate rows of the shocks of $D$ — the mean term carries the candidate's contribution, the covariance term the walk of the residual — the imposition picks a candidate by the probability its law gives the constraint box and draws the residual from the box-truncated normal (Antolin-Diaz, Petrella, Rubio-Ramirez, 2021);
-- the causes name shocks only: given $R$ the constraint functionals are a deterministic nonlinear function of the named shocks' standard normal inputs, which no mixture of gaussian rows carries. The probability of the box at every value of $R$ is computed by subset simulation (Au, Beck, 2001): a Markov chain in the standard normal space of the inputs estimates a small probability level by level and leaves samples inside the box. The price of the scenario is the mean of $-\log P(S\mid R)$ over the values of $R$ (the `log_box_probability` method of the model SDK), and the imposition resamples the samples inside the box to the repetitions of the group.
+The law of the observation functionals given $R$ is a mixture of gaussian rows: a row is a candidate contribution of the shocks (a deterministic nonlinear function of their standard normal inputs), and the row's covariance is the random walk of the residual. `constraint_law` returns these rows with their weights and the platform prices the mixture; the simulation picks a candidate by the probability its law gives to the box of the observations and draws the residual from the box-truncated normal (Antolin-Diaz, Petrella, Rubio-Ramirez, 2021). The GHK sampler `log_box_probabilities` of `mst.model_sdk.conditional` gives the box probability of a candidate, and the price of the scenario is the mean of $-\log P(S\mid R)$ over the values of $R$.
 
 ## Checks
 

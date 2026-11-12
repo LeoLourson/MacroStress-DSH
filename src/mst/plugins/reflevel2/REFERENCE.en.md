@@ -36,7 +36,7 @@ object"), $t$ a month.
   estimation, series of the levels above arrive in `upper_history`; an object without its own
   series takes the nearest object above it in the object tree.
 - For simulation the same regressors are built from paths: `upper.macro` (level 0) and
-  `upper.levels[1]` (level 1, with that level's impacts already applied).
+  `upper.levels[1]` (level 1, with that level's interventions already applied).
 
 The model neither loads nor transforms series itself, so estimation and simulation share one
 scale by construction.
@@ -59,14 +59,16 @@ $P=\bigotimes_l P^l$ requires.
 The design's formula has no own lag $y_{j,t-1}$; whether it enters through declared lags is not
 defined (see open questions).
 
-A scenario impact on level 2 is a path $o_j$: the value $o_{j,t}$ is added to the model output
-in month $t$,
+A scenario intervention on level 2 is an `Intervention` with `target`, `months`, `kind` (`set` or
+`shift`) and `values`: a set makes the output equal to the given value, a shift adds $o_{j,t}$,
 
 $$
-x^2_{j,t}=\beta_j^\top g_{j,t}+\sigma_j e_{j,t}+o_{j,t}.
+x^2_{j,t}=\begin{cases}a_{j,t}, & \text{set},\\ \beta_j^\top g_{j,t}+\sigma_j e_{j,t}+o_{j,t}, & \text{shift}.\end{cases}
 $$
 
-An impact has no dynamics of its own: where $o_{j,t}=0$ the path equals the model output.
+The model applies the interventions once after the draw (`apply_default`), so a set does not enter
+its own lag and does not accumulate; in months without an intervention the path equals the model
+output.
 
 ## 4. Estimation
 
@@ -132,9 +134,9 @@ model scale. Simulation is a pure function of the seed.
   prepared history of the quantity and `upper_history`; output is the part's meta and arrays
   with the keys of section 4.
 - `load(meta, arrays)`: reads only a version whose `meta["model"]` is `reflevel2.regression`.
-- `simulate(model, UpperPaths, drivers, impacts, rng, shocks)`: output is driver paths. Impacts
-  are `AdditiveImpact` with `target`, `start` and a path `values`: `values[k]` is added in month
-  `start + k`.
+- `simulate(model, UpperPaths, drivers, interventions, rng, shocks)`: output is driver paths.
+  Interventions are `Intervention` with `target`, `months`, `kind` (`set` or `shift`) and `values`:
+  a set puts the value, a shift adds it.
 - Plugin declaration: the model claims no quantity of the main registry.
 
 ## 8. Assumptions and limits
@@ -165,11 +167,10 @@ model scale. Simulation is a pure function of the seed.
 8. `simulate` uses the passed `shocks`: `mst.model_sdk.testing.check_shocks` returns no
    findings.
 9. Same seed, inputs and version give bitwise identical paths.
-10. An impact with path `values` from month `start` is added exactly in months `start + k` and
-    leaves other months unchanged.
-11. Two overlapping impacts on one driver add up.
-12. An impact whose path extends past the horizon is rejected, naming the target.
-13. An impact on level 1 reaches level 2 through the regressors; an impact on level 2 does not
+10. A set puts the value in its month and leaves other months unchanged; a shift adds the value in its months.
+11. Groups of paths with different intervention values do not mix: the value stands on the paths of its group.
+12. An intervention whose month extends past the horizon is rejected, naming the target.
+13. An intervention on level 1 reaches level 2 through the regressors; an intervention on level 2 does not
     change level-0 or level-1 paths.
 14. Level-2 shocks are independent of level-1 shocks: the levels use different streams.
 15. In a three-level chain with known coefficients the model recovers them within statistical
@@ -203,6 +204,6 @@ model scale. Simulation is a pure function of the seed.
    backtest, the design does not say.
 10. Missing data: how the model handles a driver with missing months, or a driver without
     history beyond the general `parameters_from_above` rule, is not described.
-11. Impact scale: whether $o_{j,t}$ is added in model scale (after transformation) or in the
+11. Intervention scale: whether $o_{j,t}$ is added in model scale (after transformation) or in the
     original unit is not stated for this plugin.
 12. Size: the SDK calls the plugin "about two hundred lines"; a guide, not a requirement.

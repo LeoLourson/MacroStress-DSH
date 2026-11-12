@@ -4,4 +4,4 @@ Tests of the plugin `mst.plugins.hier`, the reference satellite model `hier.gibb
 
 | File | What it checks |
 |---|---|
-| `test_satellite.py` | Coverage of the true coefficients, an object with no history takes the parameters from above, the out-of-sample check, a bundle version loads as saved, paths with impacts, a lagging driver is brought to $t=0$, quarterly and explosive drivers, a bitwise repeat |
+| `test_satellite.py` | Coverage of the true coefficients, an object with no history takes the parameters from above, the out-of-sample check, a bundle version loads as saved, paths with interventions, a lagging driver is brought to $t=0$, quarterly and explosive drivers, a bitwise repeat |

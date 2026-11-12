@@ -16,7 +16,7 @@
 | Каталог драйверов, портфель хвоста | `workspace/drivers/catalog.json`, `workspace/portfolios/` | backtest с `--satellites`, `--portfolio` | остаются в workspace: это данные, а не вводные проверки |
 | Пороги ворот G2–G5 и S1–S6 | `mst.models.gates`, `scripts/satellite_gates.py` | скрипты ворот | остаются: это стоп-условия планов ремонта, у них нет набора с ответами |
 
-Все макромодели (`bvar.sv`, `msvar.markov`, `rw.structural`, `expert.elicited`) и сателлиты
+Все макромодели (`bvar.sv`, `msvar.markov`, `rw.joint`, `expert.elicited`) и сателлиты
 проверяются на одном плане, поэтому файл один на все модели, а модель выбирает аргумент
 `MODEL_ID`.
 

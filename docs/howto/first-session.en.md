@@ -23,7 +23,7 @@ Long operations start as jobs: the tool returns a `job` at once, `jobs(action="w
 ## 4. Scenario
 
 8. `corpus(action="search", query=..., as_of=...)`: corpus fragments known on the date; `corpus(action="index")` rebuilds the index as a job.
-9. `scenario(action="save", id=..., spec={...})`: save a scenario: the narrative, the causes, the conditions, the impacts and the person who approved it; `scenario(action="validate", id=...)` names everything that keeps it from being calculated.
+9. `scenario(action="save", id=..., spec={...})`: save a scenario: the narrative with links to its sources, the interventions, the observations and the person who approved it; `scenario(action="validate", id=...)` names everything that keeps it from being calculated.
 
 ## 5. Calculation and result
 

@@ -26,7 +26,7 @@ $$
 
 where all $z_t$ and $\lambda_t$ are independent over $t$ and of each other. Here $\mu$ is the drift, $\Sigma=BB^\top$ the scale matrix of the changes, $\lambda_t>0$ the common scale multiplier of month $t$, and $\nu>2$ the degrees of freedom. The change of a month has a multivariate Student law with covariance $\frac{\nu}{\nu-2}\Sigma$. The multiplier is common to all variables, so in a month with a large $\lambda_t$ every variable moves widely at once. That is the crisis month of the model.
 
-The shocks $z_{t,j}$ carry the names of variables: the shock `ru.key_rate` is the key rate's own innovation. The matrix $B$ is the Cholesky factorisation of $\Sigma$ in the order the scenario chooses (section "Causes"). Without a scenario the order does not matter, because the law of the paths depends on $\Sigma$ alone.
+The shocks $z_{t,j}$ carry the names of variables: the shock `ru.key_rate` is the key rate's own innovation. The matrix $B$ is the Cholesky factorisation of $\Sigma$ in panel order; the base law of the paths does not depend on the order.
 
 In any order the global variables come before the domestic ones, so $B$ is block lower-triangular and domestic shocks do not move global variables. This is the small-open-economy assumption of `bvar.sv`.
 
@@ -76,25 +76,66 @@ where in the second formula the intervals are those shared by the housing price 
 
 ### Parameter uncertainty
 
-The uncertainty of $\theta$ is not counted: the version stores one estimate. With 177 months it would widen the 12-month spread of USD/RUB by about 3 %: a standard error of the drift of 0.4 % a month gives 5 % over a year against 19 % of noise, 19.7 % in quadrature. Hence the $R=(\theta,\dots)$ of the general scheme holds here only the coordinates the scenario does not name.
+The uncertainty of $\theta$ is not counted: the version stores one estimate. With 177 months it would widen the 12-month spread of USD/RUB by about 3 %: a standard error of the drift of 0.4 % a month gives 5 % over a year against 19 % of noise, 19.7 % in quadrature. Hence the $R=(\theta,\psi)$ of the general scheme holds here the parameters and the realized interventions of the scenario.
 
 ## Starting value
 
 Series are published with different lags, so in month 0 — the last month in which at least one variable is known — some variables are unknown. The model carries an unknown component to month 0 by its own independent steps from the last known value: $k$ steps give the law $N\!\left(k\mu_i,\,k\,\frac{\nu}{\nu-2}\Sigma_{ii}\right)$, written as $m_0+L_0u$ with a diagonal $L_0$. The baseline does the same. Conditioning on the known moves of other variables (a Kalman filter) is deferred: on the panel to 2026-09 the real wage lags by two months, unemployment, retail, credit and the mortgage rate by one, the rest are known in month 0.
 
-## Causes
+## Interventions and observations
 
-A scenario names its causes — the coordinates of the outcome whose law it changes. For `rw.joint` these are the names of variables (the $J$ set of a version is all 23 registry ids) and the hidden coordinate `scale_path`.
+A scenario under SDK 4.0 is $s=(N,I,\mathcal A)$: decisions (interventions) and requirements on the
+outcome (observations). The file holds no model versions, horizon or number of paths — the
+calculation request names them.
 
-A named variable comes first within its block in the Cholesky order. The order is: global variables among the causes in registry order, the other global ones, domestic variables among the causes in registry order, the other domestic ones. Denote by $P$ the matrix of this permutation and by $C$ the lower-triangular Cholesky factor of $P\Sigma P^\top$; then $B=P^\top CP$. In substance: the named variables move by their own innovations, and the others respond in the same month by the regression of their changes on the changes of the named ones. The strength of the response comes from the joint law and says nothing about causality.
+An intervention fixes a quantity $k$ in months $T$: `set` puts the value $a_t$, `shift` adds $o_t$
+to the model output. A scenario does not name the hidden coordinate `scale_path`: observations
+reweight its candidates.
 
-Different scenarios give different $B$, but always $BB^\top=\Sigma$, so the base law $P$ does not depend on the order. The order is a choice of the representation of the outcome that makes the named causes coordinates.
+The model executes the interventions itself, so it declares a structural form (`StructuralForm`).
+The default form would replace only the cell of a set quantity and leave the other variables of
+that month as drawn; the design of `rw.joint` carries the decision to them by the joint law. The
+Cholesky order is therefore built over the set cells: the set variables come first in their blocks
+(global in registry order, the other global ones, the set domestic ones, the other domestic
+ones). Let $P$ be the matrix of this permutation and $C$ the lower-triangular Cholesky factor of
+$P\Sigma P^\top$; then $B=P^\top CP$. In substance: the set variables move by the given values,
+and the others respond in the same month by the conditional law of changes given them,
+$\mu_o+\Sigma_{oc}\Sigma_{cc}^{-1}(\Delta c_t-\mu_c)$, with residual covariance
+$\lambda_t(\Sigma_{oo}-\Sigma_{oc}\Sigma_{cc}^{-1}\Sigma_{co})$. The strength of the response
+comes from the joint law and says nothing about causality.
 
-If `scale_path` is among the causes, the conditions change the law of the monthly multipliers too: the event can choose a crisis scale. If it is not, the multipliers keep their base law, and a large event is met by large innovations of the named variables at an ordinary scale. If no causes are named, by the general scheme every coordinate except $\theta$ is a cause, `scale_path` included.
+Different scenarios give different $B$, but always $BB^\top=\Sigma$, so the base law $P$ does not
+depend on the order.
+
+An observation is a condition on a path, a mean or a probability. After the interventions are
+substituted the path is linear in the free innovations, $W\mathbf y=c^\psi+Z^\psi\varepsilon_{\text{free}}$,
+and the free innovations are drawn from $\mathcal N(0,I)$ truncated to the observation bounds (a
+Gibbs sampler, 50 sweeps), at the chosen path of multipliers. A row wholly determined by the set
+values leaves the system; its value outside the bounds means the scenario contradicts the model. A
+row linearly dependent on the rows already fixed (threshold $10^{-9}$) is refused with its number
+(`InfeasibleScenario`).
+
+The path of multipliers is drawn as the volatility path of `bvar.sv` is. Under observations the
+model draws `LATENT_CANDIDATES` candidates of $\boldsymbol\lambda$ from the base law, weighs each
+by the probability of the box under it (`log_condition_weight`) and picks one by the weights
+(`pick_latent`). Without observations the path of multipliers is drawn from the base law without
+weights.
+
+`constraint_law` returns the law of $W\mathbf y$ given $R=(\theta,\psi)$ **after the
+interventions**, in rows of groups, one row per candidate of multipliers with its weight, as
+`bvar.sv` does; the platform turns it into $P(S\mid R)$ and the price. The model reports the size
+of the free innovations the observations need, in standard deviations (`diagnostics`); as with the
+other models, this is a flag of the report, not a refusal.
 
 ### Central bank decisions and the market's reaction
 
-The model does not know how the market reacts to a central bank decision. The regression of the rouble on the rate describes a central bank that answers a rouble collapse and gives the wrong sign for an unscheduled cut. A scenario that sets a central bank decision therefore also sets the market's reaction: the path of the exchange rate and, where something is known about it, of OFZ yields. The numbers are marked by the general rules — by the event, by a corpus source or by the word "assumption" — and all such variables are named as causes. The model carries the other variables by the joint law.
+The model does not know how the market reacts to a central bank decision. The regression of the
+rouble on the rate describes a central bank that answers a rouble collapse and gives the wrong sign
+for an unscheduled cut. A scenario that sets a central bank decision therefore also sets the
+market's reaction: the path of the exchange rate and, where something is known about it, of OFZ
+yields. The numbers are marked by the general rules — by the event, by a corpus source or by the
+word "assumption" — and all such variables are set as interventions. The model carries the other
+variables by the joint law.
 
 ## Forecast without a scenario
 
@@ -108,27 +149,19 @@ Rates, unemployment and the BBB spread have a lower bound in the registry. As wi
 
 ## Scenario
 
-A scenario reaches the model as a plan: the horizon $H$, constraints $\mathbf a\le W\mathbf y\le\mathbf b$ on the path $\mathbf y=(y_1,\dots,y_H)$ and the causes $D$. The platform widens an exact value beforehand to an interval of half-width $\tau$. It subtracts the impacts $O$ from the bounds and adds them to the paths after the draw, so the model does not see them.
+A scenario reaches the model as a plan: the horizon $H$, observations $\mathbf a\le W\mathbf y\le\mathbf b$ on the path $\mathbf y=(y_1,\dots,y_H)$, the realized interventions (one row per group of paths) and `inner`. The platform widens an exact observation beforehand to an interval of half-width $\tau$.
 
-Given the path of multipliers $\boldsymbol\lambda$ the path is linear in $\varepsilon=(u,\mathbf z)$:
+Given the path of multipliers $\boldsymbol\lambda$ and the substituted interventions the path is linear in the free innovations $\varepsilon=(u,\mathbf z)$:
 
 $$
-W\mathbf y=c+Z(\boldsymbol\lambda)\,\varepsilon,
+W\mathbf y=c^\psi+Z^\psi(\boldsymbol\lambda)\,\varepsilon,
 $$
 
-where $c$ is the value of $W\mathbf y$ at $\varepsilon=0$. A term $w\,y_{i,t}$ of a constraint contributes $w(L_0)_{i\cdot}$ to the columns of $u$ and $w\sqrt{\lambda_s}B_{ij}$ to the column of $z_{s,j}$ for every $s\le t$. Given $\boldsymbol\lambda$ the problem is therefore that of a Gaussian model, and the common machinery of `mst.model_sdk.conditional` solves it (Antolín-Díaz, Petrella, Rubio-Ramírez, 2021): exact rows are fixed, interval rows are drawn by a Gibbs sampler (Geweke, 1991), linearly dependent rows are refused.
-
-The path of multipliers is drawn as the volatility path of `bvar.sv` is. If `scale_path` is among the causes (or no causes are named), the model draws `LATENT_CANDIDATES` candidate $\boldsymbol\lambda$ from the base law, weighs each by the probability of the box under it (`log_condition_weight`) and picks one by the weights (`pick_latent`). The innovations in $D$ are then drawn under the conditions at the chosen $\boldsymbol\lambda$. If `scale_path` is not among the causes, the path of multipliers belongs to $R$ and is drawn from the base law without weights.
-
-A scenario contradicts the model if some linear combination of the constraints does not depend on the named causes but is random given $R$. Most often the constraints fix the variables of a set $I$ in every month of the horizon. The scenario is then feasible only if every fixed variable is named as a cause or is a linear function of the named ones in the same month. Since domestic shocks do not move global variables, a fixed global variable needs a named global cause. The model refuses such a scenario and names the constraints (`InfeasibleScenario`).
-
-`constraint_law` returns the law of $W\mathbf y$ given $R$ in rows of groups, one row per candidate of multipliers with its weight, as `bvar.sv` does. Without named causes there are no groups, and the rows describe the unconditional law of $W\mathbf y$ under the candidates.
-
-The model reports the size of the innovations of the named causes in standard deviations (`diagnostics["driving_sd"]`). As with the other models, this is a flag of the report, not a refusal.
+where $c^\psi$ is the value of $W\mathbf y$ at $\varepsilon=0$ with the interventions executed. A term $w\,y_{i,t}$ contributes $w(L_0)_{i\cdot}$ to the columns of $u$ and $w\sqrt{\lambda_s}B_{ij}$ to the column of $z_{s,j}$ for every $s\le t$; the set cells go into $c^\psi$, and their shocks are not drawn. Given $\boldsymbol\lambda$ the problem is therefore that of a Gaussian model, and the common machinery of `mst.model_sdk.conditional` solves it (Antolín-Díaz, Petrella, Rubio-Ramírez, 2021): exact rows are fixed, interval rows are drawn by a Gibbs sampler (Geweke, 1991), linearly dependent rows are refused.
 
 ## Difference from the baseline
 
-The `random_walk` baseline continues every variable on its own by Gaussian steps with the sample drift and spread. `rw.joint` differs from it in three places: the drift of rates, spreads, unemployment, Brent and the VIX is zero; the tails are heavy with a common crisis scale; the law is joint. The difference in CRPS between the model and the baseline on the episodes therefore measures what these choices add. If only the fixed variables are named as causes and the scale is not, the conditional law of the change of the other variables in month $t$ given $\lambda_t$ is
+The `random_walk` baseline continues every variable on its own by Gaussian steps with the sample drift and spread. `rw.joint` differs from it in three places: the drift of rates, spreads, unemployment, Brent and the VIX is zero; the tails are heavy with a common crisis scale; the law is joint. The difference in CRPS between the model and the baseline on the episodes therefore measures what these choices add. If the scenario sets only part of the variables, the conditional law of the change of the other variables in month $t$ given $\lambda_t$ is
 
 $$
 N\big(\mu_y+\Sigma_{yc}\Sigma_{cc}^{-1}(\Delta c_t-\mu_c),\ \lambda_t(\Sigma_{yy}-\Sigma_{yc}\Sigma_{cc}^{-1}\Sigma_{cy})\big),
@@ -156,9 +189,9 @@ There is no mean reversion: the spread grows as $\sqrt t$, rates and spreads inc
 
 ## Plugin and version
 
-`plugin = Plugin(plugin_id="rw", ..., model_sdk=">=3.0,<4.0", macro=(MODEL,))`, the variables are the whole registry, `latents = ("scale_path",)`. The plugin imports only `mst.model_sdk`, `mst.macro.panel`, `mst.macro.registry`, `mst.plugin_sdk` and its own package; the plugin rules forbid importing from `mst.plugins.bvar`.
+`plugin = Plugin(plugin_id="rw", ..., model_sdk=">=4.0,<5.0", macro=(MODEL,))`, the variables are the whole registry, `latents = ("scale_path",)`. The model executes the interventions itself, so `structural_form` returns a `StructuralForm` with the order "global, then domestic" and `time_recursion = True`; the platform does not apply the interventions again. The plugin imports only `mst.model_sdk`, `mst.macro.panel`, `mst.macro.registry`, `mst.plugin_sdk` and its own package; the plugin rules forbid importing from `mst.plugins.bvar`.
 
-`estimate` writes to the meta `as_of`, `ids`, `n_global`, `months`, `shocks` (the variable ids in panel order), `nu`, `diagnostics` and `spec`, and to the arrays `panel_y`, `panel_approximate`, `drift` of length $n$, `scale` of size $n\times n$ ($\Sigma$), `weights` (the weights $w_t$ of the months at the last iteration), `start_mean` of length $n$ and `start_sd` of length $n$. `load` restores the model without re-estimating. `simulate` returns a `MacroSimulation`: shadow paths of shape $(R,H+1,n)$, where row $t=0$ is the path's $y_0$, `history` is the same $y_0$, and the group numbers.
+`estimate` writes to the meta `as_of`, `ids`, `n_global`, `months`, `shocks` (the variable ids in panel order), `nu`, `diagnostics`, `spec` and `structural_form`, and to the arrays `panel_y`, `panel_approximate`, `drift` of length $n$, `scale` of size $n\times n$ ($\Sigma$), `weights` (the weights $w_t$ of the months at the last iteration), `start_mean` of length $n$ and `start_sd` of length $n$. `load` restores the model without re-estimating. `simulate` returns a `MacroSimulation`: shadow paths of shape $(R,H+1,n)$ with the interventions executed, where row $t=0$ is the path's $y_0$, `history` is the same $y_0$, and the group numbers.
 
 In `diagnostics` the version writes $\nu$, the number of iterations and the last change of the likelihood, the ten months with the smallest weight $w_t$ (the model's crisis months), the number of changes of every variable, and the distance of the Higham correction if one was needed.
 
@@ -168,8 +201,8 @@ Files and functions:
 
 - `src/mst/plugins/rw/spec.toml`, `spec.py` — the parameters of the table and their checks: the variables of `drifts` and `breaks` are in the registry, the interval `nu_bounds` lies above 2.
 - `src/mst/plugins/rw/estimate.py` — `changes(panel, spec)` (changes without the breaks), `drift(changes, spec)`, `ecme(changes, mu, spec) -> (scale, nu, weights, trace)`, `housing(panel, mu, scale, nu)`, `nearest_correlation(matrix, floor)`.
-- `src/mst/plugins/rw/forecast.py` — `order(ids, n_global, causes) -> permutation`, `impact(scale, order)`, `scale_candidates(nu, horizon, count, rng)`, `simulate(model, plan, draws, seed)`, `constraint_law(model, plan, draws, seed)`.
-- `src/mst/plugins/rw/model.py`, `plugin.py`, `__init__.py` — the model class under the `MacroModel` contract and the plugin declaration.
+- `src/mst/plugins/rw/forecast.py` — `transfer(scale, interventions) -> (mean, loadings)` (the conditional projection of a month under the set cells), `scale_candidates(nu, horizon, count, rng)`, `simulate(model, plan, draws, seed)`, `constraint_law(model, plan, draws, seed)`.
+- `src/mst/plugins/rw/model.py`, `plugin.py`, `__init__.py` — the model class under the `MacroModel` contract, `structural_form` and the plugin declaration.
 - `tests/rw/` — the checks below.
 - `docs/reference/platform.md` and `.en.md` — a line on the model in the list of macro models; `docs/plans/bench-backtest.md` — `rw.structural` replaced by `rw.joint`.
 
@@ -181,11 +214,11 @@ Checks for the code:
 4. The changes of the `breaks` months do not enter the estimate: moving the splice to another month changes the estimate only through that change.
 5. `scale` is symmetric and positive definite; on a matrix with a negative eigenvalue the correction gives a smallest eigenvalue of at least `eig_floor`.
 6. Without a scenario the sample mean and covariance of $y_t-y_0$ agree with $t\mu$ and $t\frac{\nu}{\nu-2}\Sigma$; the kurtosis of a monthly change agrees with $3(\nu-2)/(\nu-4)$ for $\nu>4$.
-7. The order of the causes does not change the law of the paths without a scenario (Kolmogorov–Smirnov by months for two orders).
-8. With the cause `ru.key_rate` and an exact condition on the rate, the conditional mean change of another variable equals the projection formula of the section "Difference from the baseline".
-9. A domestic cause does not move global variables; a scenario that fixes a global variable through domestic causes alone is refused with the constraint numbers.
-10. With `scale_path` among the causes, a condition on a large move picks candidates with a large $\lambda$: the mean multiplier of the picked paths is above the base one.
-11. `constraint_law` agrees with `simulate`: the share of unconditional paths in the box equals the probability of the row within the Monte Carlo error.
+7. The panel order does not change the law of the paths without a scenario (Kolmogorov–Smirnov by months for two orders); a set changes only the response of the other variables of the same month.
+8. With `ru.key_rate` set in month $t$, the conditional mean change of another variable in the same month equals the projection formula of the section "Difference from the baseline".
+9. A set value stands on every path of its group and only in its month; the other variables of the same month respond by the projection instead of staying untouched.
+10. Under an observation on a large move, candidates of the multipliers with a large $\lambda$ get more weight: the mean multiplier of the picked paths is above the base one.
+11. `constraint_law` agrees with `simulate`: the share of paths in the box equals the probability of the row within the Monte Carlo error.
 12. Interval conditions hold on every path, exact ones within $\tau$.
 13. One seed gives bit-identical paths; `load` after `estimate` gives the same paths.
 14. No observed path of a variable with `lower` lies below the bound.
@@ -194,7 +227,7 @@ Acceptance on the data — the same calculations as for `bvar.sv`:
 
 1. The base forecast on 12 rolling dates of 2021–2026: mean CRPS at most 1.00 of the baseline; the shares of facts below the 5th and above the 95th percentile each between 2 and 10 % over all variables and over the rates separately.
 2. The base portfolio calculation is admitted: fewer than 5 % of cells with a band wider than the history.
-3. The corpus scenarios are admitted; in the rate-cut scenario with the exchange rate set, the bands of IMOEX and USD/RUB in the second month lie within the historical range.
+3. The corpus scenarios are admitted; in the rate-cut scenario, where both the rate and the exchange rate are set, the bands of IMOEX and USD/RUB in the second month lie within the historical range.
 
 Stop conditions: if the mean CRPS of the base forecast is above 1.02 of the baseline, the model does not become the default, and the drift rule — the only systematic difference of the centre from the baseline — is checked first. If ECME does not converge in 500 iterations on the working panel, the estimation stops with an error, and the switch to the Gaussian variant ($\nu=\infty$) is decided separately.
 

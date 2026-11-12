@@ -9,7 +9,7 @@ The system answers the question of how the target quantities of an object (portf
 `bvar.sv` is the platform's reference macro model, plugin `mst.plugins.bvar`. It is a Bayesian vector autoregression (BVAR) with stochastic volatility, Student-t tails, block exogeneity of the global block, and shocks named by sign restrictions. It answers two questions:
 
 - *unconditional forecast*: the distribution of macro paths $H$ months ahead without a scenario (the base measure $P$ of the general scheme);
-- *conditional forecast*: the distribution of these paths when scenario constraints are imposed and driving shocks are named (the overlay $P_s$ of the general scheme).
+- *conditional forecast*: the distribution of these paths when the scenario's observations are imposed and its interventions executed (the overlay $P_s$ of the general scheme).
 
 Besides paths the model returns the law of the constrained quantities given the remaining coordinates; from it the platform computes the scenario price $\mathrm{dist}(s)=\mathrm{KL}(P_s\Vert P)$.
 
@@ -73,7 +73,7 @@ $$
 x_{i,t}=\max\big(s_{i,t},\,\underline x_i\big)
 $$
 
-in the model scale. Lags, scenario constraints, impacts and the price work on the shadow: it follows the gaussian law the whole conditional machinery knows, and a later rise starts from the shadow, not from the bound. The AA and A spreads have no bound because their history went below zero. Estimation reads history as observed; this is an approximation, and a proper shadow-rate estimation is out of scope.
+in the model scale. Lags, observations, interventions and the price work on the shadow: it follows the gaussian law the whole conditional machinery knows, and a later rise starts from the shadow, not from the bound. The AA and A spreads have no bound because their history went below zero. Estimation reads history as observed; this is an approximation, and a proper shadow-rate estimation is out of scope.
 
 ## 3. Model
 
@@ -226,13 +226,13 @@ Procedure for each stable draw: draw the blocks $Q^g$ and $Q^r$ from the uniform
 
 For each of $R$ replications $r$: take a draw $\theta^{(r)}$ with its volatility history; draw $h_{j,1:H}$ by the random walk from $h_{j,0}$, $\omega_{j,1:H}$ and $\varepsilon_{1:H}\sim\mathcal N(0,I)$; compute the path by the recursion of section 3.1 from the last $p$ months of history (gaps at the edge take drawn values); apply the bound of section 2.5; return to original units through $g_i^{-1}$. The result is a function of the seed: the same seed gives the same numbers bit for bit.
 
-### 6.2. Scenario constraints
+### 6.2. Scenario observations and interventions
 
 The horizon path in model scale is the vector $\mathbf y=(y_1^\top,\dots,y_H^\top)^\top$ of length $nH$. A constraint $c$ is a triple $(w_c,a_c,b_c)$ with the requirement $a_c\le w_c^\top\mathbf y\le b_c$; it covers the value of a variable, its change, a quarterly mean and the difference of two variables. An exact value $v$ is widened to $[v-\tau,v+\tau]$ with *tolerance* $\tau>0$, because a continuous law hits a point with probability zero. All constraints: $\mathbf a\le W\mathbf y\le\mathbf b$, with rows $w_c^\top$. Constraints apply to the shadow: an exact condition at the bound ("Fed at zero") means the shadow within $\tau$ of the bound.
 
-An impact $o$ on a macro variable is an additive shift of the path after the model, which does not propagate within level 0. Constraints refer to the final path, so for each term of a constraint with weight $w$ whose variable is shifted by $\Delta$ in that month, both bounds are lowered by $w\Delta$, and after drawing the shift is added to the paths. The platform does this (`plan_with_impacts`); the model receives the shifted bounds.
+An intervention is a decision of a subject outside the models: `set` makes a quantity $k$ in months $T$ equal to a given value, `shift` moves it. The model executes the interventions itself, in the recursive structural form of the VAR: a set replaces its equation's value in its month, and the reduced-form shock of that variable is not drawn in that month; a shift adds to the equation. Later months read the set value through the lags, so it does not return to the base path. Other variables of the same month keep their reduced-form errors: within level 0 an intervention acts through the lags, not within the month. The platform does not apply the interventions again, and the run report names the form executed.
 
-### 6.3. Driving shocks and the conditional law
+### 6.3. Observations and the conditional law
 
 Given $\theta$, history and future $h$, $\omega$, the path is linear in the shocks:
 
@@ -240,33 +240,33 @@ $$
 \mathbf y=\mu_\theta+\Phi\boldsymbol\varepsilon,\qquad \boldsymbol\varepsilon=(\varepsilon_1^\top,\dots,\varepsilon_H^\top)^\top\sim\mathcal N(0,I_{nH}),
 $$
 
-where $\mu_\theta$ is the path at zero shocks and $\Phi$ the cumulated responses with impact matrices $B_t$. The scenario names the *driving shocks* $D$, a subset of the named shocks; their coordinates over all horizon months form $\boldsymbol\varepsilon_D$, the rest form $\boldsymbol\varepsilon_{\bar D}$, with columns $\Phi_D$, $\Phi_{\bar D}$. With empty $D$ all shocks are driving. Non-driving shocks are drawn from $\mathcal N(0,I)$, driving shocks from $\mathcal N(0,I)$ truncated to
+where $\mu_\theta$ is the path at zero shocks and $\Phi$ the cumulated responses with impact matrices $B_t$. After the interventions are substituted, the terms of the set cells leave $W\mathbf y$ for the right-hand side: the columns of the set variables in a row are zeroed, and their contribution becomes a constant; a shift adds a known number to the right-hand side. Let $\mu^\psi$ be the path at zero free shocks with the interventions executed, and $\Phi^\psi$ the responses to the free shocks — the set cells are not drawn. The observations are
 
 $$
-\mathbf a-W\mu_\theta-W\Phi_{\bar D}\boldsymbol\varepsilon_{\bar D}\ \le\ Z\boldsymbol\varepsilon_D\ \le\ \mathbf b-W\mu_\theta-W\Phi_{\bar D}\boldsymbol\varepsilon_{\bar D},\qquad Z=W\Phi_D,
+\mathbf a-W\mu^\psi\ \le\ W\Phi^\psi\boldsymbol\varepsilon_{\text{free}}\ \le\ \mathbf b-W\mu^\psi,
 $$
 
-by a Gibbs sampler for the truncated normal (Geweke, 1991) with 50 sweeps; the approach is Antolín-Díaz, Petrella and Rubio-Ramírez (2021). $\Phi$ is never built in full; only the rows $W\Phi$ are computed.
+and the free shocks are drawn from $\mathcal N(0,I)$ truncated to this box by a Gibbs sampler for the truncated normal (Geweke, 1991) with 50 sweeps; the approach is Antolín-Díaz, Petrella and Rubio-Ramírez (2021). $\Phi^\psi$ is never built in full; only the rows $W\Phi^\psi$ are computed.
 
-A scenario is feasible only if the rows of $Z$ are linearly independent. A constraint is dependent if the driving shocks move it, beyond the rows already fixed, by less than $10^{-9}$ of how much all shocks move it; the scenario is then rejected with the constraint numbers (`InfeasibleScenario`). If $Z$ is singular on a set of $\theta$ of positive probability, the event is unreachable and the scenario contradicts the model (lemma 2 of the general scheme).
+A row that is fully determined by the set values leaves the system; if its value is outside the bounds, the scenario contradicts the model (`ContradictsModels`). A scenario is rejected also when a row is linearly dependent on the rows already fixed, at $10^{-9}$ of how much all shocks move it: such an observation adds no information, and the scenario names its number (`InfeasibleScenario`).
 
 ### 6.4. Latent coordinate: the volatility path
 
-The future volatility path $h_{1:H}$ is the model's *latent coordinate* (`volatility_path`). If no driving shocks are named, or it is named itself, it belongs to the driving coordinates and must not be drawn before the conditions: for each value of $R$, `LATENT_CANDIDATES` = 64 candidates are drawn, each gets a weight proportional to the box probability $P(S\mid\theta,h)$, and one is chosen by weight. The log box probability comes from the GHK sampler `log_box_probability`. The effective size of the weights goes to diagnostics. At each $R$ the path law then equals the base law conditioned on the event, as the corollary of the general scheme requires.
+The future volatility path $h_{1:H}$ is the model's *latent coordinate* (`volatility_path`); a scenario does not name it. It must not be drawn before the observations: for each value of $R$, `LATENT_CANDIDATES` = 64 candidates are drawn, each gets a weight proportional to the box probability $P(S\mid\theta,h)$, and one is chosen by weight; without observations the path is drawn from its base law. The log box probability comes from the GHK sampler `log_box_probability`. The effective size of the weights goes to diagnostics. At each $R$ the path law then equals the base law conditioned on the event, as the corollary of the general scheme requires.
 
-### 6.5. Law of the conditions and price
+### 6.5. Law of the observations and price
 
-Let $R=(\theta,\omega_{\bar D})$: the parameters and all coordinates outside the driving set. By the corollary of the general scheme, with a single support condition,
+Let $R=(\theta,\psi)$: the parameters and the realized interventions, whose law the scenario preserves. By the corollary of the general scheme, with a single support observation,
 
 $$
 \frac{dP_s}{dP}=\frac{\mathbf 1_S}{P(S\mid R)},\qquad \mathrm{dist}(s)=\mathbb E_P\big[-\log P(S\mid R)\big].
 $$
 
-The method `constraint_law` returns the law of $W\mathbf y$ given $R$: per value of $R$, the gaussian law of the rows (means and covariances), the latent candidates and their log weights. The platform turns it into $P(S\mid R)$ and the price, and computes the one-sided price and the standard error. Tilting for conditions on means and probabilities is done by the platform (`mst.scenario.overlay`); the model does not know it. The distribution of $\theta$ under $P_s$ does not change.
+The method `constraint_law` returns the law of $W\mathbf y$ given $R$ **after the interventions**: per value of $R$, the gaussian law of the rows (means and covariances), the latent candidates and their log weights. The platform turns it into $P(S\mid R)$ and the price, and computes the one-sided price and the standard error. Tilting for observations on means and probabilities is done by the platform (`mst.scenario.overlay`); the model does not know it. The distribution of $\theta$ under $P_s$ does not change.
 
 ### 6.6. Forecast diagnostics
 
-The size of the driving shock a condition needs, in standard deviations per horizon month, is written to the simulation `diagnostics` and reaches the run's `meta.json`: a 5-point rate cut through one shock needs a large shock, and the number must be visible.
+The size of the shock the observations need, in standard deviations per horizon month, is written to the simulation `diagnostics` and reaches the run's `meta.json`: a 5-point rate cut through one shock needs a large shock, and the number must be visible.
 
 ## 7. Parameters
 
@@ -306,12 +306,12 @@ The plugin declares one macro model: `plugin = Plugin(...)` with `macro=(MODEL,)
 |---|---|---|
 | `estimate(context)` | series store, registry, calculation date, specification | version metadata and arrays: draws of $\theta$ after the filters, historical $h$, shock names, sign table, specification, registry, panel, diagnostics `estimated`, `stable`, `identified`; the platform checks the required keys (dates, variables, shocks, panel) |
 | `load(meta, arrays)` | a version estimated by this plugin (`meta["model"]` = `bvar.sv`) | the model of the version |
-| `simulate(model, plan, draws, seed)` | `ScenarioPlan`: horizon, constraints $C$ with shifted bounds, driving shocks $D$, regime event, `inner`, the number of driving-shock draws per value of $R$ | `MacroSimulation`: paths `(R, H+1, n)` in model scale, groups of $R$, candidate diagnostics and the driving shock size |
+| `simulate(model, plan, draws, seed)` | `ScenarioPlan`: horizon, observations, realized interventions (one row per group of paths), `inner` | `MacroSimulation`: paths `(R, H+1, n)` in model scale with the interventions executed, groups of $R$, candidate diagnostics and the shock size |
 | `constraint_law(...)` | model, plan | `ConstraintLaw`: the gaussian law of $W\mathbf y$ by groups of $R$, with latent candidates and weights |
 
-The class attribute `latents` declares the latent coordinate `volatility_path`; the platform checks the scenario's driving set against it. A version is immutable and addressed by the `sha256` hash of its metadata and arrays; a changed specification gives a new hash, and old versions are not overwritten.
+The class attribute `latents` declares the latent coordinate `volatility_path`; a scenario does not name it, and observations reweight its candidates. A version is immutable and addressed by the `sha256` hash of its metadata and arrays; a changed specification gives a new hash, and old versions are not overwritten.
 
-The platform, not the model, converts paths to original units, adds impacts, applies tilting, computes the price, admission and the report. Positions receive `Paths.macro(name)` of shape `(R, H+1)` in original units; month 0 is the last history month.
+The platform, not the model, converts paths to original units, applies tilting, computes the price, admission and the report; the level-0 interventions are executed by the model in its structural form. Positions receive `Paths.macro(name)` of shape `(R, H+1)` in original units; month 0 is the last history month.
 
 ## 9. Assumptions and limits of applicability
 
@@ -356,21 +356,22 @@ The platform, not the model, converts paths to original units, adds impacts, app
 26. No output value is below `lower` for variables with a bound; for variables without `lower` paths equal those without this step.
 27. The shadow continues below the bound, and a later rise starts from the shadow: the recursion lags take $s_t$, not $\max(s_t,\underline x)$.
 28. A condition on a bounded variable holds on the shadow; a condition "at zero" holds for the shadow within $\tau$ of zero.
-29. In a conditional forecast every path satisfies all constraints $\mathbf a\le W\mathbf y\le\mathbf b$ (on the shadow, with shifted bounds).
-30. Non-driving shocks keep their base law $\mathcal N(0,I)$ under the condition; with empty $D$ all shocks are driving.
-31. A scenario whose constraints outnumber what the driving shocks can move, or with a constraint linearly dependent on others through the driving shocks (threshold $10^{-9}$), is rejected with `InfeasibleScenario` and the constraint numbers.
-32. If no driving shocks are named, or `volatility_path` is named, the volatility path is chosen from 64 candidates weighted by $P(S\mid\theta,h)$; otherwise it is drawn from its base law.
-33. `latents` declares `volatility_path`.
-34. `constraint_law` returns the gaussian law of the rows $W\mathbf y$ grouped by $R$, matching the mean and covariance of `simulate` paths at the same $R$ (checked on a sample).
-35. Simulation `diagnostics` contain the driving shock size by month in standard deviations.
-36. The plugin declares one macro model with id `bvar.sv`; a version is read back only by the model named in `meta["model"]`.
-37. The plugin imports only allowed platform modules.
-38. The distribution of $\theta$ under a condition equals the unconditional one: at each $R$ the same parameter draws are used as without the condition.
+29. Under observations every path satisfies all constraints $\mathbf a\le W\mathbf y\le\mathbf b$ (on the shadow, with the interventions executed).
+30. Free shocks under observations keep their base law $\mathcal N(0,I)$ truncated to the bounds; shocks of set cells are not drawn.
+31. A set puts the value on every path of its group in its month, a shift adds to it; later months read the set value through the lags, and other variables of the same month keep their own errors.
+32. An observation row fully determined by the set values leaves the system; its value outside the bounds is `ContradictsModels`. A scenario with a linearly dependent row (threshold $10^{-9}$) is rejected with `InfeasibleScenario` and the constraint numbers.
+33. Under observations the volatility path is chosen from 64 candidates weighted by $P(S\mid\theta,h)$; without observations it is drawn from its base law.
+34. `latents` declares `volatility_path`.
+35. `constraint_law` returns the gaussian law of the rows $W\mathbf y$ after the interventions, grouped by $R$, matching the mean and covariance of `simulate` paths at the same $R$ (checked on a sample).
+36. Simulation `diagnostics` contain the size of the shock the observations need, by month in standard deviations.
+37. The plugin declares one macro model with id `bvar.sv`; a version is read back only by the model named in `meta["model"]`.
+38. The plugin imports only allowed platform modules.
+39. The distribution of $\theta$ under observations equals the unconditional one: at each $R$ the same parameter draws are used as without observations.
 
 ## 11. Open questions and contradictions between sources
 
 1. **Bound of the BBB spread.** The registry and the package README give `ru.spread_bbb` a bound of 0 (README: history minimum +0.99). The repair plan's results log says the AA, A and BBB spreads were left unbounded.
-2. **Who applies the bound.** Repair plan: a shared helper in `model_sdk`, called by both `simulate` functions on the final paths. Package README: the platform, after impacts and tilting (`mst.model_sdk.bounds.observed`). The results log names the helper `lower_bounds`. The answer decides whether `MacroSimulation` holds the observed or the shadow value.
+2. **Who applies the bound.** Repair plan: a shared helper in `model_sdk`, called by both `simulate` functions on the final paths. Package README: the platform, after interventions and tilting (`mst.model_sdk.bounds.observed`). The results log names the helper `lower_bounds`. The answer decides whether `MacroSimulation` holds the observed or the shadow value.
 3. **Where the dummy candidate is tuned.** Repair plan: the tuning half of the rolling check's date grid, by the unconditional forecast. Results log: "backtest on the tuning half of the episodes".
 4. **Tuning winners not chosen.** $\lambda$, $\mu=\delta$ and `dof_min` (5 or 3) depend on runs the results log marks as pending measurement.
 5. **Direction of `mu`, `delta`.** In the Giannone, Lenza and Primiceri (2015) parametrisation smaller values are tighter; in Sims and Zha (1998) the weight multiplies the dummies and larger is tighter. The plan names only the candidates 1 and 5.

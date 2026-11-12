@@ -6,6 +6,39 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## Unreleased
 
+- **A scenario is decisions and observations: model SDK 4.0.** The scenario
+  $s=(N,I,\mathcal A)$ holds interventions (a decision of a subject outside the models: a value
+  set or shifted, with a law when the number is not exact) and observations (a condition on a
+  path, a mean or a probability). Causes, the regime event and impacts are gone from the file, as
+  are the model versions, the horizon and the number of paths: the calculation request names
+  them. Numbers are written in the units of a quantity and in calendar months; `translate` maps
+  them to the registry scale and to month numbers counted from the last month of the panel. The
+  platform executes the interventions in the structural form the model declares — the default
+  form replaces only its own cell — and tilts the other coordinates under the observations. The
+  report names the form executed and the size of the driving shock. A deterministic
+  `python -m mst.scenario migrate` rewrites a directory of files in the previous format.
+- **The models moved to the new plan.** `bvar.sv` executes interventions in a recursive form of
+  its own; `msvar.markov`, `hier.gibbs`, `reflevel2.regression` and `expert.elicited` use the
+  default form. A scenario no longer names hidden coordinates (the volatility path, the regime
+  path): observations reweight them. Satellite models receive the realized interventions of their
+  quantities instead of impacts. The backtest calculates an episode once: there is no sensitivity
+  to a choice of causes any more, and cells under an intervention are excluded from the CRPS the
+  way the cells of exact observations are.
+- **The rate jumps are off by default.** On 12 dates of 2021–2026 jumps on both rates brought
+  the key rate's CRPS to 0.95 of the random walk against 1.06, but the bands of the rates grew
+  wider than their history in 27 % of the cells against 5 % without jumps: a jump with the
+  probability 0.12 a month almost surely lands within a year, so the fan forecasts a decision the
+  central bank may never take. A scenario sets the decision as an intervention; the measurements
+  are in `docs/plans/macro-models-results.md`.
+- **The workspace scenarios and the bench are migrated.** `python -m mst.scenario migrate`
+  rewrote 81 scenarios of the working workspace and 84 of the 100 bench scenarios; 16 bench files
+  refused to convert without losing a number. The old causes stay as a line in the narrative, and
+  where causes had been named the approver is cleared: such a scenario is approved again by a
+  human. The list of files with the old causes is in `bench/scenario-from-corpus/MIGRATION.md`.
+- **The documentation matches the canon.** The READMEs (Russian, English, Chinese), the howtos,
+  the system architecture, the skills README and the plugin references describe interventions and
+  observations, structural forms and the new plan.
+
 - **Scenario: a scale warning and five rules of the guide.** `validate` warns when a bound
   of a condition on a price, an index or a volume stands more than five times from the last
   observed level: on the 100 bench scenarios these are exactly six defects, among them E013,

@@ -127,14 +127,14 @@ The specification (sampler section) sets the number of sweeps, burn-in and thinn
 
 ## 5. Simulation
 
-The input is $R$ paths of macro variables on months $t=0,\dots,H$ ($t=0$ is the calculation month, the last month of history), with level-0 impacts already applied. For path $r$:
+The input is $R$ paths of macro variables on months $t=0,\dots,H$ ($t=0$ is the calculation month, the last month of history), with level-0 interventions already applied. For path $r$:
 
 1. A posterior parameter draw is chosen; the draw number sets the model's own random stream.
 2. Regressors $x_t$ are built from the paths the same way as in estimation (`mst.drivers.history`).
 3. **Start.** The driver path starts from the last known value. If that value is older than $t=0$, the months between it and $t=0$ are filled by the equation. A driver without history starts with the parameters of the level above.
 4. **Noise.** The model uses the columns of `shocks` of shape $(R,\text{ steps},k_m)$: standardized joint residuals of its $k_m$ drivers with history, in the order of the `drivers` argument, reading the first rows it needs. The platform draws them as $z\mathrm{chol}(\Sigma)^\top$ with $z\sim\mathcal N(0,I)$ from the stream `default_rng([seed, 0, l, r])`. Drivers with `parameters_from_above` get independent noise from the model's stream. Without `shocks` the model draws joint noise itself from the version's correlation. Using `shocks` is required: otherwise correlation between models does not reach the joint paths.
 5. **Recursion.** $y_{i,t}=c_i+\rho_i y_{i,t-1}+\beta_{0,i}^\top x_t+\beta_{1,i}^\top x_{t-1}+\sigma_i\varepsilon_{i,t}$; in variant B the model simulates $\Delta y_{i,t}$ and accumulates them from the last known level.
-6. **Impacts.** An impact on a driver is an `AdditiveImpact` with `target`, `start`, `values`: `values[k]` is added to the level in month `start + k`. By the canon, $x^l=G^l(x^{<l},\omega^l)+o^l$: the impact is added to the model output after the recursion (in variant B after accumulation), does not enter the own lag and does not accumulate; in a month where $o^l=0$ the path equals the model output; other drivers do not react to it.
+6. **Interventions.** An intervention on a driver is an `Intervention` with `target`, `months`, `kind` (`set` or `shift`) and `values` of shape (groups, months). A set puts the value in its month, a shift adds to it; the model applies them once after the recursion (`apply_default`), so a set value does not enter the own lag and does not accumulate, and other drivers do not react to it. In the default form the other months and variables keep the model output; the paths of the level go to the levels below with the interventions applied.
 7. **Inverse transform.** The path is returned in original units: $X=e^{y/100}$ for `log100`, $X=1/(1+e^{-y})$ for `logit`, $X=y$ for `identity`.
 8. **Leaving the training range.** A driver path that leaves $[\underline y_i,\overline y_i]$ in at least one month counts toward the out-of-range share. Canon: this share must be below 1 %; until that holds and the backtest passes, the tail of the target is marked unverified. A position on such a driver gets the flag `outside_training_range:<driver>`, the report gets `tail_unverified`; the status of the calculation does not change. The model does not clip paths to the range: the rule only flags.
 
@@ -162,13 +162,13 @@ The design sets no bounds other than the range of the transform.
 
 ## 7. Inputs and outputs per the SDK contracts
 
-The model is declared in `plugin.py` as `Plugin(..., satellites=(MODEL,))` with `model_id = "hier.gibbs"` and implements `SatelliteModel` of `mst.model_sdk` (Model SDK 3.0).
+The model is declared in `plugin.py` as `Plugin(..., satellites=(MODEL,))` with `model_id = "hier.gibbs"` and implements `SatelliteModel` of `mst.model_sdk` (Model SDK 4.0).
 
 **`estimate(context) → meta and arrays`.** The context carries the store, the registries, the date and the quantity history prepared by the platform. It returns one part per assigned quantity with the required keys `months`, `nodes`, `driver`, `rows` (the number of months each node was estimated on), `checks` (the out-of-sample result), and also `train_low`, `train_high`. The platform writes the key `model`; a part naming another model is rejected. The part carries the quantity's declaration, so loading needs no registry.
 
 **`load(meta, arrays) → version model`.** Reads only parts estimated by `hier.gibbs`.
 
-**`simulate(model, upper, drivers, impacts, seed, shocks) → DriverPaths`.** `upper` is `UpperPaths`; a level-1 model reads only `upper.macro`. `drivers` are the requested drivers; `impacts` a list of `AdditiveImpact`; `shocks` an array $(R,\text{ steps},k_m)$ or absent. The output is paths $(R,H+1)$ per driver in original units, with flags (`parameters_from_above`, `outside_training_range`). The function is pure: the same inputs and seed give the same paths. `mst.model_sdk.testing.check_shocks` checks that the model accepts `shocks`, uses them and keeps the path shape.
+**`simulate(model, upper, drivers, interventions, seed, shocks) → DriverPaths`.** `upper` is `UpperPaths`; a level-1 model reads only `upper.macro`. `drivers` are the requested drivers; `interventions` the realized interventions of its drivers; `shocks` an array $(R,\text{ steps},k_m)$ or absent. The output is paths $(R,H+1)$ per driver in original units with the interventions applied, and flags (`parameters_from_above`, `outside_training_range`). The function is pure: the same inputs and seed give the same paths. `mst.model_sdk.testing.check_shocks` checks that the model accepts `shocks`, uses them and keeps the path shape.
 
 ## 8. Assumptions and limits
 
@@ -198,14 +198,14 @@ The model is declared in `plugin.py` as `Plugin(..., satellites=(MODEL,))` with 
 14. Drivers with `parameters_from_above` get noise from the model's stream, independent of `shocks`.
 15. A path starts from the driver's last known value; if it is older than $t=0$, the months up to $t=0$ are filled by the equation, and the value in the month of the last observation equals the observation.
 16. The same inputs and seed give the same paths.
-17. An impact's `values` are added to the level in months `start … start + len(values) − 1` and in no others; the difference between paths with and without the impact at one seed equals `values` in those months and zero outside them.
-18. An impact on a driver does not enter its own lag and does not change other drivers.
-19. An impact on a macro variable changes the drivers that read it, through $x_t$.
-20. Two overlapping impacts on one driver add up.
+17. A set puts the value in its month on every path of its group and in no other month; a shift adds the value to the level in its months.
+18. An intervention on a driver does not enter its own lag and does not change other drivers.
+19. An intervention on a macro variable changes the drivers that read it, through $x_t$.
+20. Groups of paths with different intervention values do not mix: the value stands on the paths of its group.
 21. Each driver path has shape $(R,H+1)$; `log100` values are positive, `logit` values lie in $(0,1)$.
 22. The share of paths outside $[\underline y_i,\overline y_i]$ is computed per node; at a share of 1 % or more, a position on the driver gets the flag `outside_training_range:<driver>`; paths are not clipped.
 23. A level-1 model does not read `upper.levels`.
-24. If variant B is on: the level path equals the starting level plus the cumulative sum of simulated changes; an impact applies after accumulation and does not accumulate; `train_low`, `train_high` are recorded in levels; without variant B results are unchanged.
+24. If variant B is on: the level path equals the starting level plus the cumulative sum of simulated changes; an intervention applies after accumulation and does not accumulate; `train_low`, `train_high` are recorded in levels; without variant B results are unchanged.
 25. If the regressor `ru.spread_bbb` is on for `share_price`: a shift of `ru.spread_bbb` in a scenario moves `share_price:vtbr`; without the regressor it does not.
 
 ## 10. Open questions and contradictions

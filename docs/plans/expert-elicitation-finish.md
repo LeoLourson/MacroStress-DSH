@@ -1,6 +1,6 @@
 # Finish the expert.elicited.rw estimation
 
-Written 2026-11-09. Workspace: `C:\Users\LeoLeon\Documents\MacroStress\macrostress-dsh\workspace`.
+Written 2026-11-09. Workspace: the `workspace` folder of the repository.
 Outcome: one stored macro version of `expert.elicited.rw` built from eighteen answered shocks,
 with a report of what was accepted, what was reopened and what the estimate produced.
 
