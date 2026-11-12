@@ -62,7 +62,15 @@ dof_min = 5.0
 # moves of 3 pp over two months 2.0 % (down) and 1.4 % (up) of the time, IMOEX and the rouble
 # unchanged. The Fed rate moves a quarter point at most meetings, a third of its months jumped
 # and its band narrowed, so it keeps the Student tails.
-jumps = ["ru.key_rate", "ru.ruonia"]
+# Off by default. On 12 rolling dates of 2021-2026 jumps on both rates brought the key rate's
+# tails to 1.1 % below p5 and 16.4 % above p95 (9.3 % and 24.3 % without) and its CRPS to 0.95
+# of the walk (1.06), but the bands of the rates grew wider than their history in 27 % of the
+# cells (5 % without) and over all variables in 10.2 % (6.0 %): a jump of probability 0.12 a
+# month almost surely lands within a year, so the fan forecasts a decision the central bank may
+# never take. Decisions of the central bank are set by a scenario instead (docs/concept/
+# formalization.md, interventions). Version c936285f was estimated with the list below.
+# jumps = ["ru.key_rate", "ru.ruonia"]
+jumps = []
 
 [sampler]
 draws = 4000
