@@ -38,7 +38,7 @@ from .engine import run as calculate_run
 from .macro import version as macro_version
 from .metrics.baselines import DOMAIN, WIDTH
 from .metrics.es import paired_difference
-from .plugin_sdk import FixedPaths, Position
+from .plugin_sdk import FixedPaths, Position, RunOptions
 from .portfolio import report as portfolio_report
 from .portfolio import tool as portfolio_tool
 from .scenario import build as scenario_build
@@ -97,6 +97,49 @@ def _named_once(targets: list[str]) -> None:
         if target in seen:
             raise ValueError(f"target {target} is named twice")
         seen.add(target)
+
+
+def _needed_drivers(positions, spec, satellites, request, macro, horizon, base_currency) -> list[str]:
+    """The drivers a run reads: those its positions value, its scenario names and its forecast.
+
+    A run simulates only these. The served bundle may carry a driver whose series stops before
+    the simulation start — a housing region the portfolio never touches, say; simulating it would
+    stop the run for a number nobody reads.
+    """
+    from .engine.model_catalog import catalog
+
+    served = set(satellites.served())
+    options = RunOptions(as_of=macro.as_of, horizon=horizon, base_currency=base_currency)
+    needed = {target for target in request.targets or [] if target in served}
+    complete = True
+    for position in positions:
+        try:
+            model = catalog.model_for(position)
+            needs = model.requirements(position, options)
+        except Exception:  # noqa: BLE001 - a position that cannot be prepared needs no driver
+            complete = False
+            continue
+        for requirement in needs.drivers:
+            driver = satellites.registry.resolve(
+                requirement.quantity,
+                object_=requirement.object,
+                codes=requirement.codes or position.codes,
+                among=served,
+            )
+            if driver is None:
+                complete = False
+            else:
+                needed.add(driver)
+    for intervention in spec.interventions:
+        if intervention.quantity in served:
+            needed.add(intervention.quantity)
+    for observation in spec.observations:
+        for term in getattr(observation, "terms", ()):
+            if term.quantity in served:
+                needed.add(term.quantity)
+    # A position this module cannot resolve (a test double, a model the catalog does not know)
+    # leaves the question open: keep the old behaviour and simulate every served driver.
+    return sorted(needed) if complete else sorted(served)
 
 
 def new_id(now: datetime | None = None) -> str:
@@ -163,8 +206,23 @@ def execute(ws: store.Workspace, run_id: str) -> dict:
             raise ValueError("a human must approve the scenario before a calculation")
         horizon = _horizon(spec, macro, request.horizon)
         execution = {"horizon": horizon, "inner": request.inner}
+        portfolio = (
+            portfolio_tool.load(ws.portfolios, request.portfolio) if request.portfolio else None
+        )
+        positions = portfolio.positions if portfolio is not None else request.positions
+        base_currency = portfolio.base_currency if portfolio is not None else request.base_currency
+        # The drivers this run actually reads: those its positions value and those its scenario
+        # names. The others stay out, so a stale series the portfolio never touches cannot stop
+        # the calculation.
+        needed = _needed_drivers(positions, spec, satellites, request, macro, horizon, base_currency)
         paths = scenario_build.build(
-            spec, macro, satellites, draws=request.draws, seed=request.seed, **execution
+            spec,
+            macro,
+            satellites,
+            draws=request.draws,
+            seed=request.seed,
+            drivers=needed,
+            **execution,
         )
         # The empty scenario on the same seed and streams: what the forecast is compared
         # against and what the constraint gate reads.
@@ -174,13 +232,9 @@ def execute(ws: store.Workspace, run_id: str) -> dict:
             satellites,
             draws=request.draws,
             seed=request.seed,
+            drivers=needed,
             **execution,
         )
-        portfolio = (
-            portfolio_tool.load(ws.portfolios, request.portfolio) if request.portfolio else None
-        )
-        positions = portfolio.positions if portfolio is not None else request.positions
-        base_currency = portfolio.base_currency if portfolio is not None else request.base_currency
 
         def engine_on(fixed: FixedPaths) -> object:
             return calculate_run(
@@ -242,7 +296,13 @@ def execute(ws: store.Workspace, run_id: str) -> dict:
             contributions = []
             for name, variant in _variants(spec):
                 variant_paths = scenario_build.build(
-                    variant, macro, satellites, draws=request.draws, seed=request.seed, **execution
+                    variant,
+                    macro,
+                    satellites,
+                    draws=request.draws,
+                    seed=request.seed,
+                    drivers=needed,
+                    **execution,
                 )
                 variant_batch = valued(variant_paths)
                 found = portfolio_report.loss_block(

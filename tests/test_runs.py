@@ -88,7 +88,9 @@ def test_a_run_writes_meta_paths_results_and_changes(workspace):
     assert meta["scenario_spec"]["narrative"] == "нефть"
     assert meta["scenario_spec"]["approved_by"] == "И. Иванов"
     assert meta["interventions"] == [] and meta["inner"] == 1
-    assert macro.shape == (5, 4, 3) and drivers.shape == (5, 4, 5)
+    # The run simulates the drivers its positions value: gazp is served but nothing reads it.
+    assert macro.shape == (5, 4, 3) and drivers.shape == (5, 4, 4)
+    assert "share_price:gazp" not in meta["drivers"]
     assert changes.shape == (5, len(POSITIONS))
     stored = runs.result(workspace, run_id)
     assert [item["position_id"] for item in stored["positions"]] == [

@@ -206,7 +206,7 @@ def _one_sided_of(spec: Spec, plan: ScenarioPlan, law: ConstraintLaw, low, high,
     )
 
 
-def build(spec, macro, satellites, *, draws, seed, horizon=12, inner=1):
+def build(spec, macro, satellites, *, draws, seed, horizon=12, inner=1, drivers=None):
     data = context_from_versions(macro, satellites)
     all_plan = translate.plan_of(spec, data, horizon, groups=draws, inner=inner, seed=seed)
     plan = replace(
@@ -216,6 +216,13 @@ def build(spec, macro, satellites, *, draws, seed, horizon=12, inner=1):
     unknown = {i.target for i in driver_interventions} - set(satellites.served())
     if unknown:
         raise ValueError(f"intervention targets not served: {', '.join(sorted(unknown))}")
+    simulated = sorted(satellites.served()) if drivers is None else sorted(set(drivers))
+    absent = set(simulated) - set(satellites.served())
+    if absent:
+        raise ValueError(f"drivers not served: {', '.join(sorted(absent))}")
+    outside = {i.target for i in driver_interventions} - set(simulated)
+    if outside:
+        raise ValueError(f"interventions of drivers the run does not simulate: {', '.join(sorted(outside))}")
     rows = translate.observations_of(spec, data, horizon)
     simulation = macro.plugin.simulate(macro.model, plan, draws=draws, seed=seed)
     if macro.plugin.structural_form(macro.model) is None:
@@ -236,16 +243,16 @@ def build(spec, macro, satellites, *, draws, seed, horizon=12, inner=1):
         ],
         axis=-1,
     )
-    drivers = satellites.simulate(
-        reported, sorted(satellites.served()), driver_interventions, seed=seed, inner=inner
+    driver_paths = satellites.simulate(
+        reported, simulated, driver_interventions, seed=seed, inner=inner
     )
     found = dist_of(spec, macro, satellites, draws=draws, seed=seed, horizon=horizon, inner=inner)
     if tilt is not None:
         found = _add_price(found, tilt.price, tilt.standard_error)
     driver_rows = [row for row in rows if row.on_driver]
     if driver_rows:
-        simulation, own, drivers, found = _below(
-            driver_rows, data, satellites, simulation, own, drivers, found, seed, inner
+        simulation, own, driver_paths, found = _below(
+            driver_rows, data, satellites, simulation, own, driver_paths, found, seed, inner
         )
     checks = {}
     if plan.constraints:
@@ -267,7 +274,7 @@ def build(spec, macro, satellites, *, draws, seed, horizon=12, inner=1):
         simulation.months,
         simulation.ids,
         own,
-        _own_units(satellites, drivers),
+        _own_units(satellites, driver_paths),
         found,
         None if tilt is None else tilt.effective_size,
         checks,
