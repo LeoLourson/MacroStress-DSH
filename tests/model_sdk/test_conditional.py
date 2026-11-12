@@ -147,3 +147,36 @@ def test_the_box_probability_in_the_upper_tail_of_two_coordinates():
         np.random.default_rng(1), 16,
     )
     assert found == pytest.approx(2 * stats.norm.logsf(9.0), rel=1e-9)
+
+
+def test_an_exact_condition_weighs_by_its_density():
+    from mst.model_sdk.conditional import log_condition_weight
+
+    rng = np.random.default_rng(1)
+    value = np.array([5.0])
+    calm = log_condition_weight(np.zeros(1), np.eye(1) * 0.25, value, value, rng, 8)
+    volatile = log_condition_weight(np.zeros(1), np.eye(1) * 4.0, value, value, rng, 8)
+    assert calm == pytest.approx(stats.norm.logpdf(5.0, scale=0.5), rel=1e-12)
+    assert volatile == pytest.approx(stats.norm.logpdf(5.0, scale=2.0), rel=1e-12)
+
+
+def test_an_interval_weighs_given_the_exact_conditions():
+    from mst.model_sdk.conditional import log_condition_weight
+
+    rng = np.random.default_rng(1)
+    cov = np.array([[1.0, 0.8], [0.8, 1.0]])
+    low, high = np.array([2.0, 0.0]), np.array([2.0, 1.0])
+    given = stats.norm(loc=0.8 * 2.0, scale=np.sqrt(1 - 0.8**2))
+    expected = stats.norm.logpdf(2.0) + np.log(given.cdf(1.0) - given.cdf(0.0))
+    got = log_condition_weight(np.zeros(2), cov, low, high, rng, 8)
+    assert got == pytest.approx(expected, rel=1e-9)
+
+
+def test_intervals_alone_weigh_by_the_box_probability():
+    from mst.model_sdk.conditional import log_box_probability, log_condition_weight
+
+    cov = np.array([[1.0, 0.3], [0.3, 2.0]])
+    low, high = np.array([0.5, -1.0]), np.array([1.5, 0.0])
+    box = log_box_probability(np.zeros(2), cov, low, high, np.random.default_rng(3), 64)
+    got = log_condition_weight(np.zeros(2), cov, low, high, np.random.default_rng(3), 64)
+    assert got == box

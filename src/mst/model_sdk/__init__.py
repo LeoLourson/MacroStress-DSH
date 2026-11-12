@@ -20,6 +20,7 @@ from .conditional import (
 )
 from .contracts import (
     BUNDLE_META_REQUIRED,
+    DRIVING_LIMIT,
     LATENT_CANDIDATES,
     MACRO_ARRAYS_REQUIRED,
     MACRO_META_REQUIRED,
@@ -59,6 +60,7 @@ __all__ = [
     "OneSided",
     "Finding",
     "InfeasibleScenario",
+    "DRIVING_LIMIT",
     "LATENT_CANDIDATES",
     "LinearConstraint",
     "LinearTerm",

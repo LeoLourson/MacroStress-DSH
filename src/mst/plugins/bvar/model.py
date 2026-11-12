@@ -29,6 +29,8 @@ from .spec import Spec, load_spec
 
 #: The arrays of a version, in the order the posterior holds them.
 ARRAYS = ("const", "lags", "dummy", "chol", "logvar", "volvol", "dof", "history", "rotation")
+JUMPS = ("jump_prob", "jump_scale")
+"""The arrays of the jump mixture; a version estimated before it has none and does not jump."""
 
 
 def _dummies(spec: Spec, meta: dict, arrays: dict) -> list:
@@ -56,7 +58,7 @@ def parts(model: Posterior, spec: Spec, panel, as_of: date) -> MacroEstimate:
         "diagnostics": model.diagnostics,
         "spec": spec.model_dump(mode="json"),
     }
-    arrays = {name: getattr(model, name) for name in ARRAYS}
+    arrays = {name: getattr(model, name) for name in (*ARRAYS, *JUMPS)}
     arrays |= {"panel_y": panel.y, "panel_approximate": panel.approximate}
     return MacroEstimate(meta=meta, arrays=arrays)
 
@@ -116,6 +118,7 @@ class BvarModel(MacroModel):
             diagnostics=meta["diagnostics"],
             shocks=meta["shocks"],
             **{key: arrays[key] for key in ARRAYS},
+            **{key: arrays[key] for key in JUMPS if key in arrays},
         )
 
     def simulate(self, model, plan: ScenarioPlan, *, draws: int, seed: int) -> MacroSimulation:

@@ -26,11 +26,12 @@ from mst.model_sdk.conditional import (
     box_gibbs,
     dependent_rows,
     draw_driving,
-    log_box_probability,
+    log_condition_weight,
     pick_latent,
     truncated_normal,
 )
 from mst.model_sdk.contracts import (
+    DRIVING_LIMIT,
     LATENT_CANDIDATES,
     ConstraintLaw,
     MacroSimulation,
@@ -125,6 +126,11 @@ def _repetition(model: Posterior, horizon: int, rng, draw: int | None = None) ->
     finite = np.isfinite(dof)
     omega = np.ones((horizon, n))
     omega[:, finite] = dof[finite] / 2 / rng.gamma(dof[finite] / 2, size=(horizon, finite.sum()))
+    jumps = model.jump_prob[draw] > 0
+    if jumps.any():
+        # A jumping variable has no Student tails; its month jumps with probability pi.
+        hit = rng.random((horizon, int(jumps.sum()))) < model.jump_prob[draw, jumps]
+        omega[:, jumps] = np.where(hit, model.jump_scale[draw, jumps], 1.0)
     scale = np.exp(h / 2) * np.sqrt(omega)
     impacts = np.einsum("ij,tj,jk->tik", model.chol[draw], scale, model.rotation[draw])
     intercept = model.const[draw] + _future(model, horizon) @ model.dummy[draw].T
@@ -317,31 +323,22 @@ def simulate(
                     continue
                 z = _loadings(plan, rep)
                 mean = _level(plan, rep.mean)
-                # An exact row (low == high) is fixed by the truncation itself whatever the
-                # candidate, so only the interval rows carry the weight; a plan of exact
-                # rows alone weighs every candidate the same.
-                interval = plan.low < plan.high
-                if not interval.any():
-                    log_probabilities.append(0.0)
-                    continue
+                # An exact row (low == high) holds under every candidate through the
+                # truncation, but weighs by its density: a far value is likelier under a
+                # volatile path. The interval rows weigh by their box given the exact ones.
+                rows = len(plan.terms)
                 if driving.any():
-                    z_driving = z[:, :, driving].reshape(len(plan.terms), -1)[interval]
+                    z_driving = z[:, :, driving].reshape(rows, -1)
                     cov = z_driving @ z_driving.T
                     if free is not None:
-                        z_free = z[:, :, ~driving].reshape(len(plan.terms), -1)[interval]
-                        mean = mean[interval] + z_free @ free.ravel()
-                    else:
-                        mean = mean[interval]
+                        mean = mean + z[:, :, ~driving].reshape(rows, -1) @ free.ravel()
                 else:
-                    z_flat = z.reshape(len(plan.terms), -1)[interval]
-                    cov = np.zeros((int(interval.sum()), int(interval.sum())))
-                    mean = mean[interval] + (
-                        z_flat @ free.ravel() if free is not None else 0.0
-                    )
+                    cov = np.zeros((rows, rows))
+                    if free is not None:
+                        mean = mean + z.reshape(rows, -1) @ free.ravel()
                 log_probabilities.append(
-                    log_box_probability(
-                        mean, cov, plan.low[interval], plan.high[interval], rng_volatility,
-                        CANDIDATE_SAMPLES,
+                    log_condition_weight(
+                        mean, cov, plan.low, plan.high, rng_volatility, CANDIDATE_SAMPLES
                     )
                 )
             if np.all(np.isneginf(log_probabilities)):
@@ -407,6 +404,7 @@ def simulate(
         diagnostics["driving_sd"] = {
             "median_by_month": [float(value) for value in np.median(sizes, axis=0)],
             "max": float(sizes.max()),
+            "share_above_limit": float(np.mean(sizes.max(axis=1) > DRIVING_LIMIT)),
         }
     return Simulation(
         ids=model.ids,

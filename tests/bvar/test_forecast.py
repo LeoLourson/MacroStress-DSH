@@ -250,3 +250,48 @@ def test_a_tail_event_prices_the_volatility_candidates(model):
         first_only, np.array([low]), np.array([low + 0.5]), rng=rng, samples=4000
     )
     assert distance < single
+
+
+def test_an_exact_tail_event_picks_the_volatility_it_needs(model):
+    # An exact condition holds under every candidate, but a far value is likelier under a
+    # volatile path: the candidates weigh by its density, so they are no longer equal.
+    if model.volvol[0].max() <= 0:
+        pytest.skip("the constant variant has no volatility to weigh")
+    reference = constraint_law(model, scenario([value("ru.b", 2, 0.0, 1.0)]), draws=1, seed=0)
+    far = float(reference.means[0, 0]) + 4.0 * float(np.sqrt(reference.covs[0, 0, 0]))
+    run = simulate(model, scenario([value("ru.b", 2, far)]), draws=4, seed=1)
+    assert run.diagnostics["latent_ess"]["max"] < LATENT_CANDIDATES
+
+
+def test_the_diagnostics_count_the_paths_that_need_huge_driving_shocks(model):
+    # One cause asked to carry a value far outside its law needs a shock of many standard
+    # deviations on every path; the admission of the run reads the share.
+    reference = constraint_law(
+        model, scenario([value("ru.b", 2, 0.0, 1.0)], causes=["ru.t"]), draws=1, seed=0
+    )
+    far = float(reference.means[0, 0]) + 50.0 * float(np.sqrt(reference.covs[0, 0, 0]))
+    run = simulate(model, scenario([value("ru.b", 2, far)], causes=["ru.t"]), draws=8, seed=1)
+    assert run.diagnostics["driving_sd"]["share_above_limit"] == 1.0
+    near = simulate(
+        model, scenario([value("ru.b", 2, 0.0, 1.0)], causes=["ru.t"]), draws=8, seed=1
+    )
+    assert near.diagnostics["driving_sd"]["share_above_limit"] == 0.0
+
+
+def test_a_jump_widens_the_impact_of_its_variable(model):
+    # A jump in every month with 100 times the variance multiplies the scale of the jumping
+    # component by ten and leaves the others alone.
+    from mst.plugins.bvar.forecast import _repetition
+
+    if np.isfinite(model.dof).any():
+        pytest.skip("the Student draws of the stochastic variant make the scales random")
+    probability = np.zeros_like(model.volvol)
+    scale = np.ones_like(model.volvol)
+    probability[:, 1], scale[:, 1] = 1.0, 100.0
+    jumping = replace(model, jump_prob=probability, jump_scale=scale)
+    calm = _repetition(model, 3, np.random.default_rng(5), draw=0)
+    wide = _repetition(jumping, 3, np.random.default_rng(5), draw=0)
+    factor = np.array([1.0, 10.0, 1.0])
+    calm_shocks = np.linalg.solve(model.chol[0], calm.impacts[0])
+    expected = np.einsum("ij,j,jk->ik", model.chol[0], factor, calm_shocks)
+    assert np.allclose(wide.impacts[0], expected)

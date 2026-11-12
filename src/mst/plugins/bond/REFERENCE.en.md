@@ -1,10 +1,10 @@
 # Bond position model `bond.paths.v1`: reference
 
-Written from the design documents, not from the code: `docs/reference/platform.md`, `docs/howto/plugins.md`, `docs/concept/formalization.md`, `src/mst/plugin_sdk/README.md`, `src/mst/drivers/registry.toml`, `plans/canon-alignment.md`, `plans/satellite-models.md` and the commit messages of the plugin. Where these sources are silent, the gap is listed under open questions and is not filled.
+The valuation follows `model.py` (version 2.0.0). The first version moved the price by the spread alone; why that was replaced is in section 8.
 
 ## 1. Purpose and place in the system
 
-The model values a position of type `bond` (a corporate bond) along the scenario paths of its driver `bond_spread`, the spread of the bond to the OFZ curve. The value change in each draw feeds the portfolio loss $\Delta_t$, its quantiles P5/P50/P95 and $\mathrm{ES}_{95\%}$ at the end of the horizon, by month and over the path, and through them the reverse stress test. The model is pure: it reads only the paths the scenario has already drawn.
+The model values a position of type `bond` (a corporate bond) along the scenario paths of its yield: the risk-free curve at the bond's duration plus its spread to the OFZ curve, the driver `bond_spread`. The value change in each draw feeds the portfolio loss $\Delta_t$, its quantiles P5/P50/P95 and $\mathrm{ES}_{95\%}$ at the end of the horizon, by month and over the path, and through them the reverse stress test. The model is pure: it reads only the paths the scenario has already drawn.
 
 ## 2. Inputs
 
@@ -12,37 +12,41 @@ The model values a position of type `bond` (a corporate bond) along the scenario
 |---|---|---|
 | `notional` | Current value of the position, $N$ | millions of the position currency |
 | `currency` | Position currency $c$; the base currency is the rouble | ISO code |
-| `codes` | `secid`, `isin`, `inn`, ...; the platform matches the bond to a driver by them, and a bond without its own series takes the driver of its rating group (`group_aa`, `group_a`, `group_bbb`) | — |
-| `terms.duration` | Duration $D$ of the bond, named by `docs/reference/platform.md` as a model input | years |
+| `codes` | `secid`, `isin`, `inn`, ...; the platform matches the bond to a driver by them | — |
+| `terms.duration` | Modified duration $D$ at the calculation month | years |
 | driver `bond_spread` | Path $s_{r,t}$ | percentage points |
+| macro paths of the curve | `ru.key_rate` (tenor 0, required), `ru.ofz_1y`, `ru.ofz_5y`, `ru.ofz_10y` (tenors 1, 5, 10 years, read when the macro model carries them) | % |
 | macro path of the exchange rate | $X_{r,t}$ for $c\ne\text{RUB}$; for USD `ru.usdrub` | roubles per unit of $c$ |
 
-$R$ is the number of draws, $H$ the horizon in months, $t=0$ the calculation month. `terms` has no silent defaults: a missing `duration` is a refusal naming the field (`docs/howto/plugins.md`).
+$R$ is the number of draws, $H$ the horizon in months, $t=0$ the calculation month. `terms` has no silent defaults: a missing `duration` is a refusal naming the field. The exchange quotes the Macaulay duration in days; the modified one is $D=\text{days}/365/(1+y/f)$ for $f$ coupons a year.
 
 ## 3. Valuation
 
-The commit message "Port the calculation of positions" fixes the loss of a bond as `duration*ds/100`: a first-order duration approximation of the price change to a yield change, where the change of yield is the change of spread (Fabozzi, *Bond Markets, Analysis and Strategies*, chapter on price volatility). With $\Delta s_{r,t}=s_{r,t}-s_{r,0}$ in percentage points, the value in the position currency is
+Let $r_{r,t}(\tau)$ be the risk-free rate at tenor $\tau$ years: linear between the tenors of the curve and flat beyond them. The bond has $D_h=\max(D-h/12,0)$ years of duration left after $h$ months. Its yield now and at month $h$ is
 
 $$
-P_{r,t}=N\left(1-\frac{D\,\Delta s_{r,t}}{100}\right),
+y_{r,0}=r_{r,0}(D)+s_{r,0},\qquad y_{r,h}=r_{r,h}(D_h)+s_{r,h},
 $$
 
-and in roubles $V_{r,t}=P_{r,t}\,X_{r,t}$, with $X\equiv 1$ for a rouble position. The value change at the end of the horizon is $\delta_r=V_{r,H}-V_{r,0}$ and the loss is $L_r=-\delta_r$; for a rouble position $L_r=N D\,\Delta s_{r,H}/100$. The division by 100 converts percentage points to a fraction.
+and its value in the position currency is
 
-The model reads the last column of the paths as the end of the horizon, so the loss by month $t$ is the same calculation on paths cut at $t$ (`plans/canon-alignment.md`). Currency conversion goes through `plugin_sdk/fx.py`.
+$$
+P_{r,h}=N\,(1+y_{r,0}/100)^{h/12}\left(1-\frac{D_h\,(y_{r,h}-y_{r,0})}{100}\right).
+$$
 
-The design is silent on what happens at maturity before $H$, on coupons, on the shortening of duration over the horizon, on a move of the OFZ curve and on default; these are open questions. A missing driver leaves the position without a calculation, status `invalid`, with the quantity and code named.
+The first factor is the yield earned over the horizon: coupons and the pull to par, reinvested at $y_{r,0}$. The second is the first-order price move of the duration left (Fabozzi, *Bond Markets, Analysis and Strategies*, chapter on price volatility). Because $y_{r,h}$ is read at the shorter tenor $D_h$, the roll down the curve is in it too. A bond whose duration runs out before $h$ is redeemed and carries no rate risk after that. In roubles $V_{r,h}=P_{r,h}X_{r,h}/X_{r,0}$, the value change is $\delta_r=V_{r,H}-N$ and the loss $L_r=-\delta_r$.
+
+The model reads the last column of the paths as the end of the horizon, so the loss by month $t$ is the same calculation on paths cut at $t$. A missing driver leaves the position without a calculation, status `invalid`, with the quantity and code named.
 
 ## 4. Parameters
 
 | Symbol | Meaning | Value | Source |
 |---|---|---|---|
 | $N$ | Notional | from the position | `Position.notional` |
-| $D$ | Duration | from `terms.duration`; no default | `docs/reference/platform.md`, commit message |
-| $s_{r,t}$ | Spread path | from the satellite version | driver `bond_spread`, unit p. p. |
+| $D$ | Modified duration now | from `terms.duration`; no default | analyst |
+| $s_{r,t}$ | Spread path | from the satellite version | driver `bond_spread`, p. p. |
+| $r_{r,t}(\tau)$ | Risk-free curve | from the macro version | `ru.key_rate`, `ru.ofz_1y`, `ru.ofz_5y`, `ru.ofz_10y` |
 | $X_{r,t}$ | Exchange rate path | from the macro version | `fx.py` |
-| $C$ | Convexity | not set by the design | — |
-| maturity, coupon, recovery | — | not set by the design | — |
 
 ## 5. Outputs
 
@@ -50,32 +54,24 @@ A `CalculationResult` per the SDK contract: status `ok`, `needs_review` or `inva
 
 ## 6. Assumptions and limits
 
-- First order in the spread: for large spread moves the duration approximation overstates losses on a rising spread and understates gains on a falling one, because convexity is positive for an option-free bond.
-- The OFZ curve itself is fixed in the valuation: only the spread moves, although the satellite reads `ru.ofz_5y` and `ru.key_rate` as regressors.
-- Duration is constant over the horizon.
-- Bond spreads are modelled in levels; per `plans/satellite-models.md` about 56 % of paths leave the training range, and a bond in `group_aa` barely reacts to a shock to `ru.spread_bbb` (loading 0.04).
-- A spread rise above $100/D$ p. p. makes the value negative; the design does not cap it.
+- First order in the yield: no convexity. For an option-free bond the approximation overstates the loss on a rise and understates the gain on a fall; at $D_h\le 2$ years and moves of a few points the error is a fraction of a percent.
+- The yield earned is reinvested at $y_{r,0}$, also after redemption.
+- The spread is measured to the zero-coupon curve at the Macaulay duration, the curve of the valuation is the G-curve at the modified one; the gap is smaller than the error of the duration approximation at these tenors.
+- Default and recovery enter only through the spread path.
+- A spread rise above $100/D_h$ p. p. makes the value negative; at the durations of the portfolios that is a rise of over 50 p. p.
 
-## 7. Checks the code must pass
+## 7. Checks the code passes
 
-1. For a rouble position on fixed paths, $\delta_r=-N D\,(s_{r,H}-s_{r,0})/100$.
-2. $D=5$, $N=100$, $\Delta s=2$ p. p. gives $\delta=-10$.
-3. Constant spread paths give $\delta_r=0$.
-4. The loss is linear in $D$ and in $\Delta s$: doubling either doubles $L_r$.
-5. A missing `terms.duration` is refused with the field named; there is no default.
-6. For a USD position, $\delta_r=P_{r,H}X_{r,H}-N X_{r,0}$ with $X$ from `ru.usdrub`.
-7. `value_change` has $R$ entries; repeat on the same paths is bit-identical.
-8. Paths cut at month $t$ give the value change at month $t$.
-9. An unresolved `bond_spread` driver gives `invalid` with the quantity named.
-10. The loss metric carries P5, P50, P95 and ES95.
+Tests `tests/engine/test_models.py`:
 
-## 8. Open questions and contradictions
+1. Constant curve and spread: the bond earns its yield, $\delta=N((1+y_0/100)^{h/12}-1)$.
+2. A spread widening costs the duration left, $D-h/12$, times the widening, on top of the yield earned.
+3. A rise of the curve costs as much as an equal spread widening.
+4. The curve is read at the duration of the bond, now and at the end: $D=3$, tenors 1 and 5 years at 12 % and 16 % give 14 % now and 13 % a year later.
+5. A bond with duration shorter than the horizon carries no spread risk.
 
-1. Duration type (Macaulay or modified) is not stated; the formula `duration*ds/100` is exact to first order only for modified duration.
-2. Convexity: standard literature adds $\tfrac12 C(\Delta y)^2$; the design has only the linear term and no `convexity` field.
-3. Maturity before the horizon end: whether the position is redeemed at par, rolled or kept at duration $D$ is not set.
-4. Coupons and carry over the horizon are not set; the formula gives zero value change on a constant spread.
-5. Default and recovery of the issuer: not set; default enters only through the spread path.
-6. Moves of the risk-free curve (`ru.ofz_5y`, `ru.key_rate`) are in the satellite regressors but not in the valuation; whether a rate shock should change bond value directly is not stated.
-7. Sign convention of the loss and the metric names, as for the other position models: not stated explicitly.
-8. Order of currency conversion (spread loss in currency $c$, then the rate) is inferred from the general `fx.py` rule, not stated for bonds.
+`tests/test_runs.py` checks the formula on a run of the simulated macro model, which carries the key rate only.
+
+## 8. What changed in version 2.0.0
+
+Version 1.0.0 valued $N(1-D\,\Delta s/100)$. On the scenarios of 2026-11-11 that gave three errors. A rate cut from 14 % to 7.6 % moved the bond by +0.2 % at the median, since the curve did not enter. With nothing moving the bond earned nothing, although its yield was 17.9 %. The duration of 2 years stayed for the whole horizon, although the bond in the portfolio had 1.3 years to its put date and 0.45 a year later, so a spread widening cost it 4.5 times too much.

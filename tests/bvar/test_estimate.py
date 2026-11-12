@@ -113,3 +113,28 @@ def test_the_sampler_recovers_known_degrees_of_freedom_above_the_floor():
     )
     assert np.all(np.median(heavy.dof, axis=0) >= 5.0)
     assert np.mean(light.dof) > np.mean(heavy.dof) + 5.0
+
+
+def test_the_sampler_finds_the_jumps_of_a_named_variable():
+    # ru.b jumps in a tenth of the months with 40 times its variance; the other errors are
+    # gaussian. The named variable gets a jump probability and scale near the truth, the
+    # others none, and its tails stay out of the Student grid.
+    rng = np.random.default_rng(21)
+    count = 400
+    n = len(sim.CONST)
+    z = rng.standard_normal((count, n))
+    z[:, 1] *= np.where(rng.random(count) < 0.1, np.sqrt(40.0), 1.0)
+    y = np.zeros((count, n))
+    previous = np.linalg.solve(np.eye(n) - sim.LAG, sim.CONST)
+    for t in range(count):
+        y[t] = sim.CONST + sim.LAG @ previous + sim.CHOL @ (np.exp(sim.LOGVAR / 2) * z[t])
+        previous = y[t]
+    posterior = estimate(
+        sim.panel(y),
+        sim.spec(volatility="stochastic", draws=300, burn=300, seed=22, jumps=["ru.b"]),
+    )
+    assert 0.05 <= np.median(posterior.jump_prob[:, 1]) <= 0.2
+    assert 20.0 <= np.median(posterior.jump_scale[:, 1]) <= 80.0
+    assert np.all(posterior.jump_prob[:, [0, 2]] == 0.0)
+    assert np.all(posterior.jump_scale[:, [0, 2]] == 1.0)
+    assert np.all(np.isinf(posterior.dof[:, 1]))

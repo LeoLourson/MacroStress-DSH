@@ -156,6 +156,11 @@ def build(
     ):
         flags.append("tail_unverified")
     flags += [f"constraint_rare:{number}" for number in (rare_constraints or [])]
+    # Shocks far beyond the model's history do not refuse the calculation — the price says
+    # how unlikely the event is — but the responses to them are extrapolated.
+    driving = (admission or {}).get("driving_above_limit")
+    if driving is not None and driving >= admission["limit"]:
+        flags.append("driving_shock_above_limit")
     return {
         "portfolio": {
             "name": portfolio.name,

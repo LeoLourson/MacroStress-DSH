@@ -47,7 +47,7 @@ def test_a_second_estimate_takes_the_finished_quantity_from_its_checkpoint(
 ):
     first = HierModel(spec=quick()).estimate(context(data, tmp_path))
     monkeypatch.setattr(hier_model, "fit", refuse_to_fit)
-    monkeypatch.setattr(hier_model, "check", refuse_to_fit)
+    monkeypatch.setattr(hier_model, "check_sources", refuse_to_fit)
     again = HierModel(spec=quick()).estimate(context(data, tmp_path))
     assert again.parts["price"].meta == first.parts["price"].meta
     for name, array in first.parts["price"].arrays.items():

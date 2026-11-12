@@ -404,7 +404,7 @@ def _write(
     """The paths, the results of every position, the report and the meta that names them."""
     months = [month.isoformat() for month in paths.months]
     # The checks come before the report: the admission of the calculation decides its status.
-    admission = _admission(checks)
+    admission = _admission(checks, paths.diagnostics)
     rare = _rare_constraints(checks)
     # A position that was not calculated has no column: NaN stands in, so nobody reads a zero
     # profit where there is no number at all.
@@ -496,7 +496,7 @@ def _write(
     return written
 
 
-def _admission(checks: dict | None) -> dict:
+def _admission(checks: dict | None, diagnostics: dict | None = None) -> dict:
     """The admission of a calculation from the checks of its paths (the canon, section 7).
 
     A calculation is admitted while fewer than ``ADMISSION_LIMIT`` of the cells of month and
@@ -505,6 +505,12 @@ def _admission(checks: dict | None) -> dict:
     covers the same months, so the mean of a condition's shares is the share of its cells.
     ``broken`` names every quantity with a positive share, worst first; the numbers stay in
     the report for diagnostics either way, an inadmissible calculation is not deleted.
+
+    When the macro model reports its driving shocks, ``driving_above_limit`` is the share of
+    paths whose largest one is above ``DRIVING_LIMIT`` standard deviations, ``None`` otherwise.
+    It does not refuse the calculation: how unlikely the event is belongs to its price, and a
+    scenario that sets the key rate may ask for a shock the model never saw. The report flags
+    the share at the admission limit — the responses to such a shock are extrapolated.
     """
     quantities = (checks or {}).get("paths") or {}
     shares = {}
@@ -517,12 +523,14 @@ def _admission(checks: dict | None) -> dict:
         for condition in (DOMAIN, WIDTH)
         if row.get(condition, 0.0) > 0.0
     ]
+    driving = ((diagnostics or {}).get("driving_sd") or {}).get("share_above_limit")
     broken.sort(key=lambda item: (-item["share"], item["quantity"]))
     return {
         "admitted": all(share < ADMISSION_LIMIT for share in shares.values()),
         "limit": ADMISSION_LIMIT,
         "shares": shares,
         "broken": broken,
+        "driving_above_limit": None if driving is None else float(driving),
     }
 
 

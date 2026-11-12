@@ -121,7 +121,7 @@ The specification (sampler section) sets the number of sweeps, burn-in and thinn
 
 **Missing data.** A month without an observation is an unobserved value, not a dropped row, and it is drawn in step 4. In variant B a missing level in month $t$ gives missing $\Delta y$ in months $t$ and $t+1$, drawn by the same mechanism. The first value of a series is drawn from the node's stationary law.
 
-**Out-of-sample check.** For each node the last months of history are held out; the model is estimated without them and forecasts up to the horizon `reach`. Its RMSE is compared with that of an AR(1) of the same node without macro variables on the same months. A node is served (`served`) if the model is more accurate; otherwise the part records the reason: "not more accurate than without macro", "too few observations", "no holdout forecast". In variant B the comparison is in levels against the same autoregression in levels, so that the verdict stays comparable. The specification sets the holdout length and `reach`.
+**Out-of-sample check.** For each node the last months of history are held out; the model is estimated without them and forecasts up to the horizon `reach`. Its RMSE is compared with that of an AR(1) of the same node without macro variables on the same months. A node is served (`served`) if the model is more accurate. When a node's own equation loses, the coefficients of the nearest node above it estimated on data of its own are checked on the same months against the same autoregression; when they are more accurate, they serve the node, the part records the source in `sources`, and the driver's path carries the flag `parameters_from_above`. Otherwise the part records the reason: "not more accurate than without macro", "too few observations", "no holdout forecast". In variant B the comparison is in levels against the same autoregression in levels, so that the verdict stays comparable. The specification sets the holdout length and `reach`.
 
 **Reason for the check:** macro regressors help a driver only if they beat its own persistence.
 
@@ -151,7 +151,7 @@ The design sets no bounds other than the range of the transform.
 | $\Sigma$ | correlation of the bundle's standardized residuals | estimated at the posterior mean | `docs/howto/plugins.md` |
 | $\rho_{\max}$ | stationarity bound | not set by the design | plugin README (`rho_max`) |
 | $\tau$ | deviations of a node from its parent | not set by the design | plugin README |
-| `constant_spread` | spread of the assumption on $c_i$ | not set by the design; candidates $\lbrace 10,1,0.1\rbrace$ for variant B | satellite plan |
+| `constant_spread`, `constant_spreads` | spread of the assumption on $c_i$ | 0.1 for shares and housing, 10 for bond spreads and overdue shares: of the plan's candidates $\lbrace 10,1,0.1\rbrace$, the one with the smaller mean holdout RMSE | `spec.toml` |
 | `lags` | deepest lag of $x$ | 1 for all quantities | driver registry |
 | `span` | months per stored value | 3 for `housing_price_*`, else 1 | driver registry |
 | $a$ | threshold of the feature `key_rate_above_15` | 15.0 | driver registry |
@@ -188,7 +188,7 @@ The model is declared in `plugin.py` as `Plugin(..., satellites=(MODEL,))` with 
 4. On simulated data with known $c,\rho,\beta_0,\beta_1,\sigma$, posterior means fall inside an interval consistent with the posterior spread.
 5. Every posterior draw satisfies $\lvert\rho_i\rvert\le\rho_{\max}$.
 6. A node with a short series is pulled to its parent: as its number of observations shrinks, its posterior mean $\phi_i$ approaches $\phi_{\pi(i)}$.
-7. A driver without a series takes the parameters of the node above and carries the flag `parameters_from_above`.
+7. A driver without a series takes the parameters of the node above and carries the flag `parameters_from_above`. A driver with a series served by the coefficients of a node above (`sources`) carries the same flag and keeps its own start, noise and residual spread.
 8. Unobserved months inside the sample are drawn, not dropped; with `span = 3` the months in between are drawn.
 9. Estimation reads only data published no later than `as_of` and the history of $x$ from the panel of its macro version.
 10. A version part holds `months`, `nodes`, `driver`, `rows`, `checks`, `train_low`, `train_high`; a part without `train_low`/`train_high` is not read.

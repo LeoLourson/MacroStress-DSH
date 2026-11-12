@@ -451,3 +451,70 @@ def test_rows_published_after_the_calculation_move_no_bound(tmp_path):
 
     assert np.array_equal(before.train_low, again.train_low, equal_nan=True)
     assert np.array_equal(before.train_high, again.train_high, equal_nan=True)
+
+
+def _spoiled(nodes, lend=False):
+    """``fit`` with the constant of ``nodes`` pushed far off, so their own forecasts drift
+    away; with ``lend`` the sector first takes the coefficients alpha was fitted with."""
+    import mst.plugins.hier.check as check_module
+
+    real = check_module.fit
+
+    def spoiled(hist, spec, **kwargs):
+        result = real(hist, spec, **kwargs)
+        gamma = result.gamma.copy()
+        if lend:
+            gamma[:, hist.nodes.index("sector")] = result.gamma[:, hist.nodes.index("alpha")]
+        for name in nodes:
+            gamma[:, hist.nodes.index(name), 0] += 5.0
+        return replace(result, gamma=gamma)
+
+    return spoiled
+
+
+def test_a_driver_whose_own_equation_fails_is_served_by_the_level_above(data, monkeypatch):
+    import mst.plugins.hier.check as check_module
+
+    registry, panel, store = data
+    hist = history(registry, "price", panel, store, AS_OF)
+    alpha, sector = hist.nodes.index("alpha"), hist.nodes.index("sector")
+    monkeypatch.setattr(check_module, "fit", _spoiled(["alpha"], lend=True))
+    checks, sources = check_module.check_sources(hist, load_spec())
+    assert checks[alpha].served and checks[alpha].satellite < checks[alpha].baseline
+    assert "sector" in checks[alpha].reason
+    assert sources == {alpha: sector}
+
+
+def test_a_driver_is_refused_when_the_level_above_fails_too(data, monkeypatch):
+    import mst.plugins.hier.check as check_module
+
+    registry, panel, store = data
+    hist = history(registry, "price", panel, store, AS_OF)
+    alpha = hist.nodes.index("alpha")
+    monkeypatch.setattr(check_module, "fit", _spoiled(["alpha", "sector"]))
+    checks, sources = check_module.check_sources(hist, load_spec())
+    assert not checks[alpha].served
+    assert alpha not in sources
+
+
+def test_a_driver_served_from_above_follows_the_parameters_of_its_source(version, data):
+    _, panel, _ = data
+    fit_ = version.models[MODEL.model_id].fits["price"]
+    hist = fit_.history
+    alpha, sector = hist.nodes.index("alpha"), hist.nodes.index("sector")
+    gamma = np.zeros_like(fit_.gamma)
+    gamma[:, sector] = simulated.COMPANIES["alpha"]
+    gamma[:, alpha] = [50.0, 0.0, 0.0, 0.0]
+    fixed = replace(fit_, gamma=gamma, sigma=np.zeros_like(fit_.sigma), sources={alpha: sector})
+    model = _with_fit(version, fixed)
+    macro = macro_paths(panel, np.array([1.0, 2.0, 3.0]))
+    result = simulate_hier(
+        model, upper_of(macro), ["price:alpha"], [],
+        shocks=platform_shocks(model, macro, ["price:alpha"]), seed=7, stream=0,
+    )
+    d, x = hist.d[-1, alpha], [panel.y[-1, 0], 1.0, 2.0, 3.0]
+    expected = [d]
+    for t in range(1, 4):
+        expected.append(simulated.COMPANIES["alpha"] @ [1.0, expected[-1], x[t], x[t - 1]])
+    assert result.paths[:, :, 0] == pytest.approx(np.tile(expected, (3, 1)))
+    assert result.flags["price:alpha"] == {PARAMETERS_FROM_ABOVE}

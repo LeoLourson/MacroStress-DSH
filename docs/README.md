@@ -14,7 +14,8 @@
 
 | Файл | Вопрос, на который отвечает |
 |---|---|
-| [concept/formalization.md](concept/formalization.md) | Общая схема: уровни, сценарий, наложение, условный прогноз, метрики качества — что система делает и в каком порядке |
+| [concept/formalization.md](concept/formalization.md) | Общая схема: уровни, структурная форма модели, сценарий из вмешательств и наблюдений, наложение, условный прогноз, метрики качества |
+| [concept/formalization-legacy.md](concept/formalization-legacy.md) | Прежняя редакция общей схемы, не канон: сценарий с версиями моделей и причинами — координатами исхода модели |
 | [concept/bvar-method-legacy.md](concept/bvar-method-legacy.md) | Устаревшее описание первой версии метода на BVAR, не канон: подробности оценки BVAR и сателлитов |
 | [concept/architecture.md](concept/architecture.md) | Как схема реализована в коде: пакеты и поток данных, workspace, версии моделей, задачи, раздел системного промпта |
 | [howto/install.md](howto/install.md) | Как поставить Python-часть, подключить плагин к профилю DSH и проверить, что всё видно |

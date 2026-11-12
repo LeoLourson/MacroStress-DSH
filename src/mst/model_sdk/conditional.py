@@ -223,6 +223,53 @@ def log_box_probability(mean, cov, low, high, rng, samples: int) -> float:
     return float(logsumexp(log_weights) - np.log(samples))
 
 
+def log_condition_weight(mean, cov, low, high, rng, samples: int) -> float:
+    """The log likelihood of the conditions under ``X ~ N(mean, cov)``: what ranks the
+    candidates of a hidden volatility path.
+
+    An exact row (``low == high``) weighs by the density of ``X`` at its value, and the interval
+    rows by the probability of their box given the exact rows (``log_box_probability``). The
+    truncation meets an exact row under every candidate, but a candidate that makes its value
+    likelier explains the event better. Exact rows the covariance does not move, or moves only
+    as a combination of each other, carry no density, and the weight is the box alone.
+    """
+    mean = np.asarray(mean, dtype=float)
+    cov = np.asarray(cov, dtype=float)
+    low = np.asarray(low, dtype=float)
+    high = np.asarray(high, dtype=float)
+    exact = low == high
+    interval = ~exact
+    if exact.any():
+        try:
+            factor = np.linalg.cholesky(cov[np.ix_(exact, exact)])
+        except np.linalg.LinAlgError:
+            factor = None
+        if factor is not None:
+            gap = low[exact] - mean[exact]
+            whitened = np.linalg.solve(factor, gap)
+            density = float(
+                -0.5 * whitened @ whitened
+                - np.log(np.diag(factor)).sum()
+                - 0.5 * len(gap) * np.log(2 * np.pi)
+            )
+            # The gaussian law of the interval rows given the exact ones.
+            gain = np.linalg.solve(factor.T, np.linalg.solve(factor, cov[np.ix_(exact, interval)]))
+            given_mean = mean[interval] + gain.T @ gap
+            given_cov = cov[np.ix_(interval, interval)] - cov[np.ix_(interval, exact)] @ gain
+            box = log_box_probability(
+                given_mean, given_cov, low[interval], high[interval], rng, samples
+            )
+            return density + box
+    return log_box_probability(
+        mean[interval],
+        cov[np.ix_(interval, interval)],
+        low[interval],
+        high[interval],
+        rng,
+        samples,
+    )
+
+
 def log_box_probabilities(
     means, covs, low, high, rng, samples: int, *, chunk: int = 0
 ) -> np.ndarray:

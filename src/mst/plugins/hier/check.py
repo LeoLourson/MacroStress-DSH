@@ -6,8 +6,11 @@ variables, by its satellite at the posterior mean, and compared with the observa
 next ``reach`` months. The model without macro variables is ``d_k = alpha + rho d_{k-1}`` over
 successive observations, fitted by least squares on the same months, so a quarterly driver is
 compared with a quarterly autoregression. A driver is served when its satellite has the smaller
-root mean squared error. A driver without history of its own is served when the nearest
-driver above it with history is.
+root mean squared error. A driver whose own equation loses is checked once more with the
+coefficients of the nearest object above it estimated on data of its own, on the same months
+and against the same autoregression; when they win, the driver is served by them, and its
+paths follow them with the flag ``parameters_from_above``. A driver without history of its own
+is served when the nearest driver above it with history is.
 
 A satellite fitted in differences is judged in levels like any other: its forecast accumulates
 the changes from the level of the origin, and the autoregression beside it is the same AR(1) on
@@ -72,10 +75,26 @@ def _forecasts(hist: History, node: int, cut: int, reach: int, gamma, alpha, rho
 
 def check(hist: History, spec: Spec, *, progress: str | None = None) -> dict[int, Check]:
     """The check of every node with a driver, by node index; ``progress`` labels the sampler."""
+    return check_sources(hist, spec, progress=progress)[0]
+
+
+def _above_with_data(hist: History, node: int, rows) -> int:
+    """The nearest node above ``node`` estimated on data of its own; -1 when there is none."""
+    above = hist.parent[node]
+    while above >= 0 and rows[above] == 0:
+        above = hist.parent[above]
+    return int(above)
+
+
+def check_sources(
+    hist: History, spec: Spec, *, progress: str | None = None
+) -> tuple[dict[int, Check], dict[int, int]]:
+    """The checks by node index, and the node whose coefficients serve every driver that its
+    own equation does not."""
     cut = len(hist.months) - 1 - spec.holdout
     trained = fit(hist, spec, until=cut, progress=progress)
     x = difference(hist.x) if trained.differenced else hist.x
-    out = {}
+    out, sources = {}, {}
     for node, driver in enumerate(hist.driver):
         d = hist.d[:, node]
         if driver is None or not np.isfinite(d).any():
@@ -97,6 +116,17 @@ def check(hist: History, spec: Spec, *, progress: str | None = None) -> dict[int
             out[node] = Check(a, b, len(mine), True, "")
         else:
             out[node] = Check(a, b, len(mine), False, "not more accurate than without macro")
+            above = _above_with_data(hist, node, trained.rows)
+            if above >= 0:
+                gamma = trained.gamma[:, above].mean(axis=0)
+                theirs, _ = _forecasts(
+                    hist, node, cut, spec.reach, gamma, alpha, rho, x, trained.differenced
+                )
+                c = _rmse(theirs)
+                if c is not None and c < b:
+                    reason = f"by the parameters of {hist.nodes[above]}: its own {a:.3g}"
+                    out[node] = Check(c, b, len(theirs), True, reason)
+                    sources[node] = above
     for node, driver in enumerate(hist.driver):
         if driver is None or node in out:
             continue
@@ -109,4 +139,4 @@ def check(hist: History, spec: Spec, *, progress: str | None = None) -> dict[int
             served = out[above].served
             reason = "" if served else f"the driver above, {hist.driver[above]}, is not served"
             out[node] = Check(None, None, 0, served, reason)
-    return out
+    return out, sources

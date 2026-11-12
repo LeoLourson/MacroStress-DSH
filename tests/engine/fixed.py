@@ -31,6 +31,7 @@ def paths(
     overdue_share=(0.02, 0.05),
     housing_price=(100_000.0, 90_000.0),
     usdrub=(80.0, 100.0),
+    key_rate=(15.0, 15.0),
     flags: dict | None = None,
 ) -> FixedPaths:
     """The paths every engine test reads: the drivers of ``tests.engine.simulated``."""
@@ -42,7 +43,10 @@ def paths(
         "housing_price_primary:belgorod": line(*housing_price, draws=draws, horizon=horizon),
     }
     return FixedPaths(
-        macros={"ru.usdrub": line(*usdrub, draws=draws, horizon=horizon)},
+        macros={
+            "ru.usdrub": line(*usdrub, draws=draws, horizon=horizon),
+            "ru.key_rate": line(*key_rate, draws=draws, horizon=horizon),
+        },
         drivers=drivers,
         driver_flags=flags or {},
         start=START,

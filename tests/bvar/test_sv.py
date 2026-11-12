@@ -52,3 +52,33 @@ def test_logvar_path_follows_the_true_one():
     low, high = np.quantile(draws, [0.05, 0.95], axis=0)
     assert np.mean((low <= h) & (h <= high)) >= 0.8
     assert np.corrcoef(np.mean(draws, axis=0), h)[0, 1] > 0.9
+
+
+def test_a_jump_mixture_recovers_its_probability_and_scale():
+    # Errors with variance kappa = 50 in a tenth of the months and 1 elsewhere: alternating
+    # the jump indicators and the parameters finds both.
+    rng = np.random.default_rng(4)
+    jumps = rng.random(3000) < 0.1
+    scaled_e2 = (np.where(jumps, np.sqrt(50.0), 1.0) * rng.standard_normal(3000)) ** 2
+    pi, kappa, kept = 0.05, 10.0, []
+    for step in range(400):
+        omega = sv.draw_jumps(scaled_e2, pi, kappa, rng)
+        pi, kappa = sv.draw_jump_parameters(scaled_e2, omega, rng)
+        if step >= 100:
+            kept.append((pi, kappa))
+    pi_draws, kappa_draws = np.array(kept).T
+    assert 0.08 <= np.median(pi_draws) <= 0.12
+    assert 40.0 <= np.median(kappa_draws) <= 62.0
+    assert np.all(kappa_draws > 1.0)
+
+
+def test_without_jumps_in_the_data_the_jump_probability_stays_small():
+    rng = np.random.default_rng(5)
+    scaled_e2 = rng.standard_normal(3000) ** 2
+    pi, kappa, kept = 0.05, 10.0, []
+    for step in range(300):
+        omega = sv.draw_jumps(scaled_e2, pi, kappa, rng)
+        pi, kappa = sv.draw_jump_parameters(scaled_e2, omega, rng)
+        if step >= 100:
+            kept.append(pi)
+    assert np.median(kept) < 0.02

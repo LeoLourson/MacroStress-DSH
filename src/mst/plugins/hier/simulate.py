@@ -114,7 +114,7 @@ def simulate(
         if not np.all(np.isfinite(observed)):
             raise NotServed(driver, "x is unknown between its last value and t = 0")
         flags = set()
-        if not own:
+        if not own or node in fit_.sources:
             flags.add(PARAMETERS_FROM_ABOVE)
         if hist.approximate[:, source].any():
             flags.add(APPROXIMATE)
@@ -150,7 +150,9 @@ def simulate(
         for k, (driver, quantity, node, source, own, start, last, _, initial) in enumerate(plan):
             fit_ = model.fits[quantity]
             hist = fit_.history
-            gamma, lags = fit_.gamma[s, node], hist.quantity.lags
+            # A driver its own equation does not serve follows the coefficients the check
+            # served it by; its start, noise and residual spread stay its own.
+            gamma, lags = fit_.gamma[s, fit_.sources.get(node, node)], hist.quantity.lags
             sigma = fit_.sigma[s, source]
             # x on the panel months, then the drawn history and the paths of repetition r.
             x = np.concatenate(

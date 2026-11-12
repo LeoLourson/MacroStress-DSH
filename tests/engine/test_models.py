@@ -5,8 +5,8 @@ from dataclasses import replace
 import pytest
 
 from mst.engine import run
-from mst.plugin_sdk import Position
-from tests.engine.fixed import fan, paths
+from mst.plugin_sdk import FixedPaths, Position
+from tests.engine.fixed import fan, line, paths
 from tests.engine.simulated import registry
 
 SERVED = {
@@ -51,17 +51,54 @@ def test_a_foreign_equity_is_valued_at_the_macro_rate():
     assert result.metrics["equity.pnl"].quantiles.p50 == pytest.approx(300.0)
 
 
-def test_a_bond_loses_its_duration_times_the_spread_widening():
-    result = only(
-        position(
-            id="corp",
-            type="bond",
-            notional=5.0,
-            codes={"isin": "RU000A0JX0J2"},
-            terms={"duration": 2.0},
-        )
+def bond(duration=2.0):
+    return position(
+        id="corp",
+        type="bond",
+        notional=5.0,
+        codes={"isin": "RU000A0JX0J2"},
+        terms={"duration": duration},
     )
-    assert result.metrics["bond.pnl"].quantiles.p50 == pytest.approx(-0.1)
+
+
+def bond_pnl(duration=2.0, **changes):
+    return only(bond(duration), paths(**changes)).metrics["bond.pnl"].quantiles.p50
+
+
+def test_a_bond_earns_its_yield_when_nothing_moves():
+    # The key rate 15 % and the spread 5 p.p. give a yield of 20 % for the two months.
+    assert bond_pnl(bond_spread=(5.0, 5.0)) == pytest.approx(5.0 * (1.2 ** (2 / 12) - 1))
+
+
+def test_a_bond_loses_its_remaining_duration_times_the_spread_widening():
+    # Two months later 2 − 2/12 years of duration are left to carry the 1 p.p. widening.
+    expected = 5.0 * (1.2 ** (2 / 12) * (1 - (2 - 2 / 12) * 1 / 100) - 1)
+    assert bond_pnl(bond_spread=(5.0, 6.0)) == pytest.approx(expected)
+
+
+def test_a_rate_rise_costs_the_bond_as_much_as_a_spread_widening():
+    rate = bond_pnl(bond_spread=(5.0, 5.0), key_rate=(15.0, 16.0))
+    assert rate == pytest.approx(bond_pnl(bond_spread=(5.0, 6.0)))
+
+
+def test_the_curve_is_read_at_the_duration_of_the_bond():
+    # Duration 3 years now and 2 years a year later: 14 % on the curve now, 13 % then.
+    flat = line(5.0, 5.0, horizon=12)
+    curve = {
+        "ru.key_rate": line(10.0, 10.0, horizon=12),
+        "ru.ofz_1y": line(12.0, 12.0, horizon=12),
+        "ru.ofz_5y": line(16.0, 16.0, horizon=12),
+        "ru.ofz_10y": line(18.0, 18.0, horizon=12),
+    }
+    paths_ = FixedPaths(macros=curve, drivers={"bond_spread:corp": flat})
+    result = only(bond(3.0), paths_)
+    expected = 5.0 * (1.19 * (1 - 2 * (13 - 14) / 100) - 1)
+    assert result.metrics["bond.pnl"].quantiles.p50 == pytest.approx(expected)
+
+
+def test_a_bond_redeemed_before_the_horizon_carries_no_spread_risk():
+    redeemed = bond_pnl(0.1, bond_spread=(5.0, 9.0))
+    assert redeemed == pytest.approx(5.0 * (1.2 ** (2 / 12) - 1))
 
 
 def test_a_loan_loses_its_lgd_times_the_overdue_share_change():

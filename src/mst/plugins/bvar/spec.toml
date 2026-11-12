@@ -51,6 +51,18 @@ differences = [
 # what the volatility process should carry — the median draw sat at it for the Fed rate,
 # the key rate, the spreads and retail. 3 stays a candidate for comparison.
 dof_min = 5.0
+# The policy rates jump instead of carrying Student tails: in a month with a jump, probability
+# pi, the variance of the error is kappa times its level. With the Student floor at 5 and the
+# vol-of-vol above, the model of 2026-11-11 gave a key-rate move of 3 pp or more over two months
+# 0.13 % (down) and 0.27 % (up) of the time, against 1.7 % and 2.9 % of the months of
+# 2012-2026; on the control half of the screening check the key rate and RUONIA fell below p5
+# in 9.3 % of the cells and rose above p95 in 24.3 %. A loose vol-of-vol (df 5) for them gave
+# a 12-month sd of the key rate of 35 pp against 4.25 in the history. With jumps the screen of
+# 2026-11-12 (1000 draws) gave pi 0.12 and kappa 171 for the key rate, a 12-month sd of 4.2 and
+# moves of 3 pp over two months 2.0 % (down) and 1.4 % (up) of the time, IMOEX and the rouble
+# unchanged. The Fed rate moves a quarter point at most meetings, a third of its months jumped
+# and its band narrowed, so it keeps the Student tails.
+jumps = ["ru.key_rate", "ru.ruonia"]
 
 [sampler]
 draws = 4000
@@ -59,21 +71,27 @@ thin = 2
 seed = 20261029
 
 # Regime dummies of the Russian block. An impulse is 1 in its month only; a step is 1 from its
-# month on, also over the scenario horizon.
+# month on, also over the scenario horizon. The impulses spare the equations of the rates: the
+# hike of December 2014 and the moves of February to April 2022 are the jumps the key rate is
+# estimated on, and with the dummies in them the largest surprise of the key rate the model
+# saw was 0.58 pp.
 [[dummies]]
 month = 2014-11-01
 kind = "impulse"
 note = "переход к плавающему курсу"
+spares = ["ru.key_rate", "ru.ruonia", "ru.ofz_1y", "ru.ofz_5y", "ru.ofz_10y"]
 
 [[dummies]]
 month = 2022-02-01
 kind = "impulse"
 note = "февраль 2022 года"
+spares = ["ru.key_rate", "ru.ruonia", "ru.ofz_1y", "ru.ofz_5y", "ru.ofz_10y"]
 
 [[dummies]]
 month = 2022-03-01
 kind = "impulse"
 note = "март 2022 года"
+spares = ["ru.key_rate", "ru.ruonia", "ru.ofz_1y", "ru.ofz_5y", "ru.ofz_10y"]
 
 [[dummies]]
 month = 2021-01-01

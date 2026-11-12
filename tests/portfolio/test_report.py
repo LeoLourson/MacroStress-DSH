@@ -279,3 +279,20 @@ def test_an_unverified_tail_and_a_rare_condition_flag_the_report_without_changin
     assert report["status"] == "ok"
     assert "tail_unverified" in report["flags"]
     assert "constraint_rare:2" in report["flags"]
+
+
+def test_huge_driving_shocks_flag_the_report_without_changing_its_status():
+    admission = {"admitted": True, "limit": 0.05, "shares": {}, "broken": []}
+    loud = build(
+        portfolio(equity()),
+        batch(equity()).results,
+        admission={**admission, "driving_above_limit": 0.9},
+    )
+    assert loud["status"] == "ok"
+    assert "driving_shock_above_limit" in loud["flags"]
+    quiet = build(
+        portfolio(equity()),
+        batch(equity()).results,
+        admission={**admission, "driving_above_limit": 0.01},
+    )
+    assert "driving_shock_above_limit" not in quiet["flags"]

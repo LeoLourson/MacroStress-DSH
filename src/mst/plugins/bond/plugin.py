@@ -8,6 +8,7 @@ from ...plugin_sdk import DemoCase, FixedPaths, Plugin, Position
 from .model import MODEL
 
 DEMO = FixedPaths(
+    macros={"ru.key_rate": np.array([[15.0, 15.0, 15.0], [15.0, 15.0, 15.0]])},
     drivers={"bond_spread:corp": np.array([[5.0, 6.0, 7.0], [5.0, 4.0, 3.0]])},
     start=date(2026, 9, 1),
 )
@@ -17,7 +18,7 @@ plugin = Plugin(
     version="1.0.0",
     sdk=">=1.0,<2.0",
     label="Облигация",
-    description="Купонная облигация на путях спреда к кривой ОФЗ.",
+    description="Купонная облигация на путях доходности: кривая ОФЗ плюс спред.",
     models=(MODEL,),
     demo=(
         DemoCase(

@@ -247,3 +247,40 @@ def test_a_difference_of_an_unknown_variable_is_refused():
 def test_the_level_dummy_rows_do_not_mix_with_differences():
     with pytest.raises(ValidationError, match="differences"):
         sim.spec(differences=["ru.b"], mu=1.0)
+
+
+def test_a_dummy_is_not_read_by_the_equations_it_spares():
+    # The impulse names ru.b among the variables it spares: neither its own column nor the
+    # columns derived from it enter the equation of ru.b, and ru.c still reads its own.
+    rng = np.random.default_rng(13)
+    y = _walk(120, rng)
+    impulse = sim.START.replace(year=sim.START.year + 5)
+    spec = sim.spec(
+        volatility="stochastic",
+        stationary=["gl.a", "ru.c"],
+        differences=["ru.b"],
+        dummies=[{"month": impulse, "kind": "impulse", "spares": ["ru.b"]}],
+        draws=20,
+        burn=10,
+        seed=14,
+    )
+    posterior = estimate(sim.panel(y), spec)
+    assert np.all(posterior.dummy[:, 1, :] == 0.0)
+    assert np.any(posterior.dummy[:, 2, 0] != 0.0)
+
+
+def test_a_version_saved_before_jumps_loads_without_them():
+    from dataclasses import replace
+    from datetime import date
+
+    from mst.plugins.bvar.model import BvarModel, parts
+
+    y = _walk(60, np.random.default_rng(15))
+    spec = sim.spec(volatility="stochastic", stationary=["gl.a", "ru.c"], draws=2, burn=0)
+    posterior = estimate(sim.panel(y), spec)
+    posterior = replace(posterior, rotation=np.tile(np.eye(3), (2, 1, 1)), shocks=["a", "b", "c"])
+    saved = parts(posterior, spec, sim.panel(y), date(2004, 12, 31))
+    arrays = {k: v for k, v in saved.arrays.items() if k not in ("jump_prob", "jump_scale")}
+    loaded = BvarModel().load(saved.meta, arrays)
+    assert np.all(loaded.jump_prob == 0.0)
+    assert np.all(loaded.jump_scale == 1.0)

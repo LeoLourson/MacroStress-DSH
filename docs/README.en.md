@@ -12,7 +12,8 @@ each has its own folder.
 
 | File | The question it answers |
 |---|---|
-| [concept/formalization.en.md](concept/formalization.en.md) | The general scheme: levels, the scenario, the overlay, the conditional forecast, quality metrics; what the system does and in what order |
+| [concept/formalization.en.md](concept/formalization.en.md) | The general scheme: levels, the structural form of a model, a scenario of interventions and observations, the overlay, the conditional forecast, quality metrics |
+| [concept/formalization-legacy.en.md](concept/formalization-legacy.en.md) | The previous edition of the general scheme, not the canon: a scenario with model versions and causes, coordinates of a model's outcome |
 | [concept/bvar-method-legacy.en.md](concept/bvar-method-legacy.en.md) | Outdated description of the first BVAR version of the method, not the canon: details of estimating the BVAR and the satellites |
 | [concept/architecture.en.md](concept/architecture.en.md) | How the scheme is implemented in code: packages and data flow, the workspace, model versions, jobs, the system prompt section |
 | [howto/install.en.md](howto/install.en.md) | How to install the Python part, connect the plugin to a DSH profile and check that everything is visible |

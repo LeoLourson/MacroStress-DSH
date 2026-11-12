@@ -7,6 +7,14 @@
 # standard deviation of the driver; the constant has `constant_spread` times it.
 spread = 0.1
 constant_spread = 10.0
+# The quantities whose constant has its own spread. The candidates {10, 1, 0.1} of the satellite
+# plan were compared by the mean holdout RMSE of the drivers on satellite version 2591b328: shares
+# 18.25, 17.91, 17.79 (served 185, 192, 192), primary housing 12.86, 11.25, 10.75, secondary
+# housing 13.16, 11.21, 10.55. At 10 the spread of the constant is ten within-object standard
+# deviations, the drifts of the objects are not pooled, and a share's mean return of 2012-2026
+# became its forecast. Bond spreads (3.70, 3.70, 3.81) and overdue shares (0.295, 0.300, 0.362)
+# keep `constant_spread`.
+constant_spreads = { share_price = 0.1, housing_price_primary = 0.1, housing_price_secondary = 0.1 }
 # The largest share of the previous month a driver may keep. A draw above it is cut by the
 # truncated conditional: an explosive root has no finite path, and the tridiagonal precision of
 # the drawn history stops being positive definite (share_price:gazc, 13 months over 141, broke

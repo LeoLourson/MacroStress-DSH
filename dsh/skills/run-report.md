@@ -54,6 +54,7 @@ Flags:
 - `tail_unverified`: some position's path leaves the training range of its satellite, so the tail of the whole report is unverified — losses add up within one path;
 - `price_not_estimated`: the price, or its one-sided companion, carries an error above a tenth of itself;
 - `constraint_rare:<number>`: the numbered condition has a base probability below the threshold, so the scenario rests on a rare tail;
+- `driving_shock_above_limit`: five percent or more of the paths need a driving shock above six standard deviations (`admission.driving_above_limit`): the event lies far beyond the model's history and the responses to it are extrapolated; read the price for how unlikely it is;
 - `approximate_data:<driver>`: the publication date of the driver's history is estimated, not taken from the source; the number may be less accurate on the calculation date;
 - `parameters_from_above:<driver>`: the driver has no history of its own, its parameters come from the nearest object above;
 - `impact:<driver>`: the path is shifted by an impact of the scenario;

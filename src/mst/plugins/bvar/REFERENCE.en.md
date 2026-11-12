@@ -103,6 +103,8 @@ $$
 
 where $s_j>0$ is the speed of volatility change: in a crisis series move more, and a constant variance would understate the tail. The multiplier $\omega_{j,t}\sim\mathrm{IG}(\nu_j/2,\nu_j/2)$ (inverse gamma) makes $e_{j,t}$ given $h_{j,t}$ Student-t with $\nu_j$ degrees of freedom, so the model admits rare large moves like December 2014. The variables $z$, $\xi$, $\omega$ are independent of each other and over time. The triangular form is there for equation-by-equation estimation (section 4.3).
 
+The policy rates (`jumps` of the specification: the key rate and RUONIA) carry a jump instead of the Student multiplier: $\omega_{j,t}=\kappa_j$ with probability $\pi_j$ and $\omega_{j,t}=1$ otherwise (Chib, Nardari, Shephard, 2002). The assumptions before data: $\pi_j\sim\mathrm{Beta}(1,19)$, $\kappa_j$ inverse gamma with shape 2 and mean 25, truncated above one. Such a rate sits still for months and moves at meetings. A random-walk volatility with a tight assumption on $s_j$ cannot follow the step, and with a loose one it falls to nought between decisions and explodes the paths of a year (2026-11-12: a 12-month sd of the key rate of 35 pp against 4.25 in the history). The impulse dummies of 2014 and 2022 do not enter the equations of the rates (`spares`): the jumps are estimated on those months.
+
 Block exogeneity extends to the errors: the elements of $C$ through which the Russian component $e^r_t$ would enter the global errors $u^g_t$ are zero; with the global block first and $C$ lower triangular this holds by construction.
 
 ### 3.3. Structural shocks

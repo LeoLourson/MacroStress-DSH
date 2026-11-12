@@ -26,7 +26,7 @@ from mst.model_sdk.contracts import (
     SatelliteModel,
     SatellitePart,
 )
-from mst.plugins.hier.check import check
+from mst.plugins.hier.check import check_sources
 from mst.plugins.hier.estimate import Fit, fit, residuals
 from mst.plugins.hier.simulate import simulate as simulate_hier
 from mst.plugins.hier.spec import Spec, load_spec
@@ -112,7 +112,7 @@ class HierModel(SatelliteModel):
     ) -> tuple[SatellitePart, dict[str, np.ndarray]]:
         quantity = hist.quantity.id
         fit_ = fit(hist, spec, progress=f"{quantity}: fit")
-        checks = check(hist, spec, progress=f"{quantity}: check")
+        checks, sources = check_sources(hist, spec, progress=f"{quantity}: check")
         part = SatellitePart(
             meta={
                 "quantity": hist.quantity.model_dump(mode="json", by_alias=True),
@@ -125,6 +125,7 @@ class HierModel(SatelliteModel):
                 "train_low": _bounds_list(fit_.train_low),
                 "train_high": _bounds_list(fit_.train_high),
                 "checks": {str(node): _check_dict(item) for node, item in checks.items()},
+                "sources": {str(node): source for node, source in sources.items()},
                 "spec": spec.model_dump(mode="json"),
             },
             arrays={
@@ -169,6 +170,7 @@ class HierModel(SatelliteModel):
                 train_high=_bounds(_required_bounds(part.meta, quantity, "train_high")),
                 differenced=quantity
                 in part.meta.get("spec", {}).get("differences", []),
+                sources={int(k): int(v) for k, v in part.meta.get("sources", {}).items()},
             )
             checks[quantity] = {
                 int(node): Check(**row) for node, row in part.meta["checks"].items()

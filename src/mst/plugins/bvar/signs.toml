@@ -21,6 +21,10 @@ id = "ru.inflation"
 label = "инфляционный"
 rises = ["ru.cpi", "ru.key_rate"]
 falls = ["ru.real_wage"]
+# No share bound on this shock and the next: in version 6d63e6de (2026-11-11) the median
+# draw gives the inflation shock 4.6 % of the CPI's surprise and the fx shock 3.6 % of the
+# rouble's, as the monetary shock had, but a bound of a tenth keeps under half of the draws
+# for either. No scenario names them as a cause yet; one that does needs this fixed first.
 
 [[shocks]]
 id = "ru.fx_risk"
@@ -33,9 +37,15 @@ id = "gl.oil"
 label = "нефтяной"
 rises = ["gl.brent"]
 falls = ["ru.usdrub"]
+# At least a tenth of Brent's surprise, and of the VIX's for the financial shock below. In
+# version 6d63e6de 31 % of the draws gave the oil shock less, and the closure of Hormuz,
+# which names it as a cause, needed driving shocks of up to 117 standard deviations; the
+# bound keeps 90 % of the draws for either shock.
+shares = { "gl.brent" = 0.1 }
 
 [[shocks]]
 id = "gl.financial"
 label = "глобальный финансовый"
 rises = ["gl.vix"]
 falls = ["gl.ust_10y", "ru.imoex"]
+shares = { "gl.vix" = 0.1 }

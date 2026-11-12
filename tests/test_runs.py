@@ -135,14 +135,20 @@ def test_the_forecast_refuses_duplicate_targets():
 
 def test_every_position_is_the_formula_of_its_model(workspace):
     run_id, _ = start(workspace)
-    meta, _, drivers, changes = arrays(workspace, run_id)
+    meta, macro, drivers, changes = arrays(workspace, run_id)
     price = driver(meta, drivers, "share_price:sber")
     spread = driver(meta, drivers, "bond_spread:corp")
+    # The simulated macro model carries only the short end of the curve: the key rate.
+    key = macro[:, :, meta["variables"].index("ru.key_rate")]
+    start_yield, end_yield = key[:, 0] + spread[:, 0], key[:, -1] + spread[:, -1]
+    months = spread.shape[1] - 1
+    left = 2.0 - months / 12
+    bond = (1 + start_yield / 100) ** (months / 12) * (1 - left * (end_yield - start_yield) / 100)
     overdue = driver(meta, drivers, "overdue_share:mining")
     housing = driver(meta, drivers, "housing_price_primary:belgorod")
     expected = {
         "sber": 10.0 * (price[:, -1] / price[:, 0] - 1),
-        "corp": 5.0 * (1 - 2.0 * (spread[:, -1] - spread[:, 0]) / 100 - 1),
+        "corp": 5.0 * (bond - 1),
         "mining": 3.0 * (1 - 0.45 * (overdue[:, -1] - overdue[:, 0]) - 1),
         "flat": 1.0 * (housing[:, -1] / housing[:, 0] - 1),
     }
@@ -373,6 +379,23 @@ def test_the_admission_limit_is_strict_and_weighs_every_quantity_equally():
     # Without paths to check there is nothing broken, and no refusal either.
     empty = _admission(None)
     assert empty["admitted"] is True and empty["broken"] == []
+
+
+def test_huge_driving_shocks_are_reported_but_do_not_refuse_the_calculation():
+    # How unlikely the event is belongs to its price: a scenario that sets the key rate may
+    # ask the model for a shock it never saw, and the calculation is still read.
+    from mst.model_sdk.contracts import DRIVING_LIMIT
+    from mst.runs import _admission
+
+    assert DRIVING_LIMIT == 6.0
+    loud = {"driving_sd": {"median_by_month": [18.0], "max": 225.0, "share_above_limit": 0.9}}
+    found = _admission(None, loud)
+    assert found["admitted"] is True
+    assert found["broken"] == []
+    assert "driving_shock_above_limit" not in found["shares"]
+    assert found["driving_above_limit"] == 0.9
+    # A model that reports no driving shocks reports no share.
+    assert _admission(None, {})["driving_above_limit"] is None
 
 
 def test_a_run_whose_bands_leave_the_domain_is_not_admitted_and_keeps_its_numbers(

@@ -2,7 +2,8 @@
 
 An orthogonalised error is ``e_t = exp(h_t / 2) sqrt(omega_t) z_t`` with ``h_t = h_{t-1} +
 s xi_t`` and ``omega_t ~ InvGamma(nu / 2, nu / 2)``. Given ``h`` and ``omega`` each step below
-draws one block from its full conditional.
+draws one block from its full conditional. A variable the spec names in ``jumps`` replaces the
+Student mixing by a jump: ``omega_t = kappa`` with probability ``pi`` and 1 otherwise.
 
 ``log(e_t^2 / omega_t) = h_t + log z_t^2``; ``log z_t^2`` is approximated by the seven-normal
 mixture of Kim, Shephard and Chib (1998, Review of Economic Studies 65(3), table 4), after
@@ -10,6 +11,7 @@ which ``h`` is Gaussian and drawn at once from its banded precision (Chan and Je
 """
 
 import numpy as np
+from scipy import stats
 from scipy.linalg import cho_solve_banded, cholesky_banded, solve_banded
 from scipy.special import gammaln
 
@@ -70,6 +72,35 @@ def draw_volvol(h: np.ndarray, prior: tuple[float, float], rng) -> float:
     shape = prior[0] + len(steps) / 2
     scale = prior[1] + steps @ steps / 2
     return scale / rng.gamma(shape)
+
+
+JUMP_PRIOR = (1.0, 19.0)
+"""Beta prior of the jump probability ``pi``: a jump in one month of twenty, weighing as
+twenty months of data."""
+KAPPA_SHAPE, KAPPA_MEAN = 2.0, 25.0
+"""Inverse-gamma prior of the jump scale ``kappa``, truncated above one: shape 2, mean 25."""
+
+
+def draw_jumps(scaled_e2: np.ndarray, pi: float, kappa: float, rng) -> np.ndarray:
+    """``omega_t`` of a jump mixture: ``kappa`` in a month with a jump, 1 without, given
+    ``e_t^2 / exp(h_t)`` (Chib, Nardari and Shephard, 2002, with a jump in the variance)."""
+    with_jump = np.log(pi) - 0.5 * np.log(kappa) - scaled_e2 / (2 * kappa)
+    without = np.log1p(-pi) - scaled_e2 / 2
+    probability = 1 / (1 + np.exp(np.clip(without - with_jump, -700, 700)))
+    return np.where(rng.random(len(scaled_e2)) < probability, kappa, 1.0)
+
+
+def draw_jump_parameters(scaled_e2: np.ndarray, omega: np.ndarray, rng) -> tuple[float, float]:
+    """``pi`` and ``kappa`` given the months with a jump (``omega > 1``)."""
+    jump = omega > 1
+    count = int(jump.sum())
+    pi = float(rng.beta(JUMP_PRIOR[0] + count, JUMP_PRIOR[1] + len(omega) - count))
+    shape = KAPPA_SHAPE + count / 2
+    scale = KAPPA_MEAN * (KAPPA_SHAPE - 1) + scaled_e2[jump].sum() / 2
+    # The truncation above one: a draw from the gamma's upper part by inversion.
+    low = stats.gamma.cdf(1.0, shape, scale=1 / scale)
+    kappa = 1 / stats.gamma.ppf(rng.uniform(0.0, low), shape, scale=1 / scale)
+    return pi, float(max(kappa, 1.0 + 1e-9))
 
 
 def draw_mixing(scaled_e2: np.ndarray, nu: float, rng) -> np.ndarray:

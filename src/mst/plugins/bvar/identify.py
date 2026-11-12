@@ -51,6 +51,8 @@ def stable(posterior: Posterior, rho_max: float) -> Posterior:
         logvar=posterior.logvar[pick],
         volvol=posterior.volvol[pick],
         dof=posterior.dof[pick],
+        jump_prob=posterior.jump_prob[pick],
+        jump_scale=posterior.jump_scale[pick],
         history=posterior.history[pick],
         diagnostics={**posterior.diagnostics, "stable": len(pick)},
     )
@@ -174,6 +176,8 @@ def identify(
         logvar=posterior.logvar[pick],
         volvol=posterior.volvol[pick],
         dof=posterior.dof[pick],
+        jump_prob=posterior.jump_prob[pick],
+        jump_scale=posterior.jump_scale[pick],
         history=posterior.history[pick],
         rotation=np.array(rotations),
         shocks=labels,

@@ -36,10 +36,11 @@ from mst.model_sdk.conditional import (
     InfeasibleScenario,
     dependent_rows,
     draw_driving,
-    log_box_probability,
+    log_condition_weight,
     pick_latent,
 )
 from mst.model_sdk.contracts import (
+    DRIVING_LIMIT,
     LATENT_CANDIDATES,
     ConstraintLaw,
     MacroSimulation,
@@ -367,10 +368,9 @@ def _hidden(
     if chosen.regime_in_r:
         path = _regime_path(model, draw, horizon, rng_path, None)
         return _repetition_of(model, draw, path), None
-    # An exact row (low == high) is fixed by the truncation itself whatever the candidate,
-    # so only the interval rows carry the weight; a plan of exact rows alone weighs every
-    # candidate the same.
-    interval = chosen.low < chosen.high
+    # An exact row (low == high) holds under every candidate through the truncation, but
+    # weighs by its density: a far value is likelier under some regime paths than others.
+    # The interval rows weigh by their box given the exact ones.
     log_probabilities = []
     paths = []
     for _ in range(candidates):
@@ -381,29 +381,27 @@ def _hidden(
             cache[key] = (_loadings(chosen, rep_of_path), _level(chosen, rep_of_path.mean))
         z, level = cache[key]
         paths.append(path)
-        if not chosen.terms or not interval.any():
+        if not chosen.terms:
             log_probabilities.append(0.0)
             continue
-        mean, cov = level[interval], None
+        rows = len(chosen.terms)
+        mean = level
         if driving.any():
-            z_driving = z[:, :, driving].reshape(len(chosen.terms), -1)[interval]
+            z_driving = z[:, :, driving].reshape(rows, -1)
             cov = z_driving @ z_driving.T
             if free is not None:
-                z_free = z[:, :, ~driving].reshape(len(chosen.terms), -1)[interval]
-                mean = mean + z_free @ free.ravel()
+                mean = mean + z[:, :, ~driving].reshape(rows, -1) @ free.ravel()
         elif free is not None:
             # Only a hidden coordinate is named as a cause: every shock belongs to R, the
             # candidate gives the box a deterministic verdict, and the drawn shocks carry it.
-            z_flat = z.reshape(len(chosen.terms), -1)[interval]
-            cov = np.zeros((int(interval.sum()), int(interval.sum())))
-            mean = mean + z_flat @ free.ravel()
+            cov = np.zeros((rows, rows))
+            mean = mean + z.reshape(rows, -1) @ free.ravel()
         else:
-            z_flat = z.reshape(len(chosen.terms), -1)[interval]
+            z_flat = z.reshape(rows, -1)
             cov = z_flat @ z_flat.T
         log_probabilities.append(
-            log_box_probability(
-                mean, cov, chosen.low[interval], chosen.high[interval], rng_path,
-                CANDIDATE_SAMPLES,
+            log_condition_weight(
+                mean, cov, chosen.low, chosen.high, rng_path, CANDIDATE_SAMPLES
             )
         )
     if np.all(np.isneginf(log_probabilities)):
@@ -550,5 +548,6 @@ def _driving_summary(driving_sd: list[np.ndarray]) -> dict:
         "driving_sd": {
             "median_by_month": [float(value) for value in np.median(sizes, axis=0)],
             "max": float(sizes.max()),
+            "share_above_limit": float(np.mean(sizes.max(axis=1) > DRIVING_LIMIT)),
         }
     }

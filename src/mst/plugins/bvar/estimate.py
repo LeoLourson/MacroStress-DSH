@@ -80,6 +80,16 @@ class Posterior:
     # (S, n, n) Q of mst.plugins.bvar.identify: B = C diag Q
     rotation: np.ndarray | None = None
     shocks: list[str] = field(default_factory=list)  # the shock of each column of B
+    # (S, n) pi_j and kappa_j of the jump mixture; 0 and 1 where a variable does not jump.
+    jump_prob: np.ndarray | None = None
+    jump_scale: np.ndarray | None = None
+
+    def __post_init__(self):
+        shape = self.volvol.shape
+        if self.jump_prob is None:
+            object.__setattr__(self, "jump_prob", np.zeros(shape))
+        if self.jump_scale is None:
+            object.__setattr__(self, "jump_scale", np.ones(shape))
 
     @property
     def draws(self) -> int:
@@ -200,12 +210,17 @@ def dummy_columns(spec: Spec, last: date) -> list[Dummy]:
     columns = list(spec.dummies)
     if not spec.differences:
         return columns
-    derived: list[date] = []
+    derived: dict[date, set[str]] = {}
     for dummy in spec.dummies:
         months = [dummy.month] if dummy.kind == "step" else [dummy.month, shift(dummy.month, 1)]
-        derived += [m for m in months if m <= last and m not in derived]
+        for m in months:
+            if m <= last:
+                # A change is spared only where every dummy it comes from spares it.
+                spared = set(dummy.spares)
+                derived[m] = derived[m] & spared if m in derived else spared
     return columns + [
-        Dummy(month=m, kind="impulse", note="change of a level dummy") for m in derived
+        Dummy(month=m, kind="impulse", note="change of a level dummy", spares=sorted(spared))
+        for m, spared in derived.items()
     ]
 
 
@@ -216,11 +231,23 @@ def _dummy_mask(panel: Panel, spec: Spec, columns: list[Dummy], s: np.ndarray) -
     changes. A column is left out of an equation where it is nought over every month the
     equation observes: no data fix its coefficient there, and a drawn value of it would move
     the drawn months — on changes, for good. Without differences every column stays, as in
-    the versions estimated before.
+    the versions estimated before. A column is also left out of the equations it spares.
     """
     n, d = len(panel.ids), len(columns)
     if not s.any():
-        return np.ones((n, d), dtype=bool)
+        mask = np.ones((n, d), dtype=bool)
+    else:
+        mask = _read_dummies(panel, spec, columns, s)
+    for j, column in enumerate(columns):
+        for i, id_ in enumerate(panel.ids):
+            if id_ in column.spares:
+                mask[i, j] = False
+    return mask
+
+
+def _read_dummies(panel: Panel, spec: Spec, columns: list[Dummy], s: np.ndarray) -> np.ndarray:
+    """The columns each equation observes: its own dummies in levels, their changes on changes."""
+    n, d = len(panel.ids), len(columns)
     own = len(spec.dummies)
     values = dummy_matrix(panel.months, columns) != 0
     known = np.isfinite(panel.y)
@@ -426,6 +453,8 @@ def _posterior(panel, spec, saved, diagnostics, q) -> Posterior:
         dof=stacked["dof"],
         history=stacked["history"],
         diagnostics=diagnostics,
+        jump_prob=stacked.get("jump_prob"),
+        jump_scale=stacked.get("jump_scale"),
     )
 
 
@@ -506,6 +535,13 @@ def _stochastic(panel, spec, prior, dummies, rng) -> Posterior:
     s2 = np.full(n, spec.volvol_mean)
     grid = sv.dof_grid(spec.dof_min)
     nu = np.full(n, grid[-1])
+    unknown = set(spec.jumps) - set(panel.ids)
+    if unknown:
+        raise ValueError(f"jumps names unknown variables: {', '.join(sorted(unknown))}")
+    jumping = np.isin(panel.ids, spec.jumps)
+    nu[jumping] = np.inf
+    pi = np.where(jumping, sv.JUMP_PRIOR[0] / sum(sv.JUMP_PRIOR), 0.0)
+    kappa = np.where(jumping, sv.KAPPA_MEAN, 1.0)
     shape = spec.volvol_df / 2
     volvol_prior = (shape, spec.volvol_mean * (shape - 1))
     a_var = (prior.scale[:, None] / prior.scale[None, :]) ** 2
@@ -535,8 +571,13 @@ def _stochastic(panel, spec, prior, dummies, rng) -> Posterior:
         a = _triangle(u, variance, a_var, rng)
         e = u @ a.T
         for j in range(n):
-            omega[:, j] = sv.draw_mixing(e[:, j] ** 2 / np.exp(h[:, j]), nu[j], rng)
-            nu[j] = sv.draw_dof(omega[:, j], rng, grid)
+            scaled = e[:, j] ** 2 / np.exp(h[:, j])
+            if jumping[j]:
+                omega[:, j] = sv.draw_jumps(scaled, pi[j], kappa[j], rng)
+                pi[j], kappa[j] = sv.draw_jump_parameters(scaled, omega[:, j], rng)
+            else:
+                omega[:, j] = sv.draw_mixing(scaled, nu[j], rng)
+                nu[j] = sv.draw_dof(omega[:, j], rng, grid)
             log_e2 = np.log(e[:, j] ** 2 / omega[:, j] + sv.OFFSET)
             h[:, j] = sv.draw_logvar(log_e2, h[:, j], s2[j], (h_start[j], LOGVAR_PRIOR_VAR), rng)
             s2[j] = sv.draw_volvol(h[:, j], volvol_prior, rng)
@@ -549,6 +590,8 @@ def _stochastic(panel, spec, prior, dummies, rng) -> Posterior:
                     "logvar": h.copy(),
                     "volvol": np.sqrt(s2),
                     "dof": nu.copy(),
+                    "jump_prob": pi.copy(),
+                    "jump_scale": kappa.copy(),
                     "history": y[-q:],
                 }
             )

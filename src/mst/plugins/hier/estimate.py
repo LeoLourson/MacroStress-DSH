@@ -29,7 +29,7 @@ checks simulated paths against what the node was trained on rather than against 
 history column.
 """
 
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 
 import numpy as np
 from scipy.linalg import cho_solve_banded, cholesky_banded, solve_banded
@@ -204,6 +204,8 @@ class Fit:
     """The equation was fitted on monthly changes: ``gamma`` reads ``Δd`` and ``Δx`` and the
     simulation accumulates the level from the last observed one. The bounds stay in levels,
     so the outside-range flag keeps its meaning."""
+    sources: dict[int, int] = field(default_factory=dict)
+    """The node whose coefficients serve a driver its own equation does not (the check)."""
 
 
 def columns(quantity) -> list[str]:
@@ -315,7 +317,8 @@ def fit(
         raise ValueError(f"no driver of {hist.quantity.id} has more than {k} usable months")
     centre, spread, level = _scales(paths, columns_)
     prior = np.full(k, (spec.spread * level) ** 2)
-    prior[0] = (spec.constant_spread * level) ** 2
+    constant = spec.constant_spreads.get(hist.quantity.id, spec.constant_spread)
+    prior[0] = (constant * level) ** 2
     b0 = (SHAPE - 1) * prior
 
     classes = sorted(set(hist.classes))

@@ -50,6 +50,14 @@ PART_META_REQUIRED = ("model", "months", "nodes", "driver", "checks", "rows")
 #: price of a scenario averages the candidates of a group into ``P(S | R)``.
 LATENT_CANDIDATES = 64
 
+#: The size of a driving shock, in standard deviations, past which the conditions ask of the
+#: causes something the model gives no weight: a standard normal exceeds 6 with probability
+#: 2e-9. A model reports the share of its paths whose largest driving shock is above it
+#: (``diagnostics["driving_sd"]["share_above_limit"]``); the report flags a share at the
+#: admission limit, because the responses to such shocks are extrapolated. The share does not
+#: refuse the calculation: how unlikely the event is belongs to the price of the scenario.
+DRIVING_LIMIT = 6.0
+
 
 @dataclass(frozen=True)
 class LinearTerm:

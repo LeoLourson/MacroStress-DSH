@@ -24,6 +24,9 @@ class Dummy(Contract):
     month: date
     kind: Literal["impulse", "step"]
     note: str = ""
+    spares: list[str] = []
+    """The variables whose equations do not read this dummy, nor its changes: a move the
+    dummy would take out of their history stays in it, for the errors to carry."""
 
     _month = field_validator("month")(first_of_month)
 
@@ -71,6 +74,11 @@ class Spec(Contract):
     equation is a monthly drift. The version stores the equivalent VAR in levels with one
     lag more, so forecasting, conditions and identification read it unchanged. Empty keeps
     every equation in levels, as the versions estimated before the field."""
+    jumps: list[str] = []
+    """The variables whose errors jump instead of carrying Student tails (stochastic only):
+    in a month with a jump, probability ``pi``, the variance is ``kappa`` times its level.
+    A policy rate sits still between decisions and then steps; a random-walk volatility
+    either cannot rise fast enough or, set loose, explodes the paths of a year."""
     sampler: Sampler
     dummies: list[Dummy] = []
 

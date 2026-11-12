@@ -495,3 +495,14 @@ def model_of_known_draws():
         shocks=["gl.s", "ru.t"],
         regime_ids=["regime.calm", "regime.stress"],
     )
+
+
+def test_an_exact_tail_event_picks_the_regime_paths_it_needs(model):
+    # An exact condition holds under every candidate, but a far value is likelier under some
+    # regime paths: the candidates weigh by its density, so they are no longer equal.
+    half = np.full((2, 2), 0.5)
+    pinned = one_draw(model, transition=half, states=np.zeros((1, model.states.shape[1]), int))
+    law = constraint_law(pinned, plan([value("ru.b", 3, 0.0, 1.0)]), draws=1, seed=0)
+    far = float(law.means[:, 0].max()) + 4.0 * float(np.sqrt(law.covs[:, 0, 0].max()))
+    run = simulate(pinned, plan([value("ru.b", 3, far)]), draws=4, seed=1)
+    assert run.diagnostics["latent_ess"]["max"] < LATENT_CANDIDATES

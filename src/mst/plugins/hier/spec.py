@@ -22,6 +22,8 @@ class Sampler(Contract):
 class Spec(Contract):
     spread: Positive
     constant_spread: Positive
+    constant_spreads: dict[Identifier, Positive] = {}
+    """The spread of the constant of a quantity named here, in place of ``constant_spread``."""
     rho_max: Annotated[float, Field(strict=True, gt=0, lt=1)]
     holdout: Count
     reach: Count

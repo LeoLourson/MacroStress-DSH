@@ -63,6 +63,12 @@ def test_the_monetary_shock_carries_a_share_of_the_key_rate_surprise():
     assert monetary.shares == {"ru.key_rate": 0.1}
 
 
+def test_the_global_shocks_carry_a_share_of_their_variable():
+    shares = {shock.id: shock.shares for shock in load_signs().shocks}
+    assert shares["gl.oil"] == {"gl.brent": 0.1}
+    assert shares["gl.financial"] == {"gl.vix": 0.1}
+
+
 def test_a_share_needs_a_signed_variable():
     row = shock("ru.monetary", rises=["ru.key_rate"]) | {"shares": {"ru.cpi": 0.1}}
     with pytest.raises(ValidationError, match=r"ru\.monetary bounds the share of ru\.cpi"):
