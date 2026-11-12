@@ -28,7 +28,7 @@ where all $z_t$ and $\lambda_t$ are independent over $t$ and of each other. Here
 
 The shocks $z_{t,j}$ carry the names of variables: the shock `ru.key_rate` is the key rate's own innovation. The matrix $B$ is the Cholesky factorisation of $\Sigma$ in panel order; the base law of the paths does not depend on the order.
 
-In any order the global variables come before the domestic ones, so $B$ is block lower-triangular and domestic shocks do not move global variables. This is the small-open-economy assumption of `bvar.sv`.
+The panel places global variables first as a storage convention. The joint law imposes no global/domestic independence: an intervention in a domestic variable can change the conditional distribution of a global one through the estimated correlations. This statistical response is not a causal effect.
 
 The parameters $\theta=(\mu,\Sigma,\nu)$ are estimated once and stored in the version. The level-0 outcome in the sense of the general scheme is
 
@@ -46,7 +46,7 @@ The model reads the panel of `bvar.sv`: months from 2012-01 to the calculation d
 
 ### Drift
 
-The drift is non-zero only for the variables in the `drifts` list of the specification: nominal prices, exchange rates and volumes that grow with the price level (`ru.cpi`, `ru.usdrub`, `ru.cnyrub`, `ru.output`, `ru.real_wage`, `ru.retail`, `ru.credit`, `ru.housing_price`, `ru.imoex`). For such a variable $\mu_i$ is the mean of its monthly changes over the whole panel. For the others $\mu_i=0$: the sample trend of 2012–2026 in rates, yields, spreads, unemployment, Brent and the VIX (+0.60 pp a year for the key rate, for example) is no forecast.
+The drift is non-zero only for the variables in the `drifts` list of the specification: nominal prices, exchange rates and volumes that grow with the price level (`ru.cpi`, `ru.usdrub`, `ru.cnyrub`, `ru.output`, `ru.real_wage`, `ru.retail`, `ru.credit`, `ru.housing_price`, `ru.imoex`). For such a variable $\mu_i$ is the mean of its monthly changes over the whole panel. Housing has no adjacent monthly observations, so its drift is the total change over valid observation intervals divided by their total duration in months. For the others $\mu_i=0$: the sample trend of 2012–2026 in rates, yields, spreads, unemployment, Brent and the VIX (+0.60 pp a year for the key rate, for example) is no forecast.
 
 The drift is a plain mean taken before the scale is estimated and stays fixed in that estimation. This is a simplification: the maximum likelihood location of a Student law is a weighted mean. The plain mean equals the baseline's drift.
 
@@ -55,7 +55,7 @@ The drift is a plain mean taken before the scale is estimated and stays fixed in
 $\Sigma$ and $\nu$ are the maximum likelihood estimates of a multivariate Student law on changes with gaps, found by the ECME algorithm (Liu, Rubin, 1995). Each iteration:
 
 1. For month $t$ take the known changes $d_t^{o}$ (the subvector of variables $o_t$). The distance from the centre is $\delta_t=(d_t^{o}-\mu_{o})^\top\Sigma_{oo}^{-1}(d_t^{o}-\mu_{o})$, the weight of the month is $w_t=(\nu+p_t)/(\nu+\delta_t)$, where $p_t$ is the number of known changes.
-2. The unknown changes of the month are replaced by their conditional mean given the known ones, giving a full vector $\hat d_t$. Denote by $V_t$ the conditional covariance of the unknown changes given the known ones, padded with zeros in the rows and columns of the known ones.
+2. The unknown changes of the month are replaced by their conditional mean given the known ones, giving a full vector $\hat d_t$. Denote by $V_t$ the Gaussian Schur complement $\Sigma_{mm}-\Sigma_{mo}\Sigma_{oo}^{-1}\Sigma_{om}$ for the missing coordinates $m$, padded with zeros in observed rows and columns. In the scale-mixture EM update this is $\mathbb E[(d_m-\hat d_m)(d_m-\hat d_m)^\top/\lambda_t\mid d_o]$, not the conditional covariance of the Student law.
 3. The new scale matrix is $\Sigma=\frac{1}{T}\sum_t\big[w_t(\hat d_t-\mu)(\hat d_t-\mu)^\top+V_t\big]$, the sum running over the $T$ months with at least one known change.
 4. The new $\nu$ maximises the observed likelihood on the interval `nu_bounds` at the new $\Sigma$. This is a one-dimensional problem solved by Brent's method.
 
@@ -95,9 +95,8 @@ reweight its candidates.
 The model executes the interventions itself, so it declares a structural form (`StructuralForm`).
 The default form would replace only the cell of a set quantity and leave the other variables of
 that month as drawn; the design of `rw.joint` carries the decision to them by the joint law. The
-Cholesky order is therefore built over the set cells: the set variables come first in their blocks
-(global in registry order, the other global ones, the set domestic ones, the other domestic
-ones). Let $P$ be the matrix of this permutation and $C$ the lower-triangular Cholesky factor of
+Cholesky order is therefore built over the set cells: all set variables come first in registry
+order, followed by all other variables, without a global/domestic restriction. Let $P$ be the matrix of this permutation and $C$ the lower-triangular Cholesky factor of
 $P\Sigma P^\top$; then $B=P^\top CP$. In substance: the set variables move by the given values,
 and the others respond in the same month by the conditional law of changes given them,
 $\mu_o+\Sigma_{oc}\Sigma_{cc}^{-1}(\Delta c_t-\mu_c)$, with residual covariance
@@ -171,7 +170,7 @@ the same linear projection as the conditional baseline `conditional_walk`, with 
 
 ## Assumptions
 
-There is no mean reversion: the spread grows as $\sqrt t$, rates and spreads included. Over a horizon of up to 15 months this is acceptable; over a longer one it overstates the spread of rates. The links between variables are only contemporaneous: the model does not carry the delayed pass-through of the exchange rate into prices, which comes from the scenario or a satellite. The crisis scale is common to all variables: a crisis in the rouble alone and a crisis in everything differ only by the innovations. The drift of prices and exchange rates comes from the history of 2012–2026. Domestic variables do not affect global ones. Parameter uncertainty is not counted.
+There is no mean reversion: the spread grows as $\sqrt t$, rates and spreads included. Over a horizon of up to 15 months this is acceptable; over a longer one it overstates the spread of rates. The links between variables are only contemporaneous: the model does not carry the delayed pass-through of the exchange rate into prices, which comes from the scenario or a satellite. The crisis scale is common to all variables: a crisis in the rouble alone and a crisis in everything differ only by the innovations. The drift of prices and exchange rates comes from the history of 2012–2026. Conditioning uses the full joint law, including statistical links from domestic to global variables. Parameter uncertainty is not counted.
 
 ## Parameters
 
@@ -189,7 +188,7 @@ There is no mean reversion: the spread grows as $\sqrt t$, rates and spreads inc
 
 ## Plugin and version
 
-`plugin = Plugin(plugin_id="rw", ..., model_sdk=">=4.0,<5.0", macro=(MODEL,))`, the variables are the whole registry, `latents = ("scale_path",)`. The model executes the interventions itself, so `structural_form` returns a `StructuralForm` with the order "global, then domestic" and `time_recursion = True`; the platform does not apply the interventions again. The plugin imports only `mst.model_sdk`, `mst.macro.panel`, `mst.macro.registry`, `mst.plugin_sdk` and its own package; the plugin rules forbid importing from `mst.plugins.bvar`.
+`plugin = Plugin(plugin_id="rw", ..., model_sdk=">=4.0,<5.0", macro=(MODEL,))`, the variables are the whole registry, `latents = ("scale_path",)`. The model executes the interventions itself, so `structural_form` returns a `StructuralForm` with registry order as its base order (all set variables move first in each intervened month) and `time_recursion = True`; the platform does not apply the interventions again. The plugin imports only `mst.model_sdk`, `mst.macro.panel`, `mst.macro.registry`, `mst.plugin_sdk` and its own package; the plugin rules forbid importing from `mst.plugins.bvar`.
 
 `estimate` writes to the meta `as_of`, `ids`, `n_global`, `months`, `shocks` (the variable ids in panel order), `nu`, `diagnostics`, `spec` and `structural_form`, and to the arrays `panel_y`, `panel_approximate`, `drift` of length $n$, `scale` of size $n\times n$ ($\Sigma$), `weights` (the weights $w_t$ of the months at the last iteration), `start_mean` of length $n$ and `start_sd` of length $n$. `load` restores the model without re-estimating. `simulate` returns a `MacroSimulation`: shadow paths of shape $(R,H+1,n)$ with the interventions executed, where row $t=0$ is the path's $y_0$, `history` is the same $y_0$, and the group numbers.
 
@@ -230,6 +229,12 @@ Acceptance on the data — the same calculations as for `bvar.sv`:
 3. The corpus scenarios are admitted; in the rate-cut scenario, where both the rate and the exchange rate are set, the bands of IMOEX and USD/RUB in the second month lie within the historical range.
 
 Stop conditions: if the mean CRPS of the base forecast is above 1.02 of the baseline, the model does not become the default, and the drift rule — the only systematic difference of the centre from the baseline — is checked first. If ECME does not converge in 500 iterations on the working panel, the estimation stops with an error, and the switch to the Gaussian variant ($\nu=\infty$) is decided separately.
+
+## Implementation checks
+
+On the panel known on 2026-10-29 (177 months, 23 variables), ECME converges in 81 iterations to $\nu=3.3525$; the last likelihood change is $9.17\cdot10^{-9}$. Housing uses 31 intervals. The corrected scale is positive definite.
+
+A rolling check on 12 dates selected at equal index intervals from the quarterly grid between 2021-01 and 2025-07, using 1,000 paths and 12 forecast months, gives relative CRPS 1.0142 (95 % block-bootstrap interval 0.9991–1.0429), coverage 72.60 %, and tail shares 9.36 % below P5 and 17.94 % above P95. These results do not meet the acceptance targets above; the model remains an explicit alternative, not a new default. The portfolio and corpus-scenario acceptance calculations have not been performed.
 
 ## References
 

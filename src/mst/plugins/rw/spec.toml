@@ -1,0 +1,12 @@
+start = 2012-01-01
+drifts = ["ru.cpi", "ru.usdrub", "ru.cnyrub", "ru.output", "ru.real_wage", "ru.retail", "ru.credit", "ru.housing_price", "ru.imoex"]
+nu_bounds = [2.5, 60.0]
+em_tol = 1e-8
+em_iterations = 500
+eig_floor = 1e-8
+min_changes = 3
+seed = 20261029
+
+[[breaks]]
+month = 2021-01-01
+variables = ["ru.spread_aa", "ru.spread_a", "ru.spread_bbb"]

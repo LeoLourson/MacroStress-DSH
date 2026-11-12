@@ -9,7 +9,7 @@ MacroStress is a modular monolith with no database, web layer or orchestrator. S
 | Layer | Package | What it gives |
 |---|---|---|
 | Data | `mst.data` | Monthly series with the publication date of each value; `as_of` does not see future revisions |
-| Level 0 | `mst.macro` + plugin | The variable registry, the panel on a date, versions; the model itself (BVAR `bvar.sv`, MS-VAR `msvar.markov` and any other) is a `MacroModel` plugin |
+| Level 0 | `mst.macro` + plugin | The variable registry, the panel on a date, versions; the model itself (BVAR `bvar.sv`, MS-VAR `msvar.markov`, joint Student walk `rw.joint` and any other) is a `MacroModel` plugin |
 | Levels above | `mst.drivers` + plugins | Objects and quantities, history preparation, the version bundle with its own satellite model per quantity (`SatelliteModel`), the out-of-sample check in the part of the version, the loop over levels |
 | Scenario | `mst.scenario` | $s=(N,I,\mathcal A)$: the narrative, the interventions and the observations; `translate` turns units and dates into a plan, `build` gives the paths, `overlay` the tilt under observations on means, `reverse` the reverse problem |
 | Model SDK | `mst.model_sdk` | The scenario plan with interventions, the default structural form and declared forms, the inner groups of paths, estimation contexts, the three model steps, the conditional machinery, the price of a law |
