@@ -10,7 +10,27 @@ from fastmcp import Client
 from mst import guides, store
 from mst.mcp import build
 from mst.scenario import tool as scenario_tool
-from mst.scenario.build import _labels
+from mst.scenario.build import dist_of
+from mst.scenario.build import validate as validate_scenario
+
+
+def calendar(versions, index: int) -> str:
+    """The calendar month of horizon month ``index`` (from one) of the test panel."""
+    from mst.scenario.translate import calendar_month
+
+    return calendar_month(index, versions.data.months[-1].strftime("%Y-%m"))
+
+
+def loaded(workspace, versions):
+    """The macro version and the satellites bundle of the workspace, loaded as a run does."""
+    from mst import plugins
+    from mst.drivers import bundle
+    from mst.macro import version as macro_version
+
+    installed = plugins.registry()
+    macro = macro_version.load(workspace.models, versions.macro, installed.macro)
+    satellites = bundle.load(workspace.models, versions.satellites, installed.satellites)
+    return macro, satellites
 
 
 def session(ws, work):
@@ -98,60 +118,99 @@ def test_describe_gives_what_a_scenario_is_written_against(workspace, versions):
 
 
 def test_validate_reports_the_marks_and_what_stays_without_support(workspace, versions):
-    term = {"terms": [{"variable": "gl.brent", "month": 1, "weight": 1.0}], "low": 0.0, "high": 1e3}
-    spec = {
-        "narrative": "нефть", "horizon": 3, "macro": versions.macro,
-        "satellites": versions.satellites,
+    macro, satellites = loaded(workspace, versions)
+    bare = {"narrative": "нефть"}
+    term = {
+        "kind": "constraint",
+        "terms": [{"quantity": "gl.brent", "month": calendar(versions, 1), "weight": 1.0}],
+        "unit": "level",
+        "low": 1.0,
+        "high": 1e3,
     }
-    scenario = scenario_tool.Spec.model_validate(
-        {**spec, "constraints": [{**term, "basis": "assumption"}]}
+    one = scenario_tool.Spec.model_validate(
+        {**bare, "observations": [{**term, "basis": "assumption"}]}
     )
-    found = _labels(scenario)
+    found = validate_scenario(one, macro, satellites, as_of=macro.as_of)
     assert found["labels"] == {"event": 0, "sourced": 0, "assumption": 1}
     assert any("assumption" in warning for warning in found["warnings"])
 
-    bare = scenario_tool.Spec.model_validate(spec)
-    assert any("records no event" in warning for warning in _labels(bare)["warnings"])
-
-    impact = {"target": "gl.brent", "start": 1, "values": [1.0], "reason": "r"}
-    moved = scenario_tool.Spec.model_validate(
-        {**spec, "impacts": [{**impact, "basis": "assumption"}]}
+    empty = scenario_tool.Spec.model_validate(bare)
+    assert any(
+        "base scenario" in warning
+        for warning in validate_scenario(empty, macro, satellites, as_of=macro.as_of)["warnings"]
     )
-    assert any("Q = P" in warning for warning in _labels(moved)["warnings"])
+
+    # An intervention alone is not an event: there is no condition to price, so Q = P.
+    moved = scenario_tool.Spec.model_validate(
+        {
+            **bare,
+            "interventions": [
+                {
+                    "quantity": "gl.brent",
+                    "months": [calendar(versions, 1)],
+                    "kind": "shift",
+                    "values": [0.1],
+                    "unit": "level",
+                    "reason": "r",
+                    "basis": "assumption",
+                }
+            ],
+        }
+    )
+    assert dist_of(moved, macro, satellites, draws=1, seed=0) is None
 
     sourced = scenario_tool.Spec.model_validate(
-        {**spec, "sources": ["S1"], "constraints": [{**term, "basis": ["S1"]}]}
+        {
+            **bare,
+            "approved_by": "И. Иванов",
+            "sources": ["S1"],
+            "observations": [{**term, "basis": ["S1"]}],
+        }
     )
-    assert _labels(sourced) == {
+    assert validate_scenario(sourced, macro, satellites, as_of=macro.as_of) == {
+        "ok": True,
+        "problems": [],
         "labels": {"event": 0, "sourced": 1, "assumption": 0},
         "warnings": [],
     }
 
     stated = scenario_tool.Spec.model_validate(
-        {**spec, "sources": ["S1"], "constraints": [{**term, "basis": "event"}]}
+        {
+            **bare,
+            "approved_by": "И. Иванов",
+            "sources": ["S1"],
+            "observations": [{**term, "basis": "event"}],
+        }
     )
-    assert _labels(stated) == {
+    assert validate_scenario(stated, macro, satellites, as_of=macro.as_of) == {
+        "ok": True,
+        "problems": [],
         "labels": {"event": 1, "sourced": 0, "assumption": 0},
         "warnings": [],
     }
 
 
 @pytest.mark.parametrize("word", ["assumption", "event"])
-def test_a_word_in_a_list_is_still_the_word(versions, word):
+def test_a_word_in_a_list_is_still_the_word(workspace, versions, word):
+    macro, satellites = loaded(workspace, versions)
     scenario = scenario_tool.Spec.model_validate(
         {
-            "narrative": "нефть", "horizon": 3, "macro": versions.macro,
-            "satellites": versions.satellites,
-            "impacts": [
+            "narrative": "нефть",
+            "interventions": [
                 {
-                    "target": "gl.brent", "start": 1, "values": [1.0], "reason": "r",
+                    "quantity": "gl.brent",
+                    "months": [calendar(versions, 1)],
+                    "kind": "shift",
+                    "values": [0.1],
+                    "unit": "level",
+                    "reason": "r",
                     "basis": [word],
                 }
             ],
         }
     )
-    assert scenario.impacts[0].basis == word
-    assert _labels(scenario)["labels"][word] == 1
+    assert scenario.interventions[0].basis == word
+    assert validate_scenario(scenario, macro, satellites, as_of=macro.as_of)["labels"][word] == 1
 
 
 def test_the_base_path_needs_no_calculation_and_is_in_the_model_scale(workspace, versions):
@@ -187,52 +246,38 @@ def test_the_base_path_refuses_a_variable_the_version_lacks(workspace, versions)
         session(workspace, work)
 
 
-def test_validate_says_where_an_impact_does_not_go(workspace, versions):
-    from mst import plugins
-    from mst.drivers import bundle
-    from mst.scenario.build import _reach
-
-    satellites = bundle.load(workspace.models, versions.satellites, plugins.registry().satellites)
-    read = next(iter(satellites.registry.quantities[0].regressors))
+def test_validate_names_an_intervention_on_a_quantity_no_model_knows(workspace, versions):
+    # The reach warnings of an intervention went with the impact list: what remains of that
+    # check is that a quantity no registry knows is refused instead of silently dropped.
+    macro, satellites = loaded(workspace, versions)
     spec = {
-        "narrative": "нефть", "horizon": 3, "macro": versions.macro,
-        "satellites": versions.satellites,
+        "narrative": "нефть",
+        "interventions": [
+            {
+                "quantity": "ru.nowhere",
+                "months": [calendar(versions, 1)],
+                "kind": "shift",
+                "values": [0.1],
+                "unit": "level",
+                "reason": "r",
+                "basis": "assumption",
+            }
+        ],
     }
-    impact = {"start": 1, "values": [1.0], "reason": "r", "basis": "assumption"}
-    moved = scenario_tool.Spec.model_validate(
-        {**spec, "impacts": [{**impact, "target": read}, {**impact, "target": "ru.nowhere"}]}
-    )
-    first, second = sorted(_reach(moved, satellites), key=lambda text: "nowhere" in text)
-    assert read in first and satellites.registry.quantities[0].id in first
-    assert "no satellite reads" in second
-
-    below = _driver_under_a_parent(satellites)
-    if below is not None:
-        parent, driver = below
-        sector = scenario_tool.Spec.model_validate(
-            {**spec, "impacts": [{**impact, "target": parent}]}
-        )
-        assert driver in _reach(sector, satellites)[0]
-        listed = scenario_tool.Spec.model_validate(
-            {**spec, "impacts": [{**impact, "target": parent}, {**impact, "target": driver}]}
-        )
-        assert all(driver not in text for text in _reach(listed, satellites))
+    moved = scenario_tool.Spec.model_validate(spec)
+    problems = validate_scenario(moved, macro, satellites, as_of=macro.as_of)["problems"]
+    assert any("ru.nowhere" in problem for problem in problems)
 
 
 def test_validate_refuses_satellites_of_another_macro_version(workspace, versions):
     from dataclasses import replace
 
-    from mst import plugins
-    from mst.drivers import bundle
-    from mst.macro import version as macro_version
-    from mst.scenario.build import _version_problems
-
-    installed = plugins.registry()
-    macro = macro_version.load(workspace.models, versions.macro, installed.macro)
-    satellites = bundle.load(workspace.models, versions.satellites, installed.satellites)
-    assert _version_problems(macro, satellites) == []
+    macro, satellites = loaded(workspace, versions)
+    spec = scenario_tool.Spec.model_validate({"narrative": "нефть", "approved_by": "И. Иванов"})
+    assert validate_scenario(spec, macro, satellites, as_of=macro.as_of)["problems"] == []
     other = replace(satellites, macro="f" * 64)
-    assert "f" * 64 in _version_problems(macro, other)[0]
+    problems = validate_scenario(spec, macro, other, as_of=macro.as_of)["problems"]
+    assert "f" * 64 in problems[0]
 
 
 def test_the_state_names_satellites_of_the_macro_version_it_names(workspace, versions):
@@ -285,12 +330,18 @@ def test_validate_refuses_a_condition_on_a_fragment_published_later(workspace, v
         workspace.scenarios,
         "cited",
         {
-            "narrative": "нефть", "horizon": 3, "macro": versions.macro,
-            "satellites": versions.satellites, "approved_by": "И. Иванов",
-            "constraints": [
+            "narrative": "нефть",
+            "approved_by": "И. Иванов",
+            "observations": [
                 {
-                    "terms": [{"variable": "gl.brent", "month": 1, "weight": 1.0}],
-                    "low": 0.0, "high": 1e3, "basis": ["S1"],
+                    "kind": "constraint",
+                    "terms": [
+                        {"quantity": "gl.brent", "month": calendar(versions, 1), "weight": 1.0}
+                    ],
+                    "unit": "level",
+                    "low": 1.0,
+                    "high": 1e3,
+                    "basis": ["S1"],
                 }
             ],
         },

@@ -27,7 +27,7 @@ def model(tmp_path_factory):
     return load(found.meta, found.arrays)
 
 
-def plan(constraints=(), causes=(), horizon=6, inner=1) -> ScenarioPlan:
+def plan(constraints=(), interventions=(), horizon=6, inner=1) -> ScenarioPlan:
     return ScenarioPlan(
         horizon=horizon,
         constraints=tuple(
@@ -41,7 +41,7 @@ def plan(constraints=(), causes=(), horizon=6, inner=1) -> ScenarioPlan:
             )
             for row, low, high in constraints
         ),
-        causes=tuple(causes),
+        interventions=tuple(interventions),
         inner=inner,
     )
 
@@ -123,7 +123,7 @@ def test_an_expectation_condition_moves_the_mean_through_the_overlay(model):
     assert tilt.price > 0
 
 
-def test_a_named_large_shock_makes_a_large_move_cheaper(tmp_path_factory):
+def test_a_large_shock_makes_a_large_move_cheaper(tmp_path_factory):
     from mst.plugins.expert.estimate import estimate, load
 
     def answer(scale, frequency):
@@ -165,21 +165,19 @@ def test_a_named_large_shock_makes_a_large_move_cheaper(tmp_path_factory):
     quiet = prepared(0.0)
     column = big.ids.index("gl.brent")
     # The same large move of every version's own base: what the answer's 95 % size
-    # makes at the third month. Naming the shock that explains the move is cheaper
-    # than leaving it to the residual, whatever the base the move is measured from.
+    # makes at the third month. Compare a model with this shock to a quiet one.
     move = big.tables[0].responses[column, 1, 2].mean()
 
-    def price_of(model, causes):
+    def price_of(model):
         target = model.base_path[3, column] + move
         bounds = (np.array([target - 0.3]), np.array([target + 0.3]))
         chosen = plan(
             constraints=[([("gl.brent", 3, 1.0)], target - 0.3, target + 0.3)],
-            causes=causes,
         )
         law = constraint_law(model, chosen, draws=16, seed=13)
         return price_of_law(law, *bounds, rng=np.random.default_rng(0))[0]
 
-    assert price_of(big, ("gl.oil", "residual")) < price_of(quiet, ("residual",))
+    assert price_of(big) < price_of(quiet)
 
 
 def test_the_same_seed_gives_the_same_paths_and_price(model):
@@ -192,22 +190,3 @@ def test_the_same_seed_gives_the_same_paths_and_price(model):
     assert np.array_equal(law.means, again.means)
 
 
-def test_causes_without_the_residual_go_to_subset_simulation(model):
-    from mst.model_sdk.dist import ContradictsModels
-    from mst.plugins.expert.forecast import box_probabilities
-
-    chosen = plan(causes=("ru.monetary",))
-    assert constraint_law(model, chosen, draws=2, seed=1) is None, "no law carries them"
-    assert (
-        box_probabilities(model, chosen, np.array([0.0]), np.array([1.0]), draws=2, seed=1)
-        is None
-    ), "a plan with nothing to price has no box probabilities either"
-    # A box the quiet shock cannot reach contradicts the models: the imposition of these
-    # plans is the subset machinery, which test_subset checks on a speaking model.
-    level = model.base_path[2, model.ids.index("ru.key_rate")]
-    far = plan(
-        constraints=[([("ru.key_rate", 2, 1.0)], level + 1.0, level + 1.1)],
-        causes=("ru.monetary",),
-    )
-    with pytest.raises(ContradictsModels):
-        simulate(model, far, draws=2, seed=1)

@@ -9,7 +9,7 @@ own, so only the plugin that estimated a part reads it back.
 The platform's part in a bundle is small: it assembles the parts (``assemble``), correlates
 the residuals every model returned, saves and loads the version, answers which drivers are
 served (``served``, from the checks the models recorded) and simulates the drivers by
-dispatching to each model with its own drivers, its own impacts and its slice of the
+dispatching to each model with its own drivers, its interventions and its slice of the
 correlation matrix. A driver whose simulated path leaves the range of the history it was
 estimated on — the convention is an array named ``<quantity>.d`` — is marked
 ``outside_training_range`` when at least one percent of the paths do. The range is the one the
@@ -36,9 +36,9 @@ from mst import versions
 from mst.model_sdk.contracts import (
     BUNDLE_META_REQUIRED,
     PART_META_REQUIRED,
-    AdditiveImpact,
     Check,
     DriverPaths,
+    Intervention,
     MacroSimulation,
     SatelliteEstimate,
     SatelliteModel,
@@ -52,9 +52,25 @@ from .registry import Registry
 OUTSIDE_TRAINING = "outside_training_range"
 """At least one percent of the paths leave the range of the driver's own history."""
 IMPACT = "impact"
-"""A direct impact of the scenario moves the path."""
+"""A direct intervention of the scenario moves the path; flag name retained for compatibility."""
 HIER = "hier.gibbs"
 """The satellite model whose parts record the linear form ``z_t`` of section 6.2."""
+
+
+def group_inner(macro: MacroSimulation) -> int:
+    """Infer the equal group size from contiguous macro group labels."""
+    count = macro.paths.shape[0]
+    if macro.group is None:
+        return 1
+    group = np.asarray(macro.group)
+    if group.shape != (count,) or count == 0:
+        raise ValueError("macro group labels must match the path count")
+    inner = int(np.count_nonzero(group == 0))
+    if inner < 1 or count % inner or not np.array_equal(
+        group, np.repeat(np.arange(count // inner), inner)
+    ):
+        raise ValueError("macro group labels must be contiguous and equally sized")
+    return inner
 
 
 @dataclass(frozen=True)
@@ -109,15 +125,16 @@ class SatelliteBundle:
         self,
         macro: MacroSimulation,
         drivers: list[str],
-        impacts: Iterable[AdditiveImpact] = (),
+        interventions: Iterable[Intervention] = (),
         *,
         seed: int,
+        inner: int = 1,
     ) -> DriverPaths:
         """The paths of ``drivers`` on ``macro``, in the model scale, by their own models.
 
         The levels are drawn in ascending order — the recursion of the canon: every model of
         level ``l`` reads the macro paths and the driver paths of the levels below its own,
-        with the impacts of those levels applied, through ``UpperPaths``. The platform draws
+        with the interventions of those levels applied, through ``UpperPaths``. The platform draws
         the joint shocks of a level's models itself — one standard normal draw per repetition
         from the stream ``[seed, 0, level, r]`` over every correlated driver of the level — so
         the cross-model correlation reaches the joint paths of the level, while the levels
@@ -127,7 +144,12 @@ class SatelliteBundle:
         its last observed month ``last >= 0`` needs ``horizon + len(its months) - 1 - last``
         steps, which does not exceed that count, and reads the first rows it needs.
         """
-        impacts = list(impacts)
+        interventions = list(interventions)
+        draws = macro.paths.shape[0]
+        if type(inner) is not int or inner < 1 or draws % inner:
+            raise ValueError("inner must divide the number of macro paths")
+        if group_inner(macro) != inner:
+            raise ValueError("macro group labels must match inner")
         served = set(self.served())
         for driver in drivers:
             if driver not in served:
@@ -135,10 +157,10 @@ class SatelliteBundle:
                 raise ValueError(
                     f"{driver} is not served: {self.checks[quantity][node].reason}"
                 )
-        for impact in impacts:
-            if impact.target not in drivers:
+        for intervention in interventions:
+            if intervention.target not in drivers:
                 raise ValueError(
-                    f"an impact on {impact.target}, which the run does not simulate"
+                    f"an intervention on {intervention.target}, which the run does not simulate"
                 )
         by_model: dict[str, list[str]] = {}
         for driver in drivers:
@@ -188,7 +210,7 @@ class SatelliteBundle:
                     self.models[model_id],
                     upper,
                     by_model[model_id],
-                    [item for item in impacts if item.target in by_model[model_id]],
+                    [item for item in interventions if item.target in by_model[model_id]],
                     correlation=(self.correlated, self.correlation),
                     shocks=platform[model_id],
                     seed=seed,
@@ -203,7 +225,7 @@ class SatelliteBundle:
                     column = drivers.index(driver)
                     paths[:, :, column] = found.paths[:, :, k]
                     flags[driver] |= set(found.flags[driver])
-                # The paths of this level, impacts applied, feed the levels below it.
+                # The paths of this level, interventions applied, feed the levels below it.
                 level_ids.setdefault(level, []).extend(found.ids)
                 level_paths.setdefault(level, []).append(found.paths)
                 level_flags.setdefault(level, {}).update(found.flags)

@@ -370,7 +370,6 @@ def _plan():
                 high=18.0,
             ),
         ),
-        causes=("ru.key_rate",),
     )
 
 

@@ -1,15 +1,20 @@
 """The episodes of the backtest: historical events the models are judged on.
 
-An episode names its start month, the variables whose realized paths fix the scenario (they
-are constrained month by month, exactly as they happened), the shocks the sources of the time
-held responsible, and the corpus keys of those sources; ``card`` links it to the corpus card
-of the same event, which a test holds to the same start month. Each episode also names its
-``half`` of the plan — tuning fits the models, validation checks them, both halves non-empty —
-and the ``source`` of its scenario, ``manual`` or ``llm``, which the scenario utility reports
-apart. The set of episodes is a plan, not a fixed list: it grows as new historical events are
-carded, and the marks are data of the plan file, not code. The window ends ``after_months``
-months after the start. An exclusion drops the months of a variable from its ``start`` on when
-the history ends before it — an index splice makes the realized level incomparable.
+An episode names its start month and splits the variables whose realized paths fix the
+scenario into ``observations`` and ``interventions``. An observation asserts an outcome the
+system produces itself — the rouble, the oil price, inflation, a spread — so the variable
+follows its realized path month by month. An intervention asserts a decision taken outside the
+models — a central bank raising or cutting the rate — so the variable takes its realized level
+in those months and its cells do not enter the score: the decision is given, not forecast.
+``reason`` and the corpus keys of ``sources`` carry the evidence; ``card`` links the episode to
+the corpus card of the same event, which a test holds to the same start month. Each episode
+also names its ``half`` of the plan — tuning fits the models, validation checks them, both
+halves non-empty — and the ``source`` of its scenario, ``manual`` or ``llm``, which the
+scenario utility reports apart. The set of episodes is a plan, not a fixed list: it grows as
+new historical events are carded, and the marks are data of the plan file, not code. The window
+ends ``after_months`` months after the start. An exclusion drops the months of a variable from
+its ``start`` on when the history ends before it — an index splice makes the realized level
+incomparable.
 """
 
 import re
@@ -18,7 +23,7 @@ from datetime import date, timedelta
 from pathlib import Path
 from typing import Annotated, Literal
 
-from pydantic import Field, field_validator
+from pydantic import Field, field_validator, model_validator
 
 from mst.contracts import Contract, Identifier, Number, Seed
 
@@ -61,15 +66,41 @@ class EpisodeCheck(Contract):
     """The first month of the episode; the models are estimated on the day before it."""
     card: Identifier | None = None
     """The key of the corpus card of the same event, when it has one."""
-    constrained: list[Identifier] = Field(min_length=1)
-    driving: list[Identifier] = Field(min_length=1)
+    observations: list[Identifier] = []
+    """The variables the episode asserts as outcomes: they follow the realized path."""
+    interventions: list[Identifier] = []
+    """The variables the episode asserts as decisions: they take the realized level, and their
+    cells are not scored."""
     half: Half
     source: Source
     reason: Identifier
-    """Why these shocks drove the episode, with the corpus keys of the sources of the time."""
+    """Why the outcomes came about and which of them were decisions, with the corpus keys of
+    the sources of the time."""
     sources: list[Identifier] = Field(min_length=1)
 
     _start = field_validator("start", mode="before")(year_month)
+
+    @model_validator(mode="after")
+    def _classified(self):
+        """Every episode fixes something, and a variable is an observation or an intervention.
+
+        The two lists are the classification of one event, so an empty pair records no event
+        and a repeated name would ask the same variable to be both stated and decided.
+        """
+        if not (self.observations or self.interventions):
+            raise ValueError("an episode fixes no variable: name observations or interventions")
+        repeated = set(self.observations) & set(self.interventions)
+        if repeated:
+            raise ValueError(
+                "a variable is both an observation and an intervention: "
+                f"{', '.join(sorted(repeated))}"
+            )
+        return self
+
+    @property
+    def constrained(self) -> list[str]:
+        """The variables whose realized paths fix the scenario, both kinds together."""
+        return [*self.observations, *self.interventions]
 
 
 class PriceEvent(Contract):

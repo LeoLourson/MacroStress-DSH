@@ -3,7 +3,7 @@
 ::
 
   python -m mst.models estimate-macro [MODEL_ID] --as-of DATE --store DIR --models DIR
-      [--inputs DIR]
+      [--inputs DIR] [--form {default,recursive}]
   python -m mst.models estimate-satellites --macro SHA256 --store DIR --models DIR --drivers FILE
   python -m mst.models diagnose-satellites SHA256 --models DIR
   python -m mst.models list --models DIR
@@ -54,6 +54,12 @@ def main(argv: list[str] | None = None) -> int:
         help="the folder of the model's answers (workspace/elicitation); needed by a model "
         "that declares inputs",
     )
+    run.add_argument(
+        "--form",
+        choices=("default", "recursive"),
+        default=None,
+        help="the structural form the version stores; omitted keeps the model's own default",
+    )
     bundle = commands.add_parser(
         "estimate-satellites", help="assemble the satellite bundle of a macro version"
     )
@@ -100,6 +106,7 @@ def main(argv: list[str] | None = None) -> int:
                 models=args.models,
                 as_of=args.as_of,
                 inputs=args.inputs,
+                form=args.form,
             )
         )
         return 0

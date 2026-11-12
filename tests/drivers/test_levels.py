@@ -376,20 +376,27 @@ def test_an_impact_on_the_first_level_reaches_the_second_and_not_back(estimated)
     )
     drivers = ["price:sector", "exposure:sber"]
     plain = bundle.simulate(simulation, drivers, (), seed=7)
-    from mst.model_sdk.contracts import AdditiveImpact
+    from mst.model_sdk.contracts import Intervention
 
     lower = bundle.simulate(
         simulation,
         drivers,
-        [AdditiveImpact(target="price:sector", start=1, values=(3.0,) * 4)],
+        [Intervention("price:sector", (1, 2, 3, 4), "shift", np.full((5, 4), 3.0))],
         seed=7,
     )
     upper = bundle.simulate(
         simulation,
         drivers,
-        [AdditiveImpact(target="exposure:sber", start=1, values=(3.0,) * 4)],
+        [Intervention("exposure:sber", (1, 2, 3, 4), "shift", np.full((5, 4), 3.0))],
         seed=7,
     )
+    fixed = bundle.simulate(
+        simulation, drivers,
+        [Intervention("exposure:sber", (2,), "set", np.full((5, 1), 17.0))], seed=7,
+    )
+    assert np.all(fixed.paths[:, 2, 1] == 17.0)
+    np.testing.assert_array_equal(fixed.paths[:, :, 0], plain.paths[:, :, 0])
+    np.testing.assert_array_equal(fixed.paths[:, [0, 1, 3, 4], 1], plain.paths[:, [0, 1, 3, 4], 1])
     # o^1 moves the price, and through G^2 the exposure reads the moved price; o^2 moves the
     # exposure alone and leaves the price untouched.
     price_column, exposure_column = 0, 1
@@ -520,38 +527,60 @@ def bundle_name_of(root):
 class TestDriverConditions:
     """The conditions on the quantities of the levels above, carried by the overlay."""
 
-    def _spec(self, data, root, name, **changes):
-        from mst.scenario.spec import Spec
+    def _spec(self, *, origin: date, constraints=(), expectations=()):
+        """A scenario of observations on the drivers, months counted from ``origin``.
 
-        values = {
-            "narrative": "экспозиция",
-            "horizon": 4,
-            "macro": name,
-            "satellites": bundle_name_of(root),
-            "approved_by": "И. Иванов",
-        }
-        values.update(changes)
-        return Spec.model_validate(values)
+        The months of the old conditions were horizon indices; the file names calendar months,
+        so every index becomes the month that far after the last month of the panel.
+        """
+        from mst.scenario.spec import Spec
+        from mst.scenario.translate import calendar_month
+
+        observations = []
+        for kind, rows in (("constraint", constraints), ("expectation", expectations)):
+            for row in rows:
+                observations.append(
+                    {
+                        "kind": kind,
+                        "terms": [
+                            {
+                                "quantity": term["variable"],
+                                "month": calendar_month(term["month"], origin.isoformat()[:7]),
+                                "weight": term["weight"],
+                            }
+                            for term in row["terms"]
+                        ],
+                        "unit": "level",
+                        "low": row.get("low"),
+                        "high": row.get("high"),
+                        "basis": row["basis"],
+                    }
+                )
+        return Spec.model_validate(
+            {
+                "narrative": "экспозиция",
+                "observations": observations,
+                "approved_by": "И. Иванов",
+            }
+        )
 
     def test_a_condition_on_the_second_level_keeps_only_the_survivors(self, estimated):
         from mst.scenario.build import build
 
         data, macro, name, bundle, root = estimated
         macro = macro_version.load(root, name, {"levels.macro": macro})
+        origin = macro.panel.months[-1]
         # The exposure of sber in month 1 is asked into a band the regression reaches for
         # some draws of the causes and not for others: the survivors carry the run, the
         # macro paths and the driver paths resampled together.
         plain = build(
-            self._spec(data, root, name, inner=4), macro, bundle, draws=6, seed=3
+            self._spec(origin=origin), macro, bundle, draws=6, seed=3, horizon=4, inner=4
         )
         column = plain.drivers.paths[:, 1, plain.drivers.ids.index("exposure:sber")]
         low, high = float(np.percentile(column, 25)), float(np.percentile(column, 75))
         constrained = build(
             self._spec(
-                data,
-                root,
-                name,
-                inner=4,
+                origin=origin,
                 constraints=[
                     {
                         "terms": [
@@ -567,6 +596,8 @@ class TestDriverConditions:
             bundle,
             draws=6,
             seed=3,
+            horizon=4,
+            inner=4,
         )
         moved = constrained.drivers.paths[
             :, 1, constrained.drivers.ids.index("exposure:sber")
@@ -586,10 +617,7 @@ class TestDriverConditions:
         with pytest.raises(ContradictsModels, match="contradicts the models"):
             build(
                 self._spec(
-                    data,
-                    root,
-                    name,
-                    inner=4,
+                    origin=macro.panel.months[-1],
                     constraints=[
                         {
                             "terms": [
@@ -605,6 +633,8 @@ class TestDriverConditions:
                 bundle,
                 draws=4,
                 seed=3,
+                horizon=4,
+                inner=4,
             )
 
     def test_the_price_of_driver_conditions_is_their_joint_share_once(self, estimated):
@@ -612,7 +642,10 @@ class TestDriverConditions:
 
         data, macro, name, bundle, root = estimated
         macro = macro_version.load(root, name, {"levels.macro": macro})
-        plain = build(self._spec(data, root, name, inner=8), macro, bundle, draws=6, seed=3)
+        origin = macro.panel.months[-1]
+        plain = build(
+            self._spec(origin=origin), macro, bundle, draws=6, seed=3, horizon=4, inner=8
+        )
         column = plain.drivers.paths[:, 1, plain.drivers.ids.index("exposure:sber")]
         condition = {
             "terms": [{"variable": "exposure:sber", "month": 1, "weight": 1.0}],
@@ -622,8 +655,8 @@ class TestDriverConditions:
         }
 
         def priced(*conditions):
-            spec = self._spec(data, root, name, inner=8, constraints=list(conditions))
-            return build(spec, macro, bundle, draws=6, seed=3).dist
+            spec = self._spec(origin=origin, constraints=list(conditions))
+            return build(spec, macro, bundle, draws=6, seed=3, horizon=4, inner=8).dist
 
         single, twice = priced(condition), priced(condition, condition)
         # The price enters the total, and a repeated condition removes no further path.
@@ -638,7 +671,7 @@ class TestDriverConditions:
             condition,
             {
                 "terms": [{"variable": macro_id, "month": 1, "weight": 1.0}],
-                "low": -1e6,
+                "low": 1.0,
                 "high": 1e6,
                 "basis": "assumption",
             },
@@ -651,17 +684,17 @@ class TestDriverConditions:
 
         data, macro, name, bundle, root = estimated
         macro = macro_version.load(root, name, {"levels.macro": macro})
-        plain = build(self._spec(data, root, name, inner=16), macro, bundle, draws=8, seed=3)
+        origin = macro.panel.months[-1]
+        plain = build(
+            self._spec(origin=origin), macro, bundle, draws=8, seed=3, horizon=4, inner=16
+        )
         k = plain.drivers.ids.index("exposure:sber")
         column = plain.drivers.paths[:, 1, k]
         term = {"variable": "exposure:sber", "month": 1, "weight": 1.0}
         target = float(column.mean() + 0.5 * column.std())
         found = build(
             self._spec(
-                data,
-                root,
-                name,
-                inner=16,
+                origin=origin,
                 constraints=[
                     {
                         "terms": [term],
@@ -676,6 +709,8 @@ class TestDriverConditions:
             bundle,
             draws=8,
             seed=3,
+            horizon=4,
+            inner=16,
         )
         moved = found.drivers.paths[:, 1, k]
         assert moved.mean() == pytest.approx(target, abs=0.5 * column.std())
@@ -692,9 +727,7 @@ class TestDriverConditions:
         with pytest.raises(ValueError, match="inner >= 2"):
             build(
                 self._spec(
-                    data,
-                    root,
-                    name,
+                    origin=macro.panel.months[-1],
                     constraints=[
                         {
                             "terms": [
@@ -710,4 +743,5 @@ class TestDriverConditions:
                 bundle,
                 draws=4,
                 seed=3,
+                horizon=4,
             )

@@ -22,11 +22,12 @@ from zlib import crc32
 
 import numpy as np
 
+from mst.drivers.bundle import group_inner
 from mst.drivers.registry import to_model
 from mst.model_sdk.contracts import (
-    AdditiveImpact,
     Check,
     DriverPaths,
+    Intervention,
     SatelliteEstimate,
     SatelliteEstimateContext,
     SatelliteModel,
@@ -34,6 +35,7 @@ from mst.model_sdk.contracts import (
     UpperHistory,
     UpperPaths,
 )
+from mst.model_sdk.interventions import apply_default
 
 POSTERIOR_DRAWS = 64
 """How many posterior draws of ``(beta, sigma)`` a fit carries for the simulation to pick."""
@@ -337,7 +339,7 @@ class RefLevel2Model(SatelliteModel):
         model: RefLevel2,
         upper: UpperPaths,
         drivers: list[str],
-        impacts: list[AdditiveImpact],
+        interventions: list[Intervention],
         *,
         correlation=None,
         shocks: np.ndarray,
@@ -387,14 +389,10 @@ class RefLevel2Model(SatelliteModel):
                 for t in range(1, horizon + 1):
                     paths[r, t, k] = beta @ design[r, t] + noise[t - 1]
             flags[driver] = frozenset()
-        for impact in impacts:
-            if impact.target not in flags:
-                raise ValueError(
-                    f"an impact on {impact.target}, which this model does not simulate"
-                )
-            k = drivers.index(impact.target)
-            paths[:, impact.start : impact.end + 1, k] += np.asarray(impact.values)
-            flags[impact.target] = flags[impact.target] | {"impact"}
+        paths = apply_default(paths, drivers, interventions, inner=group_inner(upper.macro))
+        for intervention in interventions:
+            if intervention.active is None or intervention.active.any():
+                flags[intervention.target] = flags[intervention.target] | {"impact"}
         return DriverPaths(ids=list(drivers), paths=paths, flags=flags)
 
 

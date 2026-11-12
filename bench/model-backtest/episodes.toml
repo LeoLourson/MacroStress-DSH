@@ -1,11 +1,17 @@
 # Episodes of the check of the macro model (docs/concept/bvar-method-legacy.md, «Проверка»).
 # The calculation date is the day before the start month `start` of the episode; `card` names
-# the corpus card of the same event, which tests/test_bench.py holds to the same start. The
-# constrained variables follow their realized monthly path up to the end of the window;
-# the driving shocks are those the card's sources of the time name (registry.toml, [[shocks]]).
-# Each episode needs at least as many driving shocks as constrained variables, and a global
-# variable needs a global shock. R1-R12 are left out: their history from 2012-01 is shorter
-# than two years or empty.
+# the corpus card of the same event, which tests/test_bench.py holds to the same start.
+#
+# Each episode splits the variables whose realized paths fix the scenario into two lists:
+# `observations` — outcomes the system produces itself (the rouble, oil, inflation, a spread,
+# an index), which follow their realized monthly path to the end of the window; and
+# `interventions` — actual decisions of a subject outside the models (a central bank raising or
+# cutting the key rate), which are applied as a `set` of the realized level in those months and
+# whose cells do not enter the CRPS. The rule is who chose the value, not which quantity it
+# names: a production quota that moves the oil price does not set the price, so oil stays an
+# observation, while every change of the key rate in the card is a decision and becomes an
+# intervention. Each episode is classified by its own reason text. R1-R12 are left out: their
+# history from 2012-01 is shorter than two years or empty.
 #
 # Every episode carries two marks, both decisions of a human kept in this plan:
 # - half = "tuning" | "validation": the models are fitted on the first half and checked on the
@@ -41,8 +47,8 @@ start = "2014-03"
 card = "R13"
 half = "tuning"
 source = "manual"
-constrained = ["ru.usdrub", "ru.key_rate"]
-driving = ["ru.fx_risk", "ru.monetary"]
+observations = ["ru.usdrub"]
+interventions = ["ru.key_rate"]
 reason = "отток капитала и конвертация сбережений ослабили рубль, ЦБ ответил повышением ставки"
 sources = ["T1/2014-2", "S2/2014-1"]
 
@@ -52,8 +58,8 @@ start = "2014-07"
 card = "R14"
 half = "tuning"
 source = "manual"
-constrained = ["gl.brent", "ru.usdrub"]
-driving = ["gl.oil", "ru.fx_risk"]
+observations = ["gl.brent", "ru.usdrub"]
+interventions = []
 reason = "санкции закрыли внешнее фондирование и подняли рисковую премию, во втором полугодии упала нефть"
 sources = ["S2/2014-2", "T1/2014-4"]
 
@@ -63,8 +69,8 @@ start = "2014-11"
 card = "R15"
 half = "tuning"
 source = "manual"
-constrained = ["gl.brent", "ru.usdrub", "ru.key_rate"]
-driving = ["gl.oil", "ru.fx_risk", "ru.monetary"]
+observations = ["gl.brent", "ru.usdrub"]
+interventions = ["ru.key_rate"]
 reason = "плавающий курс при падении нефти и санкциях, затем повышение ставки"
 sources = ["T1/2014-4", "T1/2015-1"]
 
@@ -74,8 +80,8 @@ start = "2014-12"
 card = "R16"
 half = "tuning"
 source = "manual"
-constrained = ["ru.key_rate", "ru.usdrub"]
-driving = ["ru.monetary", "ru.fx_risk"]
+observations = ["ru.usdrub"]
+interventions = ["ru.key_rate"]
 reason = "ставка 17 % как ответ на валютный и инфляционный шок"
 sources = ["S2/2015-1", "T1/2015-1"]
 
@@ -85,8 +91,8 @@ start = "2015-12"
 card = "R17"
 half = "tuning"
 source = "manual"
-constrained = ["gl.brent", "ru.usdrub"]
-driving = ["gl.oil", "ru.fx_risk"]
+observations = ["gl.brent", "ru.usdrub"]
+interventions = []
 reason = "падение нефти сократило валютную выручку, неприятие риска усилило давление на рубль"
 sources = ["S2/2016-1", "T1/2016-1"]
 
@@ -96,8 +102,8 @@ start = "2017-08"
 card = "R18"
 half = "tuning"
 source = "manual"
-constrained = ["ru.spread_bbb"]
-driving = ["ru.fx_risk"]
+observations = ["ru.spread_bbb"]
+interventions = []
 reason = "отток депозитов и потеря доверия к крупным частным банкам"
 sources = ["S2/2017-2", "S2/2018-1"]
 
@@ -107,8 +113,8 @@ start = "2018-04"
 card = "R19"
 half = "tuning"
 source = "manual"
-constrained = ["ru.usdrub"]
-driving = ["ru.fx_risk"]
+observations = ["ru.usdrub"]
+interventions = []
 reason = "санкции подняли рисковую премию, нерезиденты вышли из ОФЗ и акций"
 sources = ["T1/2018-2", "S2/2018-1"]
 
@@ -118,8 +124,8 @@ start = "2018-08"
 card = "R20"
 half = "tuning"
 source = "manual"
-constrained = ["ru.ofz_10y"]
-driving = ["ru.fx_risk"]
+observations = ["ru.ofz_10y"]
+interventions = []
 reason = "угроза санкций против госдолга, продажи ОФЗ нерезидентами"
 sources = ["S2/2018-2", "T1/2018-3"]
 
@@ -129,8 +135,8 @@ start = "2018-09"
 card = "R21"
 half = "tuning"
 source = "manual"
-constrained = ["ru.key_rate", "ru.usdrub"]
-driving = ["ru.monetary", "ru.fx_risk"]
+observations = ["ru.usdrub"]
+interventions = ["ru.key_rate"]
 reason = "повышение ставки в ответ на ослабление рубля из-за оттока нерезидентов"
 sources = ["T1/2018-3", "T1/2018-2"]
 
@@ -140,8 +146,8 @@ start = "2019-06"
 card = "R22"
 half = "tuning"
 source = "manual"
-constrained = ["ru.key_rate", "ru.cpi"]
-driving = ["ru.monetary", "ru.inflation"]
+observations = ["ru.cpi"]
+interventions = ["ru.key_rate"]
 reason = "снижение ставки при замедлении инфляции к цели"
 sources = ["T1/2019-3", "S1/2019"]
 
@@ -151,8 +157,8 @@ start = "2020-03"
 card = "R23"
 half = "tuning"
 source = "manual"
-constrained = ["gl.brent", "gl.vix", "ru.usdrub"]
-driving = ["gl.oil", "gl.financial", "ru.fx_risk"]
+observations = ["gl.brent", "gl.vix", "ru.usdrub"]
+interventions = []
 reason = "пандемия и распад ОПЕК+: падение нефти, глобальное бегство от риска, выход нерезидентов"
 sources = ["S2/2020-1", "T3/2020-03"]
 
@@ -162,8 +168,8 @@ start = "2020-04"
 card = "R24"
 half = "tuning"
 source = "manual"
-constrained = ["ru.key_rate"]
-driving = ["ru.monetary"]
+observations = []
+interventions = ["ru.key_rate"]
 reason = "льготная ипотека на фоне снижения ключевой ставки с 6 до 4,25 %"
 sources = ["S2/2020-2"]
 
@@ -173,8 +179,8 @@ start = "2021-03"
 card = "R25"
 half = "validation"
 source = "manual"
-constrained = ["ru.key_rate", "ru.cpi"]
-driving = ["ru.monetary", "ru.inflation"]
+observations = ["ru.cpi"]
+interventions = ["ru.key_rate"]
 reason = "перегрев спроса и инфляция выше прогноза, ставка росла на каждом заседании"
 sources = ["S1/2021", "T1/2021-2"]
 
@@ -184,8 +190,8 @@ start = "2021-12"
 card = "R26"
 half = "validation"
 source = "manual"
-constrained = ["ru.imoex", "ru.usdrub"]
-driving = ["ru.fx_risk", "ru.monetary"]
+observations = ["ru.imoex", "ru.usdrub"]
+interventions = []
 reason = "угроза санкций: выход нерезидентов из акций и ослабление рубля"
 sources = ["S2/2022-1", "T1/2022-1"]
 
@@ -195,8 +201,8 @@ start = "2022-02"
 card = "R27"
 half = "validation"
 source = "manual"
-constrained = ["ru.key_rate", "ru.usdrub"]
-driving = ["ru.monetary", "ru.fx_risk"]
+observations = ["ru.usdrub"]
+interventions = ["ru.key_rate"]
 reason = "санкции на резервы и выход нерезидентов ударили по курсу, ЦБ поднял ставку до 20 %"
 sources = ["S2/2022-1", "T1/2022-1"]
 
@@ -206,8 +212,8 @@ start = "2022-04"
 card = "R28"
 half = "validation"
 source = "manual"
-constrained = ["ru.key_rate", "ru.usdrub"]
-driving = ["ru.monetary", "ru.fx_risk"]
+observations = ["ru.usdrub"]
+interventions = ["ru.key_rate"]
 reason = "укрепление рубля при валютных ограничениях и быстрое снижение ставки"
 sources = ["S1/2022", "T1/2022-2"]
 
@@ -217,8 +223,8 @@ start = "2022-09"
 card = "R29"
 half = "validation"
 source = "manual"
-constrained = ["ru.imoex"]
-driving = ["ru.fx_risk"]
+observations = ["ru.imoex"]
+interventions = []
 reason = "мобилизация: падение акций и отток наличных"
 sources = ["S2/2022-2", "T1/2022-4"]
 
@@ -228,8 +234,8 @@ start = "2023-06"
 card = "R30"
 half = "validation"
 source = "manual"
-constrained = ["ru.usdrub"]
-driving = ["ru.fx_risk"]
+observations = ["ru.usdrub"]
+interventions = []
 reason = "однодневный шок рынка акций; месячные ряды его почти не видят"
 sources = ["S2/2023-2"]
 
@@ -239,8 +245,8 @@ start = "2023-08"
 card = "R31"
 half = "validation"
 source = "manual"
-constrained = ["ru.key_rate", "ru.usdrub"]
-driving = ["ru.monetary", "ru.fx_risk"]
+observations = ["ru.usdrub"]
+interventions = ["ru.key_rate"]
 reason = "внутренний спрос давил на курс через импорт, ЦБ внеочередно поднял ставку"
 sources = ["S1/2023", "T1/2023-4"]
 
@@ -250,7 +256,7 @@ start = "2025-06"
 card = "R32"
 half = "validation"
 source = "manual"
-constrained = ["ru.key_rate", "ru.usdrub"]
-driving = ["ru.monetary", "ru.fx_risk"]
+observations = ["ru.usdrub"]
+interventions = ["ru.key_rate"]
 reason = "охлаждение спроса жёсткой политикой, укрепление рубля, начало снижения ставки"
 sources = ["S1/2025", "S2/2025-2"]

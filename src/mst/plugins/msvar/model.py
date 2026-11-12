@@ -5,8 +5,7 @@ adapter to the model SDK. ``estimate`` builds the panel known on the calculation
 draws the posterior, identifies the shocks of the sign table in every regime and returns
 the metadata and arrays of the version. ``load`` rebuilds the posterior of a saved version.
 ``simulate`` and ``constraint_law`` read the platform's neutral ``ScenarioPlan`` directly:
-the regime element of the event arrives as a driving-shock name the same way a structural
-shock does, so the plugin never sees the scenario contracts.
+the plugin never sees the scenario contracts.
 """
 
 from datetime import date
@@ -67,8 +66,7 @@ class MSVarModel(MacroModel):
     description = (
         "Векторная авторегрессия, у которой константа и ковариация ошибок переключаются по "
         "марковскому режиму при общих лагах; шоки идентифицированы знаками "
-        "signs.toml внутри каждого режима, и режимные элементы события адресуются "
-        "сценарием наравне с шоками."
+        "signs.toml внутри каждого режима."
     )
 
     def estimate(self, context: MacroEstimateContext) -> MacroEstimate:

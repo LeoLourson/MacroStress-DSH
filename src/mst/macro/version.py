@@ -165,6 +165,7 @@ def describe(root: Path, name: str) -> dict:
         "months": meta.get("months"),
         "shocks": meta.get("shocks"),
         "latents": _latents(meta["model"]),
+        "structural_form": meta.get("structural_form"),
         "variables": _variables(meta.get("ids") or []),
         "origin": _origin(meta, arrays),
         "diagnostics": diagnostics,

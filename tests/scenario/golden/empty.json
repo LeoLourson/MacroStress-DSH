@@ -1,0 +1,15 @@
+{
+  "narrative": "Stage 0 regression baseline: no conditions or impacts.",
+  "sources": [],
+  "horizon": 12,
+  "macro": "51ead9204774f7ef0b4657c4e1a3997c77c584a902ebb6d306c68439977658f8",
+  "satellites": "0000000000000000000000000000000000000000000000000000000000000000",
+  "constraints": [],
+  "causes": [],
+  "regime_event": null,
+  "impacts": [],
+  "expectations": [],
+  "probabilities": [],
+  "inner": 1,
+  "approved_by": null
+}

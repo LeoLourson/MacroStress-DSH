@@ -9,7 +9,7 @@ MODEL = BvarModel()
 plugin = Plugin(
     plugin_id="bvar",
     version="0.1.0",
-    model_sdk=">=3.0,<4.0",
+    model_sdk=">=4.0,<5.0",
     label="BVAR со стохастической волатильностью",
     description=(
         "Макромодель уровня 0: векторная авторегрессия с блочной экзогенностью, "

@@ -7,8 +7,13 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 LINK = re.compile(r"\]\(([^)\s]+)\)")
 TREES = ("docs", "dsh", "src", "tests", "corpus", "bench")
-SKIPPED = ("docs/local/", "src/mst/templates/")
-"""A private folder and the templates a new plugin is generated from."""
+SKIPPED = ("docs/local/", "docs/plans/", "docs/reports/", "src/mst/templates/")
+"""A private folder, the working notes and the templates a new plugin is generated from.
+
+The documentation the reader works from is mapped in ``docs/README.md``: concept, howto,
+reference and adr. A plan is the record of one session of work and a report is its outcome; they
+quote numbers and commands of the day, and an English twin of such a note outlives the work it
+describes."""
 
 
 def documents() -> list[Path]:

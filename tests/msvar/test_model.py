@@ -42,7 +42,6 @@ def plan() -> ScenarioPlan:
                 high=6.0,
             ),
         ),
-        causes=("ru.t",),
     )
 
 

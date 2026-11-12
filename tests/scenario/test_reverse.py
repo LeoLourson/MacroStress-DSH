@@ -2,14 +2,37 @@
 
 The checks follow the plan: a family with a closed-form answer — a price and a loss both
 linear in the width — is searched by both questions and the boundary is found; the family of
-the scenario fixture does not get cheaper as its conditions narrow; and a family whose
-impacts move with the parameter is refused, because a free impact costs nothing and a bound
-on the price would bound nothing.
+the scenario fixture does not get cheaper as its conditions narrow; a family whose
+interventions move with the parameter is refused, because a free intervention costs nothing
+and a bound on the price would bound nothing; and the command line takes the versions as
+arguments or from the newest finished pair, never from the scenario file.
 """
+
+import json
+import os
+from types import SimpleNamespace
 
 import pytest
 
+from mst import plugins, store
+from mst.macro.registry import load_registry
+from mst.macro.version import load as load_macro
+from mst.scenario.context import context_from_versions
+from mst.scenario.contracts import Scenario
 from mst.scenario.reverse import Family, width_family
+from mst.scenario.translate import calendar_month, observations_of, tolerance_of
+
+OLDER, NEWER = "2" * 64, "3" * 64
+SATELLITES, OTHER = "5" * 64, "6" * 64
+
+
+def month(versions, index: int) -> str:
+    return calendar_month(index, versions.data.months[-1].strftime("%Y-%m"))
+
+
+def anchor(versions) -> float:
+    """The last panel coordinate of the oil price, in the model scale."""
+    return float(versions.data.y[-1, versions.data.ids.index("gl.brent")])
 
 
 class _Known:
@@ -34,31 +57,27 @@ class _Known:
 
 
 def _family_of(known):
-    """A family whose evaluation reads the known table: impacts never move."""
+    """A family whose evaluation reads the known table: interventions never move."""
 
     def build(c: float):
-        from mst.scenario.spec import Spec
-
-        return Spec.model_validate(
+        return Scenario.model_validate(
             {
                 "narrative": "test",
-                "horizon": 3,
-                "macro": "a" * 64,
-                "satellites": "b" * 64,
                 "approved_by": "test",
-                "constraints": [
+                "observations": [
                     {
-                        "terms": [{"variable": "x", "month": 1, "weight": 1.0}],
+                        "kind": "constraint",
+                        "terms": [{"quantity": "ru.key_rate", "month": "2026-11", "weight": 1.0}],
                         "low": -c,
                         "high": c,
+                        "unit": "level",
                         "basis": "assumption",
                     }
                 ],
             }
         )
 
-    family = Family(build=build)
-    return family
+    return Family(build=build)
 
 
 def _patch_evaluate(monkeypatch, known):
@@ -66,7 +85,7 @@ def _patch_evaluate(monkeypatch, known):
     from mst.scenario import reverse
 
     def evaluate(spec, macro, satellites, positions, *, draws, seed, base_currency="RUB"):
-        c = spec.constraints[0].high
+        c = spec.observations[0].high
         row = known.point(c)
         return reverse.Point(c=c, dist=row.dist, rho=row.rho)
 
@@ -79,9 +98,7 @@ def test_sup_rho_finds_the_boundary_of_a_linear_family(monkeypatch):
     known = _Known(price=(4.0, 2.0), loss=(10.0, 3.0))
     _patch_evaluate(monkeypatch, known)
     family = _family_of(known)
-    found = reverse.sup_rho(
-        family, 3.0, macro=None, satellites=None, positions=[], draws=1, seed=1
-    )
+    found = reverse.sup_rho(family, 3.0, macro=None, satellites=None, positions=[], draws=1, seed=1)
     # dist(c) = 4 - 2c <= 3 stops at c = 0.5, and rho there is 10 - 3 * 0.5 = 8.5.
     assert found["answer"]["c"] == pytest.approx(0.5, abs=0.05)
     assert found["answer"]["rho"] == pytest.approx(8.5, abs=0.2)
@@ -122,9 +139,7 @@ def test_no_affordable_scenario_answers_none(monkeypatch):
     known = _Known(price=(40.0, 2.0), loss=(10.0, 3.0))
     _patch_evaluate(monkeypatch, known)
     family = _family_of(known)
-    found = reverse.sup_rho(
-        family, 0.1, macro=None, satellites=None, positions=[], draws=1, seed=1
-    )
+    found = reverse.sup_rho(family, 0.1, macro=None, satellites=None, positions=[], draws=1, seed=1)
     assert found["answer"] is None
     assert found["points"]
 
@@ -137,7 +152,7 @@ def test_the_cheapest_point_of_a_large_error_is_not_chosen(monkeypatch):
     from mst.scenario.reverse import Point
 
     def evaluate(spec, macro, satellites, positions, *, draws, seed, base_currency="RUB"):
-        c = spec.constraints[0].high
+        c = spec.observations[0].high
         return Point(
             c=c,
             dist=4.0 - 2.0 * c,
@@ -165,7 +180,7 @@ def test_the_worst_point_of_a_large_error_is_not_chosen(monkeypatch):
     from mst.scenario.reverse import Point
 
     def evaluate(spec, macro, satellites, positions, *, draws, seed, base_currency="RUB"):
-        c = spec.constraints[0].high
+        c = spec.observations[0].high
         return Point(
             c=c,
             dist=4.0 - 2.0 * c,
@@ -185,63 +200,36 @@ def test_the_worst_point_of_a_large_error_is_not_chosen(monkeypatch):
     assert found["answer"]["dist"] <= 3.0
 
 
-def test_the_price_of_the_fixture_does_not_fall_as_the_conditions_narrow(versions):
-    from mst.scenario.build import dist_of
-
-    spec = _spec_of(versions)
-    family = width_family(spec, versions.loaded)
-    prices = [
-        dist_of(family.build(c), versions.loaded, draws=60, seed=5).distance
-        for c in (4.0, 1.0, 0.35)
-    ]
-    assert prices[0] < prices[1] < prices[2]
-
-
-def test_a_family_whose_impacts_move_is_refused(versions):
-    from mst.scenario.reverse import Family
-
-    spec = _spec_of(versions)
-
-    def build(c: float):
-        return spec.model_copy(
-            update={
-                "impacts": [
-                    spec.impacts[0].model_copy(
-                        update={"values": [value * c for value in spec.impacts[0].values]}
-                    )
-                ]
-            }
-        )
-
-    family = Family(build=build)
-    with pytest.raises(ValueError, match="impacts move with the parameter"):
-        family.check()
+@pytest.fixture(scope="module")
+def macro(versions):
+    """The macro version loaded back, as a search receives it."""
+    return load_macro(versions.models, versions.macro, plugins.registry().macro)
 
 
 def _spec_of(versions):
-    """A scenario of the fixture: one interval condition and one impact."""
-    from mst.scenario.spec import Spec
-
-    return Spec.model_validate(
+    """A scenario of the fixture: one support condition and one intervention."""
+    variable = load_registry().variable("gl.brent")
+    return Scenario.model_validate(
         {
             "narrative": "нефть",
-            "horizon": 6,
-            "macro": versions.macro,
-            "satellites": versions.satellites,
             "approved_by": "И. Иванов",
-            "constraints": [
+            "observations": [
                 {
-                    "terms": [{"variable": "gl.brent", "month": 2, "weight": 1.0}],
-                    "low": -2.0,
-                    "high": 2.0,
+                    "kind": "constraint",
+                    "terms": [{"quantity": "gl.brent", "month": month(versions, 2), "weight": 1.0}],
+                    "unit": "level",
+                    "low": float(variable.from_model(anchor(versions) - 2.0)),
+                    "high": float(variable.from_model(anchor(versions) + 2.0)),
                     "basis": "assumption",
                 }
             ],
-            "impacts": [
+            "interventions": [
                 {
-                    "target": "gl.brent",
-                    "start": 1,
-                    "values": [1.0, 1.0, 1.0],
+                    "quantity": "gl.brent",
+                    "months": [month(versions, 2)],
+                    "kind": "shift",
+                    "values": [1.0],
+                    "unit": "level",
                     "reason": "шок",
                     "basis": "assumption",
                 }
@@ -250,27 +238,222 @@ def _spec_of(versions):
     )
 
 
-def test_a_point_of_the_family_is_its_tolerance_at_one_whatever_its_value(versions):
-    from mst.scenario.build import tolerance_of
+def test_the_price_of_the_fixture_does_not_fall_as_the_conditions_narrow(versions, macro):
+    from mst.scenario.build import dist_of
 
+    family = width_family(_spec_of(versions), macro, versions.satellite)
+    prices = [dist_of(family.build(c), macro, draws=60, seed=5).distance for c in (4.0, 1.0, 0.35)]
+    assert prices[0] < prices[1] < prices[2]
+
+
+def test_a_family_whose_interventions_move_is_refused(versions):
     spec = _spec_of(versions)
-    point = spec.constraints[0].model_copy(update={"low": None, "high": None, "value": 0.0})
-    family = width_family(spec.model_copy(update={"constraints": [point]}), versions.loaded)
-    tau = tolerance_of(point.terms, versions.loaded)
-    own = family.build(1.0).constraints[0]
-    assert (own.low, own.high) == pytest.approx((-tau, tau))
-    narrow = family.build(0.5).constraints[0]
-    assert (narrow.low, narrow.high) == pytest.approx((-tau / 2, tau / 2))
+
+    def build(c: float):
+        return spec.model_copy(
+            update={
+                "interventions": [
+                    spec.interventions[0].model_copy(
+                        update={"values": [value * c for value in spec.interventions[0].values]}
+                    )
+                ]
+            }
+        )
+
+    family = Family(build=build)
+    with pytest.raises(ValueError, match="interventions move with the parameter"):
+        family.check()
 
 
-def test_the_command_line_reads_the_reverse_form_it_documents(tmp_path):
+def test_a_point_of_the_family_is_its_tolerance_at_one_whatever_its_value(versions, macro):
+    variable = load_registry().variable("gl.brent")
+    spec = _spec_of(versions)
+    point = spec.observations[0].model_copy(
+        update={
+            "low": None,
+            "high": None,
+            "value": float(variable.from_model(anchor(versions))),
+        }
+    )
+    spec = spec.model_copy(update={"observations": [point]})
+    data = context_from_versions(macro, versions.satellite)
+    (translated,) = observations_of(spec, data, 12)
+    tau = tolerance_of(translated.terms, data)
+    family = width_family(spec, macro, versions.satellite)
+    own = observations_of(family.build(1.0), data, 12)[0]
+    assert (own.low, own.high) == pytest.approx((anchor(versions) - tau, anchor(versions) + tau))
+    narrow = observations_of(family.build(0.5), data, 12)[0]
+    assert (narrow.low, narrow.high) == pytest.approx(
+        (anchor(versions) - tau / 2, anchor(versions) + tau / 2)
+    )
+
+
+def test_the_family_keeps_a_change_or_a_percent_condition_at_one(versions, macro):
+    # The bounds move in the model scale, where the price reads them; a unit of the event is
+    # written back so that the same coordinate comes out of the translation again.
+    data = context_from_versions(macro, versions.satellite)
+    for unit, terms, low, high in (
+        (
+            "change",
+            [{"quantity": "gl.brent", "month": month(versions, 2), "weight": 1.0}],
+            1.0,
+            2.0,
+        ),
+        (
+            "percent",
+            [
+                {"quantity": "gl.brent", "month": month(versions, 1), "weight": -1.0},
+                {"quantity": "gl.brent", "month": month(versions, 2), "weight": 1.0},
+            ],
+            5.0,
+            10.0,
+        ),
+    ):
+        spec = Scenario.model_validate(
+            {
+                "narrative": "нефть",
+                "approved_by": "И. Иванов",
+                "observations": [
+                    {
+                        "kind": "constraint",
+                        "terms": terms,
+                        "unit": unit,
+                        "low": low,
+                        "high": high,
+                        "basis": "assumption",
+                    }
+                ],
+            }
+        )
+        (source,) = observations_of(spec, data, 12)
+        family = width_family(spec, macro, versions.satellite)
+        (own,) = observations_of(family.build(1.0), data, 12)
+        assert (own.low, own.high) == pytest.approx((source.low, source.high))
+        (narrow,) = observations_of(family.build(0.5), data, 12)
+        middle = (source.low + source.high) / 2
+        half = (source.high - source.low) / 2
+        assert (narrow.low, narrow.high) == pytest.approx((middle - half / 2, middle + half / 2))
+
+
+def test_the_command_line_takes_the_versions_as_arguments(tmp_path):
     from mst.scenario.__main__ import main
 
     # The arguments parse: the unknown scenario fails later, not with a usage error.
     with pytest.raises((OSError, KeyError, ValueError)):
         main(
             [
-                "reverse", "nowhere", "--workspace", str(tmp_path), "--portfolio", "p",
-                "--draws", "2", "--seed", "1", "--kappa", "1.0",
+                "reverse",
+                "nowhere",
+                "--workspace",
+                str(tmp_path),
+                "--portfolio",
+                "p",
+                "--draws",
+                "2",
+                "--seed",
+                "1",
+                "--kappa",
+                "1.0",
             ]
         )
+    with pytest.raises((OSError, KeyError, ValueError)):
+        main(
+            [
+                "reverse",
+                "nowhere",
+                "--workspace",
+                str(tmp_path),
+                "--portfolio",
+                "p",
+                "--draws",
+                "2",
+                "--seed",
+                "1",
+                "--level",
+                "1.0",
+                "--macro",
+                OLDER,
+                "--satellites",
+                OTHER,
+            ]
+        )
+
+
+def version_folder(directory, name, *, mtime, **meta):
+    """A finished version folder: the meta is all ``versions.folders`` reads to find it."""
+    folder = directory / name
+    folder.mkdir(parents=True)
+    (folder / "meta.json").write_text(json.dumps(meta), encoding="utf-8")
+    os.utime(folder, (mtime, mtime))
+    return folder
+
+
+def fake_models(tmp_path):
+    """Two macro versions and two bundles; the newest bundle belongs to the older macro."""
+    models = tmp_path / "models"
+    version_folder(models / "macro", OLDER, mtime=1_000, as_of="2026-01-01")
+    version_folder(models / "macro", NEWER, mtime=2_000, as_of="2026-05-01")
+    version_folder(models / "satellites", SATELLITES, mtime=2_500, macro=NEWER)
+    version_folder(models / "satellites", OTHER, mtime=3_000, macro=OLDER)
+    return models
+
+
+def fake_loaders(monkeypatch, *, bundle_macro=NEWER):
+    """The two model loaders of the selection, recording the names they receive."""
+    calls = []
+    macro = SimpleNamespace(name=NEWER)
+    bundle = SimpleNamespace(macro=bundle_macro)
+
+    def load_macro(root, name, installed):
+        calls.append(("macro", name))
+        macro.name = name
+        return macro
+
+    def load_satellites(root, name, installed):
+        calls.append(("satellites", name))
+        return bundle
+
+    monkeypatch.setattr("mst.macro.version.load", load_macro)
+    monkeypatch.setattr("mst.drivers.bundle.load", load_satellites)
+    return calls, macro, bundle
+
+
+def test_versions_of_takes_the_newest_finished_pair(tmp_path, monkeypatch):
+    from mst.scenario.__main__ import versions_of
+
+    fake_models(tmp_path)
+    monkeypatch.setattr(plugins, "registry", lambda: SimpleNamespace(macro={}, satellites={}))
+    calls, macro, bundle = fake_loaders(monkeypatch)
+    found = versions_of(store.Workspace(tmp_path))
+    assert calls == [("macro", NEWER), ("satellites", SATELLITES)]
+    assert found == (macro, bundle)
+
+
+def test_versions_of_honours_explicit_names(tmp_path, monkeypatch):
+    from mst.scenario.__main__ import versions_of
+
+    fake_models(tmp_path)
+    monkeypatch.setattr(plugins, "registry", lambda: SimpleNamespace(macro={}, satellites={}))
+    calls, _, bundle = fake_loaders(monkeypatch, bundle_macro=OLDER)
+    found = versions_of(store.Workspace(tmp_path), OLDER, OTHER)
+    assert calls == [("macro", OLDER), ("satellites", OTHER)]
+    assert found[0].name == OLDER and found[1] is bundle
+
+
+def test_versions_of_refuses_satellites_on_another_macro(tmp_path, monkeypatch):
+    from mst.scenario.__main__ import versions_of
+
+    fake_models(tmp_path)
+    monkeypatch.setattr(plugins, "registry", lambda: SimpleNamespace(macro={}, satellites={}))
+    fake_loaders(monkeypatch, bundle_macro=OLDER)
+    with pytest.raises(ValueError, match="estimated on macro version"):
+        versions_of(store.Workspace(tmp_path), NEWER, OTHER)
+
+
+def test_versions_of_names_a_workspace_without_a_macro_version(tmp_path, monkeypatch):
+    from mst.scenario.__main__ import versions_of
+
+    monkeypatch.setattr(plugins, "registry", lambda: SimpleNamespace(macro={}, satellites={}))
+    fake_loaders(monkeypatch)
+    with pytest.raises(ValueError, match="no finished macro version"):
+        versions_of(store.Workspace(tmp_path))

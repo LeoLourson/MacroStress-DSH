@@ -3,14 +3,16 @@
 ::
 
   python -m mst.scenario reverse ID --workspace DIR --portfolio ID --draws N --seed S
-      (--kappa K | --level L) [--points ...]
+      (--kappa K | --level L) [--macro HASH] [--satellites HASH]
 
 Either the worst loss among the family's scenarios priced at ``kappa`` or less
 (``--kappa``), or the cheapest price among those whose expected shortfall reaches
-``level`` (``--level``). The family is the named scenario with every condition narrowed and
-widened around its midpoint by one factor; the versions, the impacts and the causes stay
-put — a family whose impacts move with the factor is refused, because a free impact costs
-nothing and a bound on the price would bound nothing. Nothing is fetched.
+``level`` (``--level``). The family is the named scenario with every support condition
+narrowed and widened around its midpoint by one factor; the interventions stay put, and the
+versions reach the search as arguments: ``--macro`` and ``--satellites`` name them, and the
+newest finished pair of the workspace is taken when they are omitted. The scenario file names
+no versions. A family whose interventions move with the factor is refused, because a free
+intervention costs nothing and a bound on the price would bound nothing. Nothing is fetched.
 """
 
 import argparse
@@ -19,10 +21,37 @@ import sys
 from pathlib import Path
 
 
+def versions_of(ws, macro_name: str | None = None, satellites_name: str | None = None):
+    """The pair the search runs on: the explicit names or the newest finished pair.
+
+    The scenario file no longer names the versions, so the command line picks the pair the
+    workspace holds through the same selection ``validate`` uses: the newest macro version and
+    the newest satellites estimated on it, unless the caller names them.
+    """
+    from mst.scenario import tool as scenario_tool
+
+    return scenario_tool.versions_of(ws.models, macro=macro_name, satellites=satellites_name)
+
+
 def main(argv: list[str] | None = None) -> int:
-    from mst import plugins, store
-    from mst.drivers import bundle as satellite_bundle
-    from mst.macro import version as macro_version
+    arguments = list(sys.argv[1:] if argv is None else argv)
+    if arguments and arguments[0] == "migrate":
+        from mst.scenario.migrate import migrate
+
+        parser = argparse.ArgumentParser(prog="mst.scenario migrate")
+        parser.add_argument("directory", type=Path)
+        roots = parser.add_mutually_exclusive_group(required=True)
+        roots.add_argument("--workspace", type=Path)
+        roots.add_argument("--models", type=Path)
+        args = parser.parse_args(arguments[1:])
+        try:
+            count = migrate(args.directory, args.models or args.workspace / "models")
+        except (ValueError, OSError, KeyError) as error:
+            print(str(error), file=sys.stderr)
+            return 1
+        print(f"Migrated {count} scenario(s).")
+        return 0
+    from mst import store
     from mst.portfolio import tool as portfolio_tool
     from mst.scenario import tool as scenario_tool
     from mst.scenario.reverse import inf_dist, sup_rho, width_family
@@ -34,6 +63,10 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--portfolio", required=True, help="the portfolio whose loss is rho")
     parser.add_argument("--draws", type=int, required=True)
     parser.add_argument("--seed", type=int, required=True)
+    parser.add_argument("--macro", help="the macro version; the newest finished one when omitted")
+    parser.add_argument(
+        "--satellites", help="the satellites; the newest estimated on that macro when omitted"
+    )
     group = parser.add_mutually_exclusive_group(required=True)
     group.add_argument("--kappa", type=float, help="the price bound: maximise rho under it")
     group.add_argument("--level", type=float, help="the loss level: minimise the price over it")
@@ -41,11 +74,9 @@ def main(argv: list[str] | None = None) -> int:
 
     ws = store.Workspace(args.workspace)
     spec = scenario_tool.load(ws.scenarios, args.scenario)
-    installed = plugins.registry()
-    macro = macro_version.load(ws.models, spec.macro, installed.macro)
-    satellites = satellite_bundle.load(ws.models, spec.satellites, installed.satellites)
+    macro, satellites = versions_of(ws, args.macro, args.satellites)
     portfolio = portfolio_tool.load(ws.portfolios, args.portfolio)
-    family = width_family(spec, macro)
+    family = width_family(spec, macro, satellites)
     if args.kappa is not None:
         found = sup_rho(
             family,

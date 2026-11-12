@@ -1,46 +1,42 @@
 {
-  "approved_by": null,
-  "causes": [],
-  "constraints": [
-    {
-      "basis": "event",
-      "high": null,
-      "low": null,
-      "terms": [
-        {
-          "month": 1,
-          "variable": "ru.usdrub",
-          "weight": 1.0
-        }
-      ],
-      "value": 478.749
-    },
-    {
-      "basis": "event",
-      "high": null,
-      "low": null,
-      "terms": [
-        {
-          "month": 2,
-          "variable": "ru.key_rate",
-          "weight": 1.0
-        }
-      ],
-      "value": 17.0
-    }
-  ],
-  "expectations": [],
-  "horizon": 12,
-  "impacts": [],
-  "inner": 1,
-  "macro": "1de403bd3b7f63182636b83b5051228b9a4f7ea8c9484053de203786390953ab",
   "narrative": "Событие E088: рубль ослабевает до 120 рублей за доллар, и ЦБ в ответ поднимает ключевую ставку на 3 п. п. Событие не имеет даты, начинается в месяце 2 (ноябрь 2026 года). Курс доллара к рублю достигает 120 в месяц 1 (ноябрь 2026), ключевая ставка повышается на 3 п. п. до 17 % в месяц 2 (декабрь 2026). Горизонт — 12 месяцев.",
-  "probabilities": [],
-  "regime_event": null,
-  "satellites": "d1915d6f20863d81c5b63301b10184598a8a97e3052f2411c98904f9e2797a5d",
   "sources": [
     "R27#2/1",
     "R31#4/1",
     "R16#2/1"
-  ]
+  ],
+  "interventions": [],
+  "observations": [
+    {
+      "kind": "constraint",
+      "terms": [
+        {
+          "quantity": "ru.usdrub",
+          "month": "2026-10",
+          "weight": 1.0
+        }
+      ],
+      "unit": "level",
+      "low": null,
+      "high": null,
+      "value": 119.99979086633675,
+      "basis": "event"
+    },
+    {
+      "kind": "constraint",
+      "terms": [
+        {
+          "quantity": "ru.key_rate",
+          "month": "2026-11",
+          "weight": 1.0
+        }
+      ],
+      "unit": "level",
+      "low": null,
+      "high": null,
+      "value": 17.0,
+      "basis": "event"
+    }
+  ],
+  "approved_by": null
 }

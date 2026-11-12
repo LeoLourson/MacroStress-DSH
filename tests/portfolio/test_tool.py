@@ -12,6 +12,26 @@ from mst.portfolio import tool
 from mst.scenario import tool as scenario_tool
 
 
+def calendar(versions, index: int) -> str:
+    """The calendar month of horizon month ``index`` (from one) of the test panel."""
+    from mst.scenario.translate import calendar_month
+
+    return calendar_month(index, versions.data.months[-1].strftime("%Y-%m"))
+
+
+def shift(versions, months, values) -> dict:
+    """An intervention moving ``gl.brent`` by a level ``values`` in the given months."""
+    return {
+        "quantity": "gl.brent",
+        "months": [calendar(versions, month) for month in months],
+        "kind": "shift",
+        "values": values,
+        "unit": "level",
+        "reason": "r",
+        "basis": "assumption",
+    }
+
+
 def test_the_tool_writes_lists_reads_and_deletes_a_portfolio(workspace, positions):
     saved = tool.save(workspace.portfolios, "demo", {"name": "Демо", "positions": positions})
     assert saved["portfolio"]["positions"][0]["id"] == positions[0]["id"]
@@ -84,26 +104,11 @@ def test_check_warns_what_an_impact_on_a_macro_variable_reaches(workspace, portf
         "spike",
         {
             "narrative": "рынок",
-            "horizon": 3,
-            "macro": versions.macro,
-            "satellites": name,
-            "impacts": [
-                {
-                    "target": "gl.brent",
-                    "start": 1,
-                    "values": [10.0, 10.0, 10.0],
-                    "reason": "r",
-                    "basis": "assumption",
-                },
-                {
-                    "target": "gl.brent",
-                    "start": 2,
-                    "values": [1.0, 1.0],
-                    "reason": "r",
-                    "basis": "assumption",
-                },
-            ],
             "approved_by": "И. Иванов",
+            "interventions": [
+                shift(versions, [1, 2, 3], [0.1, 0.1, 0.1]),
+                shift(versions, [4], [0.01]),
+            ],
         },
     )
     tool.save(
@@ -118,7 +123,7 @@ def test_check_warns_what_an_impact_on_a_macro_variable_reaches(workspace, portf
         },
     )
 
-    report = tool.check(workspace, "shares", "spike")
+    report = tool.check(workspace, "shares", "spike", satellites=name)
     assert report["ok"] is True and report["problems"] == []
     warnings = {row.split(":", 1)[0]: row for row in report["warnings"]}
     # The driver with the small loading is named as barely reacting, the large one is not.
@@ -126,11 +131,11 @@ def test_check_warns_what_an_impact_on_a_macro_variable_reaches(workspace, portf
     assert "share_price:sber" in warnings["sber"] and "gl.brent" in warnings["sber"]
     assert "barely reacts" not in warnings["gazp"] and "+1.40" in warnings["gazp"]
     assert set(warnings) == {"sber", "gazp"}
-    # Two impacts on one variable are one warning per driver.
+    # Two interventions on one variable are one warning per driver.
     assert len(report["warnings"]) == 2
 
     # A portfolio whose other drivers read other variables is warned for the share alone.
-    calm = tool.check(workspace, portfolio, "spike")
+    calm = tool.check(workspace, portfolio, "spike", satellites=name)
     assert {row.split(":", 1)[0] for row in calm["warnings"]} == {"sber"}
 
 
@@ -221,9 +226,11 @@ def test_check_names_a_currency_the_models_cannot_price(workspace, positions):
 
 
 def test_check_names_an_infeasible_scenario(workspace, portfolio, versions):
-    target = float(versions.data.y[-1, 0])
+    level = float(np.exp(versions.data.y[-1, 0] / 100.0))
     fixed = {
-        "terms": [{"variable": "gl.brent", "month": 1, "weight": 1.0}],
+        "kind": "constraint",
+        "terms": [{"quantity": "gl.brent", "month": calendar(versions, 1), "weight": 1.0}],
+        "unit": "level",
         "basis": "assumption",
     }
     scenario_tool.save(
@@ -231,13 +238,10 @@ def test_check_names_an_infeasible_scenario(workspace, portfolio, versions):
         "bad",
         {
             "narrative": "дважды",
-            "horizon": 3,
-            "macro": versions.macro,
-            "satellites": versions.satellites,
             "approved_by": "И. Иванов",
-            "constraints": [
-                {**fixed, "value": target},
-                {**fixed, "value": target + 1.0},
+            "observations": [
+                {**fixed, "value": level},
+                {**fixed, "value": level * 1.02},
             ],
         },
     )

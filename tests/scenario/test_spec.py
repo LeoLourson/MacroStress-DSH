@@ -1,198 +1,169 @@
-"""mst.scenario.spec: the scenario file and the contracts it carries."""
+"""mst.scenario.spec: the event file and the statements it carries."""
 
 import pytest
 from pydantic import ValidationError
 
-from mst.scenario.contracts import Constraint, Impact, Scenario
+from mst.scenario.contracts import (
+    Constraint,
+    Expectation,
+    ProbabilityCondition,
+    Scenario,
+)
 from mst.scenario.spec import Spec
 
-MACRO = "a" * 64
-SATELLITES = "b" * 64
+
+def term(quantity="ru.key_rate", month="2026-11", weight=1.0):
+    return {"quantity": quantity, "month": month, "weight": weight}
 
 
-def rate_at(month, low, high=None):
-    """A constraint on the key rate: a point when only the value is given, an interval
-    otherwise."""
-    row = {
-        "terms": [{"variable": "ru.key_rate", "month": month, "weight": 1.0}],
-        "basis": ["S1/2020#1/1"],
-    }
-    if high is None:
-        return row | {"value": low}
-    return row | {"low": low, "high": high}
-
-
-def impact(**changes):
+def constraint(**changes):
     return {
-        "target": "price:alpha",
-        "start": 1,
-        "values": [-10.0, -6.0, -3.0],
-        "reason": "перебой поставок",
-        "basis": ["S1/2020#1/1"],
+        "kind": "constraint",
+        "terms": [term()],
+        "value": 11.5,
+        "unit": "level",
+        "basis": "event",
     } | changes
 
 
-def spec(**changes):
-    values = {
+def expectation(**changes):
+    return {
+        "kind": "expectation",
+        "terms": [term()],
+        "low": 11.0,
+        "unit": "level",
+        "basis": "event",
+    } | changes
+
+
+def probability(**changes):
+    return {
+        "kind": "probability",
+        "terms": [term()],
+        "low": 10.0,
+        "high": 12.0,
+        "at_least": 0.8,
+        "unit": "level",
+        "basis": "event",
+    } | changes
+
+
+def test_a_stored_scenario_is_the_event_contract_itself():
+    assert Spec is Scenario
+    raw = {
         "narrative": "ставка растёт",
-        "horizon": 12,
-        "macro": MACRO,
-        "satellites": SATELLITES,
+        "sources": ["S1/2020#1/1"],
+        "interventions": [
+            {
+                "quantity": "ru.key_rate",
+                "months": ["2026-11"],
+                "kind": "set",
+                "values": [11.5],
+                "unit": "level",
+                "reason": "Решение ЦБ",
+                "basis": "event",
+            }
+        ],
+        "observations": [constraint()],
         "approved_by": "И. Иванов",
     }
-    values.update(changes)
-    return values
-
-
-def test_a_scenario_file_names_its_versions_and_the_contract_holds():
-    built = Spec.model_validate(
-        spec(constraints=[rate_at(3, 21.0), rate_at(12, 15.0, 18.0)], impacts=[impact()])
-    )
-    assert built.macro == MACRO and built.satellites == SATELLITES
-    assert [c.value for c in built.constraints] == [21.0, None]
-    assert [(c.low, c.high) for c in built.constraints] == [(None, None), (15.0, 18.0)]
-    assert built.constraints[0].point and not built.constraints[1].point
-    assert built.impacts[0].target == "price:alpha"
-
-
-def test_both_versions_are_required_and_are_hashes():
-    for key in ("macro", "satellites"):
-        for value in (None, "", "short"):
-            with pytest.raises(ValidationError):
-                Spec.model_validate(spec() | {key: value})
-        values = spec()
-        del values[key]
-        with pytest.raises(ValidationError, match=key):
-            Spec.model_validate(values)
-
-
-def test_unknown_fields_are_refused():
-    with pytest.raises(ValidationError):
-        Spec.model_validate(spec() | {"seed": 1})
-
-
-def test_constraint_requires_low_below_high():
-    with pytest.raises(ValidationError, match="low < high"):
-        Constraint.model_validate(rate_at(3, 21.0, 20.0))
-
-
-def test_a_constraint_of_zero_width_is_a_point_not_an_interval():
-    with pytest.raises(ValidationError, match="low < high"):
-        Constraint.model_validate(rate_at(3, 21.0, 21.0))
+    built = Spec.model_validate(raw)
+    dumped = built.model_dump(mode="json")
+    assert dumped["narrative"] == raw["narrative"] and dumped["sources"] == raw["sources"]
+    assert dumped["observations"][0]["value"] == 11.5
+    assert dumped["interventions"] == raw["interventions"]
+    assert Spec.model_validate(dumped) == built
 
 
 def test_a_constraint_names_either_an_interval_or_a_value():
     with pytest.raises(ValidationError, match="not both"):
-        Constraint.model_validate(rate_at(3, 20.0, 22.0) | {"value": 21.0})
+        Constraint.model_validate(constraint(low=10.0, high=12.0))
     with pytest.raises(ValidationError, match="low and high, or a value"):
-        Constraint.model_validate(
-            {"terms": rate_at(3, 21.0)["terms"], "basis": ["S1/2020#1/1"]}
-        )
+        Constraint.model_validate(constraint(value=None))
     with pytest.raises(ValidationError, match="both low and high"):
-        Constraint.model_validate(rate_at(3, None, 20.0))
+        Constraint.model_validate(constraint(value=None, low=10.0))
 
 
-def test_a_constraint_month_must_lie_in_the_horizon():
-    with pytest.raises(ValidationError, match="month 13 is beyond the horizon of 12"):
-        Spec.model_validate(spec(constraints=[rate_at(13, 21.0)]))
+def test_a_constraint_interval_needs_strict_bounds():
+    with pytest.raises(ValidationError, match="low < high"):
+        Constraint.model_validate(constraint(value=None, low=12.0, high=12.0))
+    with pytest.raises(ValidationError, match="low < high"):
+        Constraint.model_validate(constraint(value=None, low=13.0, high=12.0))
+    assert Constraint.model_validate(constraint(value=None, low=10.0, high=12.0)).point is False
 
 
-def test_a_file_impact_names_its_target_start_and_values():
-    built = Impact.model_validate(impact())
-    assert built.target == "price:alpha"
-    assert built.start == 1 and built.values == [-10.0, -6.0, -3.0]
-    assert built.end == 3
+def test_a_point_is_marked_and_keeps_its_value():
+    point = Constraint.model_validate(constraint())
+    assert point.point and point.value == 11.5 and point.low is None and point.high is None
+    interval = Constraint.model_validate(constraint(value=None, low=10.0, high=12.0))
+    assert not interval.point and interval.value is None
 
 
-def test_an_impact_is_a_path_with_a_value_for_every_month_it_touches():
-    built = Impact.model_validate(impact())
-    assert built.value_at(0) == 0.0
-    assert built.value_at(1) == -10.0
-    assert built.value_at(2) == -6.0
-    assert built.value_at(3) == -3.0
-    assert built.value_at(4) == 0.0
-    # A gap inside the path is a written zero, not a missing month.
-    gapped = Impact.model_validate(impact(values=[-10.0, 0.0, -3.0]))
-    assert gapped.value_at(2) == 0.0 and gapped.end == 3
+def test_an_expectation_accepts_one_or_two_bounds_and_orders_them():
+    assert Expectation.model_validate(expectation()).high is None
+    assert Expectation.model_validate(expectation(low=None, high=12.0)).low is None
+    assert Expectation.model_validate(expectation(high=12.0)).high == 12.0
+    with pytest.raises(ValidationError, match="low, high, or both"):
+        Expectation.model_validate(expectation(low=None))
+    with pytest.raises(ValidationError, match="low < high"):
+        Expectation.model_validate(expectation(high=11.0))
 
 
-def test_an_impact_refuses_an_empty_path_and_non_finite_values():
-    with pytest.raises(ValidationError, match="at least 1"):
-        Impact.model_validate(impact(values=[]))
-    for bad in (float("nan"), float("inf")):
+def test_a_probability_condition_needs_a_band_and_a_level():
+    assert ProbabilityCondition.model_validate(probability()).at_least == 0.8
+    with pytest.raises(ValidationError, match="low < high"):
+        ProbabilityCondition.model_validate(probability(low=12.0, high=12.0))
+    for level in (-0.1, 1.1):
         with pytest.raises(ValidationError):
-            Impact.model_validate(impact(values=[-10.0, bad]))
+            ProbabilityCondition.model_validate(probability(at_least=level))
 
 
-def test_an_impact_must_stay_in_the_horizon():
-    # Twelve values from month 1 end at month 12; a thirteenth reaches month 13.
-    with pytest.raises(ValidationError, match="month 13 is beyond the horizon"):
-        Spec.model_validate(spec(impacts=[impact(values=[-10.0] * 13)]))
-
-
-def test_the_old_impact_fields_are_refused():
-    # The constant shift of the old format is a repeated value now; the fields themselves
-    # are gone, and a file that still carries them does not pass the contract.
-    for field in ("end", "delta"):
+def test_a_term_needs_a_calendar_month_and_a_non_zero_weight():
+    for month in ("2026-00", "2026-13", "2026-1", "2026-11-01", 11):
         with pytest.raises(ValidationError):
-            Impact.model_validate(impact(**{field: 6 if field == "end" else -10.0}))
+            Constraint.model_validate(constraint(terms=[term(month=month)]))
+    with pytest.raises(ValidationError, match="non-zero weight"):
+        Constraint.model_validate(constraint(terms=[term(weight=0.0)]))
+    with pytest.raises(ValidationError):
+        Constraint.model_validate(constraint(terms=[term(weight=float("inf"))]))
 
 
-def test_an_impact_needs_a_reason_and_a_basis():
-    with pytest.raises(ValidationError, match="at least 1"):
-        Impact.model_validate(impact(basis=[]))
+def test_one_statement_names_a_quantity_and_a_month_at_most_once():
+    repeated = [term(), term(weight=-2.0)]
+    with pytest.raises(ValidationError, match=r"ru.key_rate in month 2026-11 appears twice"):
+        Constraint.model_validate(constraint(terms=repeated))
+    # The same quantity in two months is a change, not a repetition.
+    months = [term(), term(month="2026-12")]
+    assert len(Constraint.model_validate(constraint(terms=months)).terms) == 2
 
 
-def test_a_constraint_needs_a_basis():
-    row = rate_at(3, 21.0)
-    with pytest.raises(ValidationError, match="basis"):
-        Constraint.model_validate({key: value for key, value in row.items() if key != "basis"})
-    # The word of the author's own is a basis too, and so is a list of fragments.
-    assert Constraint.model_validate(row | {"basis": "assumption"}).basis == "assumption"
-    assert Impact.model_validate(impact(basis="assumption")).basis == "assumption"
+def test_every_statement_needs_a_basis_and_the_basis_is_a_word_or_fragments():
+    for cls, raw in ((Constraint, constraint()), (Expectation, expectation())):
+        del raw["basis"]
+        with pytest.raises(ValidationError, match="basis"):
+            cls.model_validate(raw)
+        assert cls.model_validate(raw | {"basis": "assumption"}).basis == "assumption"
+        assert cls.model_validate(raw | {"basis": ["S1/2020#1/1"]}).basis == ["S1/2020#1/1"]
+        with pytest.raises(ValidationError, match="at least 1"):
+            cls.model_validate(raw | {"basis": []})
 
 
 def test_a_word_inside_a_list_of_fragments_is_refused_by_name():
     # Left as a list, the word would pass the contract and fail later as a missing fragment.
     for word in ("event", "assumption"):
         with pytest.raises(ValidationError, match=f"the word {word} inside a list"):
-            Constraint.model_validate(rate_at(3, 21.0) | {"basis": [word, "S1/2020#1/1"]})
+            Constraint.model_validate(constraint(basis=[word, "S1/2020#1/1"]))
     # A word alone in a list is still that word.
-    assert Constraint.model_validate(rate_at(3, 21.0) | {"basis": ["event"]}).basis == "event"
+    assert Constraint.model_validate(constraint(basis=["event"])).basis == "event"
 
 
-def test_causes_are_unique():
-    with pytest.raises(ValidationError, match=r"ru.inflation is named twice"):
-        Spec.model_validate(spec(causes=["ru.inflation", "ru.inflation"]))
-
-
-def test_the_old_overlays_field_is_refused():
-    old = {
-        "driver": "price:alpha",
-        "start": 1,
-        "end": 6,
-        "delta": -10.0,
-        "reason": "перебой поставок",
-        "basis": ["S1/2020#1/1"],
-    }
-    with pytest.raises(ValidationError, match="overlays"):
-        Spec.model_validate(spec(overlays=[old]))
-
-
-def test_the_old_driving_shocks_field_is_refused():
-    # The causes have their own name now; the old one is an unknown field, refused as such.
-    with pytest.raises(ValidationError, match="driving_shocks"):
-        Spec.model_validate(spec(driving_shocks=["ru.monetary"]))
-
-
-def test_the_contract_reads_the_fields_the_forecast_uses():
-    built = Scenario.model_validate(
-        {
-            "narrative": "ставка растёт",
-            "horizon": 12,
-            "causes": ["ru.monetary"],
-            "sources": ["S1/2020#1/1"],
-        }
-    )
-    assert built.horizon == 12 and built.causes == ["ru.monetary"]
-    assert built.sources == ["S1/2020#1/1"]
+def test_the_narrative_and_sources_follow_the_wire_contract():
+    with pytest.raises(ValidationError, match="narrative"):
+        Scenario.model_validate({"narrative": ""})
+    with pytest.raises(ValidationError):
+        Scenario.model_validate({"narrative": "  "})
+    with pytest.raises(ValidationError):
+        Scenario.model_validate({"narrative": "Event", "sources": [""]})
+    with pytest.raises(ValidationError):
+        Scenario(narrative="Event", approved_by=2)
+    assert Scenario(narrative="Event").sources == []

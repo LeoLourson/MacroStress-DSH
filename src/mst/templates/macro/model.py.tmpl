@@ -14,7 +14,6 @@ import numpy as np
 
 from mst.macro.panel import Panel, build_panel
 from mst.macro.registry import load_registry as load_variables
-from mst.model_sdk import overlay as sample_overlay
 from mst.model_sdk.conditional import InfeasibleScenario, dependent_rows, draw_driving
 from mst.model_sdk.contracts import (
     MacroEstimate,
@@ -23,6 +22,7 @@ from mst.model_sdk.contracts import (
     MacroSimulation,
     ScenarioPlan,
 )
+from mst.model_sdk.interventions import constraints_under_default
 
 START = date(2012, 1, 1)
 """The first month of the panel; a model of its own chooses its own history window."""
@@ -146,53 +146,37 @@ class {{class}}(MacroModel):
         )
 
     def simulate(self, model: {{class}}Model, plan: ScenarioPlan, *, draws: int, seed: int):
-        horizon = plan.horizon
-        n = len(model.ids)
-        driving = np.zeros(n, dtype=bool)
-        index = {shock: k for k, shock in enumerate(model.ids)}
-        unknown = [shock for shock in plan.causes if shock not in index]
-        if unknown:
-            raise ValueError(f"unknown shock {', '.join(unknown)}")
-        for shock in plan.causes:
-            driving[index[shock]] = True
-        paths = np.empty((draws, horizon + 1, n))
+        horizon, n = plan.horizon, len(model.ids)
+        if any(item.values.shape[0] != draws for item in plan.interventions):
+            raise ValueError("intervention groups do not match draws")
+        paths = np.empty((draws * plan.inner, horizon + 1, n))
         months = [_shift_month(model.last_month, k) for k in range(horizon + 1)]
         for r in range(draws):
+            constraints = constraints_under_default(
+                plan.constraints, plan.interventions, model.ids, group=r
+            )
+            z = _loadings(constraints, model, horizon).reshape(len(constraints), horizon * n)
+            bad = dependent_rows(z, z)
+            if bad:
+                raise InfeasibleScenario(bad)
+            low = np.array([c.low for c in constraints])
+            high = np.array([c.high for c in constraints])
+            offset = _offset(constraints, model)
             rng = np.random.default_rng([seed, r])
-            eps = rng.standard_normal((horizon, n))
-            if plan.constraints and driving.any():
-                # Named causes: the driving shocks are truncated on the conditions, the
-                # shared machinery of every linear-gaussian model.
-                z = _loadings(plan.constraints, model, horizon)
-                z_all = z.reshape(len(plan.constraints), -1)
-                z_driving = z[:, :, driving].reshape(len(plan.constraints), -1)
-                bad = dependent_rows(z_driving, z_all)
-                if bad:
-                    raise InfeasibleScenario(bad)
-                low = np.array([c.low for c in plan.constraints])
-                high = np.array([c.high for c in plan.constraints])
-                offset = _offset(plan.constraints, model)
-                offset += np.einsum(
-                    "csj,sj->c", z[:, :, ~driving], eps[:, ~driving]
+            for j in range(plan.inner):
+                eps = (
+                    draw_driving(z, low - offset, high - offset, rng, every=z).reshape(horizon, n)
+                    if constraints else rng.standard_normal((horizon, n))
                 )
-                drawn = draw_driving(
-                    z_driving, low - offset, high - offset, rng, every=z_all
+                steps = eps @ model.chol.T + model.drift
+                paths[r * plan.inner + j] = np.vstack(
+                    [model.last, model.last + np.cumsum(steps, axis=0)]
                 )
-                eps[:, driving] = drawn.reshape(horizon, driving.sum())
-            steps = eps @ model.chol.T + model.drift
-            paths[r] = np.vstack([model.last, model.last + np.cumsum(steps, axis=0)])
-        if plan.constraints and not driving.any():
-            # No cause named: the parameters are all the model carries, R is constant, and
-            # the model is its sample of paths — the canon's section 8. The conditions
-            # weigh the sample, the survivors carry the run, and the price is the logarithm
-            # of the surviving share.
-            found = sample_overlay.reweight(paths, model.ids, plan.constraints)
-            if found.survivors == 0:
-                raise InfeasibleScenario(list(range(len(plan.constraints))))
-            picked = sample_overlay.resample(found.weights, np.random.default_rng([seed, 1]))
-            paths = paths[picked]
+        # Default form: the platform, not this plugin, applies the interventions once.
         return MacroSimulation(
-            ids=model.ids, months=months, paths=paths, history=np.tile(model.last, (draws, 1, 1))
+            ids=model.ids, months=months, paths=paths,
+            history=np.tile(model.last, (draws * plan.inner, 1, 1)),
+            group=np.repeat(np.arange(draws), plan.inner),
         )
 
 

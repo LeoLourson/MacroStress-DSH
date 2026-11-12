@@ -8,7 +8,7 @@ import pytest
 
 from mst.drivers import bundle as satellite_bundle
 from mst.drivers.history import history
-from mst.model_sdk import AdditiveImpact
+from mst.model_sdk import Intervention
 from mst.model_sdk.contracts import MacroSimulation as Simulation
 from mst.model_sdk.contracts import SatelliteEstimateContext
 from mst.plugins.hier.check import check
@@ -268,7 +268,7 @@ def test_an_impact_lands_on_the_level_and_does_not_accumulate(differenced):
         model,
         upper_of(macro),
         drivers,
-        [AdditiveImpact(target="price:alpha", start=2, values=(10.0, 10.0))],
+        [Intervention("price:alpha", (2, 3), "shift", np.full((macro.paths.shape[0], 2), 10.0))],
         shocks=shocks,
         seed=3,
         stream=0,

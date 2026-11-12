@@ -17,7 +17,14 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from .contracts import AdditiveImpact, MacroSimulation, SatelliteModel, UpperPaths
+from .contracts import (
+    Intervention,
+    MacroSimulation,
+    SatelliteModel,
+    ScenarioPlan,
+    UpperPaths,
+)
+from .interventions import apply_default
 
 
 @dataclass(frozen=True)
@@ -39,7 +46,7 @@ def check_shocks(
     *,
     correlated: Sequence[str] | None = None,
     history: int | None = None,
-    impacts: Sequence[AdditiveImpact] = (),
+    interventions: Sequence[Intervention] = (),
     seed: int = 1,
     stream: int = 1,
 ) -> list[Finding]:
@@ -72,7 +79,7 @@ def check_shocks(
             loaded,
             upper,
             list(drivers),
-            list(impacts),
+            list(interventions),
             shocks=first_shocks,
             seed=seed,
             stream=stream,
@@ -84,7 +91,7 @@ def check_shocks(
             loaded,
             upper,
             list(drivers),
-            list(impacts),
+            list(interventions),
             shocks=second_shocks,
             seed=seed,
             stream=stream,
@@ -115,4 +122,76 @@ def check_shocks(
                 "equal",
             )
         )
+    return findings
+
+
+def check_interventions(
+    model, loaded, *, horizon: int = 3, draws: int = 2, inner: int = 2, seed: int = 1
+) -> list[Finding]:
+    """Check group layout and the macro platform's default/recursive dispatch boundary.
+
+    A default-form macro plugin returns pre-intervention paths; the platform applies set or
+    shift once. A recursive plugin returns the intervened paths itself. Both must set exact
+    values on every path, preserve month zero, and return contiguous preserved groups.
+    """
+    try:
+        baseline = model.simulate(
+            loaded, ScenarioPlan(horizon=horizon, inner=inner), draws=draws, seed=seed
+        )
+        findings = _group_findings(baseline, draws, inner, horizon)
+        if findings or not baseline.ids:
+            return findings or [Finding("interventions", "the model returned no quantities")]
+        form = model.structural_form(loaded)
+        if form is not None and set(form.order_within_month) != set(baseline.ids):
+            return [Finding("structural_form", "the order is not a permutation of model ids")]
+        for kind in ("set", "shift"):
+            findings.extend(
+                _intervention_findings(
+                    model, loaded, baseline, kind, form, horizon, draws, inner, seed
+                )
+            )
+        return findings
+    except Exception as error:  # noqa: BLE001 - a broken model is a finding
+        return [Finding("interventions", f"{type(error).__name__}: {error}")]
+
+
+def _group_findings(simulation, draws, inner, horizon):
+    expected = (draws * inner, horizon + 1, len(simulation.ids))
+    if simulation.paths.shape != expected:
+        return [Finding("groups", f"expected paths {expected}, got {simulation.paths.shape}")]
+    group = simulation.group
+    if group is None and inner == 1:
+        return []
+    if group is None or not np.array_equal(group, np.repeat(np.arange(draws), inner)):
+        return [Finding("groups", "paths do not use contiguous groups of inner members")]
+    return []
+
+
+def _intervention_findings(model, loaded, baseline, kind, form, horizon, draws, inner, seed):
+    values = np.arange(draws, dtype=float)[:, None] + 7.0
+    item = Intervention(baseline.ids[0], (1,), kind, values)
+    plan = ScenarioPlan(horizon=horizon, interventions=(item,), inner=inner)
+    simulated = model.simulate(loaded, plan, draws=draws, seed=seed)
+    findings = _group_findings(simulated, draws, inner, horizon)
+    if findings:
+        return findings
+    if simulated.ids != baseline.ids:
+        return [Finding("interventions", "interventions changed the returned quantity ids")]
+    paths = (
+        apply_default(simulated.paths, simulated.ids, (item,), inner=inner)
+        if form is None else simulated.paths
+    )
+    expected = np.repeat(values[:, 0], inner)
+    if kind == "set" and not np.array_equal(paths[:, 1, 0], expected):
+        findings.append(Finding("set", "the installed value is not exact on every path"))
+    if not np.array_equal(paths[:, 0], baseline.paths[:, 0]):
+        findings.append(Finding("interventions", "an intervention changed month zero"))
+    if form is None:
+        intended = baseline.paths.copy()
+        if kind == "set":
+            intended[:, 1, 0] = expected
+        else:
+            intended[:, 1, 0] += expected
+        if not np.array_equal(paths, intended):
+            findings.append(Finding(kind, "the default form changed unmentioned cells"))
     return findings

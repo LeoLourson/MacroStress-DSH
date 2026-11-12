@@ -3,17 +3,18 @@
 The canon's section 6 turns the question around: instead of asking what a scenario costs, it
 asks either for the worst functional ``rho`` among the scenarios whose price stays under
 ``kappa``, or for the cheapest scenario whose ``rho`` reaches a level ``L*``. The family of
-scenarios is fixed by its versions ``m``, its impacts ``O`` and its causes ``D`` — only the
-conditions' width moves with the parameter ``c`` — because a free ``O`` would cost nothing
-and the bound on the price would bound nothing.
+scenarios is fixed by its versions ``m`` and its interventions ``O`` — only the conditions'
+width moves with the parameter ``c`` — because a free ``O`` would cost nothing and the bound
+on the price would bound nothing. The versions reach the search as arguments, the same ones the
+builder receives; the scenario file no longer names them.
 
 A point whose price carries an error above a tenth of it is not an estimate
 (``mst.model_sdk.dist.price_estimated``): noise would otherwise set the bound on the price,
 so the search treats such a point as one that does not qualify, and the answer never rests
 on one. When nothing qualifies, the answer is ``None``, as it is for an empty set.
 
-``Family`` carries the builder ``c -> Spec``; ``width_family`` is the natural one: every
-condition of a scenario narrows or widens around its midpoint by the same factor. The search
+``Family`` carries the builder ``c -> Scenario``; ``width_family`` is the natural one: every
+condition of the support narrows or widens around its midpoint by the same factor. The search
 walks a grid of ``c`` and refines around the boundary with bisection: the streams of stage 4
 make the price and the loss smooth in ``c`` up to the Monte-Carlo error, so a handful of
 refinements finds the boundary the report states.
@@ -22,10 +23,14 @@ refinements finds the boundary the report states.
 from collections.abc import Callable
 from dataclasses import dataclass
 
+import numpy as np
+
+from ..drivers.registry import from_model
 from ..model_sdk.dist import price_estimated
 from .build import build as build_paths
-from .build import tolerance_of
-from .spec import Spec
+from .context import context_from_versions
+from .contracts import Scenario
+from .translate import observations_of, tolerance_of
 
 GRID = (0.05, 0.1, 0.2, 0.35, 0.5, 0.75, 1.0, 1.5, 2.5, 4.0)
 """The coarse grid of the width factor ``c`` the search starts from."""
@@ -35,68 +40,93 @@ REFINEMENTS = 5
 
 @dataclass(frozen=True)
 class Family:
-    """A one-parameter family of scenarios with fixed versions, impacts and causes.
+    """A one-parameter family of scenarios with fixed versions and interventions.
 
     ``build`` maps the width factor ``c`` to a scenario: ``c = 1`` is the family's own
     scenario, smaller ``c`` narrows its conditions towards their midpoints and a larger one
-    widens them. Everything else — the versions, the impacts ``O``, the causes ``D`` — stays
-    put, and the search refuses a family whose impacts move with ``c``: a free impact costs
-    nothing, and a bound on the price would bound nothing.
+    widens them. Everything else — the versions, which the search receives as arguments, and
+    the interventions ``O`` — stays put, and the search refuses a family whose interventions
+    move with ``c``: a free intervention costs nothing, and a bound on the price would bound
+    nothing.
     """
 
-    build: Callable[[float], Spec]
+    build: Callable[[float], Scenario]
 
-    def check(self) -> list[Spec]:
-        """The variants of the coarse grid, refused when their impacts differ.
+    def check(self) -> list[Scenario]:
+        """The variants of the coarse grid, refused when their interventions differ.
 
-        The impacts are compared as the scenario contract stores them: any difference in
-        target, months or delta breaks the family, whatever the builder meant by it.
+        The interventions are compared as the scenario contract stores them: any difference
+        in quantity, months, kind or values breaks the family, whatever the builder meant by
+        it.
         """
         variants = [self.build(c) for c in GRID]
-        impacts = [
-            [impact.model_dump() for impact in variant.impacts] for variant in variants
+        interventions = [
+            [item.model_dump() for item in variant.interventions] for variant in variants
         ]
-        if any(other != impacts[0] for other in impacts[1:]):
+        if any(other != interventions[0] for other in interventions[1:]):
             raise ValueError(
-                "the family's impacts move with the parameter: only the conditions may "
-                "vary, a free impact O costs nothing and the price bounds nothing"
+                "the family's interventions move with the parameter: only the conditions "
+                "may vary, a free intervention O costs nothing and the price bounds nothing"
             )
         return variants
 
 
-def width_family(spec: Spec, macro) -> Family:
+def width_family(spec: Scenario, macro, satellites=None, *, horizon: int = 12) -> Family:
     """The family of a scenario: every support condition narrows and widens around its midpoint.
 
-    A point ``value`` is the interval ``value ± tau`` the platform expands it to, so ``c = 1``
-    is the scenario itself whatever its conditions. The conditions on means and probabilities
-    stay put: they carry their own price, and the family moves the event alone.
+    A point ``value`` is the interval ``value ± tau`` the platform expands it to, and the
+    bounds move in the model scale, where the price reads them; they are written back in the
+    observation's own unit, so ``c = 1`` is the scenario itself in the model scale whatever its
+    unit. A condition on a mean or on a probability stays put: it carries its own event, and
+    the family moves the support conditions alone.
     """
+    data = context_from_versions(macro, satellites)
+    rows = observations_of(spec, data, horizon)
 
-    def build(c: float) -> Spec:
-        constraints = []
-        for constraint in spec.constraints:
-            if constraint.value is not None:
-                half = c * tolerance_of(constraint.terms, macro)
-                constraints.append(
-                    constraint.model_copy(
-                        update={
-                            "low": constraint.value - half,
-                            "high": constraint.value + half,
-                            "value": None,
-                        }
-                    )
-                )
-                continue
-            middle = (constraint.low + constraint.high) / 2
-            half = (constraint.high - constraint.low) / 2
-            constraints.append(
-                constraint.model_copy(
-                    update={"low": middle - c * half, "high": middle + c * half}
-                )
-            )
-        return spec.model_copy(update={"constraints": constraints})
+    def moved(row, c: float):
+        if row.kind != "constraint":
+            return row.source
+        if row.point:
+            half = c * tolerance_of(row.terms, data)
+            low, high = row.value - half, row.value + half
+        else:
+            middle = (row.low + row.high) / 2
+            half = (row.high - row.low) / 2
+            low, high = middle - c * half, middle + c * half
+        quantity = data.quantity(row.terms[0].variable)
+        anchor = sum(
+            term.weight * data.last_model.get(term.quantity, 0.0) for term in row.source.terms
+        )
+        return row.source.model_copy(
+            update={
+                "low": _own_unit(quantity, low, row.source.unit, anchor),
+                "high": _own_unit(quantity, high, row.source.unit, anchor),
+                "value": None,
+            }
+        )
+
+    def build(c: float) -> Scenario:
+        observations = [moved(row, c) for row in rows]
+        return spec.model_copy(update={"observations": observations})
 
     return Family(build=build)
+
+
+def _own_unit(quantity, coordinate: float, unit: str, anchor: float) -> float:
+    """A model coordinate back in the unit of the statement.
+
+    ``to_scale`` maps a level, a change or a percent to the model scale; this is its inverse
+    for the same anchor ``last`` — the weighted last known coordinate of the statement's
+    terms, which ``observation_bounds`` gives the forward conversion. ``log100`` and ``logit``
+    are inverted by the driver registry's ``from_model``, and a change carries the anchor the
+    way ``translate._own_level`` reads it.
+    """
+    if unit == "percent":
+        return float(100 * np.expm1((coordinate - anchor) / 100))
+    level = float(from_model(quantity.transform, coordinate))
+    if unit == "change":
+        level -= float(from_model(quantity.transform, anchor))
+    return level
 
 
 @dataclass(frozen=True)
@@ -115,7 +145,7 @@ class Point:
 
 
 def evaluate(
-    spec: Spec, macro, satellites, positions, *, draws: int, seed: int, base_currency="RUB"
+    spec: Scenario, macro, satellites, positions, *, draws: int, seed: int, base_currency="RUB"
 ) -> Point:
     """``(dist, rho)`` of one scenario: the price and the loss the reverse problem trades.
 
@@ -142,11 +172,7 @@ def evaluate(
     losses = losses_of(batch.results)
     rho = float(es_block(losses, seed=seed)["es95"]) if losses.size else None
     dist = None if paths.dist is None else float(paths.dist.distance)
-    estimated = (
-        True
-        if dist is None
-        else price_estimated(dist, float(paths.dist.standard_error))
-    )
+    estimated = True if dist is None else price_estimated(dist, float(paths.dist.standard_error))
     return Point(c=float("nan"), dist=dist, rho=rho, estimated=estimated)
 
 
@@ -167,9 +193,7 @@ def sup_rho(
     price stays under ``kappa`` — is bisected. The answer names the point and the whole path
     of the search, so the reader sees the trade the price allows.
     """
-    points = _walk(
-        family, macro, satellites, positions, draws=draws, seed=seed, grid=grid
-    )
+    points = _walk(family, macro, satellites, positions, draws=draws, seed=seed, grid=grid)
     affordable = [
         point
         for point in points
@@ -217,9 +241,7 @@ def inf_dist(
     grid: tuple[float, ...] = GRID,
 ) -> dict:
     """The cheapest price among the family's scenarios whose ``rho`` reaches ``level``."""
-    points = _walk(
-        family, macro, satellites, positions, draws=draws, seed=seed, grid=grid
-    )
+    points = _walk(family, macro, satellites, positions, draws=draws, seed=seed, grid=grid)
     reached = [
         point
         for point in points
@@ -257,10 +279,7 @@ def inf_dist(
 def _walk(family, macro, satellites, positions, *, draws, seed, grid):
     """Every point of the coarse grid, with the family's impacts checked first."""
     variants = family.check()
-    points = [
-        _evaluate(family, c, macro, satellites, positions, draws, seed)
-        for c in grid
-    ]
+    points = [_evaluate(family, c, macro, satellites, positions, draws, seed) for c in grid]
     # The check built the variants; the evaluation builds them again — the same builder,
     # the same scenarios.
     assert len(variants) == len(points)
@@ -269,12 +288,8 @@ def _walk(family, macro, satellites, positions, *, draws, seed, grid):
 
 def _evaluate(family, c, macro, satellites, positions, draws, seed) -> Point:
     """One point of the family, carrying its own ``c`` and estimated mark."""
-    point = evaluate(
-        family.build(c), macro, satellites, positions, draws=draws, seed=seed
-    )
-    return Point(
-        c=float(c), dist=point.dist, rho=point.rho, estimated=point.estimated
-    )
+    point = evaluate(family.build(c), macro, satellites, positions, draws=draws, seed=seed)
+    return Point(c=float(c), dist=point.dist, rho=point.rho, estimated=point.estimated)
 
 
 def _bracket(inside, points):

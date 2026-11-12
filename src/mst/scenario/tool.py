@@ -1,17 +1,18 @@
 """The operations of the ``scenario`` tool: list, get, save and validate.
 
-A scenario is ``scenarios/<id>.json`` of the workspace. ``list`` and ``get`` read the files,
-``save`` checks the contract and writes one atomically, and ``validate`` loads the two model
-versions the file names and reports every problem that keeps the scenario from being computed.
-Nothing here touches the network: ``validate`` runs on the index and the versions already on
-disk.
+A scenario is ``scenarios/<id>.json`` of the workspace: the event, its sources, the interventions
+and the observations, with the name of the human who approved it. ``list`` and ``get`` read the
+files, ``save`` checks the contract and writes one atomically, and ``validate`` reports every
+problem that keeps the scenario from being computed. The model versions are not part of the file:
+``validate`` loads the newest finished pair on disk, or the pair it is given. Nothing here touches
+the network: ``validate`` runs on the index and the versions already on disk.
 """
 
 import re
 from pathlib import Path
 from typing import Any
 
-from .. import store
+from .. import store, versions
 from ..drivers import bundle as satellite_bundle
 from ..macro import version as macro_version
 from .build import validate as check
@@ -22,7 +23,7 @@ ID = re.compile(r"^[a-z0-9][a-z0-9-]*$")
 
 
 def catalogue(root: Path) -> dict:
-    """Every scenario file with the versions, horizon and counts it names."""
+    """Every scenario file with the counts of its event and the name of its approver."""
     found, broken = [], []
     for file in sorted(root.glob("*.json")):
         try:
@@ -34,13 +35,10 @@ def catalogue(root: Path) -> dict:
             {
                 "id": file.stem,
                 "narrative": item.narrative,
-                "macro": item.macro,
-                "satellites": item.satellites,
-                "horizon": item.horizon,
-                "constraints": len(item.constraints),
-                "causes": list(item.causes),
-                "impacts": len(item.impacts),
                 "sources": len(item.sources),
+                "observations": len(item.observations),
+                "interventions": len(item.interventions),
+                "approved_by": item.approved_by,
             }
         )
     return {"scenarios": found, "broken": broken}
@@ -58,18 +56,73 @@ def save(root: Path, id: str, raw: dict[str, Any]) -> dict:
     return {"id": id, "spec": spec.model_dump(mode="json")}
 
 
-def validate(root: Path, id: str, models: Path, corpus: Path | None = None) -> dict:
-    """Every problem of the scenario with the versions it names, or that all is well."""
+def validate(
+    root: Path,
+    id: str,
+    models: Path,
+    corpus: Path | None = None,
+    *,
+    macro: str | None = None,
+    satellites: str | None = None,
+    horizon: int = 12,
+    inner: int = 1,
+) -> dict:
+    """Every problem of the scenario under the chosen versions, or that all is well.
+
+    The versions are the named ones, otherwise the newest finished macro version and the newest
+    bundle estimated on it. ``horizon`` and ``inner`` are accepted as the calculation request
+    states them; the builder's check does not take them yet and runs its twelve months on one
+    inner path.
+    """
+    spec = load(root, id)
+    chosen, bundle = versions_of(models, macro=macro, satellites=satellites)
+    report = check(spec, chosen, bundle, as_of=chosen.as_of, corpus=corpus)
+    return {"id": id, **report}
+
+
+def versions_of(
+    models: Path, *, macro: str | None = None, satellites: str | None = None
+) -> tuple[macro_version.MacroVersion, satellite_bundle.SatelliteBundle]:
+    """The macro version and the satellites bundle a calculation runs on.
+
+    An explicit name is loaded as it is. Without one the newest finished macro version is taken,
+    and the newest bundle estimated on that version — a bundle of another version is never
+    chosen. A missing version is named, and a bundle of another macro version is refused.
+    """
     from mst import plugins
 
-    spec = load(root, id)
     installed = plugins.registry()
-    macro = macro_version.load(models, spec.macro, installed.macro)
-    satellites = satellite_bundle.load(models, spec.satellites, installed.satellites)
-    report = check(
-        spec, macro, satellites, as_of=macro.as_of, corpus=corpus
+    name = macro or _newest(models / "macro", "macro version")
+    loaded = macro_version.load(models, name, installed.macro)
+    bundle_name = satellites or _newest_satellites(models / "satellites", loaded.name)
+    bundle = satellite_bundle.load(models, bundle_name, installed.satellites)
+    if bundle.macro != loaded.name:
+        raise ValueError(
+            f"the satellites {bundle_name} were estimated on macro version {bundle.macro}, "
+            f"not {loaded.name}"
+        )
+    return loaded, bundle
+
+
+def _newest(directory: Path, what: str) -> str:
+    """The newest finished version under ``directory``; a missing one is named."""
+    found = versions.folders(directory)
+    if not found:
+        raise ValueError(
+            f"there is no finished {what} under {directory}: estimate one before a calculation"
+        )
+    return found[0].name
+
+
+def _newest_satellites(directory: Path, macro: str) -> str:
+    """The newest bundle under ``directory`` estimated on ``macro``; a missing one is named."""
+    for folder in versions.folders(directory):
+        if (store.read_json(folder / "meta.json") or {}).get("macro") == macro:
+            return folder.name
+    raise ValueError(
+        f"there is no satellite bundle under {directory} estimated on macro version {macro}: "
+        "estimate the satellites before a calculation"
     )
-    return {"id": id, **report}
 
 
 def load(root: Path, id: str) -> Spec:

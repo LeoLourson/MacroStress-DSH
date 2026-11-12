@@ -33,11 +33,11 @@ def fast_intervals(monkeypatch):
 
 
 def plan_file(tmp_path, episodes, *, swap=False):
-    """An episodes.toml with the named checks: one constrained variable, one driving shock.
+    """An episodes.toml with the named checks: ``(id, observations, interventions)``.
 
-    The halves alternate tuning and validation by position, so every plan this helper writes
-    has both non-empty — the plan contract requires it; ``swap`` flips the marks, for the test
-    that the full-sample table does not depend on them.
+    A string is one name. The halves alternate tuning and validation by position, so every plan
+    this helper writes has both non-empty — the plan contract requires it; ``swap`` flips the
+    marks, for the test that the full-sample table does not depend on them.
     """
     text = [
         "draws = 40",
@@ -46,7 +46,11 @@ def plan_file(tmp_path, episodes, *, swap=False):
         "",
         "",
     ]
-    for number, (id_, variable, shock) in enumerate(episodes):
+    for number, item in enumerate(episodes):
+        id_, observations = item[0], item[1]
+        interventions = item[2] if len(item) > 2 else []
+        observed = [observations] if isinstance(observations, str) else list(observations)
+        decided = [interventions] if isinstance(interventions, str) else list(interventions)
         tuning = number % 2 == 0
         half = "tuning" if tuning != swap else "validation"
         text += [
@@ -55,8 +59,8 @@ def plan_file(tmp_path, episodes, *, swap=False):
             f'start = "{STARTS[id_]}"',
             f'half = "{half}"',
             'source = "manual"',
-            f'constrained = ["{variable}"]',
-            f'driving = ["{shock}"]',
+            f"observations = {json.dumps(observed)}",
+            f"interventions = {json.dumps(decided)}",
             'reason = "test"',
             'sources = ["S1"]',
             "",
@@ -76,10 +80,12 @@ def workspace(tmp_path, monkeypatch):
     monkeypatch.setattr(models_pkg, "selected", lambda model_id=None: macro)
     monkeypatch.setattr(models_pkg, "satellites", lambda: {satellite.model_id: satellite})
     monkeypatch.setattr(
-        models_pkg, "assignment", lambda quantities, overrides=None: (
+        models_pkg,
+        "assignment",
+        lambda quantities, overrides=None: (
             {quantity: satellite.model_id for quantity in quantities},
             [],
-        )
+        ),
     )
     return {
         "store": store,
@@ -106,9 +112,7 @@ def run_episodes(workspace, plan, tmp_path, *, name="details.json", only=(), **e
 
 
 def test_the_runner_scores_the_cells_of_every_episode(workspace, tmp_path, capsys):
-    plan = plan_file(
-        tmp_path, [("R1", "gl.brent", "fake.demand"), ("R2", "ru.key_rate", "fake.rate")]
-    )
+    plan = plan_file(tmp_path, [("R1", "gl.brent"), ("R2", "ru.key_rate")])
 
     code = runner.run(
         store=workspace["store"].root,
@@ -126,9 +130,7 @@ def test_the_runner_scores_the_cells_of_every_episode(workspace, tmp_path, capsy
 
 
 def test_the_episode_versions_are_cached_by_the_data(workspace, tmp_path):
-    plan = plan_file(
-        tmp_path, [("R1", "gl.brent", "fake.demand"), ("R2", "ru.key_rate", "fake.rate")]
-    )
+    plan = plan_file(tmp_path, [("R1", "gl.brent"), ("R2", "ru.key_rate")])
     arguments = dict(
         store=workspace["store"].root,
         models=workspace["models"],
@@ -168,9 +170,7 @@ def test_a_model_with_inputs_reads_the_answers_of_each_episode_date(
     arguments = dict(
         store=workspace["store"].root,
         models=workspace["models"],
-        episodes=plan_file(
-            tmp_path, [("R1", "gl.brent", "fake.demand"), ("R2", "ru.key_rate", "fake.rate")]
-        ),
+        episodes=plan_file(tmp_path, [("R1", "gl.brent"), ("R2", "ru.key_rate")]),
         as_of=KNOWN_ON,
         inputs=folder,
     )
@@ -184,10 +184,8 @@ def test_a_model_with_inputs_reads_the_answers_of_each_episode_date(
     assert sorted(macro.calls) == sorted([*dates, dates[0]]), "an edited answer is re-estimated"
 
 
-def test_an_unknown_driving_shock_is_reported_not_raised(workspace, tmp_path, capsys):
-    plan = plan_file(
-        tmp_path, [("R1", "gl.brent", "no.such.shock"), ("R2", "ru.key_rate", "fake.rate")]
-    )
+def test_an_unknown_variable_is_reported_not_raised(workspace, tmp_path, capsys):
+    plan = plan_file(tmp_path, [("R1", "no.such.variable"), ("R2", "ru.key_rate")])
 
     code = runner.run(
         store=workspace["store"].root,
@@ -197,13 +195,11 @@ def test_an_unknown_driving_shock_is_reported_not_raised(workspace, tmp_path, ca
     )
 
     assert code == 1
-    assert "the macro model knows no shocks no.such.shock" in capsys.readouterr().out
+    assert "the macro panel knows no variables no.such.variable" in capsys.readouterr().out
 
 
 def test_the_calculation_date_is_the_day_before_the_start_the_plan_names(workspace, tmp_path):
-    plan = plan_file(
-        tmp_path, [("R1", "gl.brent", "fake.demand"), ("R2", "ru.key_rate", "fake.rate")]
-    )
+    plan = plan_file(tmp_path, [("R1", "gl.brent"), ("R2", "ru.key_rate")])
 
     code, report = run_episodes(workspace, plan, tmp_path)
 
@@ -211,13 +207,9 @@ def test_the_calculation_date_is_the_day_before_the_start_the_plan_names(workspa
     assert [row["as_of"] for row in report["episodes"]] == ["2023-05-31", "2024-02-29"]
 
 
-def test_a_run_without_a_single_episode_reports_it_instead_of_raising(
-    workspace, tmp_path, capsys
-):
-    # Unknown driving shocks drop both episodes: the report has no scored cells at all.
-    plan = plan_file(
-        tmp_path, [("R1", "gl.brent", "fake.one"), ("R2", "ru.key_rate", "fake.two")]
-    )
+def test_a_run_without_a_single_episode_reports_it_instead_of_raising(workspace, tmp_path, capsys):
+    # Unknown variables drop both episodes: the report has no scored cells at all.
+    plan = plan_file(tmp_path, [("R1", "fake.one"), ("R2", "fake.two")])
 
     code, report = run_episodes(workspace, plan, tmp_path)
 
@@ -230,14 +222,10 @@ def test_a_run_without_a_single_episode_reports_it_instead_of_raising(
 
 
 def test_the_monte_carlo_option_moves_no_other_field(workspace, tmp_path):
-    plan = plan_file(
-        tmp_path, [("R1", "gl.brent", "fake.demand"), ("R2", "ru.key_rate", "fake.rate")]
-    )
+    plan = plan_file(tmp_path, [("R1", "gl.brent"), ("R2", "ru.key_rate")])
 
     _, plain = run_episodes(workspace, plan, tmp_path, name="plain.json")
-    _, monte_carlo = run_episodes(
-        workspace, plan, tmp_path, name="mc.json", mc_bootstrap=True
-    )
+    _, monte_carlo = run_episodes(workspace, plan, tmp_path, name="mc.json", mc_bootstrap=True)
 
     # The Monte-Carlo error is reported beside the sampling error, never in place of it.
     for key in ("episodes", "quantities", "admission", "constraint_gate", "halves"):
@@ -249,9 +237,7 @@ def test_the_monte_carlo_option_moves_no_other_field(workspace, tmp_path):
 
 
 def test_the_details_file_holds_the_full_report(workspace, tmp_path):
-    plan = plan_file(
-        tmp_path, [("R1", "gl.brent", "fake.demand"), ("R2", "ru.key_rate", "fake.rate")]
-    )
+    plan = plan_file(tmp_path, [("R1", "gl.brent"), ("R2", "ru.key_rate")])
 
     code, report = run_episodes(workspace, plan, tmp_path)
 
@@ -273,9 +259,7 @@ def test_the_details_file_holds_the_full_report(workspace, tmp_path):
 
 
 def test_save_keeps_the_report_and_its_tables_beside_the_plan(workspace, tmp_path, capsys):
-    plan = plan_file(
-        tmp_path, [("R1", "gl.brent", "fake.demand"), ("R2", "ru.key_rate", "fake.rate")]
-    )
+    plan = plan_file(tmp_path, [("R1", "gl.brent"), ("R2", "ru.key_rate")])
 
     code, report = run_episodes(workspace, plan, tmp_path, save=True)
 
@@ -287,21 +271,15 @@ def test_save_keeps_the_report_and_its_tables_beside_the_plan(workspace, tmp_pat
 
 
 def test_a_part_of_the_plan_is_not_saved_as_its_result(workspace, tmp_path):
-    plan = plan_file(
-        tmp_path, [("R1", "gl.brent", "fake.demand"), ("R2", "ru.key_rate", "fake.rate")]
-    )
+    plan = plan_file(tmp_path, [("R1", "gl.brent"), ("R2", "ru.key_rate")])
 
     with pytest.raises(ValueError, match="--only"):
         run_episodes(workspace, plan, tmp_path, only=["R1"], save=True)
     assert not (tmp_path / "results").exists()
 
 
-def test_the_report_holds_the_aggregate_the_usefulness_and_the_halves(
-    workspace, tmp_path, capsys
-):
-    plan = plan_file(
-        tmp_path, [("R1", "gl.brent", "fake.demand"), ("R2", "ru.key_rate", "fake.rate")]
-    )
+def test_the_report_holds_the_aggregate_the_usefulness_and_the_halves(workspace, tmp_path, capsys):
+    plan = plan_file(tmp_path, [("R1", "gl.brent"), ("R2", "ru.key_rate")])
 
     _, report = run_episodes(workspace, plan, tmp_path)
     out = capsys.readouterr().out
@@ -331,7 +309,7 @@ def test_the_report_holds_the_aggregate_the_usefulness_and_the_halves(
 
 
 def test_the_full_table_does_not_depend_on_the_halves(workspace, tmp_path):
-    checks = [("R1", "gl.brent", "fake.demand"), ("R2", "ru.key_rate", "fake.rate")]
+    checks = [("R1", "gl.brent"), ("R2", "ru.key_rate")]
     plan = plan_file(tmp_path, checks)
     _, first = run_episodes(workspace, plan, tmp_path, name="first.json")
 
@@ -401,9 +379,7 @@ def test_the_tail_section_prints_the_horizon_and_the_dropped_episodes(capsys):
 
 
 def test_the_random_walk_is_not_the_base_run(workspace, tmp_path):
-    plan = plan_file(
-        tmp_path, [("R1", "gl.brent", "fake.demand"), ("R2", "ru.key_rate", "fake.rate")]
-    )
+    plan = plan_file(tmp_path, [("R1", "gl.brent"), ("R2", "ru.key_rate")])
 
     _, report = run_episodes(workspace, plan, tmp_path)
 
@@ -414,15 +390,11 @@ def test_the_random_walk_is_not_the_base_run(workspace, tmp_path):
     assert row["baseline_crps"] != pytest.approx(row["crps"], rel=1e-9)
     # The conditional-minus-base comparison of the scheme is reported apart from the RW one.
     assert row["base_normalized_crps"] == pytest.approx(row["normalized_crps"])
-    assert row["baseline_normalized_crps"] != pytest.approx(
-        row["normalized_crps"], rel=1e-9
-    )
+    assert row["baseline_normalized_crps"] != pytest.approx(row["normalized_crps"], rel=1e-9)
 
 
 def test_an_episode_scores_the_same_alone_and_with_others(workspace, tmp_path):
-    plan = plan_file(
-        tmp_path, [("R1", "gl.brent", "fake.demand"), ("R2", "ru.key_rate", "fake.rate")]
-    )
+    plan = plan_file(tmp_path, [("R1", "gl.brent"), ("R2", "ru.key_rate")])
 
     _, alone = run_episodes(workspace, plan, tmp_path, name="alone.json", only=["R1"])
     _, together = run_episodes(workspace, plan, tmp_path, name="together.json")
@@ -463,9 +435,7 @@ def test_the_macro_domain_bounds_rates_and_leaves_spreads_and_logs_open():
 
 def test_the_driver_domain_maps_the_natural_endpoints():
     def quantity(**fields):
-        return Quantity(
-            id="q", label="q", unit="u", regressors=["ru.cpi"], lags=1, **fields
-        )
+        return Quantity(id="q", label="q", unit="u", regressors=["ru.cpi"], lags=1, **fields)
 
     # A price of 0.05 is 100 ln 0.05 = -300 in the model scale: only a price of nought is
     # out of bounds, and it maps to minus infinity.
@@ -545,9 +515,7 @@ def test_the_constraint_gate_needs_more_than_one_percent():
 def test_a_fact_episode_reports_the_constraint_probability_as_not_applicable(
     workspace, tmp_path, capsys
 ):
-    plan = plan_file(
-        tmp_path, [("R1", "gl.brent", "fake.demand"), ("R2", "ru.key_rate", "fake.rate")]
-    )
+    plan = plan_file(tmp_path, [("R1", "gl.brent"), ("R2", "ru.key_rate")])
 
     code, report = run_episodes(workspace, plan, tmp_path)
     out = capsys.readouterr().out
@@ -564,6 +532,86 @@ def test_a_fact_episode_reports_the_constraint_probability_as_not_applicable(
     # Not a meaningless 0.00: the episode table says the probability is not applicable.
     episode_line = next(line for line in out.splitlines() if line.startswith("| R1 |"))
     assert "n/a" in episode_line and "0.00" not in episode_line
+
+
+def prepare(workspace, tmp_path, episodes):
+    """The plan and its first episode, prepared as the runner prepares them."""
+    plan = load_episodes(plan_file(tmp_path, episodes))
+    check = plan.episodes[0]
+    episode = runner._episode(
+        workspace["macro"],
+        workspace["store"],
+        load_registry(),
+        plan,
+        check,
+        workspace["models"] / "backtest",
+        KNOWN_ON,
+    )
+    return plan, episode
+
+
+def test_an_episode_without_interventions_keeps_its_constraint_rows(workspace, tmp_path):
+    """The "nothing changed" proof of the plan's check 1, up to the rows of the scenario.
+
+    An episode of observations alone builds the same point rows the old code built: one per
+    finite realized month of every constrained variable, in the same order, with the same
+    tolerance. The paths themselves are not compared: the old binary is not available, so the
+    CRPS of check 1 cannot be reproduced here and no number is invented.
+    """
+    from mst.model_sdk.contracts import LinearTerm
+    from mst.scenario.build import point_constraint
+
+    _, episode = prepare(
+        workspace, tmp_path, [("R1", ["gl.brent", "ru.key_rate"]), ("R2", "ru.key_rate")]
+    )
+
+    assert episode.scenario.interventions == ()
+    assert episode.observations == ["gl.brent", "ru.key_rate"]
+    assert episode.interventions == []
+    expected = tuple(
+        point_constraint(
+            (LinearTerm(variable=name, month=month, weight=1.0),),
+            float(episode.realized[month - 1, episode.panel.ids.index(name)]),
+            episode.macro,
+        )
+        for name in episode.observations
+        for month in range(1, episode.horizon + 1)
+        if not np.isnan(episode.realized[month - 1, episode.panel.ids.index(name)])
+    )
+    assert episode.scenario.constraints == expected
+
+
+def test_an_intervention_sets_the_realized_level_and_pins_its_cells(workspace, tmp_path):
+    plan, episode = prepare(
+        workspace, tmp_path, [("R1", "gl.brent", "ru.key_rate"), ("R2", "ru.key_rate")]
+    )
+    column = episode.panel.ids.index("ru.key_rate")
+    realized = episode.realized[:, column]
+    months = tuple(month for month, value in enumerate(realized, start=1) if not np.isnan(value))
+
+    (item,) = episode.scenario.interventions
+    assert item.target == "ru.key_rate" and item.kind == "set"
+    assert item.months == months
+    assert item.values.shape == (plan.draws, len(months))
+    expected = np.tile([float(realized[month - 1]) for month in months], (plan.draws, 1))
+    assert np.array_equal(item.values, expected)
+    # The decision fixes its cells: they are reported, as a point observation's cell is, and
+    # never scored.
+    installed = runner._installed(episode.scenario.interventions)
+    assert installed == {("ru.key_rate", month) for month in months}
+    assert ("gl.brent", 1) not in installed
+
+
+def test_an_intervened_quantity_is_reported_but_never_scored(workspace, tmp_path):
+    plan = plan_file(tmp_path, [("R1", "gl.brent", "ru.key_rate"), ("R2", "ru.key_rate")])
+
+    _, report = run_episodes(workspace, plan, tmp_path, only=["R1"])
+
+    episode = report["episodes"][0]
+    assert episode["interventions"] == ["ru.key_rate"]
+    row = report["quantities"]["ru.key_rate"]
+    assert row["constrained"] == episode["horizon"] == row["cells"]
+    assert row["scored"] == 0 and row["calibration"] is None
 
 
 def test_the_interval_resamples_the_reported_statistic():
@@ -584,9 +632,7 @@ def test_the_interval_resamples_the_reported_statistic():
 
 
 def test_the_report_meta_records_the_versions_and_the_vintage(workspace, tmp_path):
-    plan = plan_file(
-        tmp_path, [("R1", "gl.brent", "fake.demand"), ("R2", "ru.key_rate", "fake.rate")]
-    )
+    plan = plan_file(tmp_path, [("R1", "gl.brent"), ("R2", "ru.key_rate")])
 
     _, report = run_episodes(workspace, plan, tmp_path)
     meta = report["meta"]
@@ -645,21 +691,16 @@ def test_seasonal_facts_use_the_calculation_date_profile(tmp_path):
     months = months_between(date(2019, 1, 1), date(2020, 12, 1))
     factor = np.array([1.0, 1.05, 1.10, 1.15, 1.20, 1.10, 1.0, 0.95, 1.10, 1.05, 1.0, 0.90])
     original = {
-        month: float(100.0 * 1.01**t * factor[month.month - 1])
-        for t, month in enumerate(months)
+        month: float(100.0 * 1.01**t * factor[month.month - 1]) for t, month in enumerate(months)
     }
     revised = {
         date(2019, 6, 1): original[date(2019, 6, 1)] * 1.5,
         date(2019, 7, 1): original[date(2019, 7, 1)] * 0.5,
     }
     rows = [
-        Observation(month, value, date(2021, 1, 10), False)
-        for month, value in original.items()
+        Observation(month, value, date(2021, 1, 10), False) for month, value in original.items()
     ]
-    rows += [
-        Observation(month, value, date(2022, 6, 1), False)
-        for month, value in revised.items()
-    ]
+    rows += [Observation(month, value, date(2022, 6, 1), False) for month, value in revised.items()]
     horizon = months_between(date(2021, 1, 1), date(2021, 2, 1))
     # The facts of the horizon are published after the calculation date, before known_on.
     facts = {
@@ -693,32 +734,23 @@ def test_seasonal_facts_use_the_calculation_date_profile(tmp_path):
     expected = np.array([100 * np.log(known[month]) for month in horizon]) - calculated[calendar]
     assert np.allclose(result[:, 0], expected)
     # A profile re-estimated from today's revised data would give a different scale.
-    today = seasonal_profile(
-        np.array([100 * np.log(known[month]) for month in months]), months
-    )
+    today = seasonal_profile(np.array([100 * np.log(known[month]) for month in months]), months)
     alternative = np.array([100 * np.log(known[month]) for month in horizon]) - today[calendar]
     assert not np.allclose(result[:, 0], alternative)
 
 
 def test_the_satellites_score_the_served_drivers(workspace, tmp_path):
-    plan = plan_file(
-        tmp_path, [("R1", "gl.brent", "fake.demand"), ("R2", "ru.key_rate", "fake.rate")]
-    )
+    plan = plan_file(tmp_path, [("R1", "gl.brent"), ("R2", "ru.key_rate")])
     # The driver catalog of the workspace: one object, one driver, with a realized series.
     catalog = _catalog(tmp_path)
     store = workspace["store"]
     grid = months_between(simulated.START, shift(simulated.START, 59))
     store.write(
         "drv.share_price.sber",
-        [
-            Observation(month, float(5.0 + 0.01 * t), month, False)
-            for t, month in enumerate(grid)
-        ],
+        [Observation(month, float(5.0 + 0.01 * t), month, False) for t, month in enumerate(grid)],
     )
 
-    code, report = run_episodes(
-        workspace, plan, tmp_path, drivers=catalog, satellites=True
-    )
+    code, report = run_episodes(workspace, plan, tmp_path, drivers=catalog, satellites=True)
 
     assert code == 0
     row = report["quantities"]["share_price:sber"]
@@ -734,18 +766,13 @@ def test_the_satellites_score_the_served_drivers(workspace, tmp_path):
 
 
 def test_the_portfolio_tail_is_reported_with_its_horizon(workspace, tmp_path, capsys):
-    plan = plan_file(
-        tmp_path, [("R1", "gl.brent", "fake.demand"), ("R2", "ru.key_rate", "fake.rate")]
-    )
+    plan = plan_file(tmp_path, [("R1", "gl.brent"), ("R2", "ru.key_rate")])
     catalog = _catalog(tmp_path)
     store = workspace["store"]
     grid = months_between(simulated.START, shift(simulated.START, 59))
     store.write(
         "drv.share_price.sber",
-        [
-            Observation(month, float(5.0 + 0.01 * t), month, False)
-            for t, month in enumerate(grid)
-        ],
+        [Observation(month, float(5.0 + 0.01 * t), month, False) for t, month in enumerate(grid)],
     )
     from mst.portfolio import tool as portfolio_tool
 
@@ -779,9 +806,7 @@ def test_the_portfolio_tail_is_reported_with_its_horizon(workspace, tmp_path, ca
 
 
 def test_an_unknown_portfolio_is_a_named_error(workspace, tmp_path):
-    plan = plan_file(
-        tmp_path, [("R1", "gl.brent", "fake.demand"), ("R2", "ru.key_rate", "fake.rate")]
-    )
+    plan = plan_file(tmp_path, [("R1", "gl.brent"), ("R2", "ru.key_rate")])
 
     # Without the driver paths there is nothing to value the positions on.
     with pytest.raises(ValueError, match="needs --satellites"):
@@ -791,10 +816,7 @@ def test_an_unknown_portfolio_is_a_named_error(workspace, tmp_path):
     grid = months_between(simulated.START, shift(simulated.START, 59))
     workspace["store"].write(
         "drv.share_price.sber",
-        [
-            Observation(month, float(5.0 + 0.01 * t), month, False)
-            for t, month in enumerate(grid)
-        ],
+        [Observation(month, float(5.0 + 0.01 * t), month, False) for t, month in enumerate(grid)],
     )
     with pytest.raises(ValueError, match="no portfolio 'absent'"):
         run_episodes(
@@ -803,9 +825,7 @@ def test_an_unknown_portfolio_is_a_named_error(workspace, tmp_path):
 
 
 def test_the_decision_compares_two_reports_on_the_same_cells(workspace, tmp_path):
-    plan = plan_file(
-        tmp_path, [("R1", "gl.brent", "fake.demand"), ("R2", "ru.key_rate", "fake.rate")]
-    )
+    plan = plan_file(tmp_path, [("R1", "gl.brent"), ("R2", "ru.key_rate")])
     _, report = run_episodes(workspace, plan, tmp_path, name="incumbent.json")
     against = tmp_path / "incumbent.json"
     halves = {episode["id"]: episode["half"] for episode in report["episodes"]}
@@ -848,18 +868,13 @@ def test_the_decision_compares_two_reports_on_the_same_cells(workspace, tmp_path
 
 
 def test_the_satellite_bundle_is_cached_by_its_own_inputs(workspace, tmp_path, monkeypatch):
-    plan = plan_file(
-        tmp_path, [("R1", "gl.brent", "fake.demand"), ("R2", "ru.key_rate", "fake.rate")]
-    )
+    plan = plan_file(tmp_path, [("R1", "gl.brent"), ("R2", "ru.key_rate")])
     catalog = _catalog(tmp_path)
     store = workspace["store"]
     grid = months_between(simulated.START, shift(simulated.START, 59))
     store.write(
         "drv.share_price.sber",
-        [
-            Observation(month, float(5.0 + 0.01 * t), month, False)
-            for t, month in enumerate(grid)
-        ],
+        [Observation(month, float(5.0 + 0.01 * t), month, False) for t, month in enumerate(grid)],
     )
     calls = []
     original = models_pkg.estimate_satellites
@@ -895,8 +910,7 @@ def test_the_satellite_key_covers_the_inputs_that_shape_the_bundle(
     store = workspace["store"]
     grid = months_between(simulated.START, shift(simulated.START, 59))
     series = [
-        Observation(month, float(5.0 + 0.01 * t), month, False)
-        for t, month in enumerate(grid)
+        Observation(month, float(5.0 + 0.01 * t), month, False) for t, month in enumerate(grid)
     ]
     store.write("drv.share_price.sber", series)
     registry = load_drivers(catalog=catalog)
@@ -967,9 +981,7 @@ def _catalog(tmp_path):
 def test_an_episode_the_satellite_estimation_cannot_serve_is_skipped_by_name(
     workspace, tmp_path, monkeypatch
 ):
-    plan = plan_file(
-        tmp_path, [("R1", "gl.brent", "fake.demand"), ("R2", "ru.key_rate", "fake.rate")]
-    )
+    plan = plan_file(tmp_path, [("R1", "gl.brent"), ("R2", "ru.key_rate")])
     catalog = _catalog(tmp_path)
     original = models_pkg.estimate_satellites
     calls = []
@@ -998,12 +1010,31 @@ def test_the_calculation_date_is_the_day_before_the_episode():
     assert calculation_date(date(2023, 6, 1)) == date(2023, 5, 31)
 
 
+def test_an_episode_splits_its_variables_into_two_kinds():
+    from pydantic import ValidationError
+
+    from mst.metrics.episodes import EpisodeCheck
+
+    fields = dict(
+        id="R1",
+        start="2014-03",
+        half="tuning",
+        source="manual",
+        reason="the decision of the episode",
+        sources=["S1"],
+    )
+    with pytest.raises(ValidationError, match="fixes no variable"):
+        EpisodeCheck(**fields)
+    with pytest.raises(ValidationError, match="both an observation and an intervention"):
+        EpisodeCheck(**fields, observations=["ru.key_rate"], interventions=["ru.key_rate"])
+    check = EpisodeCheck(**fields, observations=["ru.usdrub"], interventions=["ru.key_rate"])
+    assert check.constrained == ["ru.usdrub", "ru.key_rate"]
+
+
 def test_an_unmarked_or_misguided_plan_is_a_validation_error(tmp_path):
     from pydantic import ValidationError
 
-    plan = plan_file(
-        tmp_path, [("R1", "gl.brent", "fake.demand"), ("R2", "ru.key_rate", "fake.rate")]
-    )
+    plan = plan_file(tmp_path, [("R1", "gl.brent"), ("R2", "ru.key_rate")])
     text = plan.read_text(encoding="utf-8")
 
     def check(broken: str) -> str:
@@ -1025,16 +1056,15 @@ def test_an_unmarked_or_misguided_plan_is_a_validation_error(tmp_path):
     check(text.replace('start = "2023-06"', "start = 2023-06-01"))
 
 
-def test_the_shipped_episodes_fit_the_shocked_variables():
+def test_the_shipped_episodes_name_registry_variables():
     from mst.macro.registry import load_registry
-    from mst.plugins.bvar.signs import load_signs
 
     plan = load_episodes(PLAN)
     variables = {v.id for v in load_registry().variables}
-    shocks = set(load_signs().ids)
     for check in plan.episodes:
-        assert set(check.constrained) <= variables, check.id
-        assert set(check.driving) <= shocks, check.id
+        assert set(check.observations) <= variables, check.id
+        assert set(check.interventions) <= variables, check.id
+        assert not set(check.observations) & set(check.interventions), check.id
 
 
 def test_every_point_pins_its_cell_whatever_its_rounding():

@@ -83,6 +83,10 @@ class Posterior:
     # (S, n) pi_j and kappa_j of the jump mixture; 0 and 1 where a variable does not jump.
     jump_prob: np.ndarray | None = None
     jump_scale: np.ndarray | None = None
+    structural: dict | None = None
+    """The structural form this version was estimated in: ``time_recursion`` and
+    ``order_within_month``. ``None`` is the platform's default form, which applies the
+    interventions to the drawn paths; a form is the model's own within-month recursion."""
 
     def __post_init__(self):
         shape = self.volvol.shape

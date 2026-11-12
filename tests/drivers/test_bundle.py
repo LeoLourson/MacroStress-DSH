@@ -9,8 +9,9 @@ import pytest
 from mst.drivers import bundle as satellite_bundle
 from mst.drivers.registry import Registry
 from mst.macro.panel import shift
-from mst.model_sdk import PART_META_REQUIRED, AdditiveImpact, DriverPaths, SatelliteModel
+from mst.model_sdk import PART_META_REQUIRED, DriverPaths, Intervention, SatelliteModel
 from mst.model_sdk.contracts import MacroSimulation, SatelliteEstimate, SatellitePart
+from mst.model_sdk.interventions import apply_default
 from tests.drivers import simulated
 
 AS_OF = date(2030, 1, 1)
@@ -109,9 +110,8 @@ class FakeSatellite(SatelliteModel):
             axis=-1,
         )
         flags: dict[str, frozenset[str]] = {driver: frozenset() for driver in drivers}
+        paths = apply_default(paths, drivers, impacts, inner=satellite_bundle.group_inner(macro))
         for impact in impacts:
-            k = drivers.index(impact.target)
-            paths[:, impact.start : impact.end + 1, k] += np.asarray(impact.values)
             flags[impact.target] = frozenset({"impact"})
         return DriverPaths(ids=list(drivers), paths=paths, flags=flags)
 
@@ -234,7 +234,7 @@ def test_simulate_dispatches_each_quantity_to_its_own_model(tmp_path):
     two = FakeSatellite("two.b", quantities=("spread",))
     bundle = _bundle_of(tmp_path, [one, two], registry)
 
-    impacts = [AdditiveImpact(target="spread:sector", start=1, values=(5.0, 5.0))]
+    impacts = [Intervention("spread:sector", (1, 2), "shift", np.full((3, 2), 5.0))]
     found = bundle.simulate(
         macro_simulation(), ["spread:sector", "price:sector"], impacts, seed=3
     )

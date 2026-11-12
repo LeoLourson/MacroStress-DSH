@@ -2,13 +2,14 @@
 
 A portfolio is ``portfolios/<id>.json`` of the workspace. ``save`` checks the contract and writes
 the file atomically; ``check`` loads the scenario the portfolio would run under and names every
-position its macro and satellite versions cannot serve — an unknown instrument type, terms its
-model cannot read, a macro variable the version lacks, an object no driver covers and a driver
-the out-of-sample check rejected, with that check's reason — and warns what an impact on a macro
-variable reaches through the positions' drivers, with the long-run loading of each one: a
-loading below a tenth in absolute value is named as barely reacting, which is how a shock the
+position the chosen macro and satellite versions cannot serve — an unknown instrument type, terms
+its model cannot read, a macro variable the version lacks, an object no driver covers and a
+driver the out-of-sample check rejected, with that check's reason — and warns what an intervention
+on a macro variable reaches through the positions' drivers, with the long-run loading of each one:
+a loading below a tenth in absolute value is named as barely reacting, which is how a shock the
 scenario does aim at a position still misses it. ``exposure`` values the positions at the
-calculation month of the scenario's macro version, before any path is drawn.
+calculation month of the chosen macro version, before any path is drawn. The versions are named
+in the call, otherwise the newest finished pair on disk is taken, as ``scenario.validate`` does.
 """
 
 import re
@@ -18,11 +19,9 @@ from typing import Any
 from pydantic import ValidationError
 
 from .. import store
-from ..drivers import bundle as satellite_bundle
 from ..engine.model_catalog import Catalog
 from ..engine.model_catalog import catalog as default_catalog
 from ..macro import registry as macro_registry
-from ..macro import version as macro_version
 from ..plugin_sdk import RunOptions, fx
 from ..plugin_sdk.model import Position
 from ..scenario import build as scenario_build
@@ -92,37 +91,39 @@ def path(root: Path, id: str) -> Path:
 
 
 def check(
-    ws: store.Workspace, id: str, scenario: str, catalog: Catalog = default_catalog
+    ws: store.Workspace,
+    id: str,
+    scenario: str,
+    catalog: Catalog = default_catalog,
+    *,
+    macro: str | None = None,
+    satellites: str | None = None,
+    horizon: int = 12,
+    inner: int = 1,
 ) -> dict:
-    """Every problem that keeps the portfolio from running under ``scenario``, each one named."""
-    from mst import plugins
+    """Every problem that keeps the portfolio from running under ``scenario``, each one named.
 
+    The versions are the named ones, otherwise the newest finished pair on disk;
+    ``scenario.versions_of`` names the missing one and refuses a mismatched pair. ``horizon``
+    reaches the position models through ``RunOptions``; ``inner`` is accepted as the calculation
+    request states it and no check of the portfolio reads it.
+    """
     portfolio = load(ws.portfolios, id)
     spec = scenario_tool.load(ws.scenarios, scenario)
-    installed = plugins.registry()
-    macro = macro_version.load(ws.models, spec.macro, installed.macro)
-    satellites = satellite_bundle.load(ws.models, spec.satellites, installed.satellites)
-    as_of = macro.as_of
-    problems = []
-    if satellites.macro != spec.macro:
-        problems.append(
-            f"the satellites {spec.satellites} were estimated on the macro version "
-            f"{satellites.macro}, the scenario names {spec.macro}"
-        )
+    chosen, bundle = scenario_tool.versions_of(ws.models, macro=macro, satellites=satellites)
+    as_of = chosen.as_of
     corpus = ws.corpus if (ws.corpus / "index" / "chunks.jsonl").is_file() else None
-    problems += scenario_build.validate(
-        spec, macro, satellites, as_of=as_of, corpus=corpus
+    problems = scenario_build.validate(
+        spec, chosen, bundle, as_of=as_of, corpus=corpus
     )["problems"]
-    options = RunOptions(
-        as_of=as_of, horizon=spec.horizon, base_currency=portfolio.base_currency
-    )
+    options = RunOptions(as_of=as_of, horizon=horizon, base_currency=portfolio.base_currency)
     warnings = []
     for position in portfolio.positions:
         problems += [
             f"{position.id}: {problem}"
-            for problem in _position_problems(position, options, macro, satellites, catalog)
+            for problem in _position_problems(position, options, chosen, bundle, catalog)
         ]
-        warnings += _reach_warnings(position, options, satellites, spec, catalog)
+        warnings += _reach_warnings(position, options, bundle, spec, catalog)
     return {
         "id": id,
         "scenario": scenario,
@@ -132,12 +133,24 @@ def check(
     }
 
 
-def exposure(ws: store.Workspace, id: str, scenario: str) -> dict:
-    """The value of every position at the calculation month of the scenario's macro version."""
+def exposure(
+    ws: store.Workspace,
+    id: str,
+    scenario: str,
+    *,
+    macro: str | None = None,
+    satellites: str | None = None,
+) -> dict:
+    """The value of every position at the calculation month of the chosen macro version.
+
+    The scenario is refused when it is not there and named in the report; the versions are
+    chosen as in ``check``.
+    """
     portfolio = load(ws.portfolios, id)
-    spec = scenario_tool.load(ws.scenarios, scenario)
-    panel, as_of = macro_version.panel_of(ws.models, spec.macro)
-    macro = macro_registry.load_registry()
+    scenario_tool.load(ws.scenarios, scenario)
+    chosen, _ = scenario_tool.versions_of(ws.models, macro=macro, satellites=satellites)
+    panel = chosen.panel
+    registry = macro_registry.load_registry()
     index = {name: position for position, name in enumerate(panel.ids)}
     rows, problems = [], []
     for position in portfolio.positions:
@@ -152,7 +165,7 @@ def exposure(ws: store.Workspace, id: str, scenario: str) -> dict:
         rate = (
             1.0
             if variable is None
-            else float(macro.variable(variable).from_model(panel.y[-1, index[variable]]))
+            else float(registry.variable(variable).from_model(panel.y[-1, index[variable]]))
         )
         rows.append(
             {
@@ -166,7 +179,7 @@ def exposure(ws: store.Workspace, id: str, scenario: str) -> dict:
     return {
         "id": id,
         "scenario": scenario,
-        "as_of": as_of.isoformat(),
+        "as_of": chosen.as_of.isoformat(),
         "base_currency": portfolio.base_currency,
         "exposures": rows,
         "problems": problems,
@@ -238,14 +251,15 @@ def _reason(satellites, driver: str) -> str:
 def _reach_warnings(
     position: Position, options: RunOptions, satellites, spec, catalog: Catalog
 ) -> list[str]:
-    """What the scenario's impacts on macro variables reach through this position's drivers.
+    """What the scenario's interventions on macro variables reach through this position's drivers.
 
-    A driver whose quantity reads an impacted variable is warned with its long-run loading —
+    A driver whose quantity reads an intervened variable is warned with its long-run loading —
     how much of a permanent unit of the variable the driver's level carries — and the inputs
     it loads on most, so a shock that reaches a position in name only is seen before the run.
-    Positions the check already names as problems are left to the problems.
+    Interventions on drivers themselves are the paths, not a shift of a macro variable, and are
+    left out. Positions the check already names as problems are left to the problems.
     """
-    impacted = list(dict.fromkeys(i.target for i in spec.impacts if not i.on_driver))
+    impacted = list(dict.fromkeys(i.quantity for i in spec.interventions if not i.on_driver))
     if not impacted:
         return []
     try:

@@ -16,9 +16,12 @@ ABSOLUTE = re.compile(r"[A-Za-z]:[\\/][A-Za-z]|/home/[a-z]|/Users/[A-Za-z]")
 
 def test_no_tracked_text_names_a_machine():
     # The owner's account name in any tracked file means a path that works on one machine only.
+    # The journals of the corpus bench are data: they quote the sources, dates and paths of the
+    # time, and rewriting them would falsify the record.
     found = subprocess.run(
         ["git", "grep", "-nIE", r"[A-Za-z]:\\Users\\|C:/Users/|/home/[a-z]+/", "--", ".",
-         ":!tests/test_dsh_package.py", ":!uv.lock", ":!corpus/manifest.json"],
+         ":!tests/test_dsh_package.py", ":!uv.lock", ":!corpus/manifest.json",
+         ":!bench/scenario-from-corpus/results/*/journal.json"],
         cwd=ROOT, capture_output=True, text=True, encoding="utf-8",
     ).stdout
     assert not found, found

@@ -35,8 +35,7 @@ def root(tmp_path, monkeypatch):
 
 
 def spec(**changes):
-    return {"narrative": "ставка растёт", "horizon": 3, "macro": "a" * 64,
-            "satellites": "b" * 64} | changes
+    return {"narrative": "ставка растёт"} | changes
 
 
 def call(ws, steps):

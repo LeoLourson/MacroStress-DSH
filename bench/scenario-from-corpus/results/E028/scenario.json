@@ -1,47 +1,43 @@
 {
-  "approved_by": null,
-  "causes": [],
-  "constraints": [
-    {
-      "basis": "event",
-      "high": null,
-      "low": null,
-      "terms": [
-        {
-          "month": 2,
-          "variable": "gl.vix",
-          "weight": 1.0
-        }
-      ],
-      "value": 409.43
-    },
-    {
-      "basis": "event",
-      "high": null,
-      "low": null,
-      "terms": [
-        {
-          "month": 4,
-          "variable": "gl.vix",
-          "weight": 1.0
-        }
-      ],
-      "value": 299.57
-    }
-  ],
-  "expectations": [],
-  "horizon": 12,
-  "impacts": [],
-  "inner": 1,
-  "macro": "1de403bd3b7f63182636b83b5051228b9a4f7ea8c9484053de203786390953ab",
   "narrative": "Индекс VIX (индекс ожидаемой 30-дневной волатильности S&P 500) в течение одной недели резко поднимается до 60 пунктов, а затем в течение следующих двух месяцев постепенно возвращается к уровню 20 пунктов. Событие начинается в ноябре 2026 года (месяц 2 сценария), пик приходится на этот месяц, возвращение к 20 происходит к январю 2027 года (месяц 4). В модели масштабе VIX преобразуется по правилу log100: 60 пунктов соответствуют 409,43, 20 пунктов — 299,57. Текущее значение VIX на сентябрь 2026 года — 275,87 (около 15,8 пунктов).",
-  "probabilities": [],
-  "regime_event": null,
-  "satellites": "d1915d6f20863d81c5b63301b10184598a8a97e3052f2411c98904f9e2797a5d",
   "sources": [
     "T1/2018-3#9/4",
     "G43#2/1",
     "S4/2026#5.1/5",
     "S2/2025-1#0/8"
-  ]
+  ],
+  "interventions": [],
+  "observations": [
+    {
+      "kind": "constraint",
+      "terms": [
+        {
+          "quantity": "gl.vix",
+          "month": "2026-11",
+          "weight": 1.0
+        }
+      ],
+      "unit": "level",
+      "low": null,
+      "high": null,
+      "value": 59.99732632624683,
+      "basis": "event"
+    },
+    {
+      "kind": "constraint",
+      "terms": [
+        {
+          "quantity": "gl.vix",
+          "month": "2027-01",
+          "weight": 1.0
+        }
+      ],
+      "unit": "level",
+      "low": null,
+      "high": null,
+      "value": 19.99935453933589,
+      "basis": "event"
+    }
+  ],
+  "approved_by": null
 }

@@ -30,6 +30,7 @@ from .contracts import (
     ConstraintLaw,
     Dist,
     DriverPaths,
+    Intervention,
     LinearConstraint,
     LinearTerm,
     MacroEstimate,
@@ -42,8 +43,15 @@ from .contracts import (
     SatelliteModel,
     SatellitePart,
     ScenarioPlan,
+    StructuralForm,
 )
-from .testing import Finding, check_shocks
+from .interventions import (
+    affine_constraints_under_default,
+    apply_default,
+    constraints_under_default,
+    inner_of_groups,
+)
+from .testing import Finding, check_interventions, check_shocks
 from .version import MODEL_SDK_VERSION, model_compatible
 
 __all__ = [
@@ -53,6 +61,13 @@ __all__ = [
     "MODEL_SDK_VERSION",
     "PART_META_REQUIRED",
     "AdditiveImpact",
+    "Intervention",
+    "StructuralForm",
+    "apply_default",
+    "constraints_under_default",
+    "affine_constraints_under_default",
+    "check_interventions",
+    "inner_of_groups",
     "Check",
     "ConstraintLaw",
     "Dist",

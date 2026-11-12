@@ -12,8 +12,8 @@ from mst.model_sdk import (
     MACRO_META_REQUIRED,
     MODEL_SDK_VERSION,
     PART_META_REQUIRED,
-    AdditiveImpact,
     DriverPaths,
+    Intervention,
     LinearConstraint,
     LinearTerm,
     MacroModel,
@@ -24,7 +24,7 @@ from mst.model_sdk import (
 )
 
 
-def test_a_plan_holds_constraints_and_causes():
+def test_a_plan_holds_constraints_and_interventions():
     plan = ScenarioPlan(
         horizon=3,
         constraints=(
@@ -34,19 +34,21 @@ def test_a_plan_holds_constraints_and_causes():
                 high=21.0,
             ),
         ),
-        causes=("ru.rate_hike",),
+        interventions=(Intervention("ru.key_rate", (2,), "set", np.array([[20.0]])),),
     )
     assert plan.constraints[0].terms[0].variable == "ru.key_rate"
-    assert plan.causes == ("ru.rate_hike",)
+    assert plan.interventions[0].target == "ru.key_rate"
     assert ScenarioPlan(horizon=1).constraints == ()
 
 
-def test_an_impact_names_its_target_start_and_values():
-    impact = AdditiveImpact(target="share_price:sber", start=1, values=(-10.0,) * 6)
-    assert impact.target == "share_price:sber"
-    assert (impact.start, impact.end) == (1, 6)
-    assert impact.value_at(1) == -10.0 and impact.value_at(6) == -10.0
-    assert impact.value_at(0) == 0.0 and impact.value_at(7) == 0.0
+def test_an_intervention_names_target_months_kind_and_group_values():
+    intervention = Intervention(
+        target="share_price:sber", months=(1, 3, 6), kind="shift", values=np.full((2, 3), -10.0)
+    )
+    assert intervention.target == "share_price:sber"
+    assert intervention.months == (1, 3, 6)
+    assert intervention.kind == "shift"
+    np.testing.assert_array_equal(intervention.values, np.full((2, 3), -10.0))
 
 
 def test_a_macro_simulation_carries_its_history():
@@ -128,11 +130,11 @@ def test_the_shocks_argument_is_a_required_keyword_of_a_satellite_simulate():
 
 
 def test_the_plugin_ranges_are_checked_against_the_model_sdk_version():
-    assert MODEL_SDK_VERSION == "3.2.0"
-    assert model_compatible(">=3.0,<4.0")
-    assert model_compatible(">=3.0")
-    assert model_compatible(">=3.1,<4.0")
-    assert not model_compatible(">=2.0,<3.0")
+    assert MODEL_SDK_VERSION == "4.0.0"
+    assert model_compatible(">=4.0,<5.0")
+    assert model_compatible(">=4.0")
+    assert not model_compatible(">=4.1,<5.0")
+    assert not model_compatible(">=3.0,<4.0")
     assert not model_compatible(">=2.1,<3.0")
 
 

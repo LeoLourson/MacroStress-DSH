@@ -25,7 +25,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import date
 from pathlib import Path
-from typing import Protocol
+from typing import Literal, Protocol
 
 import numpy as np
 
@@ -88,26 +88,90 @@ class LinearConstraint:
 
 
 @dataclass(frozen=True)
-class ScenarioPlan:
-    """What a macro model simulates under: the horizon, the constraints and the causes.
+class Intervention:
+    """A realized set or shift in model units, one row per preserved group.
 
-    ``constraints`` are in the model scale ``y = g(X)`` of each variable; ``causes`` names the
-    coordinates of ``omega`` beyond the parameters that the scenario holds responsible for the
-    event — shocks of the model's own ``J`` set and the hidden coordinates the model declares
-    in ``latents``. An empty tuple means every coordinate except the parameters, so the law of
-    ``R`` the price conditions on is the parameters alone. ``regime_event`` names the regime
-    element the event itself asserts, fixed over the horizon — a cause named ``regime_path``
-    explains the event through the regime instead, without fixing it.
+    ``values`` is ``(groups, len(months))``. Paths ``r * inner .. (r + 1) * inner - 1``
+    share row ``r``. An inactive cell is the identity, including for a set intervention;
+    it is never represented by a zero value or a nonfinite placeholder.
+    """
+
+    target: str
+    months: tuple[int, ...]
+    kind: Literal["set", "shift"]
+    values: np.ndarray
+    active: np.ndarray | None = None
+
+    def __post_init__(self):
+        if not self.target or self.kind not in ("set", "shift"):
+            raise ValueError("an intervention needs a target and kind set or shift")
+        months = tuple(self.months)
+        if not months or any(type(month) is not int or month < 1 for month in months):
+            raise ValueError("intervention months must be positive integers")
+        if len(set(months)) != len(months):
+            raise ValueError("an intervention names a month twice")
+        values = np.array(self.values, dtype=float, copy=True)
+        if values.ndim != 2 or values.shape[0] < 1 or values.shape[1] != len(months):
+            raise ValueError("intervention values must have shape (groups, len(months))")
+        if not np.isfinite(values).all():
+            raise ValueError("intervention values must be finite")
+        values.setflags(write=False)
+        object.__setattr__(self, "months", months)
+        object.__setattr__(self, "values", values)
+        if self.active is not None:
+            active = np.array(self.active, copy=True)
+            if active.shape != values.shape or active.dtype != np.dtype(bool):
+                raise ValueError("intervention active must be a boolean array matching values")
+            active.setflags(write=False)
+            object.__setattr__(self, "active", active)
+
+
+@dataclass(frozen=True)
+class StructuralForm:
+    """The model's resolved within-month order and temporal dependency declaration."""
+
+    order_within_month: tuple[str, ...]
+    time_recursion: bool
+
+    def __post_init__(self):
+        if len(set(self.order_within_month)) != len(self.order_within_month):
+            raise ValueError("a structural order names a quantity twice")
+
+
+@dataclass(frozen=True)
+class ScenarioPlan:
+    """Model-scale observations and realized interventions, without model coordinates.
+
+    ``draws`` in a macro call counts preserved groups, not output paths. The model returns
+    ``draws * inner`` paths with contiguous group labels ``repeat(arange(draws), inner)``.
+    Every group preserves its parameters and intervention realization; observations can
+    change all other random coordinates and reweight only inside that group.
     """
 
     horizon: int
     constraints: tuple[LinearConstraint, ...] = ()
-    causes: tuple[str, ...] = ()
-    regime_event: str | None = None
+    interventions: tuple[Intervention, ...] = ()
     inner: int = 1
-    """How many values of the causes the model draws per value of ``R``: the conditions on
-    means and probabilities reweight them inside their group, so a plan that carries such
-    conditions asks for more than one."""
+
+    def __post_init__(self):
+        if type(self.horizon) is not int or self.horizon < 1:
+            raise ValueError("a plan needs a positive integer horizon")
+        if type(self.inner) is not int or self.inner < 1:
+            raise ValueError("a plan needs a positive integer inner count")
+        seen = set()
+        groups = {item.values.shape[0] for item in self.interventions}
+        if len(groups) > 1:
+            raise ValueError("all interventions must carry the same number of groups")
+        for item in self.interventions:
+            for month in item.months:
+                if month > self.horizon:
+                    raise ValueError(f"intervention month {month} exceeds horizon {self.horizon}")
+                key = (item.target, month)
+                if key in seen:
+                    raise ValueError(
+                        f"more than one intervention on {item.target} in month {month}"
+                    )
+                seen.add(key)
 
 
 @dataclass(frozen=True)
@@ -167,9 +231,9 @@ class MacroSimulation:
     history: np.ndarray | None = None
     diagnostics: dict = field(default_factory=dict)
     group: np.ndarray | None = None
-    """``(R,)`` which value of ``R`` every path belongs to: the paths of one group share
-    their parameters and everything else the causes do not name, and the conditions on
-    means reweight them inside it. ``None`` when every path is its own group."""
+    """``(groups * inner,)`` labels ``repeat(arange(groups), inner)``. Paths in one group
+    share parameters and realized interventions; observations reweight inside it. ``None``
+    is allowed only when ``inner == 1`` and every path is its own group."""
 
 
 @dataclass(frozen=True)
@@ -258,11 +322,11 @@ class DriverPaths:
 @dataclass(frozen=True)
 class UpperPaths:
     """Everything a satellite of level ``l`` simulates on: the macro paths and the paths of
-    every level above it, with its impacts already applied.
+    every level above it, with the interventions of those levels already applied.
 
     ``macro`` is the level-0 simulation the run starts from; ``levels`` maps a level number
-    to the paths of that level's quantities, in the model scale, with every impact of those
-    levels applied — the recursion of the canon draws the levels in ascending order, so a
+    to the paths of that level's quantities, in the model scale, with every intervention of
+    those levels applied — the recursion of the canon draws the levels in ascending order, so a
     model of level ``l`` reads the levels below its own and nothing else.
     """
 
@@ -427,9 +491,9 @@ class MacroModel(ABC):
     """The level-0 model ``G_0``: the distribution of the shocks and the transmission to ``x^0``.
 
     ``model_id`` starts with the plugin's id; ``variables`` names the macro variables the model
-    works with, empty meaning all of the registry. ``shocks`` — the ``J`` set a scenario's
-    driving shocks are checked against — is a property of a version: the model records it in
-    its estimate.
+    works with, empty meaning all of the registry. ``shocks`` — the ``J`` set the version
+    records as the names of its economic shocks and regime elements — is a property of a
+    version; a scenario does not name it.
     """
 
     model_id: str
@@ -437,11 +501,19 @@ class MacroModel(ABC):
     label: str
     variables: tuple[str, ...] = ()
     latents: tuple[str, ...] = ()
-    """The hidden coordinates of ``omega`` beyond the parameters and the shocks: a regime
-    path, a volatility path — anything the constraints reweight but no gaussian draw
-    reaches. A scenario names them among its causes to keep them out of ``R``, and the
-    model draws their candidates (``LATENT_CANDIDATES``) when the price and the imposition
-    need them. A model without such coordinates declares none."""
+    """Hidden coordinates beyond parameters and gaussian noise, such as volatility or regime
+    paths. Observations may reweight them; they never belong to the preserved coordinates
+    merely because a scenario omitted their names. Models draw ``LATENT_CANDIDATES`` when
+    measuring their conditional mixture. The names are diagnostics, not scenario inputs."""
+
+    def structural_form(self, model) -> StructuralForm | None:
+        """Resolved order for recursive execution, or the platform's default form.
+
+        A recursive model executes interventions in both simulation and its constraint law.
+        With ``None``, the model conditions the unmodified paths after default substitution;
+        the platform applies the interventions once before simulating lower levels.
+        """
+        return None
 
     @abstractmethod
     def estimate(self, context: MacroEstimateContext) -> MacroEstimate:
@@ -455,9 +527,10 @@ class MacroModel(ABC):
     def simulate(
         self, model, plan: ScenarioPlan, *, draws: int, seed: int
     ) -> MacroSimulation:
-        """``draws`` paths of the macro variables under the constraints and driving shocks.
+        """``draws * plan.inner`` paths, preserving parameters and interventions per group.
 
-        Raises ``InfeasibleScenario`` when the driving shocks cannot meet the constraints.
+        Default-form models condition using the substituted constraints and leave post-draw
+        intervention application to the platform. Recursive models execute interventions.
         """
 
     def constraint_law(
@@ -465,12 +538,11 @@ class MacroModel(ABC):
     ) -> ConstraintLaw | None:
         """The law of the constraint functionals given ``R``, as ``ConstraintLaw`` rows.
 
-        One group of rows belongs to one draw of ``R`` — the parameters and every coordinate
-        the plan's driving shocks do not name — and holds the candidates of the hidden
-        coordinates the model carries (``LATENT_CANDIDATES`` of them) with their importance
-        weights. A model whose representation has no hidden structure returns one row per
-        draw. ``None`` — the default — says the model does not measure the law, and the
-        platform reports no price for its scenarios.
+        One group belongs to a draw of parameters and realized interventions and carries
+        the candidates of the model's hidden coordinates with their importance weights.
+        Means and covariances describe the original functionals AFTER interventions, so the
+        caller uses the original bounds even when sets remove terms. A model without hidden
+        structure returns one row per group. ``None`` says the model does not measure the law.
         """
         return None
 
@@ -483,8 +555,8 @@ class MacroModel(ABC):
         gaussian rows — the causes name shocks whose inputs enter the functionals
         nonlinearly — may still measure the probability of the box at every value of
         ``R``, by subset simulation or another numerical method. ``low`` and ``high`` are
-        the bounds of every constraint, the plan's own with the level-0 impacts taken
-        out, and a bound may be infinite on one side (the one-sided price). The platform
+        the bounds of every constraint, the plan's own with the level-0 interventions
+        substituted, and a bound may be infinite on one side (the one-sided price). The platform
         calls this instead of ``constraint_law`` when that returns ``None``: the price and
         its error are the mean and the spread of ``-log P(S | R)`` over the values. The
         default ``None`` says the model does not measure them.
@@ -592,13 +664,17 @@ class SatelliteModel(ABC):
 
     ``simulate`` receives the paths of every level above the quantities it serves
     (``UpperPaths``): the macro simulation and the driver paths of the levels below its own,
-    impacts applied, so a model of any level reads its inputs the same way.
+    their interventions applied, so a model of any level reads its inputs the same way.
     """
 
     model_id: str
     version: str
     label: str
     quantities: tuple[str, ...] = ()
+
+    def structural_form(self, model) -> StructuralForm | None:
+        """Resolved structural form; default-form satellites apply interventions once."""
+        return None
 
     @abstractmethod
     def estimate(self, context: SatelliteEstimateContext) -> SatelliteEstimate:
@@ -614,20 +690,22 @@ class SatelliteModel(ABC):
         model,
         upper: UpperPaths,
         drivers: list[str],
-        impacts: list[AdditiveImpact],
+        interventions: list[Intervention],
         *,
         correlation: tuple[list[str], np.ndarray] | None = None,
         shocks: np.ndarray,
         seed: int,
         stream: int,
     ) -> DriverPaths:
-        """The paths of ``drivers`` on the levels above them, with the impacts added.
+        """The paths of ``drivers`` on the levels above them, with interventions applied once.
 
         ``upper`` carries the macro simulation and the driver paths of every level above the
-        quantities the model serves, impacts of those levels applied; a model of level 1 reads
-        ``upper.macro`` alone. ``correlation`` is the bundle's residual correlation: the driver
-        ids it is measured on and their matrix. ``shocks`` holds the standardized residuals the
-        platform drew for this model's correlated drivers — ``(R, steps, k)`` columns in the
+        quantities the model serves, interventions applied; a model of level 1 reads
+        ``upper.macro`` alone. Infer the uniform group size with ``inner_of_groups(upper.macro)``
+        and apply this model's interventions once before returning its paths.
+        ``correlation`` is the bundle's residual correlation: the driver ids and their matrix.
+        ``shocks`` holds the standardized residuals the platform drew for this model's
+        correlated drivers — ``(R, steps, k)`` columns in the
         order of ``drivers``, counting only the drivers with a history of their own; a driver
         without one stays on the model's own independent noise. The model must use these
         columns as the residuals of those drivers and read the first rows it needs, not all

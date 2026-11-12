@@ -1,0 +1,30 @@
+{
+  "narrative": "Stage 0 regression baseline: deterministic additive macro impacts only, in model scale.",
+  "sources": [],
+  "horizon": 12,
+  "macro": "51ead9204774f7ef0b4657c4e1a3997c77c584a902ebb6d306c68439977658f8",
+  "satellites": "0000000000000000000000000000000000000000000000000000000000000000",
+  "constraints": [],
+  "causes": [],
+  "regime_event": null,
+  "impacts": [
+    {
+      "target": "ru.key_rate",
+      "start": 2,
+      "values": [1.5, 0.0, -0.75],
+      "reason": "Regression fixture: varying rate shifts, with an internal zero.",
+      "basis": "assumption"
+    },
+    {
+      "target": "gl.brent",
+      "start": 1,
+      "values": [-5.0, 2.0, 0.0, 7.5],
+      "reason": "Regression fixture: log-scale shifts, ending before the horizon.",
+      "basis": "assumption"
+    }
+  ],
+  "expectations": [],
+  "probabilities": [],
+  "inner": 1,
+  "approved_by": null
+}

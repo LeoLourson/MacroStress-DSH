@@ -33,7 +33,11 @@ def module():
 def base_run(workspace):
     """The base scenario of the test workspace, run once with a single share position."""
     run_id = runs.new_id()
-    runs.begin(workspace, run_id, {"scenario": "oil", "draws": 8, "seed": 11, "positions": [SHARE]})
+    runs.begin(
+        workspace,
+        run_id,
+        {"scenario": "oil", "draws": 8, "seed": 11, "horizon": 3, "positions": [SHARE]},
+    )
     runs.execute(workspace, run_id)
     return run_id
 

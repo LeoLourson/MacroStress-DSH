@@ -32,7 +32,7 @@ import numpy as np
 from pydantic import Field, model_validator
 
 from . import store
-from .contracts import Contract, Currency, Identifier, Seed
+from .contracts import Contract, Currency, Horizon, Identifier, Seed, Sha256
 from .drivers import bundle as satellite_bundle
 from .engine import run as calculate_run
 from .macro import version as macro_version
@@ -58,6 +58,10 @@ class RunRequest(Contract):
     scenario: Identifier
     draws: int = Field(strict=True, ge=1)
     seed: Seed
+    macro: Sha256 | None = None
+    satellites: Sha256 | None = None
+    horizon: Horizon = 12
+    inner: int = Field(default=1, strict=True, ge=1, le=64)
     #: The base currency of ad-hoc ``positions``; a portfolio brings its own.
     base_currency: Currency = "RUB"
     positions: list[Position] | None = None
@@ -114,6 +118,12 @@ def begin(ws: store.Workspace, run_id: str, request: dict) -> dict:
     The folder is created exclusively: a run id that already exists is not overwritten.
     """
     checked = RunRequest.model_validate(request).model_dump(mode="json")
+    if checked["macro"] is None or checked["satellites"] is None:
+        snapshot = store.state(ws)
+        checked["macro"] = checked["macro"] or snapshot["macro"]
+        checked["satellites"] = checked["satellites"] or snapshot["satellites"]
+    if checked["macro"] is None or checked["satellites"] is None:
+        raise ValueError("a run needs both a macro version and its satellite bundle")
     directory = folder(ws, run_id)
     directory.mkdir(parents=True, exist_ok=False)
     store.write_json(directory / "request.json", checked)
@@ -142,15 +152,19 @@ def execute(ws: store.Workspace, run_id: str) -> dict:
     try:
         spec = scenario_tool.load(ws.scenarios, request.scenario)
         installed = plugins.registry()
-        macro = macro_version.load(ws.models, spec.macro, installed.macro)
-        satellites = satellite_bundle.load(ws.models, spec.satellites, installed.satellites)
-        if satellites.macro != spec.macro:
+        macro = macro_version.load(ws.models, request.macro, installed.macro)
+        satellites = satellite_bundle.load(ws.models, request.satellites, installed.satellites)
+        if satellites.macro != request.macro:
             raise ValueError(
-                f"the satellites {spec.satellites} were estimated on the macro version "
-                f"{satellites.macro}, the scenario names {spec.macro}"
+                f"the satellites {request.satellites} were estimated on the macro version "
+                f"{satellites.macro}, the run selects {request.macro}"
             )
+        if not spec.approved_by:
+            raise ValueError("a human must approve the scenario before a calculation")
+        horizon = _horizon(spec, macro, request.horizon)
+        execution = {"horizon": horizon, "inner": request.inner}
         paths = scenario_build.build(
-            spec, macro, satellites, draws=request.draws, seed=request.seed
+            spec, macro, satellites, draws=request.draws, seed=request.seed, **execution
         )
         # The empty scenario on the same seed and streams: what the forecast is compared
         # against and what the constraint gate reads.
@@ -160,6 +174,7 @@ def execute(ws: store.Workspace, run_id: str) -> dict:
             satellites,
             draws=request.draws,
             seed=request.seed,
+            **execution,
         )
         portfolio = (
             portfolio_tool.load(ws.portfolios, request.portfolio) if request.portfolio else None
@@ -200,13 +215,7 @@ def execute(ws: store.Workspace, run_id: str) -> dict:
         comparison = None
         if (
             portfolio is not None
-            and (
-                spec.constraints
-                or spec.impacts
-                or spec.expectations
-                or spec.probabilities
-                or spec.regime_event
-            )
+            and (spec.observations or spec.interventions)
             and losses.size
         ):
             empty_batch = valued(empty)
@@ -233,7 +242,7 @@ def execute(ws: store.Workspace, run_id: str) -> dict:
             contributions = []
             for name, variant in _variants(spec):
                 variant_paths = scenario_build.build(
-                    variant, macro, satellites, draws=request.draws, seed=request.seed
+                    variant, macro, satellites, draws=request.draws, seed=request.seed, **execution
                 )
                 variant_batch = valued(variant_paths)
                 found = portfolio_report.loss_block(
@@ -277,6 +286,8 @@ def execute(ws: store.Workspace, run_id: str) -> dict:
             contributions=contributions,
             monthly=monthly,
             comparison=comparison,
+            intervention_rows=_intervention_rows(spec, macro, satellites, empty, request),
+            structural_forms=_structural_forms(macro, satellites),
             workspace=ws,
         )
     except BaseException as error:
@@ -399,6 +410,8 @@ def _write(
     contributions: list | None = None,
     monthly: np.ndarray | None = None,
     comparison: dict | None = None,
+    intervention_rows: list[dict] | None = None,
+    structural_forms: dict | None = None,
     workspace: store.Workspace | None = None,
 ) -> dict:
     """The paths, the results of every position, the report and the meta that names them."""
@@ -407,8 +420,10 @@ def _write(
     admission = _admission(checks, paths.diagnostics)
     rare = _rare_constraints(checks)
     # A position that was not calculated has no column: NaN stands in, so nobody reads a zero
-    # profit where there is no number at all.
-    changes = np.full((paths.draws, len(batch.results)), np.nan)
+    # profit where there is no number at all. The rows are the paths, ``draws * inner``, not the
+    # draws: every inner path of a group carries its own value change.
+    rows = paths.macro.shape[0]
+    changes = np.full((rows, len(batch.results)), np.nan)
     for index, result in enumerate(batch.results):
         if result.value_change:
             changes[:, index] = result.value_change
@@ -434,6 +449,7 @@ def _write(
             comparison=comparison,
             admission=admission,
             rare_constraints=rare,
+            intervention_rows=intervention_rows,
         )
         if portfolio is not None
         else None
@@ -451,8 +467,13 @@ def _write(
         "id": run_id,
         "scenario": request.scenario,
         "narrative": spec.narrative,
-        "macro": spec.macro,
-        "satellites": spec.satellites,
+        "macro": request.macro,
+        "satellites": request.satellites,
+        "scenario_spec": spec.model_dump(mode="json"),
+        "scenario_format": "interventions-v1",
+        "inner": request.inner,
+        "structural_forms": structural_forms,
+        "interventions": intervention_rows or [],
         "as_of": stored["as_of"],
         "started": started,
         "finished": _now(),
@@ -467,7 +488,7 @@ def _write(
         "driver_flags": {
             driver: sorted(paths.drivers.flags[driver]) for driver in paths.drivers.ids
         },
-        "dist": _dist_meta(paths.dist),
+        "dist": _dist_meta(paths.dist, spec),
         "basis": _basis(spec),
         "checks": checks,
         "diagnostics": paths.diagnostics,
@@ -550,29 +571,60 @@ def _now() -> str:
     return datetime.now(UTC).isoformat(timespec="seconds")
 
 
+def _horizon(spec: Spec, macro, requested: int) -> int:
+    from .scenario.translate import month_index
+
+    origin = macro.panel.months[-1].strftime("%Y-%m")
+    months = [month for item in spec.interventions for month in item.months]
+    months += [term.month for item in spec.observations for term in item.terms]
+    last = max((month_index(month, origin) for month in months), default=requested)
+    return max(requested, last)
+
+
+def _structural_forms(macro, satellites) -> dict:
+    from dataclasses import asdict
+
+    def describe(plugin, loaded):
+        form = plugin.structural_form(loaded)
+        return None if form is None else asdict(form)
+
+    return {
+        "macro": describe(macro.plugin, macro.model),
+        "satellites": {
+            name: describe(plugin, satellites.models[name])
+            for name, plugin in satellites.plugins.items()
+        },
+    }
+
+
+def _intervention_rows(spec, macro, satellites, empty, request):
+    from dataclasses import replace
+
+    from .drivers.registry import path_to_model
+    from .model_sdk.contracts import DriverPaths
+    from .scenario.context import context_from_versions
+    from .scenario.translate import plan_of
+
+    plan = plan_of(
+        spec, context_from_versions(macro, satellites), len(empty.months) - 1,
+        groups=request.draws, inner=request.inner, seed=request.seed,
+    )
+    paths = empty.drivers.paths.copy()
+    for column, name in enumerate(empty.drivers.ids):
+        quantity = satellites.registry.quantity(satellites.quantity_of(name))
+        paths[:, :, column] = path_to_model(quantity.transform, paths[:, :, column])
+    base = replace(empty, drivers=DriverPaths(empty.drivers.ids, paths, empty.drivers.flags))
+    return portfolio_report.interventions(base, plan.interventions, inner=request.inner)
+
+
 def _without_everything(spec: Spec) -> Spec:
     """The empty scenario ``s_0`` of the same versions and horizon: no conditions, no impacts."""
-    return spec.model_copy(
-        update={
-            "constraints": [],
-            "impacts": [],
-            "expectations": [],
-            "probabilities": [],
-            "causes": [],
-            "regime_event": None,
-            "inner": 1,
-        }
-    )
+    return spec.model_copy(update={"observations": [], "interventions": []})
 
 
 def _variants(spec: Spec):
     """``(name, scenario)`` of every element of the scenario taken out alone."""
-    for kind, field in (
-        ("constraint", "constraints"),
-        ("impact", "impacts"),
-        ("expectation", "expectations"),
-        ("probability", "probabilities"),
-    ):
+    for kind, field in (("observation", "observations"), ("intervention", "interventions")):
         elements = getattr(spec, field)
         for k in range(len(elements)):
             without = list(elements)
@@ -601,7 +653,10 @@ def _checks(spec: Spec, macro, paths, empty, satellites) -> dict:
 
     checks: dict = {}
     registry = load_macro_registry()
-    plan = scenario_build.plan_of(spec, macro)
+    plan = scenario_build.plan_of(
+        spec, macro, satellites=satellites, horizon=len(paths.months) - 1,
+        draws=paths.draws, inner=paths.shadow.shape[0] // paths.draws,
+    )
     if plan.constraints:
         # The conditions stand on the shadow, so their probability under the base reads it.
         model_scale = (
@@ -671,10 +726,8 @@ def _basis(spec: Spec) -> list[dict]:
     """What every condition and impact of the scenario rests on, element by element."""
     rows = []
     for kind, elements in (
-        ("constraint", spec.constraints),
-        ("impact", spec.impacts),
-        ("expectation", spec.expectations),
-        ("probability", spec.probabilities),
+        ("observation", spec.observations),
+        ("intervention", spec.interventions),
     ):
         for k, element in enumerate(elements):
             rows.append(
@@ -695,7 +748,7 @@ def _git_commit() -> str | None:
     return read()
 
 
-def _dist_meta(found) -> dict | None:
+def _dist_meta(found, spec: Spec | None = None) -> dict | None:
     """The price of the scenario with everything the reader needs to judge it.
 
     The definition is the canon's: ``dist(s) = KL(P_s || P) = E_P[-log P(S | R)]``, the sum
@@ -705,9 +758,27 @@ def _dist_meta(found) -> dict | None:
     ten-percent rule: a price whose error exceeds a tenth of it is not an estimate.
     ``one_sided`` is the price of the event with every interval condition opened to a ray,
     with the dropped coordinates and its own mark.
+
+    A scenario of interventions alone has no observation to price: its price is exactly
+    zero, because the event is imposed rather than observed, and it is stated as zero
+    instead of the internal absence of a law.
     """
     if found is None:
-        return None
+        if spec is None or not spec.interventions:
+            return None
+        return {
+            "definition": "dist(s) = KL(P_s || P) (docs/concept/formalization.md, sections 4-5)",
+            "distance": 0.0,
+            "log_probability": 0.0,
+            "standard_error": 0.0,
+            "estimated": True,
+            "causes": [],
+            "tolerances": [],
+            "by_level": {"0": 0.0},
+            "one_sided": None,
+            "message": None,
+            "observations": 0,
+        }
     from .model_sdk.dist import price_estimated
 
     side = found.one_sided

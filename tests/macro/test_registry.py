@@ -58,11 +58,13 @@ def test_check_names_unknown_variables(shipped):
     unknown = Scenario.model_validate(
         {
             "narrative": "x",
-            "horizon": 12,
-            "constraints": [
+            "observations": [
                 {
-                    "terms": [{"variable": "ru.gdp", "month": 1, "weight": 1.0}],
-                    "value": 0.0,
+                    "kind": "constraint",
+                    "terms": [{"quantity": "ru.gdp", "month": "2027-01", "weight": 1.0}],
+                    "unit": "level",
+                    "low": -1.0,
+                    "high": 1.0,
                     "basis": "assumption",
                 }
             ],
@@ -76,11 +78,14 @@ def test_check_accepts_a_scenario_on_registered_names(shipped):
     known = Scenario.model_validate(
         {
             "narrative": "x",
-            "horizon": 12,
-            "constraints": [
+            "interventions": [
                 {
-                    "terms": [{"variable": "ru.key_rate", "month": 3, "weight": 1.0}],
-                    "value": 21.0,
+                    "quantity": "ru.key_rate",
+                    "months": ["2027-03"],
+                    "kind": "set",
+                    "values": [21.0],
+                    "unit": "level",
+                    "reason": "meeting",
                     "basis": "assumption",
                 }
             ],

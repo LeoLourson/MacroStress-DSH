@@ -3,9 +3,10 @@
 For an episode of the plan the calculation date is the day before it starts; every model is
 estimated on the data known that day — the macro model as an episode version under
 ``<models>/backtest/``, cached by the state of the data and the model's configuration — and the
-scenario is what actually happened: the realized paths of the episode's variables, month by
-month, with the shocks the sources of the time named. The same model also runs the base
-scenario (no constraints, no impacts), and every cell — episode, month, quantity — is scored
+scenario is what actually happened: the realized paths of the episode's observed variables as
+constraints month by month, and each decision of the episode as an intervention that sets its
+realized level, whose cells are not scored. The same model also runs the base scenario (no
+constraints, no interventions), and every cell — episode, month, quantity — is scored
 against the fact several times: the conditional forecast, the random walk with drift computed
 from the history known at that episode's calculation date, the conditional walk that also reads
 the path the scenario fixes, the unconditional (base) run of the model itself, and, for targets,
@@ -13,7 +14,7 @@ the naive forecast of a year earlier with the trend. The conditional walk is the
 the conditional forecast: the plain walk does not know the future path the model is given, so a
 win over it says little. The quality of the forecast itself is judged by the rolling check
 (``mst.metrics.rolling``) on a grid of dates nobody selected; the named events only add what a
-model does when the shock is known.
+model does when the event is known.
 
 The quantities are every unconstrained macro variable the episode window knows and, with
 ``--satellites``, every served driver with a realized series. The report aggregates the cells
@@ -44,7 +45,7 @@ import hashlib
 import inspect
 import io
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import date
 from functools import partial
 from pathlib import Path
@@ -60,9 +61,11 @@ from mst.macro.registry import Registry, load_registry
 from mst.macro.version import MacroVersion
 from mst.model_sdk.bounds import lower_bounds, observed
 from mst.model_sdk.contracts import (
+    Intervention,
     LinearTerm,
     ScenarioPlan,
 )
+from mst.model_sdk.interventions import apply_default
 from mst.model_sdk.version import MODEL_SDK_VERSION
 from mst.plugin_sdk.version import SDK_VERSION
 from mst.scenario.build import point_constraint
@@ -115,8 +118,10 @@ class Episode:
     scenario: ScenarioPlan
     realized: np.ndarray
     """(H, n) the macro variables in the model scale as the check date knows them; NaN gaps."""
-    driving: list[str]
-    constrained: list[str]
+    observations: list[str]
+    """The variables the episode asserts as outcomes: they follow the realized path."""
+    interventions: list[str]
+    """The variables the episode asserts as decisions: they take the realized level."""
     half: str
     """The plan's mark: tuning fits the models, validation checks them."""
     source: str
@@ -135,6 +140,11 @@ class Episode:
     """The driver paths of the episode, in the model scale."""
     macro_paths: object = None
     """The conditional forecast of the episode, kept for the tail section's valuation."""
+
+    @property
+    def constrained(self) -> list[str]:
+        """The variables whose realized paths fix the scenario, both kinds together."""
+        return [*self.observations, *self.interventions]
 
 
 def run(
@@ -265,10 +275,10 @@ def _episode(
     start = check.start
     as_of = calculation_date(start)
     macro = _episode_macro(plugin, data, registry, as_of, root, inputs)
-    unknown = [shock for shock in check.driving if shock not in macro.shocks]
-    if unknown:
-        raise ValueError(f"the macro model knows no shocks {', '.join(unknown)}")
     panel, _ = macro_version.panel_of(root, macro.name)
+    unknown = [name for name in check.constrained if name not in panel.ids]
+    if unknown:
+        raise ValueError(f"the macro panel knows no variables {', '.join(unknown)}")
     panel_months = list(panel.months)
     end = shift(start, plan.after_months)
     horizon = (end.year - panel_months[-1].year) * 12 + end.month - panel_months[-1].month
@@ -277,7 +287,7 @@ def _episode(
     months = [shift(panel_months[-1], k) for k in range(1, horizon + 1)]
     realized = _realized(data, registry, panel, panel_months, months, as_of, known_on, plan)
     constraints = []
-    for id_ in check.constrained:
+    for id_ in check.observations:
         i = panel.ids.index(id_)
         for k, value in enumerate(realized[:, i], start=1):
             if not np.isnan(value):
@@ -297,17 +307,65 @@ def _episode(
         scenario=ScenarioPlan(
             horizon=horizon,
             constraints=tuple(constraints),
-            causes=tuple(check.driving),
+            interventions=_interventions(check.interventions, realized, panel.ids, plan.draws),
         ),
         realized=realized,
-        driving=list(check.driving),
-        constrained=list(check.constrained),
+        observations=list(check.observations),
+        interventions=list(check.interventions),
         half=check.half,
         source=check.source,
         panel=panel,
         store=data,
         known_on=known_on,
     )
+
+
+def _interventions(
+    names: list[str], realized: np.ndarray, ids: list[str], draws: int
+) -> tuple[Intervention, ...]:
+    """The decisions of the episode as sets of the realized level, one row per draw.
+
+    An episode asserts that the decision was taken, so the realized value is the value the
+    model must take in those months; every group of paths carries the same row, because the
+    episode fixes the level rather than a law of it. A month without a fact is left out, as
+    the observations leave it out.
+    """
+    found = []
+    for name in names:
+        column = ids.index(name)
+        months, values = [], []
+        for month, value in enumerate(realized[:, column], start=1):
+            if not np.isnan(value):
+                months.append(month)
+                values.append(float(value))
+        if not months:
+            continue
+        found.append(
+            Intervention(
+                target=name,
+                months=tuple(months),
+                kind="set",
+                values=np.tile(np.asarray(values, dtype=float), (draws, 1)),
+            )
+        )
+    return tuple(found)
+
+
+def _simulated(macro: MacroVersion, scenario: ScenarioPlan, plan: Episodes):
+    """The macro paths of a plan, with the interventions of a default-form model applied.
+
+    A recursive model executes its interventions itself; a default-form one returns the paths
+    before them, as the platform's ``build`` expects, so the same substitution is made here.
+    """
+    simulation = macro.plugin.simulate(macro.model, scenario, draws=plan.draws, seed=plan.seed)
+    if macro.plugin.structural_form(macro.model) is None:
+        simulation = replace(
+            simulation,
+            paths=apply_default(
+                simulation.paths, simulation.ids, scenario.interventions, inner=scenario.inner
+            ),
+        )
+    return simulation
 
 
 def _realized(
@@ -540,9 +598,7 @@ def _attach_bundle(
         pointer.write_text(found + "\n", encoding="utf-8")
         episode.bundle = satellite_bundle.load(root, found, installed)
         episode.bundle_name = found
-    simulation = episode.macro.plugin.simulate(
-        episode.macro.model, episode.scenario, draws=plan.draws, seed=plan.seed
-    )
+    simulation = _simulated(episode.macro, episode.scenario, plan)
     episode.driver_paths = episode.bundle.simulate(
         observed(simulation, load_registry()), episode.bundle.served(), (), seed=plan.seed
     )
@@ -570,32 +626,12 @@ def _report(
     levels: dict[str, str] = {}
     unverified: set[str] = set()
     constraint_shares: dict[str, dict[int, float | None]] = {}
-    sensitivity: dict[str, dict] = {}
 
     for episode in episodes:
-        # Two runs of every episode: at R = theta, with no cause named — the run the
-        # uniformity of u and the CRPS read, the only law the canon's uniformity holds for —
-        # and with the causes the card's sources named, for the sensitivity of both to the
-        # choice of the causes.
-        plain_run = observed(
-            episode.macro.plugin.simulate(
-                episode.macro.model,
-                ScenarioPlan(
-                    horizon=episode.horizon,
-                    constraints=episode.scenario.constraints,
-                ),
-                draws=plan.draws,
-                seed=plan.seed,
-            ),
-            registry,
-        )
-        driven = observed(
-            episode.macro.plugin.simulate(
-                episode.macro.model, episode.scenario, draws=plan.draws, seed=plan.seed
-            ),
-            registry,
-        )
-        episode.macro_paths = driven
+        # One run of every episode: the observations as point constraints and the decisions
+        # as interventions; the uniformity of u, the calibration and the CRPS read it.
+        candidate = observed(_simulated(episode.macro, episode.scenario, plan), registry)
+        episode.macro_paths = candidate
         shadow = episode.macro.plugin.simulate(
             episode.macro.model,
             ScenarioPlan(horizon=episode.horizon),
@@ -607,17 +643,14 @@ def _report(
         constraint_shares[episode.id] = constraint_probabilities(
             shadow.paths, shadow.ids, episode.scenario.constraints
         )
-        plain_cells: list[Cell] = []
-        driven_cells: list[Cell] = []
-        _macro_cells(episode, plain_run, base, plain_cells, levels, registry, plan)
-        _macro_cells(episode, driven, base, driven_cells, levels, registry, plan)
-        sensitivity[episode.id] = _cause_sensitivity(episode, plain_cells, driven_cells)
+        episode_cells: list[Cell] = []
+        _macro_cells(episode, candidate, base, episode_cells, levels, registry, plan)
         if episode.bundle is not None and episode.driver_paths is not None:
-            plain_drivers = episode.bundle.simulate(
-                plain_run, episode.bundle.served(), (), seed=plan.seed
+            drivers = episode.bundle.simulate(
+                candidate, episode.bundle.served(), (), seed=plan.seed
             )
-            _driver_cells(episode, plain_drivers, plain_cells, levels, unverified, plan)
-        cells.extend(plain_cells)
+            _driver_cells(episode, drivers, episode_cells, levels, unverified, plan)
+        cells.extend(episode_cells)
 
     by_quantity: dict[str, list[Cell]] = {}
     for cell in cells:
@@ -628,7 +661,6 @@ def _report(
         row = score_cells(own)
         row["level"] = levels.get(quantity, "")
         row["unverified_tail"] = quantity in unverified
-        row["uniformity_run"] = "s_no_causes"
         row["admission"] = _quantity_rules(own)
         row["intervals"] = {
             "crps": _interval(row["months"], "crps", plan),
@@ -703,8 +735,9 @@ def _report(
                 "horizon": episode.horizon,
                 "half": episode.half,
                 "source": episode.source,
+                "observations": episode.observations,
+                "interventions": episode.interventions,
                 "constrained": episode.constrained,
-                "driving": episode.driving,
                 "macro_model": episode.macro.plugin.model_id,
                 "macro_version": episode.macro.name,
                 "satellite_version": episode.bundle_name,
@@ -720,37 +753,21 @@ def _report(
         "target_level": target_level,
         "admission": admission,
         "rolling": rolling,
-        "cause_sensitivity": {
-            "episodes": sensitivity,
-            "mean_difference": float(
-                np.mean(
-                    [
-                        row["difference"]
-                        for row in sensitivity.values()
-                        if row["difference"] is not None
-                    ]
-                )
-            )
-            if any(row["difference"] is not None for row in sensitivity.values())
-            else None,
-            "note": (
-                "the CRPS of every episode at R = theta and with the named causes; the "
-                "uniformity of u and the calibration read the run without named causes only"
-            ),
-        },
         "constraint_gate": gate,
         "admission_failed": admission["failed"] or gate["failed"],
         "problems": [],
     }
     if against is not None:
         report["decision"] = _decision_block(
-            rows, against, admission=admission, halves=halves, plan=plan,
+            rows,
+            against,
+            admission=admission,
+            halves=halves,
+            plan=plan,
             target_level=target_level,
         )
     if portfolio_id is not None:
-        report["tail"] = _tail_section(
-            episodes, plan, portfolio_id, store=store, known_on=known_on
-        )
+        report["tail"] = _tail_section(episodes, plan, portfolio_id, store=store, known_on=known_on)
     return report
 
 
@@ -775,42 +792,6 @@ def _episode_relative(rows: list[dict], target_level: str, plan: Episodes) -> di
         }
         for name, (first, second) in pairs.items()
     }
-
-
-def _cause_sensitivity(episode: Episode, plain: list[Cell], driven: list[Cell]) -> dict:
-    """How the scores move between the causes: the canon's check of the choice of D.
-
-    The CRPS of the episode's macro cells is averaged per run — the plain one at
-    R = theta and the one with the named causes — and the difference is the episode's
-    sensitivity; the mean over the episodes says how much the choice of the causes moves the
-    forecast at all.
-    """
-
-    def mean_of(found: list[Cell]) -> float | None:
-        values = [
-            _cell_crps(cell)
-            for cell in found
-            if not cell.constrained and np.isfinite(cell.fact) and cell.sigma > 0
-        ]
-        return float(np.mean(values)) if values else None
-
-    plain_mean, driven_mean = mean_of(plain), mean_of(driven)
-    return {
-        "crps_plain": plain_mean,
-        "crps_driven": driven_mean,
-        "difference": None
-        if plain_mean is None or driven_mean is None
-        else driven_mean - plain_mean,
-    }
-
-
-def _cell_crps(cell) -> float:
-    """The CRPS of one cell, unnormalised."""
-    from .cells import crps, finite_draws
-
-    if not len(finite_draws(cell.draws)):
-        return float("nan")
-    return float(crps(finite_draws(cell.draws), cell.fact))
 
 
 def _cell_rows(cells: list[Cell], levels: dict[str, str]) -> list[dict]:
@@ -874,7 +855,7 @@ def _macro_cells(
     """The cells of the episode's macro variables; the random walk and the base run alongside."""
     panel = episode.panel
     column_of = {id_: i for i, id_ in enumerate(draws.ids)}
-    pinned = _pinned(episode.scenario.constraints)
+    pinned = _pinned(episode.scenario.constraints) | _installed(episode.scenario.interventions)
     months = list(range(1, len(episode.months) + 1))
     peers = {id_: panel.y[:, j] for j, id_ in enumerate(panel.ids) if id_ in column_of}
     given = [panel.ids.index(id_) for id_ in episode.constrained]
@@ -888,9 +869,7 @@ def _macro_cells(
         spread = history_range(history)
         floors = lower_bounds(registry, [id_])
         lower = None if floors is None else float(floors[0])
-        walk = random_walk(
-            history, episode.horizon, draws=plan.draws, seed=plan.seed, lower=lower
-        )
+        walk = random_walk(history, episode.horizon, draws=plan.draws, seed=plan.seed, lower=lower)
         knowing = (
             None
             if j in given
@@ -945,6 +924,12 @@ def _pinned(constraints) -> set[tuple[str, int]]:
         if constraint.point or constraint.high - constraint.low <= 2 * constraint.tolerance:
             pinned.add((term.variable, term.month))
     return pinned
+
+
+def _installed(interventions) -> set[tuple[str, int]]:
+    """The ``(variable, month)`` cells an intervention sets: the episode asserts the decision,
+    so they are reported and never scored, as a point observation's cell is."""
+    return {(item.target, month) for item in interventions for month in item.months}
 
 
 def _driver_cells(
@@ -1014,11 +999,7 @@ def _driver_fact(episode: Episode, series, month: date, declared):
 
     if series is None:
         return None
-    rows = [
-        row
-        for row in episode.store.as_of(series, episode.known_on)
-        if row.month == month
-    ]
+    rows = [row for row in episode.store.as_of(series, episode.known_on) if row.month == month]
     if not rows:
         return None
     try:
@@ -1039,9 +1020,7 @@ def _admission(cells: list[Cell]) -> dict:
     scored = [
         cell
         for cell in cells
-        if not cell.constrained
-        and np.isfinite(cell.fact)
-        and len(finite_draws(cell.draws))
+        if not cell.constrained and np.isfinite(cell.fact) and len(finite_draws(cell.draws))
     ]
     broken: dict[str, list[Cell]] = {DOMAIN: [], WIDTH: []}
     for cell in scored:
@@ -1072,9 +1051,7 @@ def _quantity_rules(cells: list[Cell]) -> dict:
     scored = [
         cell
         for cell in cells
-        if not cell.constrained
-        and np.isfinite(cell.fact)
-        and len(finite_draws(cell.draws))
+        if not cell.constrained and np.isfinite(cell.fact) and len(finite_draws(cell.draws))
     ]
     counts = {DOMAIN: 0, WIDTH: 0}
     for cell in scored:
@@ -1112,8 +1089,9 @@ def _constraint_gate(shares: dict[str, dict[int, float | None]]) -> dict:
         "failed_constraints": failed,
         "failed": bool(failed),
         "note": (
-            "a fact-reconstructed episode fixes its constrained values as points, so pi_c is "
-            "not applicable there and is excluded from the gate; a range constraint keeps it"
+            "a fact-reconstructed observation fixes its value as a point, so pi_c is not "
+            "applicable there and is excluded from the gate; an intervention is a decision, "
+            "not an observation, and is not in the gate at all; a range constraint keeps pi_c"
         ),
     }
 
@@ -1422,8 +1400,7 @@ def _decision_block(
         incumbent_paired.append(other)
     if not paired_rows:
         raise ValueError(
-            f"--against {against}: no cell of the comparison has a normalised score in both "
-            "reports"
+            f"--against {against}: no cell of the comparison has a normalised score in both reports"
         )
     candidate_rows = [
         {key: value for key, value in row.items() if key != "diff_vs_incumbent"}
@@ -1565,11 +1542,7 @@ def _tail_section(
             "served": [],
             "realized_missing": [],
         }
-        if (
-            episode.bundle is None
-            or episode.driver_paths is None
-            or episode.macro_paths is None
-        ):
+        if episode.bundle is None or episode.driver_paths is None or episode.macro_paths is None:
             row["realized_missing"] = ["no satellite bundle on the episode"]
             rows.append(row)
             continue
@@ -1647,12 +1620,10 @@ def _meta(
             "dist(s) = E_P[-log P(S | R)] on the constraint law (docs/concept/formalization.md)",
         ],
         "macro_models": [
-            {"model_id": model_id, "version": version}
-            for model_id, version in sorted(macro_models)
+            {"model_id": model_id, "version": version} for model_id, version in sorted(macro_models)
         ],
         "satellite_models": [
-            {"model_id": model_id, "version": version}
-            for model_id, version in sorted(satellites)
+            {"model_id": model_id, "version": version} for model_id, version in sorted(satellites)
         ],
         "macro_versions": sorted({episode.macro.name for episode in episodes}),
         "satellite_versions": sorted(
@@ -1684,7 +1655,7 @@ def _git_commit() -> str | None:
                 return None
             if not found.startswith("gitdir: "):
                 return None
-            marker = (folder / found[len("gitdir:"):].strip()).resolve()
+            marker = (folder / found[len("gitdir:") :].strip()).resolve()
         if not marker.is_dir():
             continue
         try:
@@ -1693,7 +1664,7 @@ def _git_commit() -> str | None:
             return None
         if not head.startswith("ref: "):
             return head[:40] or None
-        ref = head[len("ref:"):].strip()
+        ref = head[len("ref:") :].strip()
         # A linked worktree keeps its HEAD apart and its refs in the common directory.
         common = marker / "commondir"
         if common.is_file():
@@ -1716,7 +1687,9 @@ def _git_commit() -> str | None:
 def _print(report: dict) -> None:
     """The report as Markdown tables and the list of metrics it cannot compute."""
     print("## Episodes\n")
-    print("| episode | as of | horizon | constrained | driving | min constraint probability |")
+    print(
+        "| episode | as of | horizon | observations | interventions | min constraint probability |"
+    )
     print("|---|---|---|---|---|---|")
     for row in report["episodes"]:
         shares = row["constraint_probabilities"]
@@ -1725,9 +1698,11 @@ def _print(report: dict) -> None:
         worst = f"{min(known):.2f}" if known else "n/a"
         if exact:
             worst += f" ({exact} n/a)"
+        observations = ", ".join(row["observations"]) or "-"
+        interventions = ", ".join(row["interventions"]) or "-"
         print(
             f"| {row['id']} | {row['as_of']} | {row['horizon']} "
-            f"| {', '.join(row['constrained'])} | {', '.join(row['driving'])} | {worst} |"
+            f"| {observations} | {interventions} | {worst} |"
         )
     admission = report["admission"]
     print("\n## Admission\n")
@@ -1963,9 +1938,7 @@ def _print_decision(report: dict) -> None:
         f"wild disagrees {verdict.get('wild_disagrees')}"
     )
     if verdict.get("primary") == "wild":
-        print(
-            f"- fewer than {WILD_PRIMARY_BELOW} episodes: the wild interval is read as primary"
-        )
+        print(f"- fewer than {WILD_PRIMARY_BELOW} episodes: the wild interval is read as primary")
     shares = ", ".join(
         f"{rule} {_number(share)}" for rule, share in verdict.get("admission_shares", {}).items()
     )
@@ -1995,8 +1968,7 @@ def _print_tail(report: dict) -> None:
         f"{_number(tail.get('trimmed_z'))}"
     )
     print(
-        f"- episodes judged {len(tail.get('episodes', []))}, "
-        f"dropped {len(tail.get('dropped', []))}"
+        f"- episodes judged {len(tail.get('episodes', []))}, dropped {len(tail.get('dropped', []))}"
     )
     for dropped in tail.get("dropped", []):
         print(f"- dropped {dropped['id']}: {dropped['reason']}")

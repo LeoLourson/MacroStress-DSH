@@ -230,9 +230,7 @@ def _training_range(meta: dict, satellites, driver_paths: np.ndarray) -> dict:
 
 def _bands(ws, meta, macro, satellites, driver_paths, named, month) -> dict:
     """The band of every named driver at ``month``: the full one and the residuals-only one."""
-    from mst.model_sdk.contracts import MacroSimulation
-    from mst.scenario import build as scenario_build
-    from mst.scenario import tool as scenario_tool
+    from mst.model_sdk.contracts import MacroSimulation, ScenarioPlan
 
     full = {}
     for driver in named:
@@ -242,23 +240,11 @@ def _bands(ws, meta, macro, satellites, driver_paths, named, month) -> dict:
             np.percentile(column[:, month], 95) - np.percentile(column[:, month], 5)
         )
     # The same macro model, the same seed, every path fixed at its median: the noise the
-    # satellites draw is the noise of the run, so only x and the posterior differ.
-    spec = scenario_tool.load(ws.scenarios, meta["scenario"])
-    base = spec.model_copy(
-        update={
-            "constraints": [],
-            "impacts": [],
-            "expectations": [],
-            "probabilities": [],
-            "causes": [],
-            "regime_event": None,
-        }
-    )
+    # satellites draw is the noise of the run, so only x and the posterior differ. The base
+    # scenario imposes nothing, so its plan carries the horizon of the run alone.
+    empty = ScenarioPlan(horizon=meta["horizon"], constraints=(), interventions=())
     simulation = macro.plugin.simulate(
-        macro.model,
-        scenario_build.plan_with_impacts(base, macro),
-        draws=meta["draws"],
-        seed=meta["seed"],
+        macro.model, empty, draws=meta["draws"], seed=meta["seed"]
     )
     fixed = MacroSimulation(
         ids=simulation.ids,

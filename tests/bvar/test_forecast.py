@@ -30,7 +30,7 @@ def model(request):
     return identify(posterior, SHOCKS, sign_lag=2, tries=5000, seed=3)
 
 
-def scenario(constraints, causes=(), horizon=6):
+def scenario(constraints, horizon=6):
     return ScenarioPlan(
         horizon=horizon,
         constraints=tuple(
@@ -46,7 +46,6 @@ def scenario(constraints, causes=(), horizon=6):
             )
             for row in constraints
         ),
-        causes=tuple(causes),
     )
 
 
@@ -101,36 +100,56 @@ def test_a_repeated_constraint_is_redundant_and_still_holds(model):
     assert np.allclose(run.paths[:, 2, 2], 5.0, atol=1e-9, rtol=0)
 
 
-def test_same_seed_repeats_the_paths_bit_for_bit(model):
-    chosen = scenario([value("ru.c", 2, 5.0, 6.0)], causes=["ru.t"])
-    first = simulate(model, chosen, draws=20, seed=5).paths
-    assert np.array_equal(first, simulate(model, chosen, draws=20, seed=5).paths)
-
-
-def test_a_russian_shock_cannot_move_a_global_variable(model):
-    chosen = scenario([value("ru.b", 1, 1.0), value("gl.a", 2, 1.0)], causes=["ru.t"])
-    with pytest.raises(InfeasibleScenario, match="constraints 2 ") as caught:
-        simulate(model, chosen, draws=5, seed=0)
-    assert caught.value.constraints == [1]
-
-
-def test_one_shock_cannot_fix_two_variables_in_its_impact_month(model):
-    chosen = scenario([value("ru.b", 1, 1.0), value("ru.c", 1, 1.0)], causes=["ru.t"], horizon=1)
+def test_a_scaled_copy_of_a_row_is_dependent_and_reduced(model):
+    # A copy with another weight loads the same direction of every shock: the second row
+    # adds no new direction, so the dependence check refuses it.
+    chosen = scenario(
+        [
+            value("ru.b", 2, 0.0, 1.0),
+            {"terms": [{"variable": "ru.b", "month": 2, "weight": 2.0}],
+             "low": 0.0, "high": 2.0},
+        ]
+    )
     with pytest.raises(InfeasibleScenario):
         simulate(model, chosen, draws=5, seed=0)
 
 
-def test_unknown_names_are_refused(model):
-    with pytest.raises(ValueError, match="unknown cause ru.nope"):
-        simulate(model, scenario([value("ru.b", 1, 1.0)], causes=["ru.nope"]), draws=1, seed=0)
+def test_same_seed_repeats_the_paths_bit_for_bit(model):
+    chosen = scenario([value("ru.c", 2, 5.0, 6.0)])
+    first = simulate(model, chosen, draws=20, seed=5).paths
+    assert np.array_equal(first, simulate(model, chosen, draws=20, seed=5).paths)
+
+
+def test_all_shocks_are_conditioned(model):
+    # No cause names the driving shocks: an observation on a global variable and one on a
+    # Russian variable are met together, in the same month, by moving every shock. The old
+    # block-exogeneity restriction of a named shock no longer applies.
+    chosen = scenario([value("gl.a", 2, 1.0), value("ru.b", 2, 1.0)])
+    run = simulate(model, chosen, draws=10, seed=0)
+    assert np.allclose(run.paths[:, 2, 0], 1.0, atol=1e-9, rtol=0)
+    assert np.allclose(run.paths[:, 2, 1], 1.0, atol=1e-9, rtol=0)
+    assert "driving_sd" in run.diagnostics
+
+
+def test_two_variables_are_met_in_the_same_month(model):
+    # Two observations in one impact month used to need two separate shocks because a single
+    # named cause could not fix both; every shock now contributes, so both rows hold.
+    chosen = scenario([value("ru.b", 1, 1.0), value("ru.c", 1, 0.5)], horizon=1)
+    run = simulate(model, chosen, draws=10, seed=0)
+    assert np.allclose(run.paths[:, 1, 1], 1.0, atol=1e-9, rtol=0)
+    assert np.allclose(run.paths[:, 1, 2], 0.5, atol=1e-9, rtol=0)
+
+
+def test_unknown_variables_are_refused(model):
+    with pytest.raises(ValueError, match="unknown variable ru.nope"):
+        simulate(model, scenario([value("ru.nope", 1, 1.0)]), draws=1, seed=0)
 
 
 def test_the_law_of_one_gaussian_draw_matches_the_analytic_value(model):
-    # One draw, constant volatility, both shocks named as causes: W y given R is exactly
-    # normal with nothing free left, and the law's single row per group carries its mean
-    # and covariance; the price is -log of the exact box probability of the two constraints.
-    # The unnamed third shock moves nothing: with both named shocks as causes, R then has
-    # no free column left and the law's row is exactly the analytic gaussian.
+    # One parameter draw, constant volatility, one candidate: the law is exactly normal,
+    # with the covariance of the base measure, which counts every shock. The third shock is
+    # zeroed, so the two remaining shocks carry all the variation and the law is the
+    # analytic gaussian of the two constraints; the price is -log of their box probability.
     rotation = model.rotation[:1].copy()
     rotation[:, :, 2] = 0.0
     one = replace(
@@ -164,10 +183,10 @@ def test_the_law_of_one_gaussian_draw_matches_the_analytic_value(model):
                 {"terms": [{"variable": "ru.c", "month": 2, "weight": 1.0}],
                  "low": low[1], "high": high[1]},
             ],
-            causes=["ru.t", "gl.s"],
         ),
         draws=4,
         seed=0,
+        candidates=1,
     )
     assert found.means.shape == (4, 2) and found.covs.shape == (4, 2, 2)
     for k in range(4):
@@ -182,7 +201,7 @@ def test_the_law_of_one_gaussian_draw_matches_the_analytic_value(model):
     assert distance == pytest.approx(-np.log(exact), rel=0.02)
 
 
-def test_without_causes_the_law_carries_volatility_candidates(model):
+def test_the_law_carries_volatility_candidates(model):
     # The volatility path is a hidden coordinate: every parameter draw owns a group of
     # LATENT_CANDIDATES rows. Under stochastic volatility the candidates differ in their
     # covariance; under the constant variant every candidate is the same draw repeated.
@@ -198,24 +217,28 @@ def test_without_causes_the_law_carries_volatility_candidates(model):
         assert all(np.allclose(rows, rows[0]) for rows in per_group)
 
 
-def test_naming_the_volatility_path_alone_leaves_every_shock_in_r(model):
-    box = [value("ru.b", 2, 0.0, 1.0)]
-    every = constraint_law(model, scenario(box), draws=2, seed=0)
-    hidden = constraint_law(model, scenario(box, causes=["volatility_path"]), draws=2, seed=0)
-    assert np.allclose(hidden.covs, 0.0)
-    assert not np.allclose(hidden.means, every.means)
-
-
-def test_with_named_causes_the_law_has_one_row_per_group(model):
-    found = constraint_law(
+def test_the_law_covariance_counts_every_shock(model):
+    # The price law is the base law of the functionals given R, so every shock enters its
+    # covariance. Zeroing one shock's column shrinks the covariance; a law that counted
+    # only the named shocks would not change.
+    one = replace(
         model,
-        scenario([value("ru.b", 2, 0.0, 1.0)], causes=["ru.t"]),
-        draws=5,
-        seed=0,
+        **{
+            name: getattr(model, name)[:1]
+            for name in (
+                "const", "lags", "dummy", "chol", "logvar", "history", "rotation",
+                "volvol", "dof",
+            )
+        },
     )
-    assert len(found.group) == 5
-    assert set(found.group.tolist()) == set(range(5))
-    assert np.all(found.log_weight == 0.0)
+    box = scenario([value("ru.b", 2, 0.0, 1.0)])
+    full = constraint_law(one, box, draws=1, seed=0, candidates=1)
+    rotation = one.rotation.copy()
+    rotation[:, :, 2] = 0.0
+    clipped = constraint_law(
+        replace(one, rotation=rotation), box, draws=1, seed=0, candidates=1
+    )
+    assert clipped.covs[0, 0, 0] < full.covs[0, 0, 0]
 
 
 def test_a_tail_event_prices_the_volatility_candidates(model):
@@ -264,16 +287,22 @@ def test_an_exact_tail_event_picks_the_volatility_it_needs(model):
 
 
 def test_the_diagnostics_count_the_paths_that_need_huge_driving_shocks(model):
-    # One cause asked to carry a value far outside its law needs a shock of many standard
-    # deviations on every path; the admission of the run reads the share.
+    # A point far outside the law of a functional needs a shock of many standard deviations
+    # on every path, and the admission of the run reads the share; a box around the mean
+    # asks for a moderate draw and is not flagged.
     reference = constraint_law(
-        model, scenario([value("ru.b", 2, 0.0, 1.0)], causes=["ru.t"]), draws=1, seed=0
+        model, scenario([value("ru.b", 2, 0.0, 1.0)]), draws=1, seed=0, candidates=1
     )
-    far = float(reference.means[0, 0]) + 50.0 * float(np.sqrt(reference.covs[0, 0, 0]))
-    run = simulate(model, scenario([value("ru.b", 2, far)], causes=["ru.t"]), draws=8, seed=1)
+    mean = float(reference.means[0, 0])
+    spread = float(np.sqrt(reference.covs[0, 0, 0]))
+    far = mean + 50.0 * spread
+    run = simulate(model, scenario([value("ru.b", 2, far)]), draws=8, seed=1)
     assert run.diagnostics["driving_sd"]["share_above_limit"] == 1.0
     near = simulate(
-        model, scenario([value("ru.b", 2, 0.0, 1.0)], causes=["ru.t"]), draws=8, seed=1
+        model,
+        scenario([value("ru.b", 2, mean - 3.0 * spread, mean + 3.0 * spread)]),
+        draws=8,
+        seed=1,
     )
     assert near.diagnostics["driving_sd"]["share_above_limit"] == 0.0
 

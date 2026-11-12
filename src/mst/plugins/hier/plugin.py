@@ -9,7 +9,7 @@ MODEL = HierModel()
 plugin = Plugin(
     plugin_id="hier",
     version="0.1.0",
-    model_sdk=">=3.0,<4.0",
+    model_sdk=">=4.0,<5.0",
     label="Иерархическая сателлитная модель",
     description=(
         "Сателлитные модели уровней выше нуля: регрессия драйвера на своё прошлое и "

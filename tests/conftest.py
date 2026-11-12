@@ -24,12 +24,6 @@ def workspace(tmp_path, versions):
     scenario_tool.save(
         ws.scenarios,
         "oil",
-        {
-            "narrative": "нефть",
-            "horizon": 3,
-            "macro": versions.macro,
-            "satellites": versions.satellites,
-            "approved_by": "И. Иванов",
-        },
+        {"narrative": "нефть", "approved_by": "И. Иванов"},
     )
     return ws

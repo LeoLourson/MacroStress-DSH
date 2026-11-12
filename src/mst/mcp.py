@@ -28,9 +28,12 @@ from .scenario import tool as scenario_tool
 
 INSTRUCTIONS = """\
 MacroStress answers one question: how the target indicators of an object are distributed if a \
-given event happens. A scenario s = (N, m, O, D, C) is built from the text of the event and the \
-corpus; the conditions extend the description of the event, and the models compute its \
-consequences.
+given event happens. A scenario s = (N, I, O, A) is built from the text of the event and the \
+corpus: the narrative names the event, the sources back its numbers, the interventions state \
+what the event decides (a rate, a price, a volume), the observations state what the event \
+constrains or expects, and a human approves the file. The models compute its consequences; the \
+model versions, the horizon and the number of paths belong to the calculation request, not to \
+the scenario.
 
 Read a guide before the work it covers: guide(name="scenario-from-corpus") when the user names \
 an event or asks what happens if it occurs, even without the words scenario or corpus; \
@@ -55,13 +58,13 @@ the state table the question prints and from the model corpus; it does not ask t
 them and does not take them from tests or fixtures. The market variant reads the model corpus, \
 so its answers need that corpus indexed and fetched first.
 
-Search the corpus before writing any number of a scenario. Mark a condition or an impact with \
-"event" when the text of the event states its number, with a corpus fragment only when the \
-fragment gives its number, and with "assumption" otherwise. When \
+Search the corpus before writing any number of a scenario. Mark an intervention or an \
+observation with "event" when the text of the event states its number, with a corpus fragment \
+only when the fragment gives its number, and with "assumption" otherwise. When \
 neither the event nor the corpus gives a number, propose one from the nearest episode and mark \
-it "assumption": a scenario with no conditions and no impacts records no event, and questions \
-to the user come after the scenario, not instead of it. A human approves a scenario: never \
-fill approved_by yourself and never start a calculation that was not asked for.
+it "assumption": a scenario with no interventions and no observations records no event, and \
+questions to the user come after the scenario, not instead of it. A human approves a scenario: \
+never fill approved_by yourself and never start a calculation that was not asked for.
 
 A tool that starts a job returns its id at once. Wait with jobs(action="wait", id=<job>): the \
 server holds the call until the job ends, and jobs(action="log", id=<job>) shows what it \
@@ -448,7 +451,8 @@ def build(ws: store.Workspace) -> FastMCP:
             dict[str, Any] | None,
             Field(
                 description="The scenario specification save checks against the contract "
-                "before it writes the file."
+                "before it writes the file: narrative, sources, interventions, observations, "
+                "approved_by. Neither the model versions nor the horizon are part of it."
             ),
         ] = None,
         portfolio: Annotated[
@@ -489,12 +493,12 @@ def build(ws: store.Workspace) -> FastMCP:
         """Stored scenarios. Actions: list, get, save, validate, reverse.
 
         Read ``guide(name="scenario-from-corpus")`` before building one. ``save`` checks the
-        contract and writes ``scenarios/<id>.json``; ``validate`` loads the macro and satellite
-        versions the file names and names every problem that keeps the scenario from being
-        computed, including corpus fragments not visible on the calculation day when the index
-        exists, and reports how the elements are marked and what the scenario leaves unsaid
-        under ``labels`` and ``warnings``. ``reverse`` searches the scenario's family on
-        ``portfolio``: the worst loss under the price ``kappa``, or the lowest price whose loss
+        contract and writes ``scenarios/<id>.json``; ``validate`` names every problem that keeps
+        the scenario from being computed on the newest finished macro and satellite versions, or
+        on the versions the call names, including corpus fragments not visible on the calculation
+        day when the index exists, and reports how the elements are marked and what the scenario
+        leaves unsaid under ``labels`` and ``warnings``. ``reverse`` searches the scenario's family
+        on ``portfolio``: the worst loss under the price ``kappa``, or the lowest price whose loss
         reaches ``level``. ``bench`` returns the text of the bench ``event`` and starts its
         journal of corpus calls; build the scenario by the guide, then ``bench_save`` checks
         ``spec`` and keeps it with the journal and ``notes`` in the bench results, beside an
@@ -522,17 +526,12 @@ def build(ws: store.Workspace) -> FastMCP:
             if action == "save":
                 return scenario_tool.save(ws.scenarios, _need(id, "id"), _need(spec, "spec"))
             if action == "reverse":
-                from mst import plugins as _plugins
                 from mst.scenario.reverse import inf_dist, sup_rho, width_family
 
                 loaded = scenario_tool.load(ws.scenarios, _need(id, "id"))
-                installed = _plugins.registry()
-                macro = macro_version.load(ws.models, loaded.macro, installed.macro)
-                satellites = satellite_bundle.load(
-                    ws.models, loaded.satellites, installed.satellites
-                )
+                macro, satellites = scenario_tool.versions_of(ws.models)
                 found = portfolio_tool.load(ws.portfolios, _need(portfolio, "portfolio"))
-                family = width_family(loaded, macro)
+                family = width_family(loaded, macro, satellites)
                 if kappa is not None:
                     return sup_rho(
                         family,
@@ -631,6 +630,33 @@ def build(ws: store.Workspace) -> FastMCP:
                 description="Whether the report also breaks the loss down by position."
             ),
         ] = False,
+        horizon: Annotated[
+            int | None,
+            Field(
+                description="The horizon of the calculation in months; twelve by default "
+                "and never shorter than the last month a statement names."
+            ),
+        ] = None,
+        inner: Annotated[
+            int | None,
+            Field(
+                description="How many paths share one draw of the parameters and the "
+                "interventions; one by default."
+            ),
+        ] = None,
+        macro: Annotated[
+            str | None,
+            Field(
+                description="The macro version hash; the newest finished one when omitted."
+            ),
+        ] = None,
+        satellites: Annotated[
+            str | None,
+            Field(
+                description="The satellite bundle hash estimated on that macro version; "
+                "the newest one when omitted."
+            ),
+        ] = None,
     ) -> dict:
         """Runs on the paths of a scenario. Actions: start, status, result, list.
 
@@ -651,6 +677,14 @@ def build(ws: store.Workspace) -> FastMCP:
                 "draws": _need(draws, "draws"),
                 "seed": _need(seed, "seed"),
             }
+            if horizon is not None:
+                request["horizon"] = horizon
+            if inner is not None:
+                request["inner"] = inner
+            if macro is not None:
+                request["macro"] = macro
+            if satellites is not None:
+                request["satellites"] = satellites
             if portfolio:
                 request["portfolio"] = portfolio
             else:
@@ -832,6 +866,13 @@ def build(ws: store.Workspace) -> FastMCP:
                 "schema asks."
             ),
         ] = None,
+        form: Annotated[
+            str | None,
+            Field(
+                description="The structural form a macro estimate stores: 'default' or "
+                "'recursive'; omitted keeps the model's own default."
+            ),
+        ] = None,
         horizon: Annotated[
             int,
             Field(
@@ -850,7 +891,9 @@ def build(ws: store.Workspace) -> FastMCP:
         when omitted; ``assignment`` maps a quantity to the satellite model that estimates
         it in an ``estimate`` of the satellites, overriding the model that declares it.
         ``version`` is the version hash ``describe`` and ``base`` read and the macro version the
-        satellites of an ``estimate`` are built on; ``list`` takes no version.
+        satellites of an ``estimate`` are built on; ``list`` takes no version. ``form`` is the
+        structural form a macro ``estimate`` stores — ``default`` or ``recursive`` — and any
+        other value is refused by name; omitted keeps the model's own default.
 
         ``inputs`` is the elicitation a model that declares inputs is estimated from; the
         ``elicit`` tool serves the same four actions and is the one to call when the user asks
@@ -861,6 +904,8 @@ def build(ws: store.Workspace) -> FastMCP:
         ``as_of`` name the model and the date; a refused answer comes back with the field it
         was refused for.
         """
+        if form not in (None, "default", "recursive"):
+            raise ValueError(f"model: unknown form {form!r}, try default or recursive")
         with _plugin_output_to_stderr():
             if kind == "catalog":
                 if action != "list":
@@ -909,6 +954,7 @@ def build(ws: store.Workspace) -> FastMCP:
                         "estimate-macro",
                         _need(as_of, "as_of"),
                         models.selected(model_id).model_id,
+                        form=form,
                     ),
                 )
             if action == "backtest":
@@ -1355,6 +1401,7 @@ def _macro_argv(
     as_of: str,
     model_id: str,
     only: list[str] | None = None,
+    form: str | None = None,
 ) -> list[str]:
     """The command line of ``python -m mst.models`` for this workspace."""
     day = date.fromisoformat(as_of).isoformat()
@@ -1372,6 +1419,8 @@ def _macro_argv(
     ]
     if command == "estimate-macro":
         argv += ["--inputs", str(ws.elicitation)]
+        if form is not None:
+            argv += ["--form", form]
     if command == "backtest":
         argv += ["--corpus", str(ws.corpus / "manifest.json")]
         if only:

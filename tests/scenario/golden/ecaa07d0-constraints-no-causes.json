@@ -1,0 +1,63 @@
+{
+  "dist": {
+    "by_level": {},
+    "causes": [],
+    "distance": 6.7025265785330745,
+    "log_probability": -6.642599770619278,
+    "message": null,
+    "one_sided": {
+      "distance": 1.4611281329505776,
+      "dropped": [
+        2
+      ],
+      "log_probability": -1.3220594733727555,
+      "standard_error": 0.03510266070097339
+    },
+    "standard_error": 0.02229211326401699,
+    "tolerances": [
+      0.0125
+    ]
+  },
+  "draws": 256,
+  "ids": [
+    "gl.brent",
+    "gl.fed_rate",
+    "gl.ust_10y",
+    "gl.vix",
+    "ru.key_rate",
+    "ru.ruonia",
+    "ru.ofz_1y",
+    "ru.ofz_5y",
+    "ru.ofz_10y",
+    "ru.spread_aa",
+    "ru.spread_a",
+    "ru.spread_bbb",
+    "ru.usdrub",
+    "ru.cnyrub",
+    "ru.cpi",
+    "ru.output",
+    "ru.unemployment",
+    "ru.real_wage",
+    "ru.retail",
+    "ru.credit",
+    "ru.mortgage_rate",
+    "ru.housing_price",
+    "ru.imoex"
+  ],
+  "months": [
+    "2026-09-01",
+    "2026-10-01",
+    "2026-11-01",
+    "2026-12-01",
+    "2027-01-01",
+    "2027-02-01",
+    "2027-03-01",
+    "2027-04-01",
+    "2027-05-01",
+    "2027-06-01",
+    "2027-07-01",
+    "2027-08-01",
+    "2027-09-01"
+  ],
+  "seed": 20261112
+}

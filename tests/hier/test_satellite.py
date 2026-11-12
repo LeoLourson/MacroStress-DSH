@@ -10,7 +10,7 @@ from mst.data.store import Observation, SeriesStore
 from mst.drivers import bundle as satellite_bundle
 from mst.drivers.history import correlation, history
 from mst.drivers.registry import Registry
-from mst.model_sdk import AdditiveImpact
+from mst.model_sdk import Intervention
 from mst.model_sdk.contracts import MacroSimulation as Simulation
 from mst.plugins.hier import MODEL
 from mst.plugins.hier.check import check
@@ -187,7 +187,7 @@ def test_driver_paths_follow_the_satellite_and_carry_impacts(version, data):
     fixed = replace(fit_, gamma=gamma, sigma=np.zeros_like(fit_.sigma))
     model = _with_fit(version, fixed)
     macro = macro_paths(panel, np.array([1.0, 2.0, 3.0]))
-    impact = AdditiveImpact(target="price:alpha", start=2, values=(10.0, 10.0))
+    impact = Intervention("price:alpha", (2, 3), "shift", np.full((3, 2), 10.0))
     result = simulate_hier(
         model,
         upper_of(macro),
@@ -210,6 +210,22 @@ def test_driver_paths_follow_the_satellite_and_carry_impacts(version, data):
     assert result.flags["price:delta"] == {PARAMETERS_FROM_ABOVE}
     sector = hist.d[-1, hist.nodes.index("sector")]
     assert result.paths[:, 0, 1] == pytest.approx(sector)
+
+
+def test_grouped_set_changes_only_requested_hier_cells(version, data):
+    _, panel, _ = data
+    model = version.models[MODEL.model_id]
+    macro = replace(macro_paths(panel, np.array([1.0, 2.0, 3.0]), draws=4),
+                    group=np.array([0, 0, 1, 1]))
+    drivers = ["price:alpha", "price:delta"]
+    shocks = platform_shocks(model, macro, drivers)
+    plain = simulate_hier(model, upper_of(macro), drivers, [], shocks=shocks, seed=7, stream=0)
+    intervention = Intervention("price:alpha", (2,), "set", np.array([[5.0], [9.0]]))
+    moved = simulate_hier(model, upper_of(macro), drivers, [intervention],
+                          shocks=shocks, seed=7, stream=0)
+    np.testing.assert_array_equal(moved.paths[:, 2, 0], [5, 5, 9, 9])
+    np.testing.assert_array_equal(moved.paths[:, :, 1], plain.paths[:, :, 1])
+    np.testing.assert_array_equal(moved.paths[:, [0, 1, 3], 0], plain.paths[:, [0, 1, 3], 0])
 
 
 def test_a_driver_the_check_rejected_or_too_old_is_not_served(version, data):

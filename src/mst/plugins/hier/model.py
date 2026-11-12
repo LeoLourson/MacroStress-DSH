@@ -19,8 +19,8 @@ from mst.drivers.history import History, history
 from mst.model_sdk import Check, checkpoint
 from mst.model_sdk.checkpoint import report
 from mst.model_sdk.contracts import (
-    AdditiveImpact,
     DriverPaths,
+    Intervention,
     SatelliteEstimate,
     SatelliteEstimateContext,
     SatelliteModel,
@@ -182,7 +182,7 @@ class HierModel(SatelliteModel):
         model,
         upper,
         drivers: list[str],
-        impacts: list[AdditiveImpact],
+        interventions: list[Intervention],
         *,
         correlation=None,
         shocks: np.ndarray,
@@ -193,7 +193,7 @@ class HierModel(SatelliteModel):
             model,
             upper,
             drivers,
-            impacts,
+            interventions,
             correlation=correlation,
             shocks=shocks,
             seed=seed,

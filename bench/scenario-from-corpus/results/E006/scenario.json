@@ -1,138 +1,146 @@
 {
-  "approved_by": null,
-  "causes": [],
-  "constraints": [
-    {
-      "basis": [
-        "S1/2026#33/1"
-      ],
-      "high": null,
-      "low": null,
-      "terms": [
-        {
-          "month": 5,
-          "variable": "ru.key_rate",
-          "weight": 1.0
-        }
-      ],
-      "value": 13.0
-    },
-    {
-      "basis": [
-        "S1/2026#33/1"
-      ],
-      "high": null,
-      "low": null,
-      "terms": [
-        {
-          "month": 6,
-          "variable": "ru.key_rate",
-          "weight": 1.0
-        }
-      ],
-      "value": 12.0
-    },
-    {
-      "basis": [
-        "S1/2026#33/1"
-      ],
-      "high": null,
-      "low": null,
-      "terms": [
-        {
-          "month": 7,
-          "variable": "ru.key_rate",
-          "weight": 1.0
-        }
-      ],
-      "value": 11.0
-    },
-    {
-      "basis": [
-        "S1/2026#33/1"
-      ],
-      "high": null,
-      "low": null,
-      "terms": [
-        {
-          "month": 9,
-          "variable": "ru.key_rate",
-          "weight": 1.0
-        }
-      ],
-      "value": 10.0
-    },
-    {
-      "basis": [
-        "S1/2026#33/1"
-      ],
-      "high": null,
-      "low": null,
-      "terms": [
-        {
-          "month": 10,
-          "variable": "ru.key_rate",
-          "weight": 1.0
-        }
-      ],
-      "value": 9.0
-    },
-    {
-      "basis": [
-        "S1/2026#33/1"
-      ],
-      "high": null,
-      "low": null,
-      "terms": [
-        {
-          "month": 12,
-          "variable": "ru.key_rate",
-          "weight": 1.0
-        }
-      ],
-      "value": 8.0
-    },
-    {
-      "basis": [
-        "S1/2026#33/1"
-      ],
-      "high": null,
-      "low": null,
-      "terms": [
-        {
-          "month": 13,
-          "variable": "ru.key_rate",
-          "weight": 1.0
-        }
-      ],
-      "value": 7.0
-    },
-    {
-      "basis": [
-        "S1/2026#33/1"
-      ],
-      "high": null,
-      "low": null,
-      "terms": [
-        {
-          "month": 15,
-          "variable": "ru.key_rate",
-          "weight": 1.0
-        }
-      ],
-      "value": 6.0
-    }
-  ],
-  "expectations": [],
-  "horizon": 15,
-  "impacts": [],
-  "inner": 1,
-  "macro": "1de403bd3b7f63182636b83b5051228b9a4f7ea8c9484053de203786390953ab",
   "narrative": "ЦБ объявляет, что в течение 2027 года будет снижать ключевую ставку на 1 п. п. на каждом заседании. Главная величина — ru.key_rate, знак движения отрицательный: кумулятивное снижение на 8 п. п. за 2027 год. Стартовая ставка 14,0% (origin, сентябрь 2026). Календарь заседаний 2027 года по источнику S1/2026#33/1: 12 февраля, 19 марта, 30 апреля, 11 июня, 30 июля, 10 сентября, 22 октября, 17 декабря — 8 заседаний. Отображение месяцев (месяц 0 = 2026-09): месяц 5 = 2027-02 (13%), 6 = 2027-03 (12%), 7 = 2027-04 (11%), 9 = 2027-06 (10%), 10 = 2027-07 (9%), 12 = 2027-09 (8%), 13 = 2027-10 (7%), 15 = 2027-12 (6%). Каждое условие — точное значение в шкале identity. Остальные макро-переменные модели выводят из заданного пути ставки; импактов нет. Причины не названы: событие задано как путь ключевой ставки. База p50 в декабре 2027 года составляет 18,91%, поэтому сценарий представляет собой резкое смягчение относительно базы. Уверенность наименьшая в допущении об отсутствии снижения до февраля 2027 года и в достижимости столь низкого уровня в моделях.",
-  "probabilities": [],
-  "regime_event": null,
-  "satellites": "d1915d6f20863d81c5b63301b10184598a8a97e3052f2411c98904f9e2797a5d",
   "sources": [
     "S1/2026#33/1"
-  ]
+  ],
+  "interventions": [],
+  "observations": [
+    {
+      "kind": "constraint",
+      "terms": [
+        {
+          "quantity": "ru.key_rate",
+          "month": "2027-02",
+          "weight": 1.0
+        }
+      ],
+      "unit": "level",
+      "low": null,
+      "high": null,
+      "value": 13.0,
+      "basis": [
+        "S1/2026#33/1"
+      ]
+    },
+    {
+      "kind": "constraint",
+      "terms": [
+        {
+          "quantity": "ru.key_rate",
+          "month": "2027-03",
+          "weight": 1.0
+        }
+      ],
+      "unit": "level",
+      "low": null,
+      "high": null,
+      "value": 12.0,
+      "basis": [
+        "S1/2026#33/1"
+      ]
+    },
+    {
+      "kind": "constraint",
+      "terms": [
+        {
+          "quantity": "ru.key_rate",
+          "month": "2027-04",
+          "weight": 1.0
+        }
+      ],
+      "unit": "level",
+      "low": null,
+      "high": null,
+      "value": 11.0,
+      "basis": [
+        "S1/2026#33/1"
+      ]
+    },
+    {
+      "kind": "constraint",
+      "terms": [
+        {
+          "quantity": "ru.key_rate",
+          "month": "2027-06",
+          "weight": 1.0
+        }
+      ],
+      "unit": "level",
+      "low": null,
+      "high": null,
+      "value": 10.0,
+      "basis": [
+        "S1/2026#33/1"
+      ]
+    },
+    {
+      "kind": "constraint",
+      "terms": [
+        {
+          "quantity": "ru.key_rate",
+          "month": "2027-07",
+          "weight": 1.0
+        }
+      ],
+      "unit": "level",
+      "low": null,
+      "high": null,
+      "value": 9.0,
+      "basis": [
+        "S1/2026#33/1"
+      ]
+    },
+    {
+      "kind": "constraint",
+      "terms": [
+        {
+          "quantity": "ru.key_rate",
+          "month": "2027-09",
+          "weight": 1.0
+        }
+      ],
+      "unit": "level",
+      "low": null,
+      "high": null,
+      "value": 8.0,
+      "basis": [
+        "S1/2026#33/1"
+      ]
+    },
+    {
+      "kind": "constraint",
+      "terms": [
+        {
+          "quantity": "ru.key_rate",
+          "month": "2027-10",
+          "weight": 1.0
+        }
+      ],
+      "unit": "level",
+      "low": null,
+      "high": null,
+      "value": 7.0,
+      "basis": [
+        "S1/2026#33/1"
+      ]
+    },
+    {
+      "kind": "constraint",
+      "terms": [
+        {
+          "quantity": "ru.key_rate",
+          "month": "2027-12",
+          "weight": 1.0
+        }
+      ],
+      "unit": "level",
+      "low": null,
+      "high": null,
+      "value": 6.0,
+      "basis": [
+        "S1/2026#33/1"
+      ]
+    }
+  ],
+  "approved_by": null
 }

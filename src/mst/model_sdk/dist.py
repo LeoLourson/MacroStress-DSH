@@ -117,10 +117,17 @@ def one_sided_box(low, high, medians) -> tuple[np.ndarray, np.ndarray, np.ndarra
 class ContradictsModels(ValueError):
     """Some group of the law gives the event no probability: the scenario cannot be imposed."""
 
-    def __init__(self):
+    def __init__(self, constraints: tuple[int, ...] = (), *, group: int | None = None):
+        self.constraints = tuple(constraints)
+        self.group = group
+        details = ""
+        if constraints:
+            details += "; constraint " + ", ".join(str(number) for number in constraints)
+        if group is not None:
+            details += f" in group {group}"
         super().__init__(
             "the scenario contradicts the models: at some value of R the event has no "
-            "probability, the case lemma 2 of the canon names"
+            "probability" + details
         )
 
 

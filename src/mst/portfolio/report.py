@@ -83,6 +83,7 @@ def build(
     comparison: dict | None = None,
     admission: dict | None = None,
     rare_constraints: list[int] | None = None,
+    intervention_rows: list[dict] | None = None,
 ) -> dict:
     """The report of ``results`` against the portfolio that produced them.
 
@@ -174,6 +175,7 @@ def build(
         "comparison": comparison,
         "admission": admission,
         "dist": price_block,
+        "interventions": intervention_rows or [],
         "coverage": {
             "share": share,
             "limit": coverage_limit,
@@ -193,6 +195,55 @@ def build(
             for result in results
         ],
     }
+
+
+def interventions(base, items, *, inner: int = 1) -> list[dict]:
+    """Locate imposed values in the empty scenario, independently of scenario price.
+
+    A set is compared with its installed coordinate. A shift is compared with each
+    paired base value plus the displacement. Only active groups contribute; the
+    distribution of the resulting base quantiles describes random interventions.
+    """
+    rows = []
+    for item in items:
+        macro = item.target in base.ids
+        ids = base.ids if macro else base.drivers.ids
+        if item.target not in ids:
+            raise ValueError(f"the empty scenario carries no {item.target}")
+        paths = base.shadow if macro else base.drivers.paths
+        if paths is None:
+            raise ValueError("intervention diagnostics need model-scale base paths")
+        groups = paths.shape[0] // inner
+        if paths.shape[0] % inner or item.values.shape[0] != groups:
+            raise ValueError("intervention groups do not match the empty scenario")
+        column = ids.index(item.target)
+        for position, month in enumerate(item.months):
+            reference = paths[:, month, column]
+            active = (
+                np.ones(groups, dtype=bool) if item.active is None else item.active[:, position]
+            )
+            installed = np.repeat(item.values[:, position], inner)
+            if item.kind == "shift":
+                installed = reference + installed
+            selected = installed[np.repeat(active, inner)]
+            alphas = np.searchsorted(np.sort(reference), selected, side="right") / len(reference)
+            label = base.months[month]
+            row = {
+                "quantity": item.target,
+                "month": label.strftime("%Y-%m") if hasattr(label, "strftime") else label,
+                "kind": item.kind,
+                "active_share": float(active.mean()),
+                "alpha": float(alphas[0]) if len(alphas) and np.all(alphas == alphas[0]) else None,
+            }
+            if len(alphas) and row["alpha"] is None:
+                row["alpha_distribution"] = {
+                    key: float(value)
+                    for key, value in zip(
+                        ("p05", "p50", "p95"), np.percentile(alphas, [5, 50, 95]), strict=True
+                    )
+                }
+            rows.append(row)
+    return rows
 
 
 def losses_of(results) -> np.ndarray:

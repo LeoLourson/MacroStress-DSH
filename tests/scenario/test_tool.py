@@ -1,12 +1,15 @@
-"""The scenario tool: the file it writes, what it lists and what validate tells."""
+"""The scenario tool at the server: the file it writes, what it lists and what validate tells."""
 
 import asyncio
 import json
 import shutil
 
+import pytest
 from fastmcp import Client
 
 from mst import store
+from mst.data.store import shift
+from mst.macro.registry import load_registry
 from mst.mcp import build
 
 
@@ -26,60 +29,59 @@ def install(ws, versions):
         shutil.copytree(versions.models / kind / name, ws.models / kind / name)
 
 
+def month(versions, index):
+    return shift(versions.loaded.panel.months[-1], index).strftime("%Y-%m")
+
+
+def level(versions, offset=0.0):
+    """The last oil price of the panel in its own unit, moved by ``offset`` in model scale."""
+    registry = load_registry()
+    panel = versions.loaded.panel
+    column = panel.ids.index("gl.brent")
+    return float(registry.variable("gl.brent").from_model(panel.y[-1, column] + offset))
+
+
+def observation(versions, **changes):
+    return {
+        "kind": "constraint",
+        "terms": [{"quantity": "gl.brent", "month": month(versions, 2), "weight": 1.0}],
+        "value": level(versions),
+        "unit": "level",
+        "basis": "assumption",
+    } | changes
+
+
 def spec(versions, **changes):
     values = {
         "narrative": "нефть дорожает",
-        "horizon": 6,
-        "macro": versions.macro,
-        "satellites": versions.satellites,
+        "observations": [observation(versions)],
         "approved_by": "И. Иванов",
     }
     values.update(changes)
     return values
 
 
-def fixed(variable, month, value):
-    return {
-        "terms": [{"variable": variable, "month": month, "weight": 1.0}],
-        "value": value,
-        "basis": "assumption",
-    }
-
-
-def scenario(versions, **changes):
-    """A scenario file whose one constraint fixes ``gl.brent`` in month 2."""
-
-    def at(variable, month):
-        return {
-            "terms": [{"variable": variable, "month": month, "weight": 1.0}],
-            "value": 1.0,
-            "basis": "assumption",
-        }
-
-    changes.setdefault("constraints", [at("gl.brent", 2)])
-    return spec(versions, **changes)
-
-
-def test_save_writes_the_file_and_get_reads_it_back(tmp_path, versions):
+def test_save_writes_the_event_file_and_get_reads_it_back(tmp_path, versions):
     ws = store.Workspace(tmp_path)
     saved = call(ws, "scenario", {"action": "save", "id": "oil", "spec": spec(versions)}).data
-    assert saved["id"] == "oil" and saved["spec"]["horizon"] == 6
+    assert saved["id"] == "oil" and saved["spec"]["narrative"] == "нефть дорожает"
     written = json.loads((ws.scenarios / "oil.json").read_text(encoding="utf-8"))
-    assert written["macro"] == versions.macro
+    assert set(written) == {"narrative", "sources", "interventions", "observations", "approved_by"}
+    assert "macro" not in written and "horizon" not in written
     assert call(ws, "scenario", {"action": "get", "id": "oil"}).data["spec"] == written
 
 
-def test_list_shows_every_scenario_and_names_a_broken_one(tmp_path, versions):
+def test_list_shows_every_event_and_names_a_broken_file(tmp_path, versions):
     ws = store.Workspace(tmp_path)
     call(ws, "scenario", {"action": "save", "id": "oil", "spec": spec(versions)})
-    (ws.scenarios / "broken.json").write_text('{"narrative": "x"}', encoding="utf-8")
+    (ws.scenarios / "broken.json").write_text('{"sources": []}', encoding="utf-8")
     listed = call(ws, "scenario", {"action": "list"}).data
     assert [item["id"] for item in listed["scenarios"]] == ["oil"]
-    assert listed["scenarios"][0]["macro"] == versions.macro
+    assert listed["scenarios"][0]["observations"] == 1
     assert [item["id"] for item in listed["broken"]] == ["broken"]
 
 
-def test_an_old_scenario_with_overlays_is_listed_as_broken(tmp_path, versions):
+def test_an_old_scenario_naming_versions_is_listed_as_broken(tmp_path, versions):
     ws = store.Workspace(tmp_path)
     ws.scenarios.mkdir(parents=True)
     old = {
@@ -87,84 +89,87 @@ def test_an_old_scenario_with_overlays_is_listed_as_broken(tmp_path, versions):
         "horizon": 6,
         "macro": versions.macro,
         "satellites": versions.satellites,
-        "overlays": [
-            {
-                "driver": "price:alpha",
-                "start": 1,
-                "end": 2,
-                "delta": -3.0,
-                "reason": "перебой",
-                "sources": ["S1#1/1"],
-            }
-        ],
+        "approved_by": "И. Иванов",
     }
     (ws.scenarios / "old.json").write_text(json.dumps(old), encoding="utf-8")
     listed = call(ws, "scenario", {"action": "list"}).data
-    assert [item["id"] for item in listed["scenarios"]] == [] 
+    assert [item["id"] for item in listed["scenarios"]] == []
     assert [item["id"] for item in listed["broken"]] == ["old"]
 
 
 def test_validate_accepts_a_scenario_the_versions_can_compute(tmp_path, versions):
     ws = store.Workspace(tmp_path)
     install(ws, versions)
-    call(ws, "scenario", {"action": "save", "id": "oil", "spec": scenario(versions)})
+    intervention = {
+        "quantity": "ru.key_rate",
+        "months": [month(versions, 2)],
+        "kind": "set",
+        "values": [11.5],
+        "unit": "level",
+        "reason": "Решение ЦБ",
+        "basis": "event",
+    }
+    call(
+        ws,
+        "scenario",
+        {"action": "save", "id": "oil", "spec": spec(versions, interventions=[intervention])},
+    )
     report = call(ws, "scenario", {"action": "validate", "id": "oil"}).data
     assert report["id"] == "oil" and report["ok"] is True and report["problems"] == []
 
 
-def test_validate_warns_about_an_impact_that_ends_before_the_horizon(tmp_path, versions):
+def test_validate_names_the_unknown_quantity(tmp_path, versions):
     ws = store.Workspace(tmp_path)
     install(ws, versions)
-    short = scenario(
+    unknown = spec(
         versions,
-        impacts=[
-            {
-                "target": "gl.brent",
-                "start": 1,
-                "values": [1.0, 1.0, 1.0],
-                "reason": "r",
-                "basis": "assumption",
-            }
+        observations=[
+            observation(
+                versions,
+                terms=[
+                    {
+                        "quantity": "gl.nowhere",
+                        "month": month(versions, 2),
+                        "weight": 1.0,
+                    }
+                ],
+            )
         ],
     )
-    call(ws, "scenario", {"action": "save", "id": "short", "spec": short})
-    report = call(ws, "scenario", {"action": "validate", "id": "short"}).data
-    assert report["ok"] is True  # a warning, not a problem
-    warnings = "; ".join(report["warnings"])
-    assert "ends at month 3" in warnings and "horizon of 6" in warnings
-    assert "losses_by_month" in warnings
-    # An impact held to the end of the horizon does not warn.
-    held = scenario(
-        versions,
-        impacts=[
-            {
-                "target": "gl.brent",
-                "start": 1,
-                "values": [1.0] * 6,
-                "reason": "r",
-                "basis": "assumption",
-            }
-        ],
-    )
-    call(ws, "scenario", {"action": "save", "id": "held", "spec": held})
-    calm = call(ws, "scenario", {"action": "validate", "id": "held"}).data
-    assert all("ends at month" not in warning for warning in calm["warnings"])
-
-
-def test_validate_names_the_unknown_variable(tmp_path, versions):
-    ws = store.Workspace(tmp_path)
-    install(ws, versions)
-    unknown = scenario(versions, constraints=[fixed("gl.nowhere", 2, 1.0)])
     call(ws, "scenario", {"action": "save", "id": "nowhere", "spec": unknown})
     report = call(ws, "scenario", {"action": "validate", "id": "nowhere"}).data
-    assert report["ok"] is False and "unknown variable gl.nowhere" in report["problems"][0]
+    assert report["ok"] is False
+    assert "unknown quantity gl.nowhere" in report["problems"][0]
+
+
+def test_validate_labels_what_the_event_states_and_assumes(tmp_path, versions):
+    ws = store.Workspace(tmp_path)
+    install(ws, versions)
+    assumed = spec(
+        versions,
+        observations=[observation(versions, basis="event")],
+        interventions=[
+            {
+                "quantity": "ru.key_rate",
+                "months": [month(versions, 2)],
+                "kind": "shift",
+                "values": [1.0],
+                "unit": "level",
+                "reason": "Решение ЦБ",
+                "basis": "assumption",
+            }
+        ],
+    )
+    call(ws, "scenario", {"action": "save", "id": "event", "spec": assumed})
+    report = call(ws, "scenario", {"action": "validate", "id": "event"}).data
+    assert report["labels"] == {"event": 1, "sourced": 0, "assumption": 1}
 
 
 def test_validate_checks_the_corpus_only_when_it_is_indexed(tmp_path, versions):
     ws = store.Workspace(tmp_path)
     install(ws, versions)
-    sources = spec(versions, sources=["S1#1/1"])
-    call(ws, "scenario", {"action": "save", "id": "oil", "spec": sources})
+    sourced = spec(versions, sources=["S1#1/1"])
+    call(ws, "scenario", {"action": "save", "id": "oil", "spec": sourced})
     assert call(ws, "scenario", {"action": "validate", "id": "oil"}).data["ok"] is True
     (ws.corpus / "index").mkdir(parents=True)
     (ws.corpus / "index" / "chunks.jsonl").write_text("", encoding="utf-8")
@@ -172,17 +177,33 @@ def test_validate_checks_the_corpus_only_when_it_is_indexed(tmp_path, versions):
     assert report["ok"] is False and "S1#1/1" in report["problems"][0]
 
 
+def test_reverse_takes_the_versions_from_the_workspace(tmp_path, versions):
+    # The scenario file names no versions: the reverse branch selects the pair the workspace
+    # holds and then fails on the portfolio, not on a missing version of the scenario.
+    ws = store.Workspace(tmp_path)
+    install(ws, versions)
+    call(ws, "scenario", {"action": "save", "id": "oil", "spec": spec(versions)})
+    with pytest.raises(Exception, match="no portfolio 'missing'"):
+        call(
+            ws,
+            "scenario",
+            {
+                "action": "reverse",
+                "id": "oil",
+                "portfolio": "missing",
+                "kappa": 1.0,
+                "draws": 2,
+                "seed": 1,
+            },
+        )
+
+
 def test_save_refuses_a_broken_contract_and_an_id_that_is_not_a_file_name(tmp_path, versions):
     ws = store.Workspace(tmp_path)
-    late = scenario(versions, horizon=2, constraints=[fixed("gl.brent", 3, 1.0)])
-    for arguments, message in (
-        ({"action": "save", "id": "oil", "spec": late}, "beyond the horizon"),
-        ({"action": "save", "id": "Bad Id", "spec": spec(versions)}, "not a scenario id"),
-        ({"action": "get", "id": "missing"}, "no scenario"),
-    ):
-        try:
-            call(ws, "scenario", arguments)
-        except Exception as error:
-            assert message in str(error)
-        else:
-            raise AssertionError(f"{arguments} must not be accepted")
+    with pytest.raises(Exception, match="not a scenario id"):
+        call(ws, "scenario", {"action": "save", "id": "Bad Id", "spec": spec(versions)})
+    with pytest.raises(Exception, match="no scenario"):
+        call(ws, "scenario", {"action": "get", "id": "missing"})
+    broken = spec(versions, observations=[observation(versions, low=2.0, high=1.0, value=None)])
+    with pytest.raises(Exception, match="low < high"):
+        call(ws, "scenario", {"action": "save", "id": "broken", "spec": broken})

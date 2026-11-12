@@ -16,15 +16,16 @@ A quantity fitted in differences (``spec.differences``) is simulated in changes 
 accumulated: the recursion draws the monthly change on the changes of ``x``, the level is the
 running sum from the last observed one, and the recursion starts from the last observed
 change — or the stationary mean of the changes of that draw when the month before the last
-value is missing. The impacts of the scenario add their ``values`` to the path in the model
-scale, one value a month from ``start`` — for a differenced quantity, to the level, after the
-accumulation, so an impact never compounds.
+value is missing. Scenario interventions modify the resulting paths in model scale after
+accumulation, so neither shifts nor sets feed back within this level.
 """
 
 import numpy as np
 
+from mst.drivers.bundle import group_inner
 from mst.drivers.history import x_from_paths
-from mst.model_sdk.contracts import AdditiveImpact, DriverPaths, UpperPaths
+from mst.model_sdk.contracts import DriverPaths, Intervention, UpperPaths
+from mst.model_sdk.interventions import apply_default
 
 from .estimate import difference, regressors
 
@@ -33,7 +34,7 @@ PARAMETERS_FROM_ABOVE = "parameters_from_above"
 APPROXIMATE = "approximate_data"
 """Some values the satellite was estimated on have an estimated publication date."""
 IMPACT = "impact"
-"""A direct impact of the scenario moves the path."""
+"""A direct intervention moves the path; the flag name is retained for compatibility."""
 
 
 class NotServed(KeyError):
@@ -66,7 +67,7 @@ def simulate(
     model,
     upper: UpperPaths,
     drivers: list[str],
-    impacts: list[AdditiveImpact],
+    interventions: list[Intervention],
     *,
     correlation: tuple[list[str], np.ndarray] | None = None,
     shocks: np.ndarray,
@@ -182,12 +183,10 @@ def simulate(
             if last == zero:
                 paths[r, 0, k] = start
     flags = {item[0]: item[7] for item in plan}
-    for impact in impacts:
-        if impact.target not in flags:
-            raise ValueError(f"an impact on {impact.target}, which this model does not simulate")
-        k = drivers.index(impact.target)
-        paths[:, impact.start : impact.end + 1, k] += np.asarray(impact.values)
-        flags[impact.target].add(IMPACT)
+    paths = apply_default(paths, drivers, interventions, inner=group_inner(macro))
+    for intervention in interventions:
+        if intervention.active is None or intervention.active.any():
+            flags[intervention.target].add(IMPACT)
     return DriverPaths(
         ids=list(drivers),
         paths=paths,

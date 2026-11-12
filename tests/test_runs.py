@@ -46,7 +46,14 @@ POSITIONS = [
         "terms": {"market": "primary"},
     },
 ]
-REQUEST = {"scenario": "oil", "draws": 5, "seed": 11, "positions": POSITIONS}
+REQUEST = {"scenario": "oil", "draws": 5, "seed": 11, "horizon": 3, "positions": POSITIONS}
+
+
+def calendar(versions, index: int) -> str:
+    """The calendar month of horizon month ``index`` (from one) of the test panel."""
+    from mst.scenario.translate import calendar_month
+
+    return calendar_month(index, versions.data.months[-1].strftime("%Y-%m"))
 
 
 def start(ws, request=None, run_id=None):
@@ -76,6 +83,11 @@ def test_a_run_writes_meta_paths_results_and_changes(workspace):
     assert meta["admission"]["admitted"] is True
     assert meta["scenario"] == "oil" and meta["seed"] == 11 and meta["draws"] == 5
     assert meta["horizon"] == 3 and len(meta["months"]) == 4
+    # The scenario is stored as it was written, and the run's own choices stand beside it.
+    assert meta["scenario_format"] == "interventions-v1"
+    assert meta["scenario_spec"]["narrative"] == "нефть"
+    assert meta["scenario_spec"]["approved_by"] == "И. Иванов"
+    assert meta["interventions"] == [] and meta["inner"] == 1
     assert macro.shape == (5, 4, 3) and drivers.shape == (5, 4, 5)
     assert changes.shape == (5, len(POSITIONS))
     stored = runs.result(workspace, run_id)
@@ -232,50 +244,37 @@ def portfolio(workspace):
     return "demo"
 
 
+PRICE_SHIFT = -0.1
+"""The level move of the share in the shock scenarios, in the simulated price's own units.
+
+The last known level of the simulated share is about 1.1, so this is a fall of roughly nine
+percent; the builder turns it into one constant displacement of the price whatever the month.
+"""
+
+
 @pytest.fixture
-def shock_pair(workspace):
-    """Three scenarios of horizon 6: no impact, one on months 2..3, one lasting to the end."""
-    spec = scenario_tool.get(workspace.scenarios, "oil")["spec"]
-    common = {
-        "narrative": "перебой",
-        "horizon": 6,
-        "macro": spec["macro"],
-        "satellites": spec["satellites"],
-        "approved_by": "И. Иванов",
-    }
+def shock_pair(workspace, versions):
+    """Three scenarios: no intervention, one in months 2..3, one lasting to the end."""
+    common = {"narrative": "перебой", "approved_by": "И. Иванов"}
+
+    def moved(months):
+        return {
+            "interventions": [
+                {
+                    "quantity": "share_price:sber",
+                    "months": [calendar(versions, month) for month in months],
+                    "kind": "shift",
+                    "values": [PRICE_SHIFT] * len(months),
+                    "unit": "level",
+                    "reason": "r",
+                    "basis": "assumption",
+                }
+            ]
+        }
+
     scenario_tool.save(workspace.scenarios, "plain", common)
-    scenario_tool.save(
-        workspace.scenarios,
-        "shock",
-        common
-        | {
-            "impacts": [
-                {
-                    "target": "share_price:sber",
-                    "start": 2,
-                    "values": [-10.0, -10.0],
-                    "reason": "r",
-                    "basis": "assumption",
-                }
-            ]
-        },
-    )
-    scenario_tool.save(
-        workspace.scenarios,
-        "lasting",
-        common
-        | {
-            "impacts": [
-                {
-                    "target": "share_price:sber",
-                    "start": 1,
-                    "values": [-10.0] * 6,
-                    "reason": "r",
-                    "basis": "assumption",
-                }
-            ]
-        },
-    )
+    scenario_tool.save(workspace.scenarios, "shock", common | moved([2, 3]))
+    scenario_tool.save(workspace.scenarios, "lasting", common | moved([1, 2, 3, 4, 5, 6]))
     return "plain", "shock", "lasting"
 
 
@@ -283,7 +282,15 @@ def _report_of(ws, scenario, portfolio, draws: int = 5):
     """The report of one run, its saved monthly losses and its folder."""
     run_id = runs.new_id()
     runs.begin(
-        ws, run_id, {"scenario": scenario, "draws": draws, "seed": 11, "portfolio": portfolio}
+        ws,
+        run_id,
+        {
+            "scenario": scenario,
+            "draws": draws,
+            "seed": 11,
+            "horizon": 6,
+            "portfolio": portfolio,
+        },
     )
     runs.execute(ws, run_id)
     stored = runs.result(ws, run_id)
@@ -305,25 +312,30 @@ def test_the_last_month_of_losses_by_month_equals_the_loss(workspace, portfolio,
 
 
 def test_an_impact_that_ends_before_the_horizon_shows_in_its_months_alone(
-    workspace, portfolio, shock_pair
+    workspace, portfolio, shock_pair, versions
 ):
     plain, shock = shock_pair[:2]
     plain_report, _, _ = _report_of(workspace, plain, portfolio)
     shock_report, _, _ = _report_of(workspace, shock, portfolio)
+    # The report locates the two imposed months, and only them.
+    assert [(row["month"], row["kind"]) for row in shock_report["interventions"]] == [
+        (calendar(versions, 2), "shift"),
+        (calendar(versions, 3), "shift"),
+    ]
     plain_rows = plain_report["losses_by_month"]["by_month"]
     shock_rows = shock_report["losses_by_month"]["by_month"]
     for key in ("p05", "p50", "p95", "es95"):
-        # Months 2..3 carry the impact; months 1 and 4..6 do not.
+        # Months 2..3 carry the intervention; months 1 and 4..6 do not.
         assert shock_rows[1][key] != plain_rows[1][key]
         assert shock_rows[2][key] != plain_rows[2][key]
         for t in (0, 3, 4, 5):
             assert shock_rows[t][key] == plain_rows[t][key]
-        # The end of the horizon sees nothing of an impact that vanished at month 3.
+        # The end of the horizon sees nothing of an intervention that vanished at month 3.
         assert shock_report["loss"][key] == plain_report["loss"][key]
 
 
-def test_the_comparison_of_a_scenario_of_impacts_only_matches_the_shift(
-    workspace, portfolio, shock_pair
+def test_the_comparison_of_a_scenario_of_interventions_only_matches_the_shift(
+    workspace, portfolio, shock_pair, versions
 ):
     plain, _, lasting = shock_pair
     lasting_report, _, lasting_folder = _report_of(workspace, lasting, portfolio, draws=40)
@@ -331,14 +343,19 @@ def test_the_comparison_of_a_scenario_of_impacts_only_matches_the_shift(
     comparison = lasting_report["comparison"]
     assert set(comparison) == {"loss", "path"}
     centre = comparison["loss"]["centre"]
-    # The impact lowers the share in the log100 scale by 10, that is a factor of exp(-0.1)
-    # in own units from month 1 to the end; the other positions read no share price, so the
-    # whole shift of the loss is the equity position's notional * (1 - exp(-0.1)) * P(T)/P(0).
+    # The intervention moves the share by PRICE_SHIFT off its last known level, month 1 to
+    # the end: that is a constant fall of |PRICE_SHIFT| / last in own units. The other
+    # positions read no share price, so the whole shift of the loss is the equity position's
+    # notional times that fall times P(T)/P(0).
+    name = "share_price:sber"
+    quantity, node = versions.satellite.node(name)
+    history = versions.satellite.arrays[f"{quantity}.d"][:, node]
+    last = float(np.exp(history[np.isfinite(history)][-1] / 100.0))
     meta = runs.meta(workspace, plain_folder.name)
-    k = meta["drivers"].index("share_price:sber")
+    k = meta["drivers"].index(name)
     with np.load(plain_folder / "paths.npz") as saved:
         price = saved["drivers"][:, :, k]
-    shift = 10.0 * (1.0 - np.exp(-0.1)) * price[:, -1] / price[:, 0]
+    shift = 10.0 * (-PRICE_SHIFT / last) * price[:, -1] / price[:, 0]
     assert centre["value"] == pytest.approx(float(np.median(shift)), rel=0.05)
     assert centre["interval"][0] > 0.0  # narrow and clear of zero
     assert comparison["path"]["centre"]["value"] > 0.0
@@ -346,7 +363,7 @@ def test_the_comparison_of_a_scenario_of_impacts_only_matches_the_shift(
     assert plain_report["comparison"] is None
 
 
-def test_a_scenario_without_conditions_and_impacts_has_no_comparison(
+def test_a_scenario_without_conditions_and_interventions_has_no_comparison(
     workspace, portfolio, shock_pair
 ):
     report, _, _ = _report_of(workspace, "plain", portfolio)
@@ -422,7 +439,15 @@ def test_a_positions_run_without_a_portfolio_carries_the_admission_in_its_meta(
     monkeypatch.setattr(baselines, "macro_domain", lambda variable: (1e9, np.inf))
     run_id = runs.new_id()
     runs.begin(
-        workspace, run_id, {"scenario": "plain", "draws": 5, "seed": 11, "positions": POSITIONS}
+        workspace,
+        run_id,
+        {
+            "scenario": "plain",
+            "draws": 5,
+            "seed": 11,
+            "horizon": 6,
+            "positions": POSITIONS,
+        },
     )
     summary = runs.execute(workspace, run_id)
     meta = runs.meta(workspace, run_id)
@@ -443,6 +468,7 @@ def test_the_contributions_carry_the_interval_of_the_same_function(
             "scenario": shock,
             "draws": 5,
             "seed": 11,
+            "horizon": 6,
             "portfolio": portfolio,
             "contributions": True,
         },
@@ -450,7 +476,7 @@ def test_the_contributions_carry_the_interval_of_the_same_function(
     runs.execute(workspace, run_id)
     stored = store.read_json(runs.folder(workspace, run_id) / "contributions.json")
     (row,) = stored["contributions"]
-    assert row["element"] == "impact#1"
+    assert row["element"] == "intervention#1"
     assert row["loss"] is not None and row["difference"] is not None
     interval = row["interval"]
     assert set(interval) == {"centre", "width", "p95", "es95"}
@@ -463,9 +489,15 @@ def test_the_contributions_carry_the_interval_of_the_same_function(
 def test_a_contribution_is_the_loss_of_the_scenario_less_the_loss_without_the_element(
     workspace, portfolio, shock_pair
 ):
-    # An impact lasting to the horizon reaches the loss; a price cut adds to it.
+    # An intervention lasting to the horizon reaches the loss; a price cut adds to it.
     run_id = runs.new_id()
-    request = {"scenario": shock_pair[2], "draws": 5, "seed": 11, "portfolio": portfolio}
+    request = {
+        "scenario": shock_pair[2],
+        "draws": 5,
+        "seed": 11,
+        "horizon": 6,
+        "portfolio": portfolio,
+    }
     runs.begin(workspace, run_id, request | {"contributions": True})
     runs.execute(workspace, run_id)
     folder = runs.folder(workspace, run_id)
@@ -537,37 +569,30 @@ def _banded_paths(versions, bands: dict[str, tuple[float, float]]) -> SimpleName
         columns.append(np.asarray(from_model(declared.transform, model), dtype=float))
     return SimpleNamespace(
         ids=list(versions.data.ids),
+        months=versions.data.months[-13:],
         macro=np.ones((40, 13, len(versions.data.ids))),
         drivers=SimpleNamespace(
             ids=ids,
             paths=np.stack(columns, axis=-1),
             flags={driver: frozenset() for driver in ids},
         ),
+        draws=40,
+        shadow=np.zeros((40, 13, len(versions.data.ids))),
     )
 
 
-def _bare_spec(versions):
-    """A scenario without conditions or impacts, so only the paths are checked."""
+def _bare_spec():
+    """A scenario without observations or interventions, so only the paths are checked."""
     from mst.scenario.spec import Spec
 
-    return Spec.model_validate(
-        {
-            "narrative": "шкала",
-            "horizon": 12,
-            "macro": versions.macro,
-            "satellites": versions.satellites,
-            "approved_by": "И. Иванов",
-        }
-    )
+    return Spec.model_validate({"narrative": "шкала", "approved_by": "И. Иванов"})
 
 
 def _driver_checks(versions, bands) -> dict:
     """The ``driver/...`` rows of ``_checks`` on paths with the given bands."""
     macro = _macro_version(versions)
     paths = _banded_paths(versions, bands)
-    return runs._checks(_bare_spec(versions), macro, paths, None, versions.satellite)[
-        "paths"
-    ]
+    return runs._checks(_bare_spec(), macro, paths, None, versions.satellite)["paths"]
 
 
 def test_a_log100_band_narrower_than_the_history_reports_zero_at_a_high_and_low_price(
@@ -634,16 +659,28 @@ def wait(ws, job_id, timeout=120.0):
     raise AssertionError(f"job {job_id} did not finish in {timeout} s")
 
 
-def test_the_run_tool_starts_a_job_and_reports_its_result(workspace):
+def test_the_run_tool_starts_a_job_and_reports_its_result(workspace, versions):
     started = call(
         workspace,
         "run",
-        {"action": "start", "scenario": "oil", "draws": 3, "seed": 5, "positions": POSITIONS},
+        {
+            "action": "start",
+            "scenario": "oil",
+            "draws": 3,
+            "seed": 5,
+            "horizon": 3,
+            "macro": versions.macro,
+            "satellites": versions.satellites,
+            "positions": POSITIONS,
+        },
     ).data
     wait(workspace, started["job"])
     assert jobs.status(workspace, started["job"])["exit_code"] == 0
     status = call(workspace, "run", {"action": "status", "id": started["run"]}).data
     assert status["meta"]["status"] == "ok"
+    # The versions of the request are the ones the run names, not the scenario's.
+    assert status["meta"]["macro"] == versions.macro
+    assert status["meta"]["satellites"] == versions.satellites
     assert status["job"]["exit_code"] == 0
     stored = call(workspace, "run", {"action": "result", "id": started["run"]}).data
     assert len(stored["positions"]) == len(POSITIONS)
@@ -660,6 +697,7 @@ def test_the_run_tool_forecasts_the_targets_it_is_given(workspace):
             "scenario": "oil",
             "draws": 3,
             "seed": 5,
+            "horizon": 3,
             "positions": POSITIONS,
             "targets": ["share_price:sber"],
         },

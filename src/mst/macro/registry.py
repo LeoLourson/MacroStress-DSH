@@ -7,9 +7,9 @@ units, ``log100`` takes ``100 ln X`` of prices, indices and volumes, so a differ
 values is about a percentage change.
 
 The registry names the variables every macro model is estimated on and every scenario
-constraint refers to. The named shocks — the ``J`` set with the signs a model is identified
-by — belong to the macro model plugin that uses them (``mst.plugins.bvar.signs``), and a
-scenario's driving shocks are checked against the version it runs on.
+observation and intervention refers to. The named shocks — the ``J`` set with the signs a model
+is identified by — belong to the macro model plugin that uses them (``mst.plugins.bvar.signs``),
+and they serve the diagnosis of a calculation, not the scenario: a scenario names quantities.
 """
 
 import tomllib
@@ -86,13 +86,17 @@ class Registry(Contract):
         raise KeyError(id_)
 
     def check(self, scenario: Scenario) -> None:
-        """Raises ``ValueError`` naming every variable the registry does not know."""
+        """Raises ``ValueError`` naming every quantity the registry does not know.
+
+        A quantity of a driver carries a colon (``share_price:sibn``) and belongs to the driver
+        catalog, not here: it is passed over, and the catalog's own registry checks it.
+        """
         variables = {item.id for item in self.variables}
-        problems = []
-        for constraint in scenario.constraints:
-            for term in constraint.terms:
-                if term.variable not in variables:
-                    problems.append(f"unknown variable {term.variable}")
+        named = [term.quantity for item in scenario.observations for term in item.terms] + [
+            item.quantity for item in scenario.interventions
+        ]
+        unknown = [name for name in named if ":" not in name and name not in variables]
+        problems = [f"unknown variable {name}" for name in unknown]
         if problems:
             raise ValueError("; ".join(dict.fromkeys(problems)))
 

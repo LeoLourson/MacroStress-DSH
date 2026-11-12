@@ -12,7 +12,39 @@ from mst.mcp import build as server
 from mst.portfolio import tool as portfolio_tool
 from mst.scenario import tool as scenario_tool
 
-REQUEST = {"scenario": "oil", "draws": 5, "seed": 11}
+REQUEST = {"scenario": "oil", "draws": 5, "seed": 11, "horizon": 3}
+
+
+def calendar(versions, index: int) -> str:
+    """The calendar month of horizon month ``index`` (from one) of the test panel."""
+    from mst.scenario.translate import calendar_month
+
+    return calendar_month(index, versions.data.months[-1].strftime("%Y-%m"))
+
+
+def save_fixed(workspace, versions) -> str:
+    """The scenario that fixes the oil price two percent above its last known level."""
+    level = float(np.exp(versions.data.y[-1, 0] / 100.0)) * 1.02
+    scenario_tool.save(
+        workspace.scenarios,
+        "oil-fixed",
+        {
+            "narrative": "нефть",
+            "approved_by": "И. Иванов",
+            "observations": [
+                {
+                    "kind": "constraint",
+                    "terms": [
+                        {"quantity": "gl.brent", "month": calendar(versions, 1), "weight": 1.0}
+                    ],
+                    "unit": "level",
+                    "value": level,
+                    "basis": "assumption",
+                }
+            ],
+        },
+    )
+    return "oil-fixed"
 
 
 def start(ws, request=None):
@@ -65,25 +97,8 @@ def test_two_runs_of_one_portfolio_give_the_same_numbers(workspace, portfolio):
 
 
 def test_the_report_of_a_constrained_scenario_carries_the_price(workspace, portfolio, versions):
-    target = float(versions.data.y[-1, 0] + 1.0)
-    scenario_tool.save(
-        workspace.scenarios,
-        "oil-fixed",
-        {
-            "narrative": "нефть",
-            "horizon": 3,
-            "macro": versions.macro,
-            "satellites": versions.satellites,
-            "constraints": [
-                {
-                    "terms": [{"variable": "gl.brent", "month": 1, "weight": 1.0}],
-                    "value": target,
-                    "basis": "assumption",
-                }
-            ],
-        },
-    )
-    run_id, _ = start(workspace, REQUEST | {"scenario": "oil-fixed", "portfolio": "demo"})
+    scenario = save_fixed(workspace, versions)
+    run_id, _ = start(workspace, REQUEST | {"scenario": scenario, "portfolio": "demo"})
     report = runs.result(workspace, run_id)["summary"]
     assert report["dist"]["distance"] > 0
     assert np.isfinite(report["dist"]["distance"])
@@ -123,31 +138,13 @@ def test_the_meta_carries_the_basis_the_checks_and_the_commit(workspace, portfol
 def test_the_contribution_of_one_condition_is_the_difference_with_the_empty(
     workspace, portfolio, versions
 ):
-    target = float(versions.data.y[-1, 0] + 1.0)
-    scenario_tool.save(
-        workspace.scenarios,
-        "oil-fixed",
-        {
-            "narrative": "нефть",
-            "horizon": 3,
-            "macro": versions.macro,
-            "satellites": versions.satellites,
-            "approved_by": "И. Иванов",
-            "constraints": [
-                {
-                    "terms": [{"variable": "gl.brent", "month": 1, "weight": 1.0}],
-                    "value": target,
-                    "basis": "assumption",
-                }
-            ],
-        },
-    )
+    scenario = save_fixed(workspace, versions)
     run_id, _ = start(
-        workspace, REQUEST | {"scenario": "oil-fixed", "portfolio": "demo", "contributions": True}
+        workspace, REQUEST | {"scenario": scenario, "portfolio": "demo", "contributions": True}
     )
     stored = runs.result(workspace, run_id)
     rows = store.read_json(runs.folder(workspace, run_id) / "contributions.json")["contributions"]
-    assert len(rows) == 1 and rows[0]["element"] == "constraint#1"
+    assert len(rows) == 1 and rows[0]["element"] == "observation#1"
     # With one condition, taking it out is the empty scenario: the difference of the
     # contribution is the difference against the s0 run, on the same random numbers.
     empty = start(workspace, REQUEST | {"portfolio": "demo"})
@@ -187,7 +184,14 @@ def test_the_run_tool_starts_a_portfolio_run(workspace, portfolio):
     started = call(
         workspace,
         "run",
-        {"action": "start", "scenario": "oil", "draws": 3, "seed": 5, "portfolio": portfolio},
+        {
+            "action": "start",
+            "scenario": "oil",
+            "draws": 3,
+            "seed": 5,
+            "horizon": 3,
+            "portfolio": portfolio,
+        },
     ).data
     wait(workspace, started["job"])
     assert jobs.status(workspace, started["job"])["exit_code"] == 0
@@ -198,20 +202,22 @@ def test_the_run_tool_starts_a_portfolio_run(workspace, portfolio):
 def test_the_reverse_search_answers_through_the_tool_on_real_positions(
     workspace, portfolio, versions
 ):
+    level = float(np.exp(versions.data.y[-1, 0] / 100.0))
     scenario_tool.save(
         workspace.scenarios,
         "band",
         {
             "narrative": "нефть",
-            "horizon": 3,
-            "macro": versions.macro,
-            "satellites": versions.satellites,
             "approved_by": "И. Иванов",
-            "constraints": [
+            "observations": [
                 {
-                    "terms": [{"variable": "gl.brent", "month": 2, "weight": 1.0}],
-                    "low": 1.0,
-                    "high": 5.0,
+                    "kind": "constraint",
+                    "terms": [
+                        {"quantity": "gl.brent", "month": calendar(versions, 2), "weight": 1.0}
+                    ],
+                    "unit": "level",
+                    "low": level * 0.9,
+                    "high": level * 1.1,
                     "basis": "assumption",
                 }
             ],
