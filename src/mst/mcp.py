@@ -627,7 +627,8 @@ def build(ws: store.Workspace) -> FastMCP:
         contributions: Annotated[
             bool,
             Field(
-                description="Whether the report also breaks the loss down by position."
+                description="Whether to compare the full scenario with calculations without "
+                "each intervention or observation, using the same random numbers."
             ),
         ] = False,
         horizon: Annotated[
@@ -833,7 +834,7 @@ def build(ws: store.Workspace) -> FastMCP:
         only: Annotated[
             list[str] | None,
             Field(
-                description="The macro variables backtest limits itself to, and the ones "
+                description="The episode ids backtest limits itself to, or the macro variables "
                 "base reports; all when omitted."
             ),
         ] = None,

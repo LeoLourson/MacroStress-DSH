@@ -44,6 +44,9 @@ def main(argv: list[str] | None = None) -> int:
     from .backtest import run
     from .rolling import run as run_rolling
 
+    if hasattr(sys.stdout, "reconfigure"):
+        # Help and Russian labels must also survive a Windows pipe.
+        sys.stdout.reconfigure(encoding="utf-8")
     parser = argparse.ArgumentParser(prog="mst.metrics", description=__doc__.split("\n\n")[0])
     commands = parser.add_subparsers(dest="command", required=True)
     check = commands.add_parser("backtest", help="the episode check of the models")
@@ -107,9 +110,6 @@ def main(argv: list[str] | None = None) -> int:
     )
     args = parser.parse_args(argv)
 
-    if hasattr(sys.stdout, "reconfigure"):
-        # Russian labels survive a Windows pipe.
-        sys.stdout.reconfigure(encoding="utf-8")
     if args.command == "rolling":
         return run_rolling(
             store=args.store,

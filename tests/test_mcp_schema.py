@@ -50,6 +50,24 @@ def test_every_parameter_of_every_tool_carries_a_description(tmp_path):
     assert not missing, missing
 
 
+def test_model_only_names_episodes_for_backtest_and_variables_for_base(tmp_path):
+    description = tools(tmp_path)["model"].parameters["properties"]["only"]["description"]
+
+    assert "episode" in description
+    assert "backtest" in description
+    assert "macro variables" in description
+    assert "base" in description
+
+
+def test_run_contributions_describes_removed_scenario_elements(tmp_path):
+    description = tools(tmp_path)["run"].parameters["properties"]["contributions"]["description"]
+
+    assert "intervention" in description
+    assert "observation" in description
+    assert "without" in description
+    assert "by position" not in description
+
+
 def test_every_tool_declares_the_hints_a_client_reads(tmp_path):
     found = tools(tmp_path)
     assert len(found) == 10, sorted(found)
