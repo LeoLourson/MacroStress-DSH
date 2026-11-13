@@ -43,9 +43,28 @@ def transfer(scale: np.ndarray, interventions: tuple[int, ...]) -> tuple[np.ndar
     return gain, factor
 
 
-def scale_candidates(nu: float, horizon: int, count: int, rng) -> np.ndarray:
-    """Independent common monthly scales: ``nu / chi_square(nu)``."""
-    return nu / rng.chisquare(nu, size=(count, horizon))
+def scale_candidates(
+    nu: float, horizon: int, count: int, rng, phi: float = 0.0, sigma: float = 0.0
+) -> np.ndarray:
+    """Common monthly scales: iid ``nu / chi_square(nu)`` or a log AR(1) path.
+
+    With ``sigma = 0`` this is the Student scale of the law. With a positive volatility the
+    log scale follows ``s_t = phi s_{t-1} + sigma e_t`` from its stationary distribution, and
+    the level is set so that ``E[lambda] = nu / (nu - 2)``: the persistence reshapes the path,
+    it does not change the unconditional monthly covariance.
+    """
+    if sigma <= 0:
+        return nu / rng.chisquare(nu, size=(count, horizon))
+    if not 0 <= phi < 1:
+        raise ValueError("scale persistence must lie in [0, 1)")
+    stationary = sigma**2 / (1 - phi**2)
+    level = np.log(nu / (nu - 2)) - stationary / 2
+    state = np.empty((count, horizon + 1))
+    state[:, 0] = rng.normal(0, np.sqrt(stationary), count)
+    noise = rng.normal(0, sigma, (count, horizon))
+    for t in range(1, horizon + 1):
+        state[:, t] = phi * state[:, t - 1] + noise[:, t - 1]
+    return np.exp(level + state[:, 1:])
 
 
 def _validate(model, plan: ScenarioPlan, draws: int) -> None:
@@ -94,15 +113,29 @@ class _Affine:
 
 
 def _step(model, cells) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """The transition, the intercept and the innovation factor of one month.
+
+    The law is ``y_t = A y_{t-1} + c + sqrt(lambda_t) B z_t`` with a diagonal ``A``. A cell
+    set to a value fixes that month's realised coordinate, so the free innovations are
+    conditioned on the set change: the free mean gains the projection of the set innovation,
+    and the transition loses the same projection of the set row.
+    """
     n = len(model.ids)
+    persistence = getattr(model, "persistence", None)
+    intercept = getattr(model, "intercept", None)
+    if persistence is None or intercept is None:
+        persistence = np.ones(n)
+        intercept = model.drift
+    persistence = np.asarray(persistence, dtype=float)
     sets = sorted((i, value) for i, kind, value in cells if kind == "set")
     fixed = tuple(i for i, _ in sets)
     gain, factor = transfer(model.scale, fixed)
-    transition = np.eye(n)
-    intercept = model.drift.copy()
+    # Keep the arithmetic explicit: the free rows lose the projection of the set rows.
+    transition = np.diag(persistence).copy()
+    intercept = np.asarray(intercept, dtype=float).copy()
     if fixed:
-        transition[:, fixed] -= gain
-        intercept += gain @ (np.array([value for _, value in sets]) - model.drift[list(fixed)])
+        transition -= gain @ np.diag(persistence)[list(fixed), :]
+        intercept += gain @ (np.array([value for _, value in sets]) - intercept[list(fixed)])
         # Exact assignments avoid round-off in cells that must be deterministic.
         transition[list(fixed)] = 0.0
         intercept[list(fixed)] = [value for _, value in sets]
@@ -159,6 +192,14 @@ def _independent(affine: _Affine, low, high) -> np.ndarray:
     return np.array(kept, dtype=int)
 
 
+def _scale_law(model) -> tuple[float, float]:
+    """The persistence and volatility of the common scale; zero for the base law."""
+    return (
+        float(getattr(model, "scale_persistence", 0.0)),
+        float(getattr(model, "scale_volatility", 0.0)),
+    )
+
+
 def constraint_law(
     model, plan: ScenarioPlan, *, draws: int, seed: int, candidates: int = LATENT_CANDIDATES
 ) -> ConstraintLaw | None:
@@ -171,7 +212,11 @@ def constraint_law(
     for group in range(draws):
         affine = _affine(model, plan, group)
         scales = scale_candidates(
-            model.nu, plan.horizon, candidates, np.random.default_rng([seed, group, 1])
+            model.nu,
+            plan.horizon,
+            candidates,
+            np.random.default_rng([seed, group, 1]),
+            *_scale_law(model),
         )
         for scale in scales:
             rows = affine.rows * _multipliers(scale, n)
@@ -187,7 +232,9 @@ def constraint_law(
 
 def _candidate_rows(model, plan, affine, kept, low, high, seed, group, candidates):
     rng = np.random.default_rng([seed, group, 1])
-    scales = scale_candidates(model.nu, plan.horizon, candidates, rng)
+    scales = scale_candidates(
+        model.nu, plan.horizon, candidates, rng, *_scale_law(model)
+    )
     rows, weights = [], []
     for scale in scales:
         z = affine.rows[kept] * _multipliers(scale, len(model.ids))
@@ -213,7 +260,11 @@ def _group_paths(model, plan, affine, *, group, seed, candidates, sweeps):
         )
     else:
         scales = scale_candidates(
-            model.nu, plan.horizon, plan.inner, np.random.default_rng([seed, group, 1])
+            model.nu,
+            plan.horizon,
+            plan.inner,
+            np.random.default_rng([seed, group, 1]),
+            *_scale_law(model),
         )
     result, sizes, chosen, ess = [], [], [], []
     for j in range(plan.inner):

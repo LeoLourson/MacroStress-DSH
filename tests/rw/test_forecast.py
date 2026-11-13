@@ -172,6 +172,40 @@ def test_inverse_chi_square_scale_mean():
     assert_allclose(scales.mean(axis=0), 8 / 6, rtol=0.025)
 
 
+def test_persistent_scale_keeps_the_unconditional_mean_and_correlates_months():
+    scales = scale_candidates(
+        8, 12, 40000, np.random.default_rng(6), phi=0.9, sigma=0.3
+    )
+    assert_allclose(scales.mean(axis=0), 8 / 6, rtol=0.03)
+    assert np.corrcoef(scales[:, 0], scales[:, 1])[0, 1] > 0.5
+    with pytest.raises(ValueError, match="persistence"):
+        scale_candidates(8, 2, 10, np.random.default_rng(1), phi=1.0, sigma=0.3)
+
+
+def test_persistence_centres_the_base_law_and_narrows_it():
+    m = model()
+    m.persistence = np.array([0.8, 0.95])
+    m.intercept = np.array([0.2, 1.0])
+    paths = simulate(m, ScenarioPlan(12, inner=8000), draws=1, seed=15).paths
+    first = paths[:, 12, 0] - paths[:, 0, 0]
+    expected = 1.0 + 0.8**12 * (10.0 - 1.0) - 10.0
+    assert abs(first.mean() - expected) < 0.06
+    second = paths[:, 12, 1] - paths[:, 0, 1]
+    expected_second = 20.0 + 0.95**12 * (20.0 - 20.0) - 20.0
+    assert abs(second.mean() - expected_second) < 0.06
+    assert first.std() < np.sqrt(12 * m.nu / (m.nu - 2) * m.scale[0, 0])
+
+
+def test_set_response_uses_the_ar1_baseline_of_the_set_month():
+    m = model()
+    m.persistence = np.array([1.0, 0.5])
+    m.intercept = np.array([0.0, 10.0])
+    item = Intervention("ru.y", (1,), "set", np.array([[24.0]]))
+    result = simulate(m, ScenarioPlan(1, interventions=(item,), inner=16000), draws=1, seed=21)
+    response = result.paths[:, 1, 0] - m.start_mean[0]
+    assert abs(response.mean() - 0.3 * 4.0) < 0.05
+
+
 def test_platform_reads_shadow_paths_through_registry_floor():
     from mst.macro.registry import load_registry
     from mst.model_sdk import MacroSimulation

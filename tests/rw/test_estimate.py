@@ -13,7 +13,10 @@ from mst.plugins.rw.estimate import (
     ecme,
     estimate,
     housing,
+    mean_reversion,
     nearest_correlation,
+    sample_covariance,
+    scale_path_parameters,
 )
 from mst.plugins.rw.spec import Break, Spec
 
@@ -165,3 +168,67 @@ def test_housing_break_excludes_whole_crossing_interval():
 def test_insufficient_data_names_variable(ids, y, expected):
     with pytest.raises(ValueError, match=expected):
         estimate(panel(y, ids), Spec(drifts=[], breaks=[]))
+
+
+def test_mean_reversion_recovers_the_ar1_coefficient_and_the_neutral():
+    rng = np.random.default_rng(5)
+    count, truth, neutral = 500, 0.9, 5.0
+    series = np.empty(count)
+    series[0] = neutral
+    for t in range(1, count):
+        series[t] = neutral + truth * (series[t - 1] - neutral) + rng.normal(0, 0.5)
+    p = panel(series[:, None], ["ru.key_rate"])
+    spec = Spec(drifts=[], breaks=[], reversion=["ru.key_rate"], sample_scale=False)
+    persistence, level, report = mean_reversion(p, spec)
+    assert truth - 0.05 < persistence[0] < truth + 0.05
+    assert_allclose(level[0], series.mean(), atol=0.05)
+    assert report[0] == {
+        "id": "ru.key_rate",
+        "persistence": persistence[0],
+        "neutral": level[0],
+        "source": "ar1",
+    }
+
+
+def test_a_variable_not_named_keeps_the_random_walk():
+    p = panel([[0, 0], [1, 1], [3, 2], [6, 3]], ["x", "y"])
+    persistence, _, report = mean_reversion(p, Spec(drifts=[], breaks=[]))
+    assert_allclose(persistence, [1.0, 1.0])
+    assert [row["source"] for row in report] == ["walk", "walk"]
+
+
+def test_sample_scale_is_the_sample_covariance_in_the_student_scale():
+    rng = np.random.default_rng(17)
+    scale = np.array([[1.0, 0.4], [0.4, 2.0]])
+    d = rng.multivariate_normal([0, 0], scale, 800)
+    p = panel(np.vstack([np.zeros(2), np.cumsum(d, axis=0)]), ["x", "y"])
+    spec = Spec(drifts=[], breaks=[], sample_scale=True)
+    _, arrays, nu = estimate(p, spec)
+    expected = (nu - 2) / nu * np.cov(d.T, ddof=1)
+    assert_allclose(arrays["scale"], expected, rtol=1e-6, atol=1e-10)
+
+
+def test_sample_covariance_uses_the_window():
+    p = panel(np.zeros((14, 2)), ["x", "y"])
+    months = p.months
+    data = np.zeros((13, 2))
+    data[:2] = 100.0
+    data[2:, 0] = np.arange(11) + 1.0
+    data[2:, 1] = 2.0 * (np.arange(11) + 1.0)
+    early = sample_covariance(p, data, Spec(drifts=[], breaks=[], scale_start=months[0]))[0]
+    late = sample_covariance(p, data, Spec(drifts=[], breaks=[], scale_start=months[4]))[0]
+    assert late[0, 0] < early[0, 0] / 100
+    assert late[1, 1] > late[0, 0]
+
+
+def test_scale_path_parameters_recovers_a_log_ar1():
+    rng = np.random.default_rng(31)
+    truth, volatility = 0.7, 0.4
+    state = np.zeros(600)
+    state[0] = rng.normal(0, volatility / np.sqrt(1 - truth**2))
+    for t in range(1, len(state)):
+        state[t] = truth * state[t - 1] + rng.normal(0, volatility)
+    weights = np.exp(-state)
+    found = scale_path_parameters(weights)
+    assert abs(found["persistence"] - truth) < 0.06
+    assert abs(found["volatility"] - volatility) < 0.05

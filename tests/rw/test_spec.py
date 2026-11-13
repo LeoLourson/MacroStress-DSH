@@ -14,6 +14,8 @@ def test_defaults_match_bundled_spec():
     assert spec.em_tol == 1e-8
     assert spec.em_iterations == 500
     assert spec.min_changes == 3
+    assert spec.reversion == Spec().reversion
+    assert spec.scale_start == date(2015, 1, 1)
     assert spec.breaks == [
         Break(month=date(2021, 1, 1), variables=["ru.spread_aa", "ru.spread_a", "ru.spread_bbb"])
     ]
@@ -39,6 +41,8 @@ def test_defaults_match_bundled_spec():
         {"min_changes": 0},
         {"breaks": [{"month": "2021-01-02", "variables": ["x"]}]},
         {"drifts": ["x", "x"]},
+        {"reversion": ["x", "x"]},
+        {"scale_start": date(2015, 1, 2)},
     ],
 )
 def test_spec_rejects_invalid_settings(kwargs):
@@ -51,6 +55,8 @@ def test_validate_ids_is_explicit_and_names_unknown_variables():
     with pytest.raises(ValueError, match="unknown"):
         spec.validate_ids(["ru.cpi"])
     spec.validate_ids(["unknown"])
+    with pytest.raises(ValueError, match="unknown"):
+        Spec(reversion=["unknown"], breaks=[]).validate_ids(["ru.cpi"])
     with pytest.raises(ValueError, match="typo"):
         Spec(drifts=[], breaks=[Break(month=date(2020, 1, 1), variables=["typo"])]).validate_ids(
             ["x"]

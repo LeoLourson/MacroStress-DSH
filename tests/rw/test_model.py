@@ -51,7 +51,11 @@ def test_estimate_load_round_trip_and_intervention_contract(monkeypatch, tmp_pat
 
     data = panel()
     monkeypatch.setattr(adapter, "build_panel", lambda *args, **kwargs: data)
-    monkeypatch.setattr(adapter, "load_spec", lambda: Spec(drifts=["gl.x"], breaks=[]))
+    monkeypatch.setattr(
+        adapter,
+        "load_spec",
+        lambda: Spec(drifts=["gl.x"], breaks=[], stochastic_scale=False, sample_scale=False),
+    )
     registry = Registry(
         variables=[
             Variable(id=id_, label=id_, unit="unit", transform="identity", source="test")
@@ -82,3 +86,29 @@ def test_estimate_load_round_trip_and_intervention_contract(monkeypatch, tmp_pat
     assert loaded.start_sd[0] == 0
     assert loaded.start_sd[1] > 0
     assert_allclose(loaded.start_mean[1], data.y[-3, 1])
+    assert_array_equal(loaded.persistence, np.ones(2))
+    assert_array_equal(loaded.intercept, loaded.drift)
+    assert loaded.scale_persistence == 0
+    assert loaded.scale_volatility == 0
+
+
+def test_load_of_a_version_without_the_new_arrays_keeps_the_random_walk():
+    meta = {
+        "ids": ["gl.x", "ru.y"],
+        "n_global": 1,
+        "months": ["2026-01-01"],
+        "nu": 8.0,
+        "diagnostics": {},
+    }
+    arrays = {
+        "drift": np.array([0.1, 0.0]),
+        "scale": np.eye(2),
+        "weights": np.array([1.0]),
+        "start_mean": np.zeros(2),
+        "start_sd": np.zeros(2),
+    }
+    model = MODEL.load(meta, arrays)
+    assert_array_equal(model.persistence, np.ones(2))
+    assert_array_equal(model.intercept, arrays["drift"])
+    assert model.scale_persistence == 0.0
+    assert model.scale_volatility == 0.0

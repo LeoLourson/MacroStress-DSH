@@ -228,6 +228,110 @@ def housing(panel: Panel, mu: np.ndarray, scale: np.ndarray, nu: float, spec: Sp
     return _positive_scale(result, spec.eig_floor)
 
 
+def mean_reversion(panel: Panel, spec: Spec) -> tuple[np.ndarray, np.ndarray, list[dict]]:
+    """Diagonal AR(1) persistence and neutral level of the variables the spec names.
+
+    The fit is an OLS regression of the level of the series on its previous month with a
+    constant. The neutral is the panel mean of the level, not the estimated intercept over
+    ``1 - a``: the intercept of a trending series implies a long-run mean far from the data,
+    and a clipped coefficient above one has no intercept at all. A variable not named in the
+    spec keeps ``a = 1`` and its drift. Two-step estimate: the scale and ``nu`` come from
+    ECME on the changes first, this fit is independent of them.
+    """
+    count = len(panel.ids)
+    persistence = np.ones(count)
+    neutral = np.zeros(count)
+    report = []
+    for i, variable in enumerate(panel.ids):
+        series = panel.y[:, i]
+        neutral[i] = float(np.nanmean(series))
+        if variable not in spec.reversion:
+            report.append({"id": variable, "persistence": 1.0, "neutral": None, "source": "walk"})
+            continue
+        previous, current = series[:-1], series[1:]
+        known = np.isfinite(previous) & np.isfinite(current)
+        if known.sum() < max(spec.min_changes, 3):
+            report.append(
+                {"id": variable, "persistence": 1.0, "neutral": neutral[i], "source": "short"}
+            )
+            continue
+        design = np.column_stack([np.ones(int(known.sum())), previous[known]])
+        coefficient = np.linalg.lstsq(design, current[known], rcond=None)[0]
+        persistence[i] = float(np.clip(coefficient[1], 0.0, 1.0))
+        report.append(
+            {
+                "id": variable,
+                "persistence": persistence[i],
+                "neutral": neutral[i],
+                "source": "ar1",
+            }
+        )
+    return persistence, neutral, report
+
+
+def scale_path_parameters(weights: np.ndarray) -> dict:
+    """Log AR(1) of the implied common scale, from the ECME weights.
+
+    The weight of a month is proportional to ``1 / lambda_t``: the posterior mean of the
+    inverse scale under the Student likelihood. A regression of its logarithm on the previous
+    month of the same series gives the persistence and the vol-of-vol of the scale path. The
+    implied scale is a posterior mean, so its variance is shrunk and the vol-of-vol is
+    approximate. Missing months are skipped; a pair that is not two adjacent months is not
+    used, because the panel has no change for the missing month.
+    """
+    known = np.flatnonzero(np.isfinite(weights))
+    if len(known) < 4:
+        return {"persistence": 0.0, "volatility": 0.0, "months": int(len(known))}
+    implied = np.log(1.0 / weights[known])
+    previous, current = implied[:-1], implied[1:]
+    adjacent = np.diff(known) == 1
+    previous, current = previous[adjacent], current[adjacent]
+    if len(previous) < 3:
+        return {"persistence": 0.0, "volatility": 0.0, "months": int(len(known))}
+    design = np.column_stack([np.ones(len(previous)), previous])
+    coefficient = np.linalg.lstsq(design, current, rcond=None)[0]
+    residual = current - design @ coefficient
+    persistence = float(np.clip(coefficient[1], 0.0, 0.98))
+    volatility = float(np.std(residual, ddof=2))
+    return {
+        "persistence": persistence,
+        "volatility": volatility,
+        "months": int(len(known)),
+        "intercept": float(coefficient[0]),
+    }
+
+
+def sample_covariance(panel: Panel, data: np.ndarray, spec: Spec) -> tuple[np.ndarray, list[int]]:
+    """The unweighted sample covariance of the changes, as a positive-definite matrix.
+
+    The ECME weight of a crisis month is small, so the t-scale it estimates is below the
+    sample second moment of a variable whose large changes cluster. This matrix is the
+    second step of the scale estimate: the level and the correlations the innovation
+    covariance is matched to, over the months from ``scale_start`` on. Housing has no monthly
+    changes and is left to the interval estimate.
+    """
+    ordinary = [i for i, variable in enumerate(panel.ids) if variable != HOUSING]
+    months = np.array([month >= spec.scale_start for month in panel.months[1:]])
+    rows = data[months][:, ordinary]
+    matrix = _pairwise_covariance(rows)
+    return _positive_scale(matrix, spec.eig_floor), ordinary
+
+
+def _pairwise_covariance(data: np.ndarray) -> np.ndarray:
+    n = data.shape[1]
+    result = np.zeros((n, n))
+    for i in range(n):
+        for j in range(i + 1):
+            known = np.isfinite(data[:, i]) & np.isfinite(data[:, j])
+            value = (
+                float(np.cov(data[known, i], data[known, j], ddof=1)[0, 1])
+                if known.sum() > 1
+                else 0.0
+            )
+            result[i, j] = result[j, i] = value
+    return result
+
+
 def _counts(panel: Panel, data: np.ndarray, spec: Spec) -> dict[str, int]:
     counts = {variable: int(np.isfinite(data[:, i]).sum()) for i, variable in enumerate(panel.ids)}
     if HOUSING in panel.ids:
@@ -241,14 +345,30 @@ def _counts(panel: Panel, data: np.ndarray, spec: Spec) -> dict[str, int]:
 
 
 def _start(
-    panel: Panel, mu: np.ndarray, scale: np.ndarray, nu: float
+    panel: Panel,
+    scale: np.ndarray,
+    nu: float,
+    persistence: np.ndarray,
+    intercept: np.ndarray,
 ) -> tuple[np.ndarray, np.ndarray]:
+    """The month-zero law from the last known value, under the AR(1) recursion.
+
+    A known value has no spread; an unknown one accumulates ``duration`` steps of the law,
+    whose mean reverts toward the neutral and whose variance grows as ``1 - a ** (2 duration)``.
+    """
     mean, sd = np.zeros(len(panel.ids)), np.zeros(len(panel.ids))
     for i in range(len(panel.ids)):
         last = np.flatnonzero(np.isfinite(panel.y[:, i]))[-1]
         duration = len(panel.y) - 1 - last
-        mean[i] = panel.y[last, i] + duration * mu[i]
-        sd[i] = np.sqrt(duration * nu / (nu - 2) * scale[i, i])
+        a = float(persistence[i])
+        if a < 1:
+            neutral = intercept[i] / (1 - a)
+            mean[i] = neutral + a**duration * (panel.y[last, i] - neutral)
+            factor = (1 - a ** (2 * duration)) / (1 - a**2)
+        else:
+            mean[i] = panel.y[last, i] + duration * intercept[i]
+            factor = float(duration)
+        sd[i] = np.sqrt(max(factor, 0.0) * nu / (nu - 2) * scale[i, i])
     return mean, sd
 
 
@@ -263,6 +383,19 @@ def estimate(panel: Panel, spec: Spec) -> tuple[dict, dict, float]:
     fitted, nu, weights, trace = ecme(data[:, ordinary], mu[ordinary], spec)
     scale = np.zeros((len(panel.ids), len(panel.ids)))
     scale[np.ix_(ordinary, ordinary)] = fitted
+    ecme_variance = {
+        panel.ids[i]: float(np.diag(fitted)[k] * nu / (nu - 2))
+        for k, i in enumerate(ordinary)
+    }
+    sample_variance: dict[str, float] = {}
+    if spec.sample_scale:
+        # The Student law has monthly covariance nu / (nu - 2) * Sigma, so this rescaled
+        # sample covariance makes that covariance the sample covariance of the changes.
+        sample, ordinary = sample_covariance(panel, data, spec)
+        scale[np.ix_(ordinary, ordinary)] = (nu - 2) / nu * sample
+        sample_variance = {
+            panel.ids[i]: float(np.diag(sample)[k]) for k, i in enumerate(ordinary)
+        }
     distance = 0.0
     if HOUSING in panel.ids:
         h = panel.ids.index(HOUSING)
@@ -278,7 +411,17 @@ def estimate(panel: Panel, spec: Spec) -> tuple[dict, dict, float]:
         scale = _positive_scale(scale, spec.eig_floor)
         corrected = scale / np.sqrt(np.outer(np.diag(scale), np.diag(scale)))
         distance = float(np.linalg.norm(corrected - original))
-    start_mean, start_sd = _start(panel, mu, scale, nu)
+    persistence, neutral, reversion = mean_reversion(panel, spec)
+    dynamics = (
+        scale_path_parameters(weights)
+        if spec.stochastic_scale
+        else {"persistence": 0.0, "volatility": 0.0, "months": int(np.isfinite(weights).sum())}
+    )
+    intercept = mu.copy()
+    for i, variable in enumerate(panel.ids):
+        if variable in spec.reversion:
+            intercept[i] = (1.0 - persistence[i]) * neutral[i]
+    start_mean, start_sd = _start(panel, scale, nu, persistence, intercept)
     chosen = np.flatnonzero(np.isfinite(weights))
     chosen = chosen[np.argsort(weights[chosen], kind="stable")[:10]]
     diagnostics = {
@@ -291,6 +434,19 @@ def estimate(panel: Panel, spec: Spec) -> tuple[dict, dict, float]:
         "smallest_weights": [
             {"month": panel.months[i + 1].isoformat(), "weight": float(weights[i])} for i in chosen
         ],
+        "mean_reversion": reversion,
+        "scale_path": dynamics,
+        "scale_correction": {
+            "mode": "sample" if spec.sample_scale else "ecme",
+            "ecme_sd": {
+                variable: float(np.sqrt(max(value, 0.0)))
+                for variable, value in ecme_variance.items()
+            },
+            "sample_sd": {
+                variable: float(np.sqrt(max(value, 0.0)))
+                for variable, value in sample_variance.items()
+            },
+        },
     }
     arrays = {
         "drift": mu,
@@ -298,5 +454,7 @@ def estimate(panel: Panel, spec: Spec) -> tuple[dict, dict, float]:
         "weights": weights,
         "start_mean": start_mean,
         "start_sd": start_sd,
+        "persistence": persistence,
+        "intercept": intercept,
     }
     return diagnostics, arrays, nu
