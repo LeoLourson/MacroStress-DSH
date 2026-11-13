@@ -5,7 +5,7 @@ import re
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-LINK = re.compile(r"\]\(([^)\s]+)\)")
+LINK = re.compile(r"\]\((?:<([^>\n]+)>|([^\s)]+))\)")
 TREES = ("docs", "dsh", "src", "tests", "corpus", "bench")
 SKIPPED = ("docs/local/", "docs/plans/", "docs/reports/", "src/mst/templates/")
 """A private folder, the working notes and the templates a new plugin is generated from.
@@ -46,7 +46,8 @@ def link_problems(path: Path) -> list[str]:
     The file's own original is allowed: that link is the language switch.
     """
     problems = []
-    for target in LINK.findall(path.read_text(encoding="utf-8")):
+    for bracketed, plain in LINK.findall(path.read_text(encoding="utf-8")):
+        target = bracketed or plain
         if target.startswith(("http://", "https://", "mailto:", "#")):
             continue
         resolved = (path.parent / target.split("#")[0]).resolve()
@@ -92,10 +93,14 @@ def test_the_guard_catches_a_broken_and_a_russian_link(tmp_path):
     (tmp_path / "other.en.md").write_text("x", encoding="utf-8")
     (tmp_path / "own.md").write_text("x", encoding="utf-8")
     page = tmp_path / "own.en.md"
+    (tmp_path / "space name.en.md").write_text("x", encoding="utf-8")
     page.write_text(
-        "[a](nowhere.en.md) [b](other.md) [c](other.en.md) [d](own.md) [e](https://a.b)",
+        "[a](nowhere.en.md) [b](other.md) [c](other.en.md) [d](own.md) [e](https://a.b) "
+        "[f](<space name.en.md>) [g](<other.en.md#section>) [h](<missing.en.md>) "
+        "[i](<https://example.org/a>) [j](<other.md>)",
         encoding="utf-8",
     )
     found = link_problems(page)
-    assert len(found) == 2
+    assert len(found) == 4
     assert "nowhere" in found[0] and "other.md" in found[1]
+    assert "missing.en.md" in found[2] and "other.md" in found[3]

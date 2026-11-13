@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="330" viewBox="0 0 960 330" role="img" aria-labelledby="title desc">
+<title id="title">Уровни моделей: от общего к частному</title>
+<desc id="desc">Макромодель рассчитывает общеэкономические величины. Сателлитные модели получают траектории предыдущих уровней и рассчитывают отраслевые и корпоративные показатели. Модель позиции использует траектории для оценки актива. Стрелки обозначают направление передачи входов, а не доказанную причинность.</desc>
+<rect width="960" height="330" fill="#ffffff"/>
+<g font-family="Arial, sans-serif" fill="#162b40">
+<text x="32" y="38" font-size="24" font-weight="bold">Уровни моделей</text>
+<rect x="32" y="80" width="264" height="142" rx="12" fill="#edf1fb" stroke="#788dc4"/>
+<text x="50" y="112" font-size="20" font-weight="bold">Экономика · уровень 0</text>
+<text x="50" y="148" font-size="18">Макромодель</text>
+<text x="50" y="180" font-size="17">Ставка, инфляция, курс</text>
+<text x="50" y="207" font-size="16">Совместное движение величин</text>
+<line x1="296" y1="151" x2="340" y2="151" stroke="#405e79" stroke-width="3"/>
+<polyline points="330,143 340,151 330,159" fill="none" stroke="#405e79" stroke-width="3"/>
+<rect x="348" y="80" width="264" height="142" rx="12" fill="#eaf5f3" stroke="#538f84"/>
+<text x="366" y="112" font-size="20" font-weight="bold">Отрасль → компания</text>
+<text x="366" y="148" font-size="18">Сателлитные модели</text>
+<text x="366" y="180" font-size="17">Цена, выпуск, просрочка</text>
+<text x="366" y="207" font-size="16">Уровни 1, …, L по модели</text>
+<line x1="612" y1="151" x2="656" y2="151" stroke="#405e79" stroke-width="3"/>
+<polyline points="646,143 656,151 646,159" fill="none" stroke="#405e79" stroke-width="3"/>
+<rect x="664" y="80" width="264" height="142" rx="12" fill="#fff5de" stroke="#b89144"/>
+<text x="682" y="112" font-size="20" font-weight="bold">Применение к портфелю</text>
+<text x="682" y="148" font-size="18">Модели позиций</text>
+<text x="682" y="180" font-size="17">Стоимость каждого актива</text>
+<text x="682" y="207" font-size="16">Потери на общем пути → сумма</text>
+<text x="32" y="269" font-size="18">Обратной связи между уровнями нет, а связи внутри уровня задаёт модель.</text>
+</g>
+</svg>

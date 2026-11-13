@@ -1,32 +1,61 @@
-# Migration of the bench scenarios to the intervention format
+# Перенос проверочных сценариев в формат вмешательств
 
-The scenarios of the 100-event bench of 2026-11-10 were converted on 2026-11-12 with
-`python -m mst.scenario migrate`, one staging folder per event, so that every file went through
-the shipped translator and writer. 84 of the 100 files are now in the intervention format; the
-16 below stay in the legacy format because the translator refuses to turn them into the new
-canon without changing a number, and a written-out refusal is better than a silent shift.
+12 ноября 2026 года сценарии проверочного набора из ста событий перевели в формат
+вмешательств и наблюдений; набор был собран 10 ноября 2026 года. Переведены 84 файла,
+но ещё 16 оставлены в прежнем формате, поскольку автоматический перевод изменил бы смысл числа.
+Для повторной проверки архивного события нужно заново построить сценарий по тексту события
+и корпусу, а не обходить отказ переводчика.
 
-The refusals fall into three classes, all of them shapes the old format allowed and the new one
-does not:
+## Что сохранял перенос
 
-- `log100 observation on ru.usdrub has unsupported weights` — E007, E014, E019. A check on a
-  variable measured in log units carried weights other than one, which the new contract does not
-  express.
-- `expectations on X: E(log X) is not log E(X)` — E030, E033, E044, E091, E092. A mean of the
-  variable was written in the log scale; the new contract states an expectation of the level, and
-  the translation of the mean is not the mean of the translation.
-- `no shared unit preserves every value` / `no shared unit preserves bounds` — E017, E034, E045,
-  E066 and E035, E039, E054, E085. The numbers were written in the model scale of the panel, and
-  no single own unit (`level`, `change`, `percent`) reproduces them exactly.
+Перенос выполнялся командой `python -m mst.scenario migrate` в отдельной промежуточной
+папке для каждого события. Каждый файл прошёл через поставляемый переводчик и запись
+сценария, поэтому отказ остался явным. Дата и количества описывают итог переноса
+12 ноября 2026 года; они не являются сводкой текущего состояния всего проверочного набора.
 
-These 16 files remain readable as the archive of that bench: they are not executed by the
-platform, and re-running one means rewriting it under the current canon, with the numbers
-re-derived from the event text and the corpus. A legacy calculation result keeps its scenario copy
-in its own meta, so the past runs of the workspace stay readable as well.
+В новом формате вмешательство задаёт решение внешнего участника, например установленную
+ставку, а наблюдение ограничивает или задаёт ожидаемый результат, например курс валюты.
+Числа должны иметь собственные единицы. Правила формата описаны в
+[справочнике сценария](<../../src/mst/scenario/README.md>), а входные события — в
+[перечне событий](<events.toml>).
 
-Four of the migrated files named driving causes: E002, E004 and E083 named `ru.monetary`, E023
-named `gl.oil`. The command keeps their intervention numbers as they were and moves the former
-causes into the narrative as `прежние причины: …`, dropping the approver, so each of the four
-needs a fresh classification under the current guide before it is computed again. The scenario
-files of the workspace went through the same command on the same day, and its 13 cause-naming
-files are listed in `workspace/scenarios-migration-causes.txt`.
+## Почему 16 файлов не переведены
+
+Отказы разделились по форме старой записи. Идентификаторы `E007` и подобные обозначают
+события проверочного набора, а сообщения в обратных кавычках сохранены для диагностики.
+
+| Сообщение переводчика | События | Какой смысл нельзя сохранить автоматически |
+|---|---|---|
+| `log100 observation on ru.usdrub has unsupported weights` | E007, E014, E019 | Наблюдение курса рубля к доллару в логарифмической шкале имело веса, отличные от единицы; новый контракт такую запись не выражает |
+| `expectations on X: E(log X) is not log E(X)` | E030, E033, E044, E091, E092 | Среднее задано для логарифма показателя, а новый контракт задаёт среднее уровня; среднее логарифма не равно логарифму среднего |
+| `no shared unit preserves every value` | E017, E034, E045, E066 | Числа записаны в шкале модели; одна общая единица `level`, `change` или `percent` не воспроизводит все значения |
+| `no shared unit preserves bounds` | E035, E039, E054, E085 | Та же проблема единиц затрагивает границы наблюдения |
+
+Здесь `level` означает уровень показателя, `change` — абсолютное изменение, а `percent` —
+изменение в процентах; точный смысл зависит от вида утверждения сценария. Архивные файлы
+доступны для чтения как запись прежней проверки, но платформа не исполняет старый формат.
+Выбор состоит между сохранением архива без пересчёта и новой формализацией события.
+Новая формализация требует повторного обоснования чисел и уже не тождественна старому ответу.
+
+Старый результат расчёта хранит собственную копию сценария в метаданных. Поэтому чтение
+исторического результата не требует выдавать архивный сценарий за исполнимый в новом формате.
+
+## Сценарии с прежним указанием причин
+
+Среди переведённых файлов E002, E004 и E083 указывали причину `ru.monetary`, то есть
+денежно-кредитный шок, а E023 — `gl.oil`, нефтяной шок. Команда сохранила числа вмешательств,
+перенесла прежние причины в текст сценария с пометкой `прежние причины: …` и сняла утверждение
+человеком. Перед новым расчётом каждое из четырёх событий требует повторного разделения
+решений и наблюдений по действующему руководству; сохранение числа само по себе не
+подтверждает правильность такого разделения.
+
+Сценарии рабочей области переносились той же командой в тот же день. Для рабочей области
+был записан отдельный список 13 файлов с прежними причинами:
+
+```text
+workspace/scenarios-migration-causes.txt
+```
+
+Список относится к локальной рабочей области переноса, поэтому его наличие не требуется
+для чтения проверочного набора из репозитория. Перенос формата не заменяет независимую
+оценку качества сценария и не утверждает сценарий за человека.
