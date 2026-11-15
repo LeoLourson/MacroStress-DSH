@@ -299,19 +299,30 @@ def draw_interventions(
     scale: a ``uniform`` interval is a law of that very number, not of its translation. The
     second member is the activity mask for ``with_probability`` and ``None`` when the
     intervention is certain.
+
+    One law repeated in several months of an intervention is one unknown number: an interval
+    held over the months takes a single value per group, and a decision with a probability is
+    taken in all its months or in none. Different laws in one intervention are drawn apart.
     """
     rng = np.random.default_rng([seed, INTERVENTION_STREAM])
     drawn = []
     for intervention in scenario.interventions:
         values, active = [], []
+        shared: dict = {}
         for value in intervention.values:
             if isinstance(value, UniformValue):
                 low, high = value.uniform
-                values.append(rng.uniform(low, high, size=groups))
+                key = ("uniform", low, high)
+                if key not in shared:
+                    shared[key] = rng.uniform(low, high, size=groups)
+                values.append(shared[key])
                 active.append(None)
             elif isinstance(value, ProbabilityValue):
+                key = ("probability", float(value.with_probability), float(value.value))
+                if key not in shared:
+                    shared[key] = rng.random(groups) < float(value.with_probability)
                 values.append(np.full(groups, float(value.value)))
-                active.append(rng.random(groups) < float(value.with_probability))
+                active.append(shared[key])
             else:
                 values.append(np.full(groups, float(value)))
                 active.append(None)

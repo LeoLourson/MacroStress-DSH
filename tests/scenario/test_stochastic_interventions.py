@@ -103,3 +103,39 @@ def test_a_shift_carries_the_drawn_displacement():
     assert values.shape == (200, 1)
     assert np.all((values >= -2.0) & (values <= 2.0))
     assert values.std() > 0.5
+
+
+def months_scenario(values):
+    return Scenario.model_validate(
+        {
+            "narrative": "решение на два месяца",
+            "interventions": [
+                {
+                    "quantity": "ru.key_rate",
+                    "months": ["2026-11", "2026-12"][: len(values)],
+                    "kind": "set",
+                    "values": values,
+                    "unit": "level",
+                    "reason": "заседание",
+                    "basis": "assumption",
+                }
+            ],
+        }
+    )
+
+
+def test_one_law_repeated_over_the_months_is_one_unknown_number():
+    """The same interval in two months of one intervention is drawn once per group."""
+    law = {"uniform": [10.0, 13.0]}
+    values = plan_of(months_scenario([law, law]), DATA, 3, groups=200, seed=3).interventions[0]
+    assert np.array_equal(values.values[:, 0], values.values[:, 1])
+    other = {"uniform": [10.0, 13.5]}
+    apart = plan_of(months_scenario([law, other]), DATA, 3, groups=200, seed=3).interventions[0]
+    assert not np.array_equal(apart.values[:, 0], apart.values[:, 1])
+
+
+def test_a_decision_with_a_probability_holds_in_all_its_months_or_in_none():
+    law = {"with_probability": 0.5, "value": 12.0}
+    found = plan_of(months_scenario([law, law]), DATA, 3, groups=400, seed=9).interventions[0]
+    assert np.array_equal(found.active[:, 0], found.active[:, 1])
+    assert found.active[:, 0].mean() == pytest.approx(0.5, abs=0.07)
