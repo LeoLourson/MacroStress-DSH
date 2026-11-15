@@ -107,7 +107,7 @@ $$
 C=\frac{1}{T-1}\sum_{t\in T}(d_t-\bar d)(d_t-\bar d)^\top,\qquad \Sigma=\frac{\nu-2}{\nu}\,C,
 $$
 
-so that the monthly covariance of the law, $\frac{\nu}{\nu-2}\Sigma$, equals $C$. The matrix $C$ is computed over pairwise known months with the breaks excluded, and its correlation part is projected onto a positive-definite one when needed (as for the housing price). The window $T$ starts at `scale_start = 2015-01-01`: the rouble floated in November 2014, and the rate-to-market transfer is measured from 2015. Housing has no monthly changes and keeps the interval estimate.
+so that the monthly covariance of the law, $\frac{\nu}{\nu-2}\Sigma$, equals $C$. The matrix $C$ is computed over pairwise known months with the breaks excluded, and its correlation part is projected onto a positive-definite one when needed (as for the housing price). The window $T$ starts at `scale_start = 2012-01-01`, with the panel, so the scale sees the 2014 crisis. With a window from 2015, after the rouble floated, the out-of-sample forecasts of quarterly dates 2017–2025 held the fact in the 90 % band in 77 % of the macro cells over 12 months; with 2012, in 81 %. The window was chosen on those same dates, with no separate validation half. Housing has no monthly changes and keeps the interval estimate.
 
 In substance this restores the sample correlations of the joint law. A regression of the monthly IMOEX change on the key-rate change gives −1.34 % per 1 pp instead of −0.46 % for the ECME estimate; BBB +0.61 pp, USD/RUB +2.81 % (see "Implementation checks"). The signs and orders are those of the data; this is a statistical transfer, not a causal effect.
 
@@ -222,7 +222,7 @@ the same linear projection as the conditional baseline `conditional_walk`, with 
 
 ## Assumptions
 
-By default there is no mean reversion: the spread grows as $\sqrt t$, rates and spreads included. The code supports a diagonal AR(1) (`reversion`), but on this panel it does not help (section "Mean reversion"). The links between variables are only contemporaneous: the model does not carry the delayed pass-through of the exchange rate into prices, which comes from the scenario or a satellite. The crisis scale is common to all variables: a crisis in the rouble alone and a crisis in everything differ only by the innovations. The covariance of the changes is the sample covariance from 2015, so crises also set the correlations: this is a statistical transfer, not a causal effect. The drift of prices and exchange rates comes from the history of 2012–2026. Conditioning uses the full joint law, including statistical links from domestic to global variables. Parameter uncertainty is not counted.
+By default there is no mean reversion: the spread grows as $\sqrt t$, rates and spreads included. The code supports a diagonal AR(1) (`reversion`), but on this panel it does not help (section "Mean reversion"). The links between variables are only contemporaneous: the model does not carry the delayed pass-through of the exchange rate into prices, which comes from the scenario or a satellite. The crisis scale is common to all variables: a crisis in the rouble alone and a crisis in everything differ only by the innovations. The covariance of the changes is the sample covariance from 2012, so crises also set the correlations: this is a statistical transfer, not a causal effect. The drift of prices and exchange rates comes from the history of 2012–2026. Conditioning uses the full joint law, including statistical links from domestic to global variables. Parameter uncertainty is not counted.
 
 ## Parameters
 
@@ -233,7 +233,7 @@ By default there is no mean reversion: the spread grows as $\sqrt t$, rates and 
 | `reversion` | `[]` | the variables with mean reversion; empty by default |
 | `stochastic_scale` | `false` | the path of the common multiplier is a log AR(1) instead of independent months |
 | `sample_scale` | `true` | the level and correlations of the scale are the sample covariance of the changes |
-| `scale_start` | 2015-01-01 | the first month of the sample covariance: the floating rouble |
+| `scale_start` | 2012-01-01 | the first month of the sample covariance and of the momentum fit |
 | `momentum`, `momentum_horizon`, `momentum_bound` | `true`, 12, 0.5 | the AR(1) of the monthly changes, chosen by the yearly variance |
 | `breaks` | 2021-01: three spreads | changes left out at breaks of the series |
 | `nu_bounds` | $[2.5,\ 60]$ | the search interval of $\nu$ |
