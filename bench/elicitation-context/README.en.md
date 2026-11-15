@@ -3,15 +3,21 @@
 This opt-in check measures gateway usage without changing the number, order or schemas of
 expert questions. It is not a production LLM plugin and does not start a model estimate.
 
-Set `GATEWAY_BASE_URL`, `GATEWAY_API_KEY`, `ELICIT_BENCH_ROOT` (a new output directory),
-`ELICIT_BENCH_SOURCE` (default `workspace`) and optionally `ELICIT_BENCH_MODEL`
-(default `gpt-6-astra`). Run:
+Set `GATEWAY_BASE_URL` and `GATEWAY_API_KEY` in the environment; everything else is an
+argument of the command. `--root` is a new output folder, `--source` the workspace whose series
+are copied (default `workspace`), `--model` the gateway's model id (default `gpt-6-astra`),
+and `--model-id`, `--as-of`, `--key` the interviewed model, date and shock. The command refuses
+a root equal to the source. Run:
 
 ```powershell
-.\.venv\Scripts\python.exe bench/elicitation-context/check.py
+python -m mst.bench elicitation --root FOLDER
 ```
 
-The script copies series to isolated workspaces, elicits one law and eight response questions
+The code is [`mst.bench.elicitation`](../../src/mst/bench/elicitation.py).
+`python -m mst.bench elicitation --describe FILE` prints the medians of the saved responses of
+one shock and the cells whose quantiles collapsed; it describes, it does not judge.
+
+The command copies series to isolated workspaces, elicits one law and eight response questions
 through the actual MCP tool. The second mode reuses the elicited law unchanged, so differences
 are not caused by a different size distribution. The executor supplies no numeric answers.
 Only the eight matching response questions enter the token comparison; the shared law is

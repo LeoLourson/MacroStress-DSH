@@ -1,0 +1,36 @@
+# The forecast check set: every number here is fixed before a result is read, and a change of
+# a threshold is a commit of this file. `python -m mst.bench forecast` reads it.
+
+# The portfolio of the workspace whose losses are checked.
+portfolio = "fifth-test"
+# The first change month of every historical comparison: the rouble floats from November 2014.
+history_start = 2015-01-01
+horizons = [1, 3, 12]
+# The central band: width = q95 - q05, coverage = the share of facts between them.
+band = 0.90
+draws = 2000
+seed = 20261115
+
+# The three spread indexes were spliced in January 2021: that change is not a market move.
+[[splices]]
+month = 2021-01-01
+variables = ["ru.spread_aa", "ru.spread_a", "ru.spread_bbb"]
+
+[gates]
+# The model's quantile width over the historical one, for every series and horizon.
+width = [0.75, 1.40]
+# The share of the macro variables of one horizon whose width must pass.
+width_share = 0.8
+# The largest distance of the mean pair correlation of 12-month share returns from history.
+correlation = 0.15
+# The share of facts inside the 90 % band out of sample: 90 % expected, overlap widens the
+# sampling error of a few dozen dates to about five points.
+coverage = [0.80, 0.97]
+
+# Out of sample: on every date the models are estimated on what was published by then, and the
+# forecast is compared with what happened. The last date leaves twelve observed months.
+[rolling]
+first = 2017-01-01
+last = 2025-09-01
+step_months = 3
+draws = 1000

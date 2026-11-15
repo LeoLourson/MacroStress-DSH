@@ -99,7 +99,7 @@ def _named_once(targets: list[str]) -> None:
         seen.add(target)
 
 
-def _needed_drivers(positions, spec, satellites, request, macro, horizon, base_currency) -> list[str]:
+def needed_drivers(positions, spec, satellites, request, macro, horizon, base_currency) -> list[str]:
     """The drivers a run reads: those its positions value, its scenario names and its forecast.
 
     A run simulates only these. The served bundle may carry a driver whose series stops before
@@ -214,7 +214,7 @@ def execute(ws: store.Workspace, run_id: str) -> dict:
         # The drivers this run actually reads: those its positions value and those its scenario
         # names. The others stay out, so a stale series the portfolio never touches cannot stop
         # the calculation.
-        needed = _needed_drivers(positions, spec, satellites, request, macro, horizon, base_currency)
+        needed = needed_drivers(positions, spec, satellites, request, macro, horizon, base_currency)
         paths = scenario_build.build(
             spec,
             macro,

@@ -1,26 +1,19 @@
-"""The results of the check sets of ``bench/``, kept beside each set in its ``results/``.
+"""scenario-from-corpus: the scenario an agent builds from the text of an event.
 
-``model-backtest`` and ``corpus-search`` keep the last result of each model or search as a JSON
-report and a Markdown summary; the history is in git. ``scenario-from-corpus`` keeps one folder
-per event: the scenario the agent built, the journal of its corpus calls, and ``review.toml``,
-which an expert fills by hand after comparing the scenario with the expected decision kept
-outside the project. The expected decisions never enter this folder.
-
-::
-
-  python -m mst.bench scenarios      the verdict shares over the reviewed events
+Each event keeps one folder in ``results/``: the scenario the agent built, the journal of its
+corpus calls, and ``review.toml``, which an expert fills by hand after comparing the scenario
+with the expected decision kept outside the project. The expected decisions never enter this
+folder, and a bench scenario is never approved.
 """
 
-import argparse
-import sys
 import tomllib
 from pathlib import Path
 
 from mst import store
 from mst.scenario.spec import Spec
 
-ROOT = Path(__file__).resolve().parents[2] / "bench"
-"""The check sets of the repository."""
+from . import bench_root, results
+
 VERDICTS = ("match", "partial", "mismatch")
 REVIEW = '''# The expert's review of the scenario of {event}, filled by hand after comparing it with
 # the expected decision of the event. verdict: "match", "partial" or "mismatch".
@@ -30,22 +23,9 @@ comment = """
 '''
 
 
-def results(folder: Path) -> Path:
-    """The results folder of the check set whose input file lies in ``folder``."""
-    return folder / "results"
-
-
-def save_result(folder: Path, name: str, report: dict, summary: str) -> list[Path]:
-    """``name.json`` and ``name.md`` in ``folder``: the last result, written over the old one."""
-    report_file, summary_file = folder / f"{name}.json", folder / f"{name}.md"
-    store.write_json(report_file, report)
-    summary_file.write_text(summary, encoding="utf-8", newline="\n")
-    return [report_file, summary_file]
-
-
 def events(root: Path | None = None) -> dict[str, str]:
     """The texts of the events of scenario-from-corpus by id."""
-    root = root or ROOT
+    root = bench_root(root)
     with (root / "scenario-from-corpus" / "events.toml").open("rb") as file:
         return {event["id"]: event["text"] for event in tomllib.load(file)["events"]}
 
@@ -66,7 +46,7 @@ def save_scenario(
     The scenario is checked against the contract first; a scenario saved again replaces the
     old one and its review, which git keeps.
     """
-    root = root or ROOT
+    root = bench_root(root)
     text = event(id, root)["text"]
     built = Spec.model_validate(spec).model_dump(mode="json")
     if built.get("approved_by"):
@@ -84,7 +64,7 @@ def save_scenario(
 
 def scenario_summary(root: Path | None = None) -> str:
     """The Markdown table of the verdicts over the events that have a saved scenario."""
-    root = root or ROOT
+    root = bench_root(root)
     folder = results(root / "scenario-from-corpus")
     counts = dict.fromkeys((*VERDICTS, "not reviewed"), 0)
     rows = []
@@ -102,22 +82,3 @@ def scenario_summary(root: Path | None = None) -> str:
         lines.append(f"| {name} | {count} | {share} |")
     lines += ["", "| event | verdict |", "|---|---|", *rows, ""]
     return "\n".join(lines)
-
-
-def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(prog="mst.bench", description=__doc__.split("\n\n")[0])
-    commands = parser.add_subparsers(dest="command", required=True)
-    commands.add_parser("scenarios", help="the verdict shares of scenario-from-corpus")
-    parser.parse_args(argv)
-    summary = scenario_summary()
-    file = results(ROOT / "scenario-from-corpus") / "summary.md"
-    file.parent.mkdir(parents=True, exist_ok=True)
-    file.write_text(summary, encoding="utf-8", newline="\n")
-    if hasattr(sys.stdout, "reconfigure"):
-        sys.stdout.reconfigure(encoding="utf-8")
-    print(summary)
-    return 0
-
-
-if __name__ == "__main__":
-    sys.exit(main())
