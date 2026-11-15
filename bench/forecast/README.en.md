@@ -15,9 +15,13 @@ The *width* is the 95th minus the 5th percentile of the $h$-month change. Quanti
 | Portfolio | Width of the return and the expected loss of the worst 5 % (ES95) over 1, 3 and 12 months | The same portfolio valued by the same position models on the observed paths of every historical window | Ratio 0.75–1.40 |
 | Portfolio | Percentiles and mean | The same | For reference |
 | Out of sample | Share of facts inside the 90 % band at every level and horizon | The nominal 90 % | 80–97 % |
-| Out of sample | Mean of $F(y)$, CRPS against the historical simulation, the Acerbi–Székely statistic of the portfolio | 0.5; the simulation's CRPS; 0 | For reference |
+| Out of sample | Mean of $F(y)$, CRPS against the historical simulation, the Acerbi–Székely statistic and the coverage of the historical simulation itself, for the portfolio | 0.5; the simulation's CRPS; 0; 90 % | For reference |
+| Events | The admission of the run of every scenario of `[events]` | The admission conditions of a run | The run is admitted |
+| Events | The shift of the median return by month, of ES95 at the end of the horizon and over the path, the peak shift, the price of the observations | The base scenario, and the empty scenario on the same random numbers | For reference |
 
 In history the portfolio is held as in the forecast: in every window the position models receive the observed paths of the macro variables and the drivers and value the change. A position enters a window when everything it reads was observed in every month of the window, and the return of the window is the sum of those positions' changes over the sum of their current values. A share listed later therefore does not turn a window into a loss.
+
+The events are ordinary runs of the workspace on the checked versions, with the plan's portfolio, draws and seed and the contribution of every element of the scenario. A run compares itself with the empty scenario on the same random numbers, and the set compares the median by month with the plan's base scenario on the same seed. The run ids, the remoteness of the interventions, the contributions and the comparison blocks are kept in `events` of the result.
 
 Out of sample, on every date of the plan, quarterly from 2017 to 2025, the models are estimated again on what was published by the 15th of the next month, and the forecast is compared with what happened. The facts come from the history of the working version. *CRPS*, the continuous ranked probability score, compares the whole forecast distribution with the fact; lower is better. The historical simulation is the distribution of the returns of the same positions over the windows that ended by the forecast date. The Acerbi–Székely statistic is zero when large losses are on average as the tail predicted; a positive value means the tail was underestimated.
 
@@ -27,10 +31,10 @@ Run from the repository root in the project environment. `MACRO` and `SATELLITES
 
 ```powershell
 python -m mst.bench forecast --macro MACRO --satellites SATELLITES
-python -m mst.bench forecast --macro MACRO --satellites SATELLITES --no-rolling
+python -m mst.bench forecast --macro MACRO --satellites SATELLITES --no-rolling --no-events
 ```
 
-Without the out-of-sample dates the check takes about 10 seconds, with them a few minutes: the macro model and the satellites are estimated on every date. Exit code 1 means that a gate failed.
+Without the out-of-sample dates and the events the set takes about 10 seconds. The dates add about two minutes: the macro model and the satellites are estimated on every date. Every event adds about half a minute. Exit code 1 means that a gate failed.
 
 ## Results
 

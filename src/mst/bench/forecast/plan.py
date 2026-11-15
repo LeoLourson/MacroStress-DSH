@@ -62,6 +62,16 @@ class Rolling(_Strict):
         return found
 
 
+class Events(_Strict):
+    """The scenarios computed as ordinary runs of the workspace, and their base."""
+
+    base: str
+    """The scenario without an event the medians by month are compared with."""
+    scenarios: list[str] = Field(min_length=1)
+    draws: int = Field(default=2000, ge=100, strict=True)
+    contributions: bool = True
+
+
 class Plan(_Strict):
     portfolio: str
     """The stored portfolio of the workspace whose losses are checked."""
@@ -75,6 +85,7 @@ class Plan(_Strict):
     splices: list[Splice] = []
     gates: Gates = Gates()
     rolling: Rolling | None = None
+    events: Events | None = None
 
     @model_validator(mode="after")
     def horizons_positive(self):

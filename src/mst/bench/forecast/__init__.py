@@ -9,7 +9,9 @@ It forecasts the empty scenario of the plan's portfolio and judges every level t
 - ``portfolio``: the width and the expected shortfall of the return against the same
   portfolio held over every past window, valued by the same position models;
 - out of sample, on the plan's dates, the coverage of the band at every level and, for the
-  portfolio, the CRPS against the historical simulation and the Acerbi-Székely statistic.
+  portfolio, the CRPS against the historical simulation and the Acerbi-Székely statistic;
+- ``scenario``: the runs of the plan's events, their admission, the shift of the median and
+  of ES95 against the base and the empty scenario, the price and the contributions.
 
 Every number is a row (``rows.Row``) with its reference, its sample size and its verdict; the
 scorecard keeps the rows, the gates, the versions and the commit, and ``save`` writes it to
@@ -22,6 +24,7 @@ from pathlib import Path
 from mst import store as files
 
 from .. import results, save_result
+from . import events as scenario_events
 from . import levels
 from . import rolling as out_of_sample
 from .pipeline import forecast, replay
@@ -46,7 +49,7 @@ def _commit() -> str | None:
 
 
 def run(plan: Plan, *, workspace: Path, macro: str, satellites: str, rolling: bool = True,
-        progress=print) -> dict:
+        events: bool = True, progress=print) -> dict:
     """The scorecard of the versions ``macro`` and ``satellites`` (hashes or prefixes)."""
     from mst import plugins
     from mst.data.store import SeriesStore
@@ -84,6 +87,13 @@ def run(plan: Plan, *, workspace: Path, macro: str, satellites: str, rolling: bo
             portfolio=portfolio, replay=past, store=store, progress=progress,
         )
         rows += found
+    records = []
+    if events and plan.events is not None:
+        found, records = scenario_events.run(
+            plan, workspace=ws.root, macro=macro, satellites=satellites, value=base.value,
+            progress=progress,
+        )
+        rows += found
     found_gates = gates(plan, rows)
     return {
         "plan": plan.model_dump(mode="json"),
@@ -93,6 +103,7 @@ def run(plan: Plan, *, workspace: Path, macro: str, satellites: str, rolling: bo
         "git_commit": _commit(),
         "value": base.value,
         "rolling_dates": dates,
+        "events": records,
         "rows": [row.as_dict() for row in rows],
         "gates": found_gates,
         "passed": all(gate["verdict"] != "fail" for gate in found_gates),

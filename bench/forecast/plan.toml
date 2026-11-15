@@ -34,3 +34,25 @@ first = 2017-01-01
 last = 2025-09-01
 step_months = 3
 draws = 1000
+
+# The events: ordinary runs of these scenarios of the workspace on the checked versions, with
+# the contribution of every element. A run compares itself with the empty scenario on the same
+# random numbers; the medians by month are compared with the base run on the same seed.
+[events]
+base = "base-2026-10"
+scenarios = [
+    "cbr-cut-5pp-random",
+    "cbr-cut-5pp-market-reaction-random",
+    "cbr-target-6-7-random",
+    "bank-admin-top5-random",
+    "cn-bank-payments-stop-random",
+    "dividends-a-random",
+    "dividends-b-random",
+    "fed-zero-gold-random",
+    "fuel-export-ban-random",
+    "hormuz-closure-2m-random",
+    "migrant-ban-random",
+    "sbp-outage-10d-random",
+]
+draws = 2000
+contributions = true

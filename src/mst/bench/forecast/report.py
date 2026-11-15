@@ -86,6 +86,28 @@ def markdown(card: dict) -> str:
                 f"| {r.check} | {r.item} | {r.horizon or '-'} | {_value(r.model)} |"
                 f" {_value(r.history)} | {r.n} | {MARK[r.verdict]} |"
             )
+    shifts = [r for r in rows if r.level == "scenario" and r.check == "median return shift, %"]
+    if shifts:
+        horizons_of = sorted({r.horizon for r in shifts})
+        lines += ["", "## Events: shift against the base, % of the portfolio", "",
+                  "| scenario | admitted | " + " | ".join(f"median {h} m" for h in horizons_of)
+                  + " | peak median | ES95 loss 12 m | path ES95 loss |",
+                  "|---|---|" + "---:|" * (len(horizons_of) + 3)]
+        by = {}
+        for r in rows:
+            if r.level == "scenario":
+                by.setdefault(r.item, {})[(r.check, r.horizon)] = r
+        for item, found in by.items():
+            admitted = found.get(("admitted", None))
+            cells = [_value(found[("median return shift, %", h)].model) for h in horizons_of]
+            peak = next((r for (c, _), r in found.items() if c.startswith("peak")), None)
+            es = next((r for (c, _), r in found.items() if c == "ES95 loss shift, %"), None)
+            path = next((r for (c, _), r in found.items() if c.startswith("path")), None)
+            lines.append(
+                f"| {item} | {MARK[admitted.verdict] if admitted else '-'} | " + " | ".join(cells)
+                + f" | {_value(peak.model) if peak else '-'} ({peak.horizon if peak else '-'} m)"
+                f" | {_value(es.model) if es else '-'} | {_value(path.model) if path else '-'} |"
+            )
     out = [r for r in rows if r.check.endswith("out of sample") and r.item == "all series"]
     if out:
         lines += ["", "## Macro out of sample", "", "| level | h | coverage | n | verdict |",
