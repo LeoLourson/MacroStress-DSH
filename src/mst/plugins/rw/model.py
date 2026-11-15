@@ -33,6 +33,8 @@ class JointWalk:
     start_sd: np.ndarray
     persistence: np.ndarray
     intercept: np.ndarray
+    momentum: np.ndarray
+    previous: np.ndarray
     scale_persistence: float
     scale_volatility: float
     diagnostics: dict
@@ -42,7 +44,7 @@ class RwModel(MacroModel):
     """No lags: joint Student monthly changes with a common crisis multiplier."""
 
     model_id = "rw.joint"
-    version = "0.2.0"
+    version = "0.3.0"
     latents = ("scale_path",)
     label = "Joint random walk with heavy tails"
     description = (
@@ -88,6 +90,8 @@ class RwModel(MacroModel):
             diagnostics=meta["diagnostics"],
             persistence=np.asarray(arrays.get("persistence", np.ones(n)), dtype=float),
             intercept=np.asarray(arrays.get("intercept", arrays["drift"]), dtype=float),
+            momentum=np.asarray(arrays.get("momentum", np.zeros(n)), dtype=float),
+            previous=np.asarray(arrays.get("previous", np.full(n, np.nan)), dtype=float),
             scale_persistence=float(scale_path.get("persistence", 0.0)),
             scale_volatility=float(scale_path.get("volatility", 0.0)),
             drift=arrays["drift"],

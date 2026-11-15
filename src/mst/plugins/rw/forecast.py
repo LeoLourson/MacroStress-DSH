@@ -112,13 +112,21 @@ class _Affine:
     rows: np.ndarray  # (m,(H+1)*n)
 
 
-def _step(model, cells) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-    """The transition, the intercept and the innovation factor of one month.
+def _momentum(model) -> np.ndarray:
+    """The AR(1) coefficient of the monthly changes; zero for a version without it."""
+    found = getattr(model, "momentum", None)
+    return np.zeros(len(model.ids)) if found is None else np.asarray(found, dtype=float)
 
-    The law is ``y_t = A y_{t-1} + c + sqrt(lambda_t) B z_t`` with a diagonal ``A``. A cell
-    set to a value fixes that month's realised coordinate, so the free innovations are
-    conditioned on the set change: the free mean gains the projection of the set innovation,
-    and the transition loses the same projection of the set row.
+
+def _step(model, cells) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    """The transitions on the last two months, the intercept and the innovation factor.
+
+    The law is ``y_t = (A + Phi) y_{t-1} - Phi y_{t-2} + c - Phi mu + sqrt(lambda_t) B z_t``
+    with diagonal ``A`` and ``Phi``: at ``A = I`` the change ``y_t - y_{t-1}`` keeps the share
+    ``Phi`` of the previous change in excess of the drift ``mu``. A cell set to a value fixes
+    that month's realised coordinate, so the free innovations are conditioned on the set
+    change: the free mean gains the projection of the set innovation, and both transitions
+    lose the same projection of the set row.
     """
     n = len(model.ids)
     persistence = getattr(model, "persistence", None)
@@ -126,23 +134,42 @@ def _step(model, cells) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     if persistence is None or intercept is None:
         persistence = np.ones(n)
         intercept = model.drift
-    persistence = np.asarray(persistence, dtype=float)
+    phi = _momentum(model)
     sets = sorted((i, value) for i, kind, value in cells if kind == "set")
     fixed = tuple(i for i, _ in sets)
     gain, factor = transfer(model.scale, fixed)
     # Keep the arithmetic explicit: the free rows lose the projection of the set rows.
-    transition = np.diag(persistence).copy()
-    intercept = np.asarray(intercept, dtype=float).copy()
+    transition = np.diag(np.asarray(persistence, dtype=float) + phi)
+    lag = np.diag(-phi)
+    intercept = np.asarray(intercept, dtype=float) - phi * np.asarray(model.drift, dtype=float)
     if fixed:
-        transition -= gain @ np.diag(persistence)[list(fixed), :]
-        intercept += gain @ (np.array([value for _, value in sets]) - intercept[list(fixed)])
+        rows = list(fixed)
+        transition = transition - gain @ transition[rows, :]
+        lag = lag - gain @ lag[rows, :]
+        intercept = intercept + gain @ (np.array([value for _, value in sets]) - intercept[rows])
         # Exact assignments avoid round-off in cells that must be deterministic.
-        transition[list(fixed)] = 0.0
-        intercept[list(fixed)] = [value for _, value in sets]
+        transition[rows] = 0.0
+        lag[rows] = 0.0
+        intercept[rows] = [value for _, value in sets]
     for i, kind, value in cells:
         if kind == "shift":
             intercept[i] += value
-    return transition, intercept, factor
+    return transition, lag, intercept, factor
+
+
+def _previous(model, start: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """The mean and the loading of month -1, which the first change of the momentum reads.
+
+    A coordinate observed at -1 and at 0 starts from its last observed change. Otherwise the
+    month -1 is month 0 less the drift, with the same loading, so the first change is the drift.
+    """
+    n = len(model.ids)
+    found = getattr(model, "previous", None)
+    previous = np.full(n, np.nan) if found is None else np.asarray(found, dtype=float)
+    known = np.isfinite(previous) & (np.asarray(model.start_sd) == 0)
+    mean = np.where(known, previous, np.asarray(model.start_mean) - np.asarray(model.drift))
+    loading = np.where(known[:, None], 0.0, start)
+    return mean, loading
 
 
 def _affine(model, plan: ScenarioPlan, group: int) -> _Affine:
@@ -152,12 +179,14 @@ def _affine(model, plan: ScenarioPlan, group: int) -> _Affine:
     paths = np.zeros((horizon + 1, n, (horizon + 1) * n))
     mean[0] = model.start_mean
     paths[0, :, :n] = np.diag(model.start_sd)
+    before_mean, before_paths = _previous(model, paths[0])
     cells = _cells(model, plan, group)
     for t in range(1, horizon + 1):
-        transition, intercept, factor = _step(model, cells.get(t, ()))
-        mean[t] = transition @ mean[t - 1] + intercept
-        paths[t] = transition @ paths[t - 1]
+        transition, lag, intercept, factor = _step(model, cells.get(t, ()))
+        mean[t] = transition @ mean[t - 1] + lag @ before_mean + intercept
+        paths[t] = transition @ paths[t - 1] + lag @ before_paths
         paths[t, :, t * n : (t + 1) * n] = factor
+        before_mean, before_paths = mean[t - 1], paths[t - 1]
     centre = np.zeros(len(plan.constraints))
     rows = np.zeros((len(plan.constraints), paths.shape[-1]))
     index = {id_: i for i, id_ in enumerate(model.ids)}

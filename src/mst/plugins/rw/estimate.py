@@ -269,6 +269,53 @@ def mean_reversion(panel: Panel, spec: Spec) -> tuple[np.ndarray, np.ndarray, li
     return persistence, neutral, report
 
 
+def variance_ratio(phi: float, horizon: int) -> float:
+    """``Var`` of a sum of ``horizon`` stationary AR(1) changes over ``horizon`` single ones."""
+    return 1.0 + 2.0 * sum((1 - k / horizon) * phi**k for k in range(1, horizon))
+
+
+def _window_sums(column: np.ndarray, horizon: int) -> np.ndarray:
+    """Sums of ``horizon`` consecutive changes; a window with a missing change is skipped."""
+    sums = np.array([column[t : t + horizon].sum() for t in range(len(column) - horizon + 1)])
+    return sums[np.isfinite(sums)]
+
+
+def momentum(panel: Panel, data: np.ndarray, spec: Spec) -> tuple[np.ndarray, list[dict]]:
+    """The AR(1) coefficient of the monthly changes of every variable, and how it was chosen.
+
+    ``phi`` solves ``variance_ratio(phi, h) = Var(h-month change) / (h Var(monthly change))``
+    over the change months from ``scale_start`` on, clipped to ``momentum_bound``. Matching
+    the ratio rather than the first autocorrelation fits the horizon a stress test reads: the
+    monthly means of a walk have a positive first autocorrelation, while the year may revert.
+    A variable in ``reversion``, housing and a variable with fewer than two windows keep 0.
+    """
+    from scipy.optimize import brentq
+
+    count, horizon, bound = len(panel.ids), spec.momentum_horizon, spec.momentum_bound
+    window = np.array([month >= spec.scale_start for month in panel.months[1:]])
+    phi, report = np.zeros(count), []
+    for i, variable in enumerate(panel.ids):
+        row = {"id": variable, "momentum": 0.0, "variance_ratio": None}
+        column = data[window, i]
+        sums = _window_sums(column, horizon)
+        if not spec.momentum or variable in spec.reversion or variable == HOUSING:
+            report.append(row | {"source": "off"})
+            continue
+        if len(sums) < 2 * horizon:
+            report.append(row | {"source": "short"})
+            continue
+        monthly = np.nanvar(column, ddof=1)
+        target = float(np.var(sums, ddof=1) / (horizon * monthly))
+        if target <= variance_ratio(-bound, horizon):
+            phi[i] = -bound
+        elif target >= variance_ratio(bound, horizon):
+            phi[i] = bound
+        else:
+            phi[i] = brentq(lambda x: variance_ratio(x, horizon) - target, -bound, bound)
+        report.append(row | {"momentum": float(phi[i]), "variance_ratio": target, "source": "fit"})
+    return phi, report
+
+
 def scale_path_parameters(weights: np.ndarray) -> dict:
     """Log AR(1) of the implied common scale, from the ECME weights.
 
@@ -396,6 +443,14 @@ def estimate(panel: Panel, spec: Spec) -> tuple[dict, dict, float]:
         sample_variance = {
             panel.ids[i]: float(np.diag(sample)[k]) for k, i in enumerate(ordinary)
         }
+    phi, persistence_of_changes = momentum(panel, data, spec)
+    if phi.any():
+        # A diagonal AR(1) of changes has monthly covariance Sigma_e / (1 - phi phi'),
+        # elementwise; this innovation scale keeps the monthly covariance estimated above.
+        block = np.ix_(ordinary, ordinary)
+        scale[block] = _positive_scale(
+            scale[block] * (1 - np.outer(phi[ordinary], phi[ordinary])), spec.eig_floor
+        )
     distance = 0.0
     if HOUSING in panel.ids:
         h = panel.ids.index(HOUSING)
@@ -435,6 +490,7 @@ def estimate(panel: Panel, spec: Spec) -> tuple[dict, dict, float]:
             {"month": panel.months[i + 1].isoformat(), "weight": float(weights[i])} for i in chosen
         ],
         "mean_reversion": reversion,
+        "momentum": persistence_of_changes,
         "scale_path": dynamics,
         "scale_correction": {
             "mode": "sample" if spec.sample_scale else "ecme",
@@ -456,5 +512,8 @@ def estimate(panel: Panel, spec: Spec) -> tuple[dict, dict, float]:
         "start_sd": start_sd,
         "persistence": persistence,
         "intercept": intercept,
+        "momentum": phi,
+        # The month before t = 0: the last observed change the momentum starts from.
+        "previous": panel.y[-2] if len(panel.y) > 1 else np.full(len(panel.ids), np.nan),
     }
     return diagnostics, arrays, nu

@@ -43,6 +43,10 @@ def test_defaults_match_bundled_spec():
         {"drifts": ["x", "x"]},
         {"reversion": ["x", "x"]},
         {"scale_start": date(2015, 1, 2)},
+        {"momentum_horizon": 1},
+        {"momentum_horizon": 12.0},
+        {"momentum_bound": 0},
+        {"momentum_bound": 1},
     ],
 )
 def test_spec_rejects_invalid_settings(kwargs):

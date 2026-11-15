@@ -265,3 +265,51 @@ def test_all_cells_set_and_multiple_constraints_with_a_determined_row():
     sim = simulate(m, ScenarioPlan(2, rows, items, inner=3), draws=1, seed=8)
     assert np.all((25.1 <= sim.paths[:, 2, 1]) & (sim.paths[:, 2, 1] <= 25.2))
     assert np.all((15.1 <= sim.paths[:, 2, 0]) & (sim.paths[:, 2, 0] <= 15.2))
+
+
+def momentum_model(phi, previous):
+    m = model()
+    m.momentum = np.asarray(phi, dtype=float)
+    m.previous = np.asarray(previous, dtype=float)
+    return m
+
+
+def test_momentum_carries_the_last_change_and_widens_the_year():
+    phi = 0.5
+    # The last observed change of gl.x is the drift plus one: its excess decays as phi ** k.
+    m = momentum_model([phi, 0.0], [10.0 - 0.1 - 1.0, 20.0])
+    paths = simulate(m, ScenarioPlan(12, inner=30000), draws=1, seed=5).paths
+    year = paths[:, 12, 0] - paths[:, 0, 0]
+    assert abs(year.mean() - (12 * 0.1 + sum(phi**k for k in range(1, 13)))) < 0.08
+    loads = [(1 - phi ** (12 - s + 1)) / (1 - phi) for s in range(1, 13)]
+    expected = m.nu / (m.nu - 2) * m.scale[0, 0] * sum(w * w for w in loads)
+    assert_allclose(year.var(), expected, rtol=0.05)
+    # Without momentum the second coordinate stays the walk of independent steps.
+    assert_allclose((paths[:, 12, 1] - paths[:, 0, 1]).var(), 12 * 8 / 6 * 2.0, rtol=0.05)
+
+
+def test_an_unknown_previous_month_starts_from_the_drift():
+    m = momentum_model([0.5, 0.5], [np.nan, np.nan])
+    paths = simulate(m, ScenarioPlan(6, inner=20000), draws=1, seed=9).paths
+    assert_allclose((paths[:, 6] - paths[:, 0]).mean(axis=0), 6 * m.drift, atol=0.08)
+
+
+def test_a_set_level_feeds_the_momentum_of_the_next_month():
+    m = momentum_model([0.0, 0.5], [9.9, 20.0])
+    item = Intervention("ru.y", (1,), "set", np.array([[24.0]]))
+    paths = simulate(m, ScenarioPlan(2, interventions=(item,), inner=20000), draws=1, seed=3).paths
+    assert_array_equal(paths[:, 1, 1], np.full(len(paths), 24.0))
+    # The set change of +4 is carried at half its size into month two.
+    assert abs((paths[:, 2, 1] - 24.0).mean() - 2.0) < 0.04
+
+
+def test_momentum_law_matches_the_simulated_paths_under_a_set():
+    m = momentum_model([0.4, 0.3], [9.5, 19.0])
+    item = Intervention("ru.y", (1,), "set", np.array([[24.0]]))
+    rows = (condition("gl.x", 3, 0, 100), condition("ru.y", 3, 0, 100))
+    law_item = Intervention("ru.y", (1,), "set", np.full((64, 1), 24.0))
+    law = constraint_law(m, ScenarioPlan(3, rows, (law_item,)), draws=64, seed=7)
+    p = simulate(m, ScenarioPlan(3, interventions=(item,), inner=15000), draws=1, seed=11).paths
+    # The standard error of the simulated mean of gl.x is 0.021: four of them.
+    assert_allclose(p[:, 3].mean(axis=0), law.means.mean(axis=0), atol=0.085)
+    assert_allclose(np.cov(p[:, 3].T), law.covs.mean(axis=0), rtol=0.06)

@@ -202,7 +202,7 @@ def test_sample_scale_is_the_sample_covariance_in_the_student_scale():
     scale = np.array([[1.0, 0.4], [0.4, 2.0]])
     d = rng.multivariate_normal([0, 0], scale, 800)
     p = panel(np.vstack([np.zeros(2), np.cumsum(d, axis=0)]), ["x", "y"])
-    spec = Spec(drifts=[], breaks=[], sample_scale=True)
+    spec = Spec(drifts=[], breaks=[], sample_scale=True, momentum=False)
     _, arrays, nu = estimate(p, spec)
     expected = (nu - 2) / nu * np.cov(d.T, ddof=1)
     assert_allclose(arrays["scale"], expected, rtol=1e-6, atol=1e-10)
@@ -232,3 +232,50 @@ def test_scale_path_parameters_recovers_a_log_ar1():
     found = scale_path_parameters(weights)
     assert abs(found["persistence"] - truth) < 0.06
     assert abs(found["volatility"] - volatility) < 0.05
+
+
+def ar_changes(rng, phi, count, sd=1.0):
+    d = np.zeros(count)
+    for t in range(1, count):
+        d[t] = phi * d[t - 1] + rng.normal(0, sd)
+    return d
+
+
+def test_momentum_matches_the_variance_of_twelve_month_changes():
+    from mst.plugins.rw.estimate import momentum, variance_ratio
+
+    rng = np.random.default_rng(41)
+    d = np.column_stack([ar_changes(rng, 0.4, 3000), ar_changes(rng, -0.3, 3000)])
+    p = panel(np.vstack([np.zeros(2), np.cumsum(d, axis=0)]), ["x", "y"])
+    spec = Spec(drifts=[], breaks=[], scale_start=p.months[0])
+    phi, report = momentum(p, changes(p, spec), spec)
+    assert_allclose(phi, [0.4, -0.3], atol=0.08)
+    assert_allclose(variance_ratio(phi[0], 12), report[0]["variance_ratio"], rtol=1e-6)
+    assert report[1]["id"] == "y"
+
+
+def test_momentum_keeps_the_sample_monthly_covariance():
+    rng = np.random.default_rng(43)
+    d = np.column_stack([ar_changes(rng, 0.4, 2500), ar_changes(rng, 0.2, 2500)])
+    d[:, 1] += 0.5 * d[:, 0]
+    p = panel(np.vstack([np.zeros(2), np.cumsum(d, axis=0)]), ["x", "y"])
+    spec = Spec(drifts=[], breaks=[], scale_start=p.months[0])
+    _, arrays, nu = estimate(p, spec)
+    phi = arrays["momentum"]
+    monthly = nu / (nu - 2) * arrays["scale"] / (1 - np.outer(phi, phi))
+    assert_allclose(monthly, np.cov(d.T, ddof=1), rtol=1e-6)
+    assert_allclose(arrays["previous"], p.y[-2])
+
+
+def test_momentum_is_bounded_and_off_for_mean_reverting_variables():
+    from mst.plugins.rw.estimate import momentum
+
+    rng = np.random.default_rng(47)
+    d = np.column_stack([ar_changes(rng, 0.9, 2000), ar_changes(rng, 0.4, 2000)])
+    p = panel(np.vstack([np.zeros(2), np.cumsum(d, axis=0)]), ["x", "y"])
+    spec = Spec(drifts=[], breaks=[], scale_start=p.months[0], reversion=["y"])
+    phi, _ = momentum(p, changes(p, spec), spec)
+    assert phi[0] == spec.momentum_bound
+    assert phi[1] == 0.0
+    off = Spec(drifts=[], breaks=[], scale_start=p.months[0], momentum=False)
+    assert_allclose(momentum(p, changes(p, off), off)[0], [0.0, 0.0])

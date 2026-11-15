@@ -90,6 +90,20 @@ class Spec(BaseModel):
     monetary regime, and the rate-to-market transfer is measured from 2015 on.
     """
 
+    momentum: bool = True
+    """Whether the monthly changes keep a share of the previous change.
+
+    The series are monthly means of daily values, and the mean of a walk over a month has
+    changes that follow one another: a crisis spreads over two monthly means. With this switch
+    every variable outside ``reversion`` gets a diagonal AR(1) on its changes,
+    ``d_t - mu = phi (d_{t-1} - mu) + e_t``; ``phi`` is chosen so that the variance of
+    ``momentum_horizon``-month changes over the scale window equals the sample one, while the
+    monthly covariance stays the sample covariance.
+    """
+    momentum_horizon: int = Field(default=12, ge=2, strict=True)
+    momentum_bound: float = Field(default=0.5, gt=0, lt=1, allow_inf_nan=False)
+    """The largest absolute ``phi``: a short window cannot support a stronger persistence."""
+
     @field_validator("start")
     @classmethod
     def first_of_month(cls, value: date) -> date:

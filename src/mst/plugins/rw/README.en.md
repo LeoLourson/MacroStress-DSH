@@ -68,6 +68,24 @@ The coefficient $a_i$ is the slope of a regression of the level on its previous 
 
 On the 2012–2026 panel the coefficients are 0.97–0.99 for rates, 0.89–0.91 for spreads, 0.78 for the VIX. At those values the centre moves by 20–30 % of the gap to the mean over 12 months, while the band narrows by 10–25 %. On the rolling grid that lowers coverage: rates and the real block move in cycles, and a walk with no return describes their width better. The `reversion` list is therefore empty by default; the code and the specification keep it switchable.
 
+### Persistence of the monthly changes
+
+The panel series are monthly means, and the changes of a monthly mean of a walk follow one another: a crisis that starts late in a month is split between two means. From 2015 the first autocorrelation of the changes is +0.21 for the share index, +0.36 for inflation and +0.43 for credit, and the variance of the 12-month change of the index is 1.62 times twelve monthly ones; a walk of independent steps put the yearly width of the index at 0.79 of the observed one. With `momentum = true` every variable outside `reversion`, housing excepted, gets an AR(1) of its changes,
+
+$$
+d_{i,t}-\mu_i=\varphi_i\,(d_{i,t-1}-\mu_i)+e_{i,t},
+$$
+
+where $d_{i,t}=y_{i,t}-y_{i,t-1}$. We choose $\varphi_i$ so that the variance ratio
+
+$$
+\mathrm{VR}_h(\varphi)=1+2\sum_{k=1}^{h-1}\Bigl(1-\frac kh\Bigr)\varphi^k
+$$
+
+at $h$ = `momentum_horizon` equals the ratio of the sample variance of $h$-month changes to $h$ monthly ones over the `scale_start` window, bounded by `momentum_bound`; the first autocorrelation is not used. A stress test reads the year, and the monthly means of the exchange rate and oil follow one another while their yearly changes revert: a fit to the first autocorrelation would widen their yearly width by 19–25 %. The innovation scale is $\Sigma_e=C\circ(1-\varphi\varphi^\top)$, where $C$ is the monthly covariance of the changes from the previous step and $\circ$ the elementwise product, so the monthly covariance of the model stays the sample one.
+
+In levels this is a second-order recursion $y_t=(A+\Phi)y_{t-1}-\Phi y_{t-2}+c-\Phi\mu+\sqrt{\lambda_t}Bz_t$ with $\Phi=\operatorname{diag}(\varphi)$. The first forecast change reads the last observed change; when month $-1$ or month $0$ is unknown, the first change starts from the drift. A set value overrides the recursion in its cell, and the set change passes into the next month with the share $\varphi_i$; the projection on the free coordinates uses both transitions.
+
 ### Scale and degrees of freedom
 
 $\Sigma$ and $\nu$ are the maximum likelihood estimates of a multivariate Student law on changes with gaps, found by the ECME algorithm (Liu, Rubin, 1995). Each iteration:
@@ -216,6 +234,7 @@ By default there is no mean reversion: the spread grows as $\sqrt t$, rates and 
 | `stochastic_scale` | `false` | the path of the common multiplier is a log AR(1) instead of independent months |
 | `sample_scale` | `true` | the level and correlations of the scale are the sample covariance of the changes |
 | `scale_start` | 2015-01-01 | the first month of the sample covariance: the floating rouble |
+| `momentum`, `momentum_horizon`, `momentum_bound` | `true`, 12, 0.5 | the AR(1) of the monthly changes, chosen by the yearly variance |
 | `breaks` | 2021-01: three spreads | changes left out at breaks of the series |
 | `nu_bounds` | $[2.5,\ 60]$ | the search interval of $\nu$ |
 | `em_tol` | $10^{-8}$ | the threshold on the change of the log likelihood |
@@ -224,13 +243,13 @@ By default there is no mean reversion: the spread grows as $\sqrt t$, rates and 
 | `min_changes` | 3 | the least number of changes or intervals of a variable |
 | `seed` | 20261029 | the seed of the model's draws |
 
-The estimated parameters are written to the version meta. `diagnostics.mean_reversion` is a row per panel variable: the coefficient $a_i$, the mean level $m_i$ and the source (`ar1`, `walk`, `short`). `diagnostics.scale_path` holds $\phi$, $\sigma$, the number of months and the regression constant. `diagnostics.scale_correction` holds the mode (`sample` or `ecme`) and the sample and ECME standard deviations of the changes of every variable. The version arrays carry `persistence` ($a_i$) and `intercept` ($c_i$).
+The estimated parameters are written to the version meta. `diagnostics.mean_reversion` is a row per panel variable: the coefficient $a_i$, the mean level $m_i$ and the source (`ar1`, `walk`, `short`). `diagnostics.scale_path` holds $\phi$, $\sigma$, the number of months and the regression constant. `diagnostics.scale_correction` holds the mode (`sample` or `ecme`) and the sample and ECME standard deviations of the changes of every variable. `diagnostics.momentum` is a row per variable: $arphi_i$, the variance ratio it matches and the source (`fit`, `off`, `short`). The version arrays carry `persistence` ($a_i$), `intercept` ($c_i$), `momentum` ($arphi_i$) and `previous` (the panel values of month $-1$).
 
 ## Plugin and version
 
 `plugin = Plugin(plugin_id="rw", ..., model_sdk=">=4.0,<5.0", macro=(MODEL,))`, the variables are the whole registry, `latents = ("scale_path",)`. The model executes the interventions itself, so `structural_form` returns a `StructuralForm` with registry order as its base order (all set variables move first in each intervened month) and `time_recursion = True`; the platform does not apply the interventions again. The plugin imports only `mst.model_sdk`, `mst.macro.panel`, `mst.macro.registry`, `mst.plugin_sdk` and its own package; the plugin rules forbid importing from `mst.plugins.bvar`.
 
-`estimate` writes to the meta `as_of`, `ids`, `n_global`, `months`, `shocks` (the variable ids in panel order), `nu`, `diagnostics`, `spec` and `structural_form`, and to the arrays `panel_y`, `panel_approximate`, `drift` of length $n$, `scale` of size $n\times n$ ($\Sigma$), `weights` (the weights $w_t$ of the months at the last iteration), `start_mean` of length $n$, `start_sd` of length $n$, `persistence` ($a_i$) and `intercept` ($c_i$). `load` restores the model without re-estimating; a version without `persistence` and `intercept` (estimated before 0.2.0) reads as the former walk: $a_i=1$, $c_i=\mu_i$, $\phi=\sigma=0$. `simulate` returns a `MacroSimulation`: shadow paths of shape $(R,H+1,n)$ with the interventions executed, where row $t=0$ is the path's $y_0$, `history` is the same $y_0$, and the group numbers.
+`estimate` writes to the meta `as_of`, `ids`, `n_global`, `months`, `shocks` (the variable ids in panel order), `nu`, `diagnostics`, `spec` and `structural_form`, and to the arrays `panel_y`, `panel_approximate`, `drift` of length $n$, `scale` of size $n\times n$ ($\Sigma$), `weights` (the weights $w_t$ of the months at the last iteration), `start_mean` of length $n$, `start_sd` of length $n$, `persistence` ($a_i$) and `intercept` ($c_i$). `load` restores the model without re-estimating; a version without `persistence` and `intercept` (estimated before 0.2.0) reads as the former walk: $a_i=1$, $c_i=\mu_i$, $\phi=\sigma=0$. A version without `momentum` and `previous` reads with $arphi=0$. `simulate` returns a `MacroSimulation`: shadow paths of shape $(R,H+1,n)$ with the interventions executed, where row $t=0$ is the path's $y_0$, `history` is the same $y_0$, and the group numbers.
 
 In `diagnostics` the version writes $\nu$, the number of iterations and the last change of the likelihood, the ten months with the smallest weight $w_t$ (the model's crisis months), the number of changes of every variable, the distance of the Higham correction if one was needed, and the three blocks above (`mean_reversion`, `scale_path`, `scale_correction`).
 
