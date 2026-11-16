@@ -10,9 +10,6 @@ from datetime import date
 
 import numpy as np
 
-from mst.data.store import SeriesStore
-from mst.drivers.objects import series_id
-
 
 def month_index(month: date) -> int:
     return month.year * 12 + month.month - 1
@@ -24,20 +21,6 @@ def from_index(index: int) -> date:
 
 def grid(first: date, last: date) -> list[date]:
     return [from_index(i) for i in range(month_index(first), month_index(last) + 1)]
-
-
-def monthly(store: SeriesStore, series: str, as_of: date) -> dict[date, float]:
-    """The values of a series by month, as published on or before ``as_of``."""
-    return {row.month: row.value for row in store.as_of(series, as_of)}
-
-
-def driver_series(registry, driver: str) -> str:
-    """The store series of a driver: its own, or ``drv.<quantity>.<object>``."""
-    quantity, object_ = driver.split(":", 1)
-    for item in registry.drivers:
-        if item.id == driver and item.series:
-            return item.series
-    return series_id(quantity, object_)
 
 
 def windows(months: list[date], horizon: int, start: date, spliced: set[date]) -> list[int]:

@@ -8,8 +8,6 @@ It forecasts the empty scenario of the plan's portfolio and judges every level t
   year, and the satellite's own check against an AR(1);
 - ``portfolio``: the width and the expected shortfall of the return against the same
   portfolio held over every past window, valued by the same position models;
-- out of sample, on the plan's dates, the coverage of the band at every level and, for the
-  portfolio, the CRPS against the historical simulation and the Acerbi-Székely statistic;
 - ``scenario``: the runs of the plan's events, their admission, the shift of the median and
   of ES95 against the base and the empty scenario, the price and the contributions.
 
@@ -22,12 +20,12 @@ import subprocess
 from pathlib import Path
 
 from mst import store as files
+from mst.portfolio.history import replay
 
 from .. import results, save_result
 from . import events as scenario_events
 from . import levels
-from . import rolling as out_of_sample
-from .pipeline import forecast, replay
+from .pipeline import forecast
 from .plan import Plan, load_plan
 from .report import gates, markdown
 
@@ -48,8 +46,8 @@ def _commit() -> str | None:
         return None
 
 
-def run(plan: Plan, *, workspace: Path, macro: str, satellites: str, rolling: bool = True,
-        events: bool = True, progress=print) -> dict:
+def run(plan: Plan, *, workspace: Path, macro: str, satellites: str, events: bool = True,
+        progress=print) -> dict:
     """The scorecard of the versions ``macro`` and ``satellites`` (hashes or prefixes)."""
     from mst import plugins
     from mst.data.store import SeriesStore
@@ -80,13 +78,6 @@ def run(plan: Plan, *, workspace: Path, macro: str, satellites: str, rolling: bo
         *levels.share_rows(plan, bundle, base, store, macro_found.as_of),
         *levels.portfolio_rows(plan, base, past),
     ]
-    dates = []
-    if rolling and plan.rolling is not None:
-        found, dates = out_of_sample.run(
-            plan, workspace=ws.root, current_macro=macro_found, current_satellites=bundle,
-            portfolio=portfolio, replay=past, store=store, progress=progress,
-        )
-        rows += found
     records = []
     if events and plan.events is not None:
         found, records = scenario_events.run(
@@ -102,7 +93,6 @@ def run(plan: Plan, *, workspace: Path, macro: str, satellites: str, rolling: bo
         "versions": {"macro": macro, "satellites": satellites},
         "git_commit": _commit(),
         "value": base.value,
-        "rolling_dates": dates,
         "events": records,
         "rows": [row.as_dict() for row in rows],
         "gates": found_gates,

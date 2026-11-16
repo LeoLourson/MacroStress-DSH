@@ -59,7 +59,6 @@ def _forecast(args) -> int:
         workspace=args.workspace,
         macro=args.macro,
         satellites=args.satellites,
-        rolling=not args.no_rolling,
         events=not args.no_events,
     )
     files = forecast.save(card, args.plan.parent)
@@ -78,9 +77,6 @@ def main(argv: list[str] | None = None) -> int:
     found.add_argument("--workspace", type=Path, default=Path("workspace"))
     found.add_argument("--macro", required=True, help="the macro version hash or its prefix")
     found.add_argument("--satellites", required=True, help="the satellite version or prefix")
-    found.add_argument(
-        "--no-rolling", action="store_true", help="skip the out-of-sample dates (minutes)"
-    )
     found.add_argument(
         "--no-events", action="store_true", help="skip the runs of the plan's event scenarios"
     )

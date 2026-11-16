@@ -2,11 +2,19 @@
 
 A window (``mst.metrics.windows``) gives one cell per quantity and month of its horizon where
 the fact is known: the macro variables from the macro paths, the served drivers from the driver
-paths. A cell carries the forecast and every comparison drawn on the same cell — the random
-walk with drift from the history known on the calculation date, the walk that also knows the
-path the scenario fixes, the base run of the same models under the empty scenario and, for a
-driver, the naive forecast of a year earlier with the trend. A comparison that does not exist
-for a window is absent: the empty scenario has no base run apart from itself and fixes no path.
+paths, and — when the check names a portfolio — every position and the portfolio itself from
+the position models on those paths. A cell carries the forecast and every comparison drawn on
+the same cell: the random walk with drift from the history known on the calculation date, the
+walk that also knows the path the scenario fixes, the base run of the same models under the
+empty scenario, for a driver the naive forecast of a year earlier with the trend, and for a
+position or the portfolio the historical simulation — its return over every past window of the
+same length the calculation date knows, valued by the same models. A comparison that does not
+exist for a window is absent: the empty scenario has no base run apart from itself and fixes no
+path.
+
+The return of a position is its change of value over its current value, in percent; the fact
+is the same valuation on the facts of the window. The portfolio's return reads only the
+positions valued on both, so a position the facts cannot value does not turn into a loss.
 
 A cell the scenario fixes — a point observation or an intervention — is kept and marked
 constrained: its value was told to the model, so it is reported and never scored.
@@ -35,17 +43,25 @@ from .baselines import (
 )
 from .cells import Cell, crps, finite_draws, history_range, pit, quantiles
 from .episodes import Episodes
+from .valuation import conditional_paths, realized_paths, value
 from .windows import Window
 
 MACRO = "macro"
 """The level of the macro variables."""
+POSITION = "position"
+"""The level of the positions of a portfolio."""
+PORTFOLIO = "portfolio"
+"""The level of the portfolio as a whole."""
 
 
 def cells(window: Window, registry: Registry, plan: Episodes) -> list[Cell]:
-    """Every cell of the window: the macro variables, then the drivers when a bundle is on."""
+    """Every cell of the window: the macro variables, the drivers when a bundle is on, and the
+    positions and the portfolio when a portfolio is."""
     found = macro_cells(window, registry, plan)
     if window.bundle is not None:
         found += driver_cells(window, registry, plan)
+    if window.portfolio is not None:
+        found += position_cells(window, registry, plan)
     return found
 
 
@@ -108,12 +124,7 @@ def driver_cells(window: Window, registry: Registry, plan: Episodes) -> list[Cel
     The base run of a driver is the bundle on the macro base run, drawn with the same seed. A
     driver whose paths leave the range of its own training history carries an unverified tail.
     """
-    bundle, paths = window.bundle, window.driver_paths
-    base = None
-    if window.base_shadow is not None:
-        base = bundle.simulate(
-            observed(window.base_shadow, registry), bundle.served(), (), seed=plan.seed
-        )
+    bundle, paths, base = window.bundle, window.driver_paths, window.base_driver_paths
     series_of = {driver.id: driver.series for driver in bundle.registry.drivers}
     found = []
     for k, driver in enumerate(paths.ids):
@@ -152,6 +163,91 @@ def driver_cells(window: Window, registry: Registry, plan: Episodes) -> list[Cel
     return found
 
 
+def position_cells(window: Window, registry: Registry, plan: Episodes) -> list[Cell]:
+    """The cells of every position and of the portfolio, month by month of the horizon.
+
+    The forecast, the base run and the facts are valued by the same position models on the
+    paths cut at the month; the benchmark is the historical simulation of the same month. The
+    positions the engine cannot value on the forecast are kept on the window with the reason.
+    """
+    portfolio, bundle, as_of = window.portfolio, window.bundle, window.as_of
+    forecast = conditional_paths(window.macro_paths, window.driver_paths, bundle, seed=plan.seed)
+    base = None
+    if window.base_shadow is not None:
+        base = conditional_paths(
+            observed(window.base_shadow, registry), window.base_driver_paths, bundle, seed=plan.seed
+        )
+    realized, _ = realized_paths(
+        window.store,
+        as_of=as_of,
+        known_on=window.known_on,
+        months=window.months,
+        panel=window.panel,
+        realized=window.realized,
+        bundle=bundle,
+    )
+    if realized is None:
+        return []
+    found = []
+    for t in range(1, window.horizon + 1):
+        drawn = value(portfolio, forecast.up_to(t), bundle=bundle, as_of=as_of)
+        window.excluded.update(drawn.excluded)
+        facts = value(portfolio, realized.up_to(t), bundle=bundle, as_of=as_of)
+        based = (
+            None if base is None else value(portfolio, base.up_to(t), bundle=bundle, as_of=as_of)
+        )
+        kept = [
+            name
+            for name in drawn.changes
+            if name in facts.changes and np.isfinite(facts.changes[name]).all()
+        ]
+        for name in kept:
+            found.append(
+                _return_cell(
+                    window, t, name, POSITION, [name], drawn, facts, based, _past(window, [name], t)
+                )
+            )
+        if kept:
+            found.append(
+                _return_cell(
+                    window,
+                    t,
+                    window.portfolio_id,
+                    PORTFOLIO,
+                    kept,
+                    drawn,
+                    facts,
+                    based,
+                    _past(window, kept, t),
+                )
+            )
+    return found
+
+
+def _return_cell(window, t, quantity, level, chosen, drawn, facts, based, past) -> Cell:
+    """One cell of a return: the chosen positions together on the forecast, the facts, the
+    base run and the past."""
+    has_base = based is not None and all(name in based.changes for name in chosen)
+    return Cell(
+        unit=window.id,
+        month=t,
+        quantity=quantity,
+        level=level,
+        fact=float(facts.returns(chosen)[0]),
+        draws=drawn.returns(chosen),
+        base=based.returns(chosen) if has_base else None,
+        historical=past if len(past) else None,
+        history_range=history_range(past),
+    )
+
+
+def _past(window: Window, chosen: list[str], t: int) -> np.ndarray:
+    """The returns of the chosen positions over the past windows of ``t`` months, the ones the
+    calculation date knows."""
+    found = window.past.returns(chosen)[:, t - 1]
+    return found[np.isfinite(found)]
+
+
 def rows(found: list[Cell], unit: str, half_of: Mapping[str, str]) -> list[dict]:
     """The scored cells as flat rows; ``unit`` names the key of the window id, ``half_of`` maps
     every window to its half.
@@ -183,6 +279,7 @@ def rows(found: list[Cell], unit: str, half_of: Mapping[str, str]) -> list[dict]
             "conditional_walk": None,
             "base": None,
             "naive": None,
+            "historical": None,
             "pit": pit(draws, cell.fact),
             "inside": bool(band[0] <= cell.fact <= band[2]),
             "width": float(band[2] - band[0]),
@@ -198,6 +295,7 @@ def rows(found: list[Cell], unit: str, half_of: Mapping[str, str]) -> list[dict]
             ("conditional_walk", cell.conditional),
             ("base", cell.base),
             ("naive", cell.naive),
+            ("historical", cell.historical),
         ):
             known = np.array([]) if column is None else finite_draws(column)
             if len(known):
@@ -259,3 +357,22 @@ def _driver_fact(window: Window, series, month: date, declared):
         return float(to_model(declared.transform, rows_[-1].value))
     except ValueError:
         return None
+
+
+def fell_out(
+    windows: list[Window],
+    found: list[Cell],
+    *,
+    refused: Mapping[str, str],
+    skipped: Mapping[str, str] | None = None,
+) -> dict:
+    """What a check could not judge, with the reasons: the windows refused or left out for too
+    little history, the variables a model left out as too short, the positions the engine could
+    not value and the cells without a finite draw."""
+    return {
+        "refused": dict(refused),
+        "skipped": dict(skipped or {}),
+        "left_out": {window.id: window.left_out for window in windows if window.left_out},
+        "excluded": {window.id: dict(window.excluded) for window in windows if window.excluded},
+        "non_finite": non_finite(found),
+    }

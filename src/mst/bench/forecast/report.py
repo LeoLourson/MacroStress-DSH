@@ -108,11 +108,5 @@ def markdown(card: dict) -> str:
                 + f" | {_value(peak.model) if peak else '-'} ({peak.horizon if peak else '-'} m)"
                 f" | {_value(es.model) if es else '-'} | {_value(path.model) if path else '-'} |"
             )
-    out = [r for r in rows if r.check.endswith("out of sample") and r.item == "all series"]
-    if out:
-        lines += ["", "## Macro out of sample", "", "| level | h | coverage | n | verdict |",
-                  "|---|---:|---:|---:|---|"]
-        for r in out:
-            lines.append(f"| {r.level} | {r.horizon} | {_value(r.model)} | {r.n} | {MARK[r.verdict]} |")
     lines.append("")
     return "\n".join(lines)

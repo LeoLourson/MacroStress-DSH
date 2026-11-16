@@ -10,7 +10,9 @@ the same way whatever the check:
   coverage of the band;
 - the same per half: the models are fitted on the tuning windows and judged on the validation
   ones, and the full table stays over every window;
-- per quantity, the ratios, the calibration and the sharpness.
+- per quantity, the ratios, the calibration and the sharpness;
+- with a portfolio, the Acerbi-Székely ``Z`` of its tail (``mst.metrics.es``): the loss is minus
+  the portfolio's return at the last month of every window.
 
 A relative score is the mean CRPS of the first forecast over the second on the same cells,
 pooled in logarithms with equal weights over the quantities of a level and the months
@@ -21,21 +23,26 @@ from collections.abc import Mapping, Sequence
 
 import numpy as np
 
+from . import es
 from .cells import BUCKET_EDGES, Cell, crps, finite_draws
+from .levels import PORTFOLIO
 from .quality import interval, relative
-from .sanity import check
+from .sanity import benchmark_of, check
 
 PAIRS = (
     ("model", "conditional_walk"),
     ("model", "walk"),
     ("base", "walk"),
+    ("model", "historical"),
+    ("base", "historical"),
     ("model", "base"),
     ("model", "naive"),
 )
-"""The forecast against the walk that knows the scenario's path, against the plain walk, the
-base run against the walk, the forecast against the base run (what the scenario adds) and, for
-drivers, against the naive forecast of a year earlier. A pair the rows do not carry is left out:
-the empty scenario has no base run apart from itself and fixes no path."""
+"""The forecast against the walk that knows the scenario's path, against the plain walk, for a
+return against the historical simulation, the base run against the same plain benchmarks, the
+forecast against the base run (what the scenario adds) and, for drivers, against the naive
+forecast of a year earlier. A pair the rows do not carry is left out: the empty scenario has no
+base run apart from itself and fixes no path, a series has no historical simulation."""
 HORIZONS = (1, 3, 6, 12)
 """The horizon months the calibration is reported at, beside the pool of them all."""
 REPETITIONS = 1000
@@ -59,14 +66,28 @@ def judge(
         if chosen:
             halves[half] = chosen
     levels = summary(rows, unit=unit, block=block, seed=seed, repetitions=repetitions)
+    ends: dict[str, Cell] = {}
+    for cell in found:
+        if cell.level == PORTFOLIO and cell.month >= ends.get(cell.unit, cell).month:
+            ends[cell.unit] = cell
+    tail = (
+        es.tail(
+            [(name, -ends[name].fact, -ends[name].draws) for name in sorted(ends)],
+            block=block,
+            seed=seed,
+            repetitions=repetitions,
+        )
+        if ends
+        else None
+    )
     return {
-        "sanity": check(rows, benchmark="walk"),
+        "sanity": check(rows),
         "levels": levels,
         "halves": {
             name: {
                 "units": sorted({str(row[unit]) for row in chosen}),
                 "cells": len(chosen),
-                "sanity": check(chosen, benchmark="walk")["admission"],
+                "sanity": check(chosen)["admission"],
                 "levels": summary(
                     chosen, unit=unit, block=block, seed=seed, repetitions=repetitions
                 ),
@@ -74,6 +95,7 @@ def judge(
             for name, chosen in halves.items()
         },
         "quantities": quantities(found, rows, levels),
+        "tail": tail,
     }
 
 
@@ -153,26 +175,27 @@ def quantities(found: list[Cell], rows: Rows, levels: Mapping[str, dict]) -> dic
 def monte_carlo(
     found: list[Cell], rows: Rows, *, unit: str, level: str, seed: int, repetitions: int
 ) -> dict:
-    """The Monte-Carlo interval of the forecast against the walk at ``level``.
+    """The Monte-Carlo interval of the forecast against the plain benchmark of ``level``.
 
     The cells of one calculation share the draws, so a repetition resamples one index vector
     per number of draws and applies it to every cell; the CRPS of the forecast and the relative
     score are recomputed. This measures the error of the finite number of paths, apart from the
     error of the sample of windows.
     """
+    benchmark = benchmark_of([row for row in rows if row["level"] == level])
     keyed = {
         (row[unit], row["month"], row["quantity"]): row
         for row in rows
-        if row["level"] == level and row["walk"] is not None
+        if row["level"] == level and benchmark is not None and row[benchmark] is not None
     }
     pairs = [
         (cell, keyed[key])
         for cell in found
         if (key := (cell.unit, cell.month, cell.quantity)) in keyed
     ]
-    point = relative([row for _, row in pairs], "model", "walk")["score"]
+    point = relative([row for _, row in pairs], "model", benchmark)["score"] if pairs else None
     if point is None:
-        return {"point": None, "interval": None}
+        return {"benchmark": benchmark, "point": None, "interval": None}
     rng = np.random.default_rng([seed, MC_STREAM])
     sizes = sorted({len(cell.draws) for cell, _ in pairs})
     logs = []
@@ -182,8 +205,8 @@ def monte_carlo(
             {**row, "model": crps(finite_draws(cell.draws[index[len(cell.draws)]]), cell.fact)}
             for cell, row in pairs
         ]
-        score = relative(resampled, "model", "walk")["score"]
+        score = relative(resampled, "model", benchmark)["score"]
         if score is not None:
             logs.append(np.log(score))
     low, high = np.exp(np.percentile(logs, [2.5, 97.5]))
-    return {"point": point, "interval": (float(low), float(high))}
+    return {"benchmark": benchmark, "point": point, "interval": (float(low), float(high))}

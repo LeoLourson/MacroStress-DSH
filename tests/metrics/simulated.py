@@ -291,3 +291,21 @@ def share_price(store, months: int = 60):
         "drv.share_price.sber",
         [Observation(month, float(5.0 + 0.01 * t), month, False) for t, month in enumerate(grid)],
     )
+
+
+def portfolio(folder, portfolio_id: str = "tail-test"):
+    """A stored portfolio of one share of the test driver, beside the series of ``folder``."""
+    from mst.portfolio import tool as portfolio_tool
+
+    portfolio_tool.save(
+        folder / "portfolios",
+        portfolio_id,
+        {
+            "name": "tail",
+            "base_currency": "RUB",
+            "positions": [
+                {"id": "sber", "type": "common_stock", "notional": 10.0, "codes": {"secid": "SBER"}}
+            ],
+        },
+    )
+    return portfolio_id

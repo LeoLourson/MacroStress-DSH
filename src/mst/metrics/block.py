@@ -1,11 +1,10 @@
 """The block bootstrap: an interval of a mean when neighbours are dependent.
 
-The rolling windows of the price check overlap, so their scores are not independent draws
-and the ordinary bootstrap understates the interval. A block bootstrap resamples whole
-blocks of consecutive dates instead of single rows: the dependence inside a block survives,
-and the interval reads the spread of the mean over the blocks. ``wild.py`` keeps the wild
-cluster bootstrap of the episode scores; this module keeps the block one — two tools, two
-names.
+The windows of neighbouring dates overlap, so their scores are not independent draws and the
+ordinary bootstrap understates the interval. A block bootstrap resamples whole blocks of
+consecutive windows instead of single rows: the dependence inside a block survives, and the
+interval reads the spread of the statistic over the blocks. A block of one window is the
+ordinary bootstrap of the episodes.
 """
 
 import numpy as np

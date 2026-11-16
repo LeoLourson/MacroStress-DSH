@@ -159,7 +159,13 @@ def test_the_details_file_holds_the_full_report(workspace, tmp_path):
     code, report = run_episodes(workspace, plan, tmp_path)
 
     assert code == 0
-    assert report["dropped"] == {"refused": {}, "left_out": {}, "non_finite": {}}
+    assert report["dropped"] == {
+        "refused": {},
+        "skipped": {},
+        "left_out": {},
+        "excluded": {},
+        "non_finite": {},
+    }
     assert len(report["episodes"]) == 2
     row = report["quantities"]["ru.key_rate"]
     assert row["scored"] > 0
@@ -313,7 +319,6 @@ def prepare(workspace, tmp_path, episodes):
         workspace["models"] / "backtest",
         KNOWN_ON,
         None,
-        None,
     )
     return plan, episode
 
@@ -393,7 +398,7 @@ def test_the_satellites_judge_the_drivers_with_their_own_base_run(workspace, tmp
     plan = plan_file(tmp_path, [("R1", "gl.brent"), ("R2", "ru.key_rate")])
     catalog = with_drivers(workspace, tmp_path)
 
-    code, report = run_episodes(workspace, plan, tmp_path, drivers=catalog, satellites=True)
+    code, report = run_episodes(workspace, plan, tmp_path, drivers=catalog)
 
     assert code == 0
     row = report["quantities"]["share_price:sber"]
@@ -428,7 +433,7 @@ def test_an_episode_the_satellite_estimation_cannot_serve_is_dropped_by_name(
     monkeypatch.setattr(models_pkg, "estimate_satellites", failing)
 
     code, report = run_episodes(
-        workspace, plan, tmp_path, name="late.json", drivers=catalog, satellites=True
+        workspace, plan, tmp_path, name="late.json", drivers=catalog
     )
 
     # The first episode is named and dropped; the check goes on with the second.
@@ -438,43 +443,34 @@ def test_an_episode_the_satellite_estimation_cannot_serve_is_dropped_by_name(
 
 
 def test_the_portfolio_tail_is_reported_with_its_horizon(workspace, tmp_path, capsys):
-    from mst.portfolio import tool as portfolio_tool
-
     plan = plan_file(tmp_path, [("R1", "gl.brent"), ("R2", "ru.key_rate")])
     catalog = with_drivers(workspace, tmp_path)
-    portfolio_tool.save(
-        tmp_path / "portfolios",
-        "tail-test",
-        {
-            "name": "tail",
-            "base_currency": "RUB",
-            "positions": [
-                {"id": "sber", "type": "common_stock", "notional": 10.0, "codes": {"secid": "SBER"}}
-            ],
-        },
-    )
+    simulated.portfolio(tmp_path)
 
-    _, report = run_episodes(
-        workspace, plan, tmp_path, drivers=catalog, satellites=True, portfolio="tail-test"
-    )
+    _, report = run_episodes(workspace, plan, tmp_path, drivers=catalog, portfolio="tail-test")
 
+    # The positions and the portfolio are levels like any other: judged against their own
+    # historical simulation and against the base run of the same models.
+    for level in ("position", "portfolio"):
+        assert {"model/historical", "model/base"} <= set(report["levels"][level]["pairs"])
+    assert report["quantities"]["sber"]["level"] == "position"
+    assert report["quantities"]["tail-test"]["level"] == "portfolio"
+    # The tail reads the portfolio's cell at the last month of every episode.
     tail = report["tail"]
-    assert tail["horizon"]["kind"] == "episode window"
-    assert tail["horizon"]["month"] == report["episodes"][0]["horizon"]
-    assert len(tail["episodes"]) + len(tail["dropped"]) == 2
-    assert "## Tail (Acerbi-Székely)" in capsys.readouterr().out
+    assert len(tail["windows"]) + len(tail["dropped"]) == 2
+    assert "## Episodes: tail of the portfolio (Acerbi-Székely)" in capsys.readouterr().out
 
 
 def test_an_unknown_portfolio_is_a_named_error(workspace, tmp_path):
     plan = plan_file(tmp_path, [("R1", "gl.brent"), ("R2", "ru.key_rate")])
 
     # Without the driver paths there is nothing to value the positions on.
-    with pytest.raises(ValueError, match="needs --satellites"):
+    with pytest.raises(ValueError, match="needs --drivers"):
         run_episodes(workspace, plan, tmp_path, portfolio="absent")
     catalog = with_drivers(workspace, tmp_path)
     with pytest.raises(ValueError, match="no portfolio 'absent'"):
         run_episodes(
-            workspace, plan, tmp_path, drivers=catalog, satellites=True, portfolio="absent"
+            workspace, plan, tmp_path, drivers=catalog, portfolio="absent"
         )
 
 
@@ -535,28 +531,6 @@ def test_the_decision_section_prints_the_steps(capsys):
     assert "**inconclusive** (step 4)" in out
     assert "half validation: 12 paired cells" in out
     assert "model/conditional_walk 0.900 [0.800, 1.000]" in out
-
-
-def test_the_tail_section_prints_the_horizon_and_the_dropped_episodes(capsys):
-    runner._print_tail(
-        {
-            "tail": {
-                "z": 0.4,
-                "interval": (0.1, 0.7),
-                "wild": (0.05, 0.75),
-                "wild_disagrees": False,
-                "trimmed_z": 0.3,
-                "trim": 0.01,
-                "episodes": [{"id": "R1"}],
-                "dropped": [{"id": "R2", "reason": "no fact at t = H"}],
-                "horizon": {"kind": "episode window", "month": 6, "note": ""},
-            }
-        }
-    )
-    out = capsys.readouterr().out
-    assert "## Tail (Acerbi-Székely)" in out
-    assert "month 6" in out
-    assert "dropped R2: no fact at t = H" in out
 
 
 class _ShortRate(simulated.FakeMacro):

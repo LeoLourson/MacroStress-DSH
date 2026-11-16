@@ -33,7 +33,7 @@ from . import levels, scores
 from .decision import verdict
 from .episodes import Episodes, calculation_date, load_episodes
 from .tables import print_decision, print_dropped, print_judgement
-from .windows import Window, attach_satellites, facts, open_window, simulate
+from .windows import MACRO_ONLY, Scope, Window, extend, facts, open_window, simulate
 
 UNIT = "date"
 """The key of a grid date in the rows."""
@@ -50,14 +50,15 @@ def rolling_report(
     plan: Episodes,
     known_on: date,
     inputs: Path | None = None,
-    drivers: Path | None = None,
+    scope: Scope = MACRO_ONLY,
     only: list[date] | None = None,
 ) -> dict:
     """The rolling block of a report: what fell out, the judgement of every level, the price.
 
-    ``drivers`` names the driver catalog: with it every date also estimates the satellite
-    bundle and the drivers are judged. ``only`` narrows the grid to these dates. The report is
-    empty when the plan names no rolling grid.
+    ``scope`` names the levels judged beyond the macro variables: with a driver catalog every
+    date also estimates the satellite bundle, with a portfolio the positions are valued too.
+    ``only`` narrows the grid to these dates. The report is empty when the plan names no rolling
+    grid.
     """
     if plan.rolling is None:
         return {}
@@ -79,8 +80,7 @@ def rolling_report(
                 known_on=known_on,
                 inputs=inputs,
             )
-            if drivers is not None:
-                attach_satellites(window, store, root, drivers)
+            extend(window, store, root, scope)
         except ValueError as error:
             short = _short_of_history(store, registry, calculation_date(when))
             (skipped if short else refused)[when.isoformat()] = str(error)
@@ -95,12 +95,7 @@ def rolling_report(
         "validation_from": plan.rolling.validation_from,
         "block_dates": block,
         "dates": len(windows),
-        "dropped": {
-            "skipped": skipped,
-            "refused": refused,
-            "left_out": {window.id: window.left_out for window in windows if window.left_out},
-            "non_finite": levels.non_finite(found),
-        },
+        "dropped": levels.fell_out(windows, found, refused=refused, skipped=skipped),
         **scores.judge(
             found, rows, unit=UNIT, block=block, seed=plan.seed, repetitions=scores.REPETITIONS
         ),
@@ -201,6 +196,7 @@ def run(
     against: Path | None = None,
     inputs: Path | None = None,
     drivers: Path | None = None,
+    portfolio: str | None = None,
     target_level: str = "macro",
 ) -> int:
     """The rolling check from the command line; 1 when the model refused a date, no date could
@@ -231,7 +227,7 @@ def run(
         plan=plan,
         known_on=as_of,
         inputs=inputs,
-        drivers=drivers,
+        scope=Scope.of(store, drivers, portfolio),
         only=only,
     )
     if against is not None and report["rows"]:

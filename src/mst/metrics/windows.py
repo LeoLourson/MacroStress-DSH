@@ -81,6 +81,16 @@ class Window:
     scenario itself, whose forecast is its own base."""
     driver_paths: object = None
     """The driver paths on ``macro_paths``."""
+    base_driver_paths: object = None
+    """The driver paths on the base run; None when the scenario is empty."""
+    portfolio_id: str | None = None
+    portfolio: object = None
+    """The portfolio whose positions are judged, when the check names one."""
+    past: object = None
+    """The portfolio held over the past windows the calculation date knows
+    (``mst.portfolio.history.Replay``): the historical simulation of its returns."""
+    excluded: dict[str, str] = field(default_factory=dict)
+    """The positions the engine could not value on the window's paths, with the reason."""
 
     @property
     def horizon(self) -> int:
@@ -159,9 +169,84 @@ def simulate(window: Window, registry: Registry, plan: Episodes) -> None:
             macro.model, ScenarioPlan(horizon=window.horizon), draws=plan.draws, seed=plan.seed
         )
     if window.bundle is not None:
-        window.driver_paths = window.bundle.simulate(
-            window.macro_paths, window.bundle.served(), (), seed=plan.seed
-        )
+        served = window.bundle.served()
+        window.driver_paths = window.bundle.simulate(window.macro_paths, served, (), seed=plan.seed)
+        if window.base_shadow is not None:
+            window.base_driver_paths = window.bundle.simulate(
+                observed(window.base_shadow, registry), served, (), seed=plan.seed
+            )
+
+
+@dataclass(frozen=True)
+class Scope:
+    """The levels a check judges beyond the macro variables."""
+
+    drivers: Path | None = None
+    """The driver catalog: the satellites are estimated on every window and their drivers
+    judged."""
+    portfolio_id: str | None = None
+    portfolio: object = None
+    """The portfolio whose positions and whole are judged; it needs the drivers."""
+
+    @classmethod
+    def of(cls, store: Path, drivers: Path | None, portfolio_id: str | None) -> "Scope":
+        """The scope of a check run on the workspace of ``store``, whose portfolios lie beside
+        its series."""
+        if portfolio_id is None:
+            return cls(drivers=drivers)
+        if drivers is None:
+            raise ValueError("--portfolio needs --drivers: the positions read the driver paths")
+        from mst.portfolio import tool as portfolio_tool
+
+        folder = Path(store).parent / "portfolios"
+        try:
+            portfolio = portfolio_tool.load(folder, portfolio_id)
+        except FileNotFoundError:
+            raise ValueError(
+                f"--portfolio {portfolio_id}: no portfolio {portfolio_id!r} in {folder}"
+            ) from None
+        return cls(drivers=drivers, portfolio_id=portfolio_id, portfolio=portfolio)
+
+
+MACRO_ONLY = Scope()
+"""The scope of a check of the macro variables alone."""
+
+
+def extend(window: Window, data: SeriesStore, root: Path, scope: Scope) -> None:
+    """The models of the levels the scope names, on the window: the satellites, then the
+    portfolio's history. A level that cannot be estimated voids the window with the reason."""
+    if scope.drivers is not None:
+        try:
+            attach_satellites(window, data, root, scope.drivers)
+        except ValueError as error:
+            raise ValueError(f"satellites: {error}") from error
+    if scope.portfolio is not None:
+        try:
+            attach_portfolio(window, scope.portfolio_id, scope.portfolio)
+        except ValueError as error:
+            raise ValueError(f"positions: {error}") from error
+
+
+def attach_portfolio(window: Window, portfolio_id: str, portfolio) -> None:
+    """The portfolio of the window and its history as the calculation date knows it.
+
+    The history reads the window's own macro panel and the driver series known on its
+    calculation date, so the benchmark of a position never sees the months it is judged on.
+    A position the models cannot value on that history voids the window with the reason.
+    """
+    from mst.portfolio.history import replay
+
+    if window.bundle is None:
+        raise ValueError("the positions are valued on the driver paths: the window has no bundle")
+    window.portfolio_id, window.portfolio = portfolio_id, portfolio
+    window.past = replay(
+        window.macro,
+        window.bundle,
+        portfolio,
+        window.store,
+        horizon=window.horizon,
+        as_of=window.as_of,
+    )
 
 
 def provenance() -> dict:

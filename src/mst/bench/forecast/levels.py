@@ -2,13 +2,15 @@
 
 These checks read one forecast made on today's data and the whole history behind it, so they
 say whether the forecast is as wide and as linked as the past, not whether it was right on
-any date; the out-of-sample check (``rolling``) answers that.
+any date; the check out of sample, ``python -m mst.metrics rolling``, answers that.
 """
 
 import numpy as np
 
+from mst.portfolio.history import Replay, driver_series, monthly
+
 from . import history
-from .pipeline import Forecast, Replay
+from .pipeline import Forecast
 from .rows import Row, distance, info, ratio
 
 SHARES = "share_price"
@@ -63,7 +65,7 @@ def share_rows(plan, satellites, forecast: Forecast, store, as_of) -> list[Row]:
     months = history.grid(history.from_index(history.month_index(months[0]) - 1), months[-1])
     past = {}
     for driver in shares:
-        found = history.monthly(store, history.driver_series(satellites.registry, driver), as_of)
+        found = monthly(store, driver_series(satellites.registry, driver), as_of)
         past[driver] = _log_driver(np.array([found.get(m, np.nan) for m in months]))
     rows = []
     for h in plan.horizons:

@@ -72,7 +72,9 @@ def test_estimate_and_backtest_become_tasks_on_the_models_resource(tmp_path):
     ).data
     try:
         assert answer["argv"][:4] == ["-m", "mst.metrics", "backtest", "bvar.sv"]
-        assert "--episodes" in answer["argv"] and "--drivers" in answer["argv"]
+        # The macro model is checked alone: the drivers and the positions are levels of their
+        # own, named on the command line when they are to be judged.
+        assert "--episodes" in answer["argv"] and "--drivers" not in answer["argv"]
         assert jobs.status(ws, answer["job"])["resource"] == "models"
     finally:
         jobs.cancel(ws, answer["job"])

@@ -58,16 +58,6 @@ def distance(level, check, item, horizon, model, history, n, tolerance, *, least
     return Row(level, check, item, horizon, model, history, n, "pass" if inside else "fail", rule)
 
 
-def inside(level, check, item, horizon, value, nominal, n, bounds, *, least=8) -> Row:
-    """``value`` inside ``bounds``; ``nominal`` is what a calibrated forecast gives."""
-    value = _number(value)
-    rule = f"{bounds[0]:g} <= value <= {bounds[1]:g}"
-    if value is None or n < least:
-        return Row(level, check, item, horizon, value, nominal, n, "short", rule)
-    found = bounds[0] <= value <= bounds[1]
-    return Row(level, check, item, horizon, value, nominal, n, "pass" if found else "fail", rule)
-
-
 def info(level, check, item, horizon, model, history, n) -> Row:
     return Row(level, check, item, horizon, _number(model), _number(history), n, "info")
 

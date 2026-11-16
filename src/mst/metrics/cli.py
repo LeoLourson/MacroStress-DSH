@@ -3,11 +3,11 @@
 ::
 
   python -m mst.metrics backtest [MODEL_ID] --as-of DATE --store DIR --models DIR --episodes FILE
-      [--drivers FILE] [--satellites] [--only ID ...] [--details FILE] [--against REPORT.json]
+      [--drivers FILE] [--only ID ...] [--details FILE] [--against REPORT.json]
       [--portfolio ID] [--mc-bootstrap] [--no-rolling] [--save]
   python -m mst.metrics rolling [MODEL_ID] --as-of DATE --store DIR --models DIR --episodes FILE
       [--dates YYYY-MM-DD ...] [--half tuning|validation] [--details FILE] [--against REPORT.json]
-      [--drivers FILE] [--target-level LEVEL]
+      [--drivers FILE] [--portfolio ID] [--target-level LEVEL]
 
 ``rolling`` judges the forecast itself: on a grid of dates nobody selected, the unconditional
 forecast of the model estimated on that date against the random walk, in relative CRPS, with
@@ -57,8 +57,7 @@ def main(argv: list[str] | None = None) -> int:
     check.add_argument("--store", type=Path, required=True)
     check.add_argument("--models", type=Path, required=True)
     check.add_argument("--episodes", type=Path, required=True, help=PLAN)
-    check.add_argument("--drivers", type=Path, help="the driver catalog, with --satellites")
-    check.add_argument("--satellites", action="store_true", help="score the drivers too")
+    check.add_argument("--drivers", type=Path, help="the driver catalog: judge the drivers too")
     check.add_argument("--only", nargs="+", default=[], help="episode ids; all by default")
     check.add_argument("--details", type=Path, help="write the full report as JSON here")
     check.add_argument(
@@ -68,7 +67,7 @@ def main(argv: list[str] | None = None) -> int:
     )
     check.add_argument(
         "--portfolio",
-        help="a stored portfolio id: the Acerbi-Székely tail section (needs --satellites)",
+        help="a stored portfolio id: judge its positions and its tail (needs --drivers)",
     )
     check.add_argument(
         "--mc-bootstrap",
@@ -112,6 +111,10 @@ def main(argv: list[str] | None = None) -> int:
     )
     grid.add_argument("--drivers", type=Path, help="the driver catalog: judge the drivers too")
     grid.add_argument(
+        "--portfolio",
+        help="a stored portfolio id: judge its positions and its tail (needs --drivers)",
+    )
+    grid.add_argument(
         "--target-level",
         default="macro",
         help="the level the decision reads (macro by default)",
@@ -131,6 +134,7 @@ def main(argv: list[str] | None = None) -> int:
             against=args.against,
             inputs=args.inputs,
             drivers=args.drivers,
+            portfolio=args.portfolio,
             target_level=args.target_level,
         )
     return run(
@@ -140,7 +144,6 @@ def main(argv: list[str] | None = None) -> int:
         as_of=args.as_of,
         macro_id=args.model_id,
         drivers=args.drivers,
-        satellites=args.satellites,
         only=args.only,
         details=args.details,
         against=args.against,

@@ -27,39 +27,14 @@ class Gates(_Strict):
     """The share of the macro variables of one horizon whose width must pass."""
     correlation: float = Field(default=0.15, gt=0)
     """The largest distance of the mean pair correlation of the shares from history."""
-    coverage: tuple[float, float] = (0.80, 0.97)
-    """The share of facts inside the band out of sample, for a band of ``band``."""
 
     @model_validator(mode="after")
     def ordered(self):
-        for name in ("width", "coverage"):
+        for name in ("width",):
             low, high = getattr(self, name)
             if not 0 < low < high:
                 raise ValueError(f"{name} needs 0 < low < high")
         return self
-
-
-class Rolling(_Strict):
-    """The dates the models are estimated again on what was known then."""
-
-    first: date
-    last: date
-    step_months: int = Field(default=3, ge=1, strict=True)
-    draws: int = Field(default=1000, ge=100, strict=True)
-
-    @model_validator(mode="after")
-    def ordered(self):
-        if self.first > self.last:
-            raise ValueError("rolling.first must not follow rolling.last")
-        return self
-
-    def origins(self) -> list[date]:
-        found, month = [], self.first
-        while month <= self.last:
-            found.append(month)
-            index = month.year * 12 + month.month - 1 + self.step_months
-            month = date(index // 12, index % 12 + 1, 1)
-        return found
 
 
 class Events(_Strict):
@@ -84,7 +59,6 @@ class Plan(_Strict):
     seed: int = Field(default=20261115, ge=0, strict=True)
     splices: list[Splice] = []
     gates: Gates = Gates()
-    rolling: Rolling | None = None
     events: Events | None = None
 
     @model_validator(mode="after")

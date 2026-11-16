@@ -1,12 +1,13 @@
 """The check sets of ``bench/`` and their results, kept beside each set in its ``results/``.
 
-Two groups of sets measure different things. The forecast set (``forecast``) checks the
-numbers of the models against history at every level: the macro variables, the drivers of the
-portfolio and the portfolio itself, in sample and out of sample, with the gates its plan fixes.
+Two groups of sets measure different things. The model backtest (``model-backtest``) checks
+a model of any level on history, on a grid of dates and on named episodes: its plan lies in
+``bench/`` and its command is ``python -m mst.metrics``. The forecast set (``forecast``) reads
+today's forecast of a portfolio against the whole history behind it — the width of every level,
+the links of the shares, the scale of the portfolio's tail — and runs the scenarios of its plan.
 The agent sets check the work of the agent: the corpus search (``corpus-search``, scored by
 ``python -m mst.corpus eval``), the scenario built from an event (``scenario-from-corpus``) and
-the context of an expert interview (``elicitation-context``). The model backtest of episodes
-(``model-backtest``) keeps its plan in ``bench/`` and its command in ``mst.metrics``.
+the context of an expert interview (``elicitation-context``).
 
 ::
 

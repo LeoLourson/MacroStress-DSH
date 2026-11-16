@@ -17,7 +17,8 @@ run is what the scenario adds — reported per episode and split by who formalis
 The quality of the forecast itself is judged on the rolling grid (``mst.metrics.rolling``), on
 dates nobody selected, which ``run`` adds to the report unless told not to. Beside the scores
 an episode reports the probability its conditions have under the base run: a scenario resting
-on a rare tail is marked. ``--portfolio`` adds the Acerbi-Székely tail section.
+on a rare tail is marked. ``--drivers`` adds the drivers, ``--portfolio`` the positions and
+the portfolio, with the Acerbi-Székely tail of its losses.
 """
 
 import contextlib
@@ -40,7 +41,7 @@ from .decision import verdict
 from .episodes import Episodes, load_episodes
 from .quality import relative
 from .tables import number, print_decision, print_dropped, print_judgement
-from .windows import Window, attach_satellites, file_digest, open_window, provenance, simulate
+from .windows import Scope, Window, extend, file_digest, open_window, provenance, simulate
 
 UNIT = "episode"
 """The key of an episode in the rows."""
@@ -56,7 +57,6 @@ def run(
     as_of: date,
     macro_id: str | None = None,
     drivers: Path | None = None,
-    satellites: bool = False,
     only: list[str] = (),
     details: Path | None = None,
     against: Path | None = None,
@@ -71,11 +71,11 @@ def run(
 
     ``episodes`` is the plan file, ``bench/model-backtest/episodes.toml`` in the repository.
     ``as_of`` is the date the facts are read on; each episode's models are estimated on the day
-    before it starts, whatever ``as_of`` is. With ``satellites`` the drivers of the catalog
-    ``drivers`` are judged too, on the bundle estimated on each window's macro version, on the
-    episodes and on the grid. ``against`` names the ``--details`` file of the incumbent version,
-    checked on the same plan. ``portfolio`` names a stored portfolio for the tail section;
-    ``mc_bootstrap`` adds the Monte-Carlo interval of the forecast against the walk;
+    before it starts, whatever ``as_of`` is. With the driver catalog ``drivers`` the drivers
+    are judged too, on the bundle estimated on each window's macro version, on the episodes and
+    on the grid; ``portfolio`` names a stored portfolio whose positions and whole are judged as
+    well. ``against`` names the ``--details`` file of the incumbent version, checked on the same
+    plan. ``mc_bootstrap`` adds the Monte-Carlo interval of the forecast against the benchmark;
     ``target_level`` is the level the decision and the usefulness read. ``rolling`` off leaves
     out the grid, which ``python -m mst.metrics rolling`` also runs. ``inputs`` is the folder of
     the answers a model with declared inputs reads. ``save`` keeps the report without its cells
@@ -87,25 +87,20 @@ def run(
 
     if save and only:
         raise ValueError("--save keeps the result of the whole plan: leave out --only")
-    if satellites and drivers is None:
-        raise ValueError("--satellites needs --drivers, the driver catalog file")
-    if portfolio is not None and not satellites:
-        raise ValueError(
-            "--portfolio needs --satellites: the tail values the positions on the driver paths"
-        )
+    scope = Scope.of(store, drivers, portfolio)
     plan = load_episodes(episodes)
     plugin = models_pkg.selected(macro_id)
     registry = load_registry()
     data = SeriesStore(store)
     root = Path(models) / "backtest"
-    catalog = drivers if satellites else None
     refused: dict[str, str] = {}
     windows: list[Window] = []
     for check in plan.episodes:
         if only and check.id not in only:
             continue
         try:
-            window = _episode(plugin, data, registry, plan, check, root, as_of, inputs, catalog)
+            window = _episode(plugin, data, registry, plan, check, root, as_of, inputs)
+            extend(window, data, root, scope)
         except ValueError as error:
             refused[check.id] = str(error)
             continue
@@ -124,8 +119,6 @@ def run(
     )
     if against is not None:
         report["decision"] = _decision_block(report, against, plan, target_level)
-    if portfolio is not None:
-        report["tail"] = _tail_section(windows, plan, portfolio, store=store, known_on=as_of)
     if plan.rolling is not None and rolling:
         from .rolling import rolling_report
 
@@ -137,7 +130,7 @@ def run(
             plan=plan,
             known_on=as_of,
             inputs=inputs,
-            drivers=catalog,
+            scope=scope,
         )
     tables = io.StringIO()
     with contextlib.redirect_stdout(tables):
@@ -164,7 +157,6 @@ def _episode(
     root: Path,
     known_on: date,
     inputs: Path | None,
-    catalog: Path | None,
 ) -> Window:
     """The window of an episode with its scenario built from the facts.
 
@@ -212,11 +204,6 @@ def _episode(
     window.observations = list(check.observations)
     window.interventions = list(check.interventions)
     window.source = check.source
-    if catalog is not None:
-        try:
-            attach_satellites(window, data, root, catalog)
-        except ValueError as error:
-            raise ValueError(f"satellites: {error}") from error
     return window
 
 
@@ -280,11 +267,7 @@ def _report(
     )
     gate = _constraint_gate(shares)
     report = {
-        "dropped": {
-            "refused": dict(refused),
-            "left_out": {window.id: window.left_out for window in windows if window.left_out},
-            "non_finite": levels.non_finite(found),
-        },
+        "dropped": levels.fell_out(windows, found, refused=refused),
         **judgement,
         "constraint_gate": gate,
         "admission_failed": judgement["sanity"]["admission"]["failed"] or gate["failed"],
@@ -398,58 +381,6 @@ def _decision_block(report: dict, against: Path, plan: Episodes, target_level: s
     )
 
 
-def _tail_section(
-    windows: list[Window], plan: Episodes, portfolio_id: str, *, store: Path, known_on: date
-) -> dict:
-    """The Acerbi-Székely section: the portfolio tail backtest over the episodes.
-
-    The conditional forecast of every episode valued through the engine gives the predictive
-    loss distribution; the realized loss comes from the portfolio value on the facts at both
-    ends of the window. An episode without the facts of its window or with a position the engine
-    could not calculate is dropped with its reason. Admission does not read ``Z``.
-    """
-    from mst.portfolio import tool as portfolio_tool
-
-    from .es import conditional_paths, realized_paths, tail_section
-
-    # The portfolios live beside the store, in the workspace the run was pointed at.
-    portfolios_dir = Path(store).parent / "portfolios"
-    try:
-        portfolio = portfolio_tool.load(portfolios_dir, portfolio_id)
-    except FileNotFoundError:
-        raise ValueError(
-            f"--portfolio {portfolio_id}: no portfolio {portfolio_id!r} in {portfolios_dir}"
-        ) from None
-    rows = []
-    for window in windows:
-        realized, missing = realized_paths(
-            window.store,
-            as_of=window.as_of,
-            known_on=known_on,
-            months=window.months,
-            panel=window.panel,
-            realized=window.realized,
-            bundle=window.bundle,
-        )
-        rows.append(
-            {
-                "id": window.id,
-                "as_of": window.as_of,
-                "known_on": known_on,
-                "horizon": window.horizon,
-                "months": window.months,
-                "paths": conditional_paths(
-                    window.macro_paths, window.driver_paths, window.bundle, seed=plan.seed
-                ),
-                "realized": realized,
-                "realized_missing": missing,
-                "drivers": window.bundle.registry,
-                "served": window.bundle.served(),
-            }
-        )
-    return tail_section(rows, portfolio, seed=plan.seed)
-
-
 def _meta(
     windows: list[Window],
     plan: Episodes,
@@ -512,8 +443,6 @@ def print_report(report: dict) -> None:
         )
     if report.get("decision"):
         print_decision(report["decision"])
-    if report.get("tail"):
-        _print_tail(report)
     if report.get("rolling"):
         from .rolling import print_rolling
 
@@ -569,30 +498,6 @@ def _print_episodes(report: dict) -> None:
             f"| {', '.join(row['observations']) or '-'} | {', '.join(row['interventions']) or '-'} "
             f"| {number(ratios.get(row['id']))} | {worst} |"
         )
-
-
-def _print_tail(report: dict) -> None:
-    """The Acerbi-Székely ``Z``, its intervals, the trimming and the episodes left out."""
-    tail = report["tail"]
-    horizon = tail.get("horizon", {})
-    print("\n## Tail (Acerbi-Székely)\n")
-    print(f"- horizon: {horizon.get('kind', 'episode window')}, month {horizon.get('month', '-')}")
-    interval = tail.get("interval") or (None, None)
-    wild = tail.get("wild") or (None, None)
-    print(
-        f"- Z {number(tail.get('z'))}; episode interval {number(interval[0])} .. "
-        f"{number(interval[1])}; wild {number(wild[0])} .. {number(wild[1])}; "
-        f"wild disagrees {tail.get('wild_disagrees')}"
-    )
-    print(
-        f"- trimmed Z with {tail.get('trim')} of the heaviest draws dropped: "
-        f"{number(tail.get('trimmed_z'))}"
-    )
-    print(
-        f"- episodes judged {len(tail.get('episodes', []))}, dropped {len(tail.get('dropped', []))}"
-    )
-    for dropped in tail.get("dropped", []):
-        print(f"- dropped {dropped['id']}: {dropped['reason']}")
 
 
 def compact(report: dict) -> dict:

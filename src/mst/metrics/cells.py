@@ -22,7 +22,6 @@ only once calibration passes.
 scenario reads it as the tolerance of a point it fixes (``mst.scenario.build``).
 """
 
-from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 
 import numpy as np
@@ -31,8 +30,6 @@ BUCKETS = (5.0, 50.0, 95.0)
 """The quantile edges of the calibration band, in percent."""
 BUCKET_EDGES = (0.05, 0.50, 0.95)
 """The same edges as shares, where the probability integral transform falls."""
-BUCKET_SHARES = (0.05, 0.45, 0.45, 0.05)
-"""Where a calibrated forecast puts the facts: below p5, p5..p50, p50..p95, above p95."""
 
 
 @dataclass(frozen=True)
@@ -59,6 +56,9 @@ class Cell:
     """(R,) the unconstrained run of the model, the second comparison of the scheme."""
     conditional: np.ndarray | None = None
     """(R,) the walk that knows the path the scenario fixes: the like-for-like benchmark."""
+    historical: np.ndarray | None = None
+    """The historical simulation of a return: its values over the past windows of the same
+    length the calculation date knows. The benchmark of a position and of the portfolio."""
     history_range: float = float("nan")
     """The range of the quantity's history known at the same date; the width rule reads it."""
     domain: tuple[float, float] | None = None
@@ -129,37 +129,3 @@ def history_range(history: np.ndarray) -> float:
     y = np.asarray(history, dtype=float)
     known = y[np.isfinite(y)]
     return float(known.max() - known.min()) if len(known) else float("nan")
-
-
-def bootstrap(
-    samples: Mapping[str, Sequence[float]], repetitions: int = 1000, seed: int = 0
-) -> tuple[float, float]:
-    """The 95% interval of the mean over cells, resampling the episodes with replacement.
-
-    ``samples`` maps an episode to the per-cell values it contributes. The resampled statistic
-    is the same cell-weighted mean the report shows, not the mean of the episode means: the
-    cells of one episode are dependent, so the episodes are the resampling unit, while the
-    weights stay those of the report.
-    """
-    groups = []
-    for values in samples.values():
-        known = np.asarray(values, dtype=float)
-        known = known[np.isfinite(known)]
-        if len(known):
-            groups.append(known)
-    if not groups:
-        return float("nan"), float("nan")
-    totals = np.array([group.sum() for group in groups])
-    sizes = np.array([len(group) for group in groups], dtype=float)
-    rng = np.random.default_rng(seed)
-    drawn = rng.integers(0, len(groups), size=(repetitions, len(groups)))
-    counts = np.stack(
-        [
-            (drawn == column).sum(axis=1).astype(float)
-            for column in range(len(groups))
-        ],
-        axis=1,
-    )
-    means = (counts * totals).sum(axis=1) / (counts * sizes).sum(axis=1)
-    low, high = np.percentile(means, [2.5, 97.5])
-    return float(low), float(high)

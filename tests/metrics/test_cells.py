@@ -10,7 +10,6 @@ from mst.metrics.baselines import (
     random_walk,
 )
 from mst.metrics.cells import (
-    bootstrap,
     crps,
     finite_draws,
     history_range,
@@ -72,22 +71,6 @@ def test_history_range_ignores_the_gaps():
 
 def test_finite_draws_drops_the_non_finite_values():
     assert finite_draws(np.array([1.0, np.nan, np.inf, 2.0])).tolist() == [1.0, 2.0]
-
-
-def test_bootstrap_resamples_the_same_cell_weighted_statistic():
-    # One cell in e1 and ten in each of e2..e4: the report shows 38/31 = 1.2258, while the mean
-    # of the episode means is 2.75. The interval must be the one of the reported statistic.
-    samples = {"e1": [8.0], "e2": [1.0] * 10, "e3": [1.0] * 10, "e4": [1.0] * 10}
-    low, high = bootstrap(samples, repetitions=2000, seed=3)
-    assert low < 38 / 31 < high
-    assert high < 2.75
-
-
-def test_bootstrap_with_balanced_clusters_contains_the_mean():
-    low, high = bootstrap({"e1": [1.0, 3.0], "e2": [2.0, 4.0]}, repetitions=2000, seed=3)
-    assert low < 2.5 < high
-    empty = bootstrap({}, repetitions=10, seed=0)
-    assert np.isnan(empty[0]) and np.isnan(empty[1])
 
 
 def test_band_problems_name_the_rule_they_break():

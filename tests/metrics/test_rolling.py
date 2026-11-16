@@ -20,6 +20,7 @@ from mst.metrics.backtest import jsonable
 from mst.metrics.block import block_interval
 from mst.metrics.episodes import load_episodes
 from mst.metrics.rolling import rolling_decision, rolling_report
+from mst.metrics.windows import Scope
 from mst.model_sdk.contracts import MacroSimulation
 
 from . import simulated
@@ -154,6 +155,7 @@ def report_of(
     validation_from=None,
     only=None,
     drivers=False,
+    portfolio=False,
 ):
     """The rolling report of the fake macro on the simulated store."""
     tmp_path.mkdir(parents=True, exist_ok=True)
@@ -161,9 +163,10 @@ def report_of(
     macro = macro or WalkMacro()
     simulated.install(monkeypatch, macro)
     catalog = None
-    if drivers:
+    if drivers or portfolio:
         simulated.share_price(store, months=months)
         catalog = simulated.catalog(tmp_path)
+    held = simulated.portfolio(tmp_path) if portfolio else None
     file = plan_file(tmp_path, step=step, events=events, validation_from=validation_from)
     return rolling_report(
         plugin=macro,
@@ -172,7 +175,7 @@ def report_of(
         root=tmp_path / "models",
         plan=load_episodes(file),
         known_on=KNOWN_ON,
-        drivers=catalog,
+        scope=Scope.of(store.root, catalog, held),
         only=only,
     )
 
@@ -281,6 +284,15 @@ def test_the_drivers_are_judged_on_the_grid_as_on_the_episodes(tmp_path, monkeyp
     entries = {entry["quantity"]: entry for entry in found["sanity"]["quantities"]}
     assert entries["share_price:sber"]["level"] == "driver/share_price"
     assert found["quantities"]["share_price:sber"]["scored"] == driver["cells"]
+
+
+def test_the_positions_and_the_tail_are_judged_on_the_grid(tmp_path, monkeypatch):
+    found = report_of(tmp_path, monkeypatch, portfolio=True, months=72)
+
+    for level in ("position", "portfolio"):
+        assert set(found["levels"][level]["pairs"]) == {"model/historical"}
+    assert found["tail"]["z"] is not None
+    assert len(found["tail"]["windows"]) == found["dates"] - len(found["tail"]["dropped"])
 
 
 def test_the_grid_can_be_narrowed_to_some_dates(tmp_path, monkeypatch):

@@ -1,14 +1,14 @@
-"""The quality metrics: cells, scores, admission and episodes.
+"""The check of a model of any level on history: one procedure for every plugin.
 
-The backtest judges a version on historical episodes: every cell (episode, month, quantity)
-compares the conditional forecast with the fact, and the report — CRPS normalised by the
-typical movement known at the episode's calculation date, calibration, sharpness, coverage, the
-admission rules pooled per rule, the random-walk and base-run comparisons, and the bootstrap
-intervals — is given per quantity. On the same cell rows the report gives the equal-weight
-aggregate per level and horizon (with the tuning/validation halves beside it), the
-usefulness of the scenario split by the manual/llm mark, the wild cluster bootstrap of every
-few-cluster interval, the four-step 2-SE decision behind ``--against``, the Monte-Carlo interval
-behind ``--mc-bootstrap`` and, behind ``--portfolio``, the Acerbi-Székely tail of the
-portfolio's losses. The episode definitions live in ``episodes.toml``; the runner is
-``backtest.py`` and the command is ``python -m mst.metrics``.
+A check is a set of windows (``windows``): a calculation date, the months after it, a scenario
+and the facts. The rolling grid (``rolling``) opens a window on every date of the plan with the
+empty scenario; the episodes (``backtest``) open one before every named event with the scenario
+of what happened. On every window the models of every level are estimated on the data known
+then — the macro model, the satellites with ``--drivers``, the position models with
+``--portfolio`` — and the cells of every level (``levels``) hold the fact, the forecast and its
+benchmarks. The same judgement reads both checks (``scores``): what fell out first, then the
+sanity of every quantity (``sanity``), then the relative CRPS per level with its interval, the
+halves and the quantities; the decision between two versions (``decision``) reads their cells;
+the tail of the portfolio is the Acerbi-Székely ``Z`` of its cells (``es``). The command is
+``python -m mst.metrics``.
 """

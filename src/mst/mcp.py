@@ -1452,8 +1452,6 @@ def _backtest_argv(
         str(ws.models),
         "--episodes",
         str(EPISODE_PLAN),
-        "--drivers",
-        str(ws.drivers / "catalog.json"),
         "--inputs",
         str(ws.elicitation),
     ]

@@ -35,7 +35,7 @@ def print_dropped(dropped: Mapping, *, judged: int, unit: str) -> None:
     ``skipped`` windows have too little history for any model; ``refused`` ones had enough,
     and the model or the scenario could not be built on them — the scores never cover them.
     """
-    refused, skipped = dropped["refused"], dropped.get("skipped", {})
+    refused, skipped = dropped["refused"], dropped["skipped"]
     print(f"{judged} of {judged + len(refused) + len(skipped)} {unit} judged.")
     if skipped:
         print(f"\nLeft out, too little history for any model: {len(skipped)}\n")
@@ -55,6 +55,14 @@ def print_dropped(dropped: Mapping, *, judged: int, unit: str) -> None:
         print("\nVariables the model left out as too short, their cells unscored:\n")
         for (variable, reason), names in sorted(grouped.items()):
             print(f"- {variable} in {', '.join(sorted(names))}: {reason}")
+    if dropped["excluded"]:
+        grouped = {}
+        for name, positions in dropped["excluded"].items():
+            for position, reason in positions.items():
+                grouped.setdefault((position, reason), []).append(name)
+        print("\nPositions the engine could not value, their cells unscored:\n")
+        for (position, reason), names in sorted(grouped.items()):
+            print(f"- {position} in {', '.join(sorted(names))}: {reason}")
     if dropped["non_finite"]:
         print("\nCells whose draws are all non-finite, left out:\n")
         for quantity, count in dropped["non_finite"].items():
@@ -99,21 +107,30 @@ def print_judgement(found: Mapping, *, title: str, reference_calibration: bool) 
             f"| {level} | {_shares(entry['calibration'])} | {by_month} | {entry['coverage']:.3f} |"
         )
     print(f"\n## {title}: halves\n")
-    print(
-        "| half | windows | cells | level | model/walk | model/conditional_walk | model/base "
-        "| admission |"
-    )
-    print("|---|---:|---:|---|---:|---:|---:|---|")
+    print(f"| half | windows | cells | level | {' | '.join(PAIR_NAMES)} | admission |")
+    print(f"|---|---:|---:|---|{'---:|' * len(PAIR_NAMES)}---|")
     for name, half in found["halves"].items():
         admitted = "fails" if half["sanity"]["failed"] else "passes"
         for level, entry in half["levels"].items():
-            pairs = entry["pairs"]
-            print(
-                f"| {name} | {len(half['units'])} | {half['cells']} | {level} "
-                f"| {number(pairs.get('model/walk', {}).get('score'))} "
-                f"| {number(pairs.get('model/conditional_walk', {}).get('score'))} "
-                f"| {number(pairs.get('model/base', {}).get('score'))} | {admitted} |"
+            scores = " | ".join(
+                number(entry["pairs"].get(pair, {}).get("score")) for pair in PAIR_NAMES
             )
+            print(
+                f"| {name} | {len(half['units'])} | {half['cells']} | {level} | {scores} "
+                f"| {admitted} |"
+            )
+    tail = found.get("tail")
+    if tail is not None:
+        print(f"\n## {title}: tail of the portfolio (Acerbi-Székely)\n")
+        low, high = tail["interval"] or (None, None)
+        print(
+            f"Z {number(tail['z'])}, 95 % interval {number(low)} .. {number(high)}, over "
+            f"{len(tail['windows'])} windows; with the heaviest {tail.get('trim', 0.01):.0%} of "
+            f"the predictive draws dropped {number(tail['trimmed_z'])}. Zero for a calibrated "
+            "tail, above zero when the forecast understates the losses."
+        )
+        for item in tail["dropped"]:
+            print(f"- dropped {item['id']}: {item['reason']}")
     print(f"\n## {title}: quantities\n")
     print(
         f"| quantity | level | scored | constrained | {' | '.join(PAIR_NAMES)} "
@@ -157,9 +174,10 @@ def _print_sanity(found: Mapping) -> None:
     admission = found["admission"]
     print(
         "\n| level | quantity | cells | band outside domain | band wider than history "
-        "| band / history range | toward the fact | model / walk | level without it |"
+        "| band / history range | toward the fact | benchmark | model / benchmark "
+        "| level without it |"
     )
-    print("|---|---|---:|---:|---:|---:|---:|---:|---:|")
+    print("|---|---|---:|---:|---:|---:|---:|---|---:|---:|")
     for entry in found["quantities"]:
         direction = entry["direction"]
         toward = "-" if direction is None else number(direction["toward"])
@@ -168,7 +186,7 @@ def _print_sanity(found: Mapping) -> None:
             f"| {entry['level']} | {entry['quantity']} | {entry['cells']} "
             f"| {marks[DOMAIN]}{entry['shares'][DOMAIN]:.3f}{marks[DOMAIN]} "
             f"| {marks[WIDTH]}{entry['shares'][WIDTH]:.3f}{marks[WIDTH]} "
-            f"| {number(entry['width_to_range'])} | {toward} "
+            f"| {number(entry['width_to_range'])} | {toward} | {entry['benchmark'] or '-'} "
             f"| {number(entry['score'])} | {number(entry['without'])} |"
         )
     failing = [

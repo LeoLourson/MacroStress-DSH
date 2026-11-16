@@ -7,10 +7,10 @@ import numpy as np
 import pytest
 from numpy.testing import assert_allclose
 
-from mst.bench.forecast import history, load_plan, rolling
-from mst.bench.forecast.pipeline import Replay
+from mst.bench.forecast import history, load_plan
 from mst.bench.forecast.report import gates
-from mst.bench.forecast.rows import distance, inside, ratio, share_gate
+from mst.bench.forecast.rows import distance, ratio, share_gate
+from mst.portfolio.history import Replay
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -51,7 +51,6 @@ def test_a_ratio_passes_inside_its_bounds_and_is_short_on_few_windows():
     assert ratio("macro", "width", "x", 12, 1.5, 1.0, 50, (0.75, 1.4)).verdict == "fail"
     assert ratio("macro", "width", "x", 12, 1.0, 1.0, 3, (0.75, 1.4)).verdict == "short"
     assert distance("shares", "c", "m", 12, 0.3, 0.5, 40, 0.15).verdict == "fail"
-    assert inside("portfolio", "c", "r", 12, 0.9, 0.9, 30, (0.8, 0.97)).verdict == "pass"
 
 
 def test_a_share_gate_counts_only_judged_rows():
@@ -79,74 +78,9 @@ def test_replay_sums_the_observed_positions_of_a_window():
     assert found.window(date(2020, 2, 1)) == 1
 
 
-def test_reduced_catalog_keeps_the_objects_above_and_their_drivers():
-    catalog = {
-        "updated": "2026-10-29",
-        "quantities": {
-            "share_price": {
-                "drivers": ["oil", "lkoh", "gazp", "sber", "banks"],
-                "objects": [
-                    {"id": "shares"},
-                    {"id": "oil", "parent": "shares"},
-                    {"id": "banks", "parent": "shares"},
-                    {"id": "lkoh", "parent": "oil"},
-                    {"id": "gazp", "parent": "oil"},
-                    {"id": "sber", "parent": "banks"},
-                ],
-                "sources": {k: {} for k in ("oil", "lkoh", "gazp", "sber", "banks")},
-            },
-            "bond_spread": {"drivers": ["x"], "objects": [{"id": "x"}], "sources": {"x": {}}},
-        },
-    }
-    found = rolling.reduced_catalog(catalog, ["share_price:lkoh"])
-    part = found["quantities"]["share_price"]
-    assert set(found["quantities"]) == {"share_price"}
-    assert part["drivers"] == ["oil", "lkoh"]
-    assert [item["id"] for item in part["objects"]] == ["shares", "oil", "lkoh"]
-    assert set(part["sources"]) == {"oil", "lkoh"}
-
-
-def test_the_forecast_of_a_month_is_made_mid_next_month():
-    assert rolling.as_of_of(date(2025, 12, 1)) == date(2026, 1, 15)
-
-
-def test_the_tail_statistic_is_zero_when_the_losses_match_the_forecast():
-    rng = np.random.default_rng(3)
-    sample = rng.normal(0, 10, 4000)
-    pairs = [(rng.normal(0, 10), sample) for _ in range(4000)]
-    assert abs(rolling._acerbi(pairs)) < 0.15
-
-
-def test_the_crps_of_an_empirical_sample_matches_the_normal_formula():
-    sample = np.random.default_rng(5).normal(0, 1, 200000)
-    # CRPS of N(0, 1) at 0 is 2 phi(0) - 1 / sqrt(pi).
-    expected = 2 / np.sqrt(2 * np.pi) - 1 / np.sqrt(np.pi)
-    assert rolling._crps(sample, 0.0) == pytest.approx(expected, abs=0.003)
-
-
 def test_the_plan_of_the_set_loads_and_every_gate_names_its_horizon():
     plan = load_plan(ROOT / "bench" / "forecast" / "plan.toml")
     assert plan.horizon == 12
     assert plan.quantiles == pytest.approx((0.05, 0.95))
-    assert plan.rolling.origins()[-1] <= date(2025, 9, 1)
     rows = [ratio("macro", "width", "x", h, 1.0, 1.0, 50, plan.gates.width) for h in plan.horizons]
     assert [g["gate"] for g in gates(plan, rows)] == [f"macro width, {h} m" for h in plan.horizons]
-
-
-def test_a_driver_listed_later_is_not_in_the_catalog_of_an_earlier_date():
-    class Store:
-        def as_of(self, series, day):
-            if series in ("drv.share_price.it", "drv.bond_spread.x") and day < date(2020, 1, 1):
-                return ["value"] * (rolling.LEAST_MONTHS - 1)
-            return ["value"] * rolling.LEAST_MONTHS
-
-    catalog = {"quantities": {
-        "share_price": {"drivers": ["oil", "it"], "objects": [], "sources": {}},
-        "bond_spread": {"drivers": ["x"], "objects": [], "sources": {}},
-    }}
-    early = rolling.known_catalog(catalog, Store(), date(2017, 2, 15))
-    late = rolling.known_catalog(catalog, Store(), date(2021, 2, 15))
-    assert early["quantities"] == {"share_price": {"drivers": ["oil"], "objects": [],
-                                                   "sources": {}}}
-    assert late["quantities"]["share_price"]["drivers"] == ["oil", "it"]
-    assert late["quantities"]["bond_spread"]["drivers"] == ["x"]

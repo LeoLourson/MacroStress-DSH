@@ -14,11 +14,14 @@ episodes or the rolling grid, of any level — and answers per quantity:
 - **direction**: where the scenario moved the median from the base run, the share of cells it
   moved towards the fact. Only a move larger than ``MOVED`` of the base band counts; below it
   the move is Monte-Carlo noise. Under one half the scenario pushes the forecast the wrong way;
-- **weight**: the score of the level without the quantity, beside the score with it. When one
-  quantity moves the aggregate, the reader sees which one.
+- **weight**: the score against the level's plain benchmark, and the score of the level without
+  the quantity beside it. When one quantity moves the aggregate, the reader sees which one.
+
+The plain benchmark of a level is the first of ``BENCHMARKS`` its rows carry: the random walk
+of a series, the historical simulation of a return (``benchmark_of``).
 
 A row carries ``quantity``, ``level``, ``month``, the CRPS columns (``model`` and the
-benchmark's) and the band columns: ``width`` (``p95 - p5``), ``history_range``, a boolean per
+benchmarks') and the band columns: ``width`` (``p95 - p5``), ``history_range``, a boolean per
 admission rule and, in the episodes, ``shift`` (median less the base run's median), ``miss``
 (fact less the base run's median) and ``base_width`` (the base run's band).
 """
@@ -35,18 +38,28 @@ ADMISSION_SHARE = 0.05
 RULES = (DOMAIN, WIDTH)
 MOVED = 0.1
 """The smallest move of the median, as a share of the base band, the direction reads."""
+BENCHMARKS = ("walk", "historical")
+"""The plain benchmarks, in the order a level's is chosen: a series is judged against the
+random walk, a return against the historical simulation."""
 
 Rows = Sequence[Mapping[str, object]]
 
 
-def check(rows: Rows, *, benchmark: str = "walk") -> dict:
-    """The table of the quantities and the admission it gives; ``benchmark`` names the column
-    the scores are relative to."""
-    table = quantities(rows, benchmark=benchmark)
+def benchmark_of(rows: Rows) -> str | None:
+    """The plain benchmark the rows carry: the first of ``BENCHMARKS`` with a value."""
+    for name in BENCHMARKS:
+        if any(row.get(name) is not None for row in rows):
+            return name
+    return None
+
+
+def check(rows: Rows) -> dict:
+    """The table of the quantities and the admission it gives."""
+    table = quantities(rows)
     return {"quantities": table, "admission": admission(rows, table)}
 
 
-def quantities(rows: Rows, *, benchmark: str = "walk") -> list[dict]:
+def quantities(rows: Rows) -> list[dict]:
     """One entry per level and quantity, in that order."""
     groups: dict[tuple[str, str], list] = {}
     for row in rows:
@@ -54,7 +67,9 @@ def quantities(rows: Rows, *, benchmark: str = "walk") -> list[dict]:
     table = []
     for (level, quantity), own in sorted(groups.items()):
         others = [row for row in rows if row["level"] == level and row["quantity"] != quantity]
+        benchmark = benchmark_of([row for row in rows if row["level"] == level])
         shares = {rule: float(np.mean([bool(row[rule]) for row in own])) for rule in RULES}
+        scored = benchmark is not None
         table.append(
             {
                 "level": level,
@@ -64,8 +79,11 @@ def quantities(rows: Rows, *, benchmark: str = "walk") -> list[dict]:
                 "failed": [rule for rule in RULES if shares[rule] >= ADMISSION_SHARE],
                 "width_to_range": _width_to_range(own),
                 "direction": _direction(own),
-                "score": relative(own, "model", benchmark)["score"],
-                "without": relative(others, "model", benchmark)["score"] if others else None,
+                "benchmark": benchmark,
+                "score": relative(own, "model", benchmark)["score"] if scored else None,
+                "without": (
+                    relative(others, "model", benchmark)["score"] if scored and others else None
+                ),
             }
         )
     return table

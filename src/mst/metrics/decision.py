@@ -19,7 +19,7 @@ from collections.abc import Mapping, Sequence
 import numpy as np
 
 from .quality import interval, paired, relative
-from .sanity import ADMISSION_SHARE, worst_shares
+from .sanity import ADMISSION_SHARE, benchmark_of, worst_shares
 
 
 def decide(
@@ -168,8 +168,9 @@ def verdict(
 
     The comparison reads the validation half when the check has one, and all windows
     otherwise. The benchmark is the walk that knows the scenario's path where the level has
-    one, since it knows what the forecast knows, and the plain walk otherwise. ``admission``
-    is the candidate's (``mst.metrics.sanity``); the incumbent's is read from its report.
+    one, since it knows what the forecast knows, and the level's plain benchmark otherwise
+    (``mst.metrics.sanity.benchmark_of``). ``admission`` is the candidate's; the incumbent's is
+    read from its report.
     """
     if "rows" not in incumbent:
         raise ValueError("the incumbent carries no cells: pass the --details file of its check")
@@ -184,8 +185,12 @@ def verdict(
     if not mine:
         raise ValueError(f"level {level!r} has no scored cells to decide on")
     benchmark = (
-        "conditional_walk" if any(row["conditional_walk"] is not None for row in mine) else "walk"
+        "conditional_walk"
+        if any(row["conditional_walk"] is not None for row in mine)
+        else benchmark_of(mine)
     )
+    if benchmark is None:
+        raise ValueError(f"level {level!r} has no benchmark to decide against")
     found = on_rows(
         mine,
         theirs,

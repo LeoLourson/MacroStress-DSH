@@ -23,17 +23,8 @@ width = [0.75, 1.40]
 width_share = 0.8
 # The largest distance of the mean pair correlation of 12-month share returns from history.
 correlation = 0.15
-# The share of facts inside the 90 % band out of sample: 90 % expected, overlap widens the
-# sampling error of a few dozen dates to about five points.
-coverage = [0.80, 0.97]
-
-# Out of sample: on every date the models are estimated on what was published by then, and the
-# forecast is compared with what happened. The last date leaves twelve observed months.
-[rolling]
-first = 2017-01-01
-last = 2025-09-01
-step_months = 3
-draws = 1000
+# Out of sample, the forecast of every level is checked by `python -m mst.metrics rolling`
+# with --drivers and --portfolio, on the grid of bench/model-backtest/episodes.toml.
 
 # The events: ordinary runs of these scenarios of the workspace on the checked versions, with
 # the contribution of every element. A run compares itself with the empty scenario on the same
