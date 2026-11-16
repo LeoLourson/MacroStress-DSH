@@ -37,7 +37,7 @@ The same score is computed for three references on the same cells:
 
 - the conditional walk `conditional_walk` knows the same path of the given quantities as the model: it takes the monthly change of every other quantity from a regression on the changes of the given quantities over the history known on the calculation date, plus random noise; the model is useful if it beats this simple transfer;
 - the random walk with drift and, for target indicators, last year's value with a trend do not know the event; beating them may come from knowing the future condition alone;
-- the base calculation is the same model without the scenario; the difference from it is the value of the scenario itself.
+- the base calculation is the unconditional forecast of the same model on the same date: the model is not told about the event, nor is the event ruled out, and crisis paths enter the forecast in the share the model finds likely; the difference from it is the value of the scenario itself. If the model's joint law is right, knowing the realized path of the given quantities does not worsen the forecast of the rest on average, since CRPS is a strictly proper score. A larger error with the scenario therefore means the model passes the move of the given quantities to the rest wrongly.
 
 The value of a scenario is the share of episodes where the forecast under the scenario beats the base, and the mean difference of CRPS, reported apart for scenarios of a human and of a language model. A language model may remember the outcome of a past event, so its scenarios can only be checked fairly on events after the date they were written.
 
