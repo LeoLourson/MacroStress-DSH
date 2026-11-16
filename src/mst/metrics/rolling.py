@@ -34,6 +34,7 @@ from mst.model_sdk import ShortHistory
 from . import levels, scores
 from .decision import verdict
 from .episodes import Episodes, calculation_date, load_episodes
+from .prepare import prepare
 from .tables import print_decision, print_dropped, print_judgement
 from .windows import MACRO_ONLY, Scope, Window, extend, facts, open_window, simulate
 
@@ -54,6 +55,7 @@ def rolling_report(
     inputs: Path | None = None,
     scope: Scope = MACRO_ONLY,
     only: list[date] | None = None,
+    workers: int = 1,
 ) -> dict:
     """The rolling block of a report: what fell out, the judgement of every level, the price.
 
@@ -67,6 +69,16 @@ def rolling_report(
     dates = grid_dates(store, registry, plan, known_on)
     if only is not None:
         dates = [when for when in dates if when in set(only)]
+    prepare(
+        plugin,
+        store,
+        registry,
+        [calculation_date(when) for when in dates],
+        root,
+        inputs=inputs,
+        drivers=scope.drivers,
+        workers=workers,
+    )
     windows, skipped, refused = [], {}, {}
     for when in dates:
         try:
@@ -205,6 +217,7 @@ def run(
     drivers: Path | None = None,
     portfolio: str | None = None,
     target_level: str = "macro",
+    workers: int = 1,
 ) -> int:
     """The rolling check from the command line; 1 when the model refused a date, no date could
     be judged or a quantity failed admission."""
@@ -236,6 +249,7 @@ def run(
         inputs=inputs,
         scope=Scope.of(store, drivers, portfolio),
         only=only,
+        workers=workers,
     )
     if against is not None and report["rows"]:
         report["decision"] = rolling_decision(report, against, level=target_level, seed=plan.seed)

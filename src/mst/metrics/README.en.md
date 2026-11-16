@@ -13,7 +13,7 @@ The unit of a check is a *window*: a calculation date, the horizon months after 
 
 A window ends `after_months` months after its start month; a series published with a lag adds its missing months to the horizon.
 
-On every window the platform estimates the models of every level again. It caches the macro version in `<models>/backtest/` by the state of the data on the date, the model's configuration and the expert's answers, and the satellite bundle by its own inputs. With `--portfolio` the window also gets the history of the portfolio: the same positions valued by their own models over the past windows known on the calculation date.
+On every window the platform estimates the models of every level again. It caches the macro version in `<models>/backtest/` by the state of the data on the date, the model's configuration and the expert's answers, and the satellite bundle by its own inputs. The dates do not depend on one another, so before the windows open the missing versions of every date are estimated in parallel by `--workers` processes; the default is half the logical processors, and one on a single-core machine. A refusal of the model on a date is cached too, with the hash of the code of the `mst` package: the same code on the same data refuses again, and fixed code estimates the date anew. With `--portfolio` the window also gets the history of the portfolio: the same positions valued by their own models over the past windows known on the calculation date.
 
 ## Levels and cells
 
@@ -116,6 +116,7 @@ python -m mst.metrics backtest MODEL_ID --as-of DATE --store STORE --models MODE
 | Module | What it does |
 |---|---|
 | [windows.py](<windows.py>) | the window, the cache of versions, `ShortHistory`, the satellites and the portfolio of a window, the facts |
+| [prepare.py](<prepare.py>) | the versions of every date estimated in parallel before the windows open |
 | [levels.py](<levels.py>) | the cells of every level, the rows, what fell out |
 | [valuation.py](<valuation.py>) | the paths in own units and the valuation of positions |
 | [sanity.py](<sanity.py>) | sanity and admission per quantity |

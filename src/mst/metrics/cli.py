@@ -4,15 +4,15 @@
 
   python -m mst.metrics backtest [MODEL_ID] --as-of DATE --store DIR --models DIR --episodes FILE
       [--drivers FILE] [--only ID ...] [--details FILE] [--against REPORT.json]
-      [--portfolio ID] [--mc-bootstrap] [--no-rolling] [--save]
+      [--portfolio ID] [--mc-bootstrap] [--no-rolling] [--save] [--workers N]
   python -m mst.metrics rolling [MODEL_ID] --as-of DATE --store DIR --models DIR --episodes FILE
       [--dates YYYY-MM-DD ...] [--half tuning|validation] [--details FILE] [--against REPORT.json]
-      [--drivers FILE] [--portfolio ID] [--target-level LEVEL]
+      [--drivers FILE] [--portfolio ID] [--target-level LEVEL] [--workers N]
 
 ``rolling`` judges the forecast itself: on a grid of dates nobody selected, the unconditional
 forecast of the model estimated on that date against the random walk, in relative CRPS, with
-the calibration and a block-bootstrap interval. ``--dates`` fills the cache of the versions date
-by date, in parallel processes; ``--against`` names the incumbent report for the decision.
+the calibration and a block-bootstrap interval. ``--dates`` narrows the grid to these
+dates; ``--against`` names the incumbent report for the decision.
 
 ``backtest`` estimates the macro model (the named one, or the only one installed) on the day
 before every episode of the plan ``--episodes`` starts, builds the scenario from what actually
@@ -27,11 +27,15 @@ the usefulness of the scenario split by the manual/llm mark, and the tuning/vali
 apart. ``--against`` names the incumbent's ``--details`` JSON for the four-step 2-SE decision;
 ``--portfolio`` names a stored portfolio for the Acerbi-Székely tail section;
 ``--mc-bootstrap`` adds the Monte-Carlo interval of the forecast against the walk, separated
-from the episode-sampling interval. With ``--satellites`` the served drivers are scored too, on
+from the episode-sampling interval. With ``--drivers`` the served drivers are scored too, on
 the bundle estimated on each episode's macro version. It exits with 1 when an episode could
 not be checked or a quantity failed admission. ``--save`` keeps the report without its cells
 and the tables in ``results/<model>.json`` and ``results/<model>.md`` beside the plan, over
 the last result of the model. Nothing is fetched.
+
+Both commands first estimate the versions every date needs and the cache lacks, in ``--workers``
+processes (half the logical processors by default, ``mst.metrics.prepare``); the report does not
+depend on their number.
 """
 
 import argparse
@@ -119,7 +123,19 @@ def main(argv: list[str] | None = None) -> int:
         default="macro",
         help="the level the decision reads (macro by default)",
     )
+    for command in (check, grid):
+        command.add_argument(
+            "--workers",
+            type=int,
+            default=None,
+            help="processes estimating the versions of the dates; half the processors by default",
+        )
     args = parser.parse_args(argv)
+    from .prepare import default_workers
+
+    workers = default_workers() if args.workers is None else args.workers
+    if workers < 1:
+        parser.error("--workers must be at least 1")
 
     if args.command == "rolling":
         return run_rolling(
@@ -136,6 +152,7 @@ def main(argv: list[str] | None = None) -> int:
             drivers=args.drivers,
             portfolio=args.portfolio,
             target_level=args.target_level,
+            workers=workers,
         )
     return run(
         store=args.store,
@@ -153,6 +170,7 @@ def main(argv: list[str] | None = None) -> int:
         rolling=not args.no_rolling,
         inputs=args.inputs,
         save=args.save,
+        workers=workers,
     )
 
 

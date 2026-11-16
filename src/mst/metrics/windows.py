@@ -20,6 +20,7 @@ import hashlib
 import inspect
 from dataclasses import dataclass, field, replace
 from datetime import date
+from functools import cache
 from pathlib import Path
 
 import numpy as np
@@ -274,19 +275,81 @@ def estimate_macro(
     loads the version instead of estimating again, and an edited spec, sign table, model
     package or answer never reuses a stale one.
     """
-    key = _data_key(plugin, data, registry, as_of, inputs)
-    pointer = root / key
-    installed = {plugin.model_id: plugin}
-    if pointer.exists():
-        name = pointer.read_text(encoding="utf-8").strip()
-        if (root / "macro" / name).is_dir():
-            return macro_version.load(root, name, installed)
-    estimate, left_out = _estimate_known(plugin, data, registry, as_of, inputs)
+    name = macro_name(plugin, data, registry, as_of, root, inputs)
+    return macro_version.load(root, name, {plugin.model_id: plugin})
+
+
+def macro_name(
+    plugin,
+    data: SeriesStore,
+    registry: Registry,
+    as_of: date,
+    root: Path,
+    inputs: Path | None = None,
+) -> str:
+    """The name of the macro version of ``as_of`` in the cache, estimated when it is not there.
+
+    A refusal of the model is cached too (``cached``): the estimate is seeded, so the same
+    code on the same data refuses again, and a model that refuses every date — the MS-VAR
+    whose stability filter leaves no draw — is not estimated again on every rerun.
+    """
+    pointer = root / _data_key(plugin, data, registry, as_of, inputs)
+    found = cached(pointer, root / "macro")
+    if found is not None:
+        return found
+    try:
+        estimate, left_out = _estimate_known(plugin, data, registry, as_of, inputs)
+    except ValueError as error:
+        refuse(pointer, error)
+        raise
     meta = {**estimate.meta, "left_out": left_out}
     name = macro_version.save(plugin.model_id, meta, estimate.arrays, root)
     pointer.parent.mkdir(parents=True, exist_ok=True)
     pointer.write_text(name + "\n", encoding="utf-8")
-    return macro_version.load(root, name, installed)
+    return name
+
+
+REFUSED = "refused "
+"""The first word of a pointer that holds a refusal: then the code digest and the reason."""
+
+
+def cached(pointer: Path, folder: Path) -> str | None:
+    """The version a cache pointer names, or None when it must be estimated; a cached refusal
+    raises it again.
+
+    A refusal counts only for the code it was made with (``code_digest``): the key of the
+    pointer covers the model's own package and the data, while a refusal may come from the
+    platform, and a fixed platform must estimate the date again.
+    """
+    if not pointer.exists():
+        return None
+    text = pointer.read_text(encoding="utf-8")
+    if text.startswith(REFUSED):
+        digest, _, reason = text[len(REFUSED) :].partition("\n")
+        if digest == code_digest():
+            raise ValueError(reason.strip())
+        return None
+    name = text.strip()
+    return name if (folder / name).is_dir() else None
+
+
+def refuse(pointer: Path, error: ValueError) -> None:
+    """Keeps a refusal under the cache pointer, with the digest of the code that made it."""
+    pointer.parent.mkdir(parents=True, exist_ok=True)
+    pointer.write_text(f"{REFUSED}{code_digest()}\n{error}\n", encoding="utf-8")
+
+
+@cache
+def code_digest() -> str:
+    """The sha256 of every Python file of the ``mst`` package: the code a refusal belongs to."""
+    import mst
+
+    digest = hashlib.sha256()
+    package = Path(mst.__file__).parent
+    for path in sorted(package.rglob("*.py")):
+        digest.update(path.relative_to(package).as_posix().encode())
+        digest.update(path.read_bytes())
+    return digest.hexdigest()
 
 
 def _estimate_known(
@@ -400,12 +463,13 @@ def _series_into(digest, data: SeriesStore, series: str | None, as_of: date) -> 
 
 
 def _satellite_key(
-    window: Window, data: SeriesStore, drivers: Path, installed, driver_registry
+    macro: str, as_of: date, data: SeriesStore, drivers: Path, installed, driver_registry
 ) -> str:
-    """The cache key of the satellite bundle of one window: every input that shapes it.
+    """The cache key of the satellite bundle of a macro version on a date: every input that
+    shapes it.
 
     The key holds the macro version the bundle is estimated on; the bytes of the driver
-    catalog; the driver series as known on the window's calculation date; the configuration
+    catalog; the driver series as known on the calculation date ``as_of``; the configuration
     and version of every installed satellite plugin (``_configuration_digest``); the plugin
     SDK version; and the quantity-to-model assignment. An edited catalog or ``spec.toml``, a
     revised series, a new plugin version or another assignment is another key, so a stale
@@ -414,10 +478,10 @@ def _satellite_key(
     from mst import models as models_pkg
 
     digest = hashlib.sha256()
-    digest.update(window.macro.name.encode())
+    digest.update(macro.encode())
     _file_into(digest, drivers)
     for driver in driver_registry.drivers:
-        _series_into(digest, data, driver.series, window.as_of)
+        _series_into(digest, data, driver.series, as_of)
     for model_id in sorted(installed):
         digest.update(model_id.encode())
         digest.update(_configuration_digest(installed[model_id]).encode())
@@ -433,41 +497,44 @@ def _satellite_key(
     return digest.hexdigest()
 
 
-def attach_satellites(window: Window, data: SeriesStore, root: Path, drivers: Path) -> None:
-    """The satellite bundle of the window's macro version, estimated or found again.
-
-    The bundle is cached beside the macro version, under the same root, by the digest of every
-    input that shapes it (``_satellite_key``); ``simulate`` draws the driver paths.
-    """
+def satellite_name(macro: str, as_of: date, data: SeriesStore, root: Path, drivers: Path) -> str:
+    """The name of the satellite bundle of the macro version ``macro`` in the cache under
+    ``root``, estimated when it is not there; a refusal is cached as for the macro version."""
     from mst import models as models_pkg
-    from mst.drivers import bundle as satellite_bundle
     from mst.drivers.registry import load_registry as load_drivers
 
     driver_registry = load_drivers(catalog=drivers)
-    name = window.macro.name
     installed = models_pkg.satellites()
-    pointer = root / (
-        f"satellites-{_satellite_key(window, data, drivers, installed, driver_registry)}"
-    )
-    if pointer.exists():
-        found = pointer.read_text(encoding="utf-8").strip()
-        if (root / "satellites" / found).is_dir():
-            window.bundle = satellite_bundle.load(root, found, installed)
-            window.bundle_name = found
-        else:
-            pointer.unlink()
-    if window.bundle is None:
+    key = _satellite_key(macro, as_of, data, drivers, installed, driver_registry)
+    pointer = root / f"satellites-{key}"
+    found = cached(pointer, root / "satellites")
+    if found is not None:
+        return found
+    try:
         found, _ = models_pkg.estimate_satellites(
-            name,
-            store=data.root if hasattr(data, "root") else data,
+            macro,
+            store=data.root,
             models=root,
             drivers=drivers,
             root=root,
             registry=driver_registry,
         )
-        pointer.write_text(found + "\n", encoding="utf-8")
-        window.bundle = satellite_bundle.load(root, found, installed)
-        window.bundle_name = found
+    except ValueError as error:
+        refuse(pointer, error)
+        raise
+    pointer.write_text(found + "\n", encoding="utf-8")
+    return found
+
+
+def attach_satellites(window: Window, data: SeriesStore, root: Path, drivers: Path) -> None:
+    """The satellite bundle of the window's macro version, estimated or found again
+    (``satellite_name``); ``simulate`` draws the driver paths."""
+    from mst import models as models_pkg
+    from mst.drivers import bundle as satellite_bundle
+
+    found = satellite_name(window.macro.name, window.as_of, data, root, drivers)
+    window.bundle = satellite_bundle.load(root, found, models_pkg.satellites())
+    window.bundle_name = found
     if window.bundle.as_of > window.as_of:
         raise ValueError(
             f"the satellite bundle is dated {window.bundle.as_of}, "

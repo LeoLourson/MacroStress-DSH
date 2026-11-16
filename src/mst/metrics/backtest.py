@@ -38,7 +38,8 @@ from mst.scenario.build import point_constraint
 from . import levels, scores
 from .baselines import CONSTRAINT, CONSTRAINT_THRESHOLD, constraint_probabilities
 from .decision import verdict
-from .episodes import Episodes, load_episodes
+from .episodes import Episodes, calculation_date, load_episodes
+from .prepare import prepare
 from .quality import relative
 from .tables import number, print_decision, print_dropped, print_judgement
 from .windows import Scope, Window, extend, file_digest, open_window, provenance, simulate
@@ -66,6 +67,7 @@ def run(
     rolling: bool = True,
     inputs: Path | None = None,
     save: bool = False,
+    workers: int = 1,
 ) -> int:
     """The check of every episode the plan names; prints Markdown tables, returns an exit code.
 
@@ -80,7 +82,7 @@ def run(
     out the grid, which ``python -m mst.metrics rolling`` also runs. ``inputs`` is the folder of
     the answers a model with declared inputs reads. ``save`` keeps the report without its cells
     and its tables in ``results/`` beside the plan; a part of the plan named by ``only`` is not
-    saved.
+    saved. ``workers`` processes estimate the versions of the dates first (``prepare``).
     """
     from mst import bench
     from mst import models as models_pkg
@@ -93,6 +95,15 @@ def run(
     registry = load_registry()
     data = SeriesStore(store)
     root = Path(models) / "backtest"
+    chosen = [check for check in plan.episodes if not only or check.id in only]
+    dates = [calculation_date(check.start) for check in chosen]
+    if plan.rolling is not None and rolling:
+        from .rolling import grid_dates
+
+        dates += [calculation_date(when) for when in grid_dates(data, registry, plan, as_of)]
+    prepare(
+        plugin, data, registry, dates, root, inputs=inputs, drivers=scope.drivers, workers=workers
+    )
     refused: dict[str, str] = {}
     windows: list[Window] = []
     for check in plan.episodes:
@@ -131,6 +142,7 @@ def run(
             known_on=as_of,
             inputs=inputs,
             scope=scope,
+            workers=workers,
         )
     tables = io.StringIO()
     with contextlib.redirect_stdout(tables):

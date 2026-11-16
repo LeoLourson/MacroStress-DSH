@@ -274,7 +274,7 @@ def test_the_satellite_key_covers_the_inputs_that_shape_the_bundle(store, tmp_pa
     window = SimpleNamespace(macro=SimpleNamespace(name="macro-1"), as_of=date(2024, 1, 31))
 
     def key(of=window):
-        return windows._satellite_key(of, store, catalog, installed, registry)
+        return windows._satellite_key(of.macro.name, of.as_of, store, catalog, installed, registry)
 
     baseline = key()
     assert key() == baseline
