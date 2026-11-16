@@ -19,6 +19,8 @@ from mst.model_sdk import (
 from mst.model_sdk.conditional import log_condition_weight, pick_latent
 
 CANDIDATE_SAMPLES = 64
+BRIDGE_STREAM = 7
+"""The random stream of the months the panel missed before t = 0, apart from the paths'."""
 
 
 def transfer(scale: np.ndarray, interventions: tuple[int, ...]) -> tuple[np.ndarray, np.ndarray]:
@@ -335,6 +337,50 @@ def _diagnostics(scales, sizes, ess, candidates):
     return result
 
 
+def recent(model, zero: np.ndarray, seed: int) -> np.ndarray:
+    """The months ``1 - p .. 0`` of every path, ``(R, p, n)``, for the satellites.
+
+    The version keeps the last ``p`` months of the panel (``tail``), from the latest month at
+    which every variable was known; month 0 is the path's own draw. A month the panel missed
+    is drawn from the AR(1) law ``_start`` puts on month 0, given the month before it and the
+    next known month, one month after another: a satellite that reads the recent past of a
+    series published with a lag sees the law the month-zero draw came from.
+    """
+    tail = np.asarray(model.tail, dtype=float)
+    history = np.repeat(tail[None], len(zero), axis=0)
+    history[:, -1] = zero
+    rng = np.random.default_rng([seed, BRIDGE_STREAM])
+    variance = model.nu / (model.nu - 2) * np.diag(model.scale)
+    for i in range(tail.shape[1]):
+        known = np.flatnonzero(np.isfinite(history[0, :, i]))
+        for m in np.flatnonzero(~np.isfinite(history[0, :, i])):
+            right = int(known[known > m][0])
+            history[:, m, i] = _bridge_step(
+                history[:, m - 1, i],
+                history[:, right, i],
+                right - m,
+                float(model.persistence[i]),
+                float(model.intercept[i]),
+                float(variance[i]),
+                rng,
+            )
+    return history
+
+
+def _bridge_step(previous, right, steps: int, a: float, c: float, s2: float, rng) -> np.ndarray:
+    """A draw of the month after ``previous`` given the value ``right`` ``steps`` months later,
+    under ``x_t = c + a x_{t-1} + e_t`` with ``Var e = s2``."""
+    if a < 1:
+        reach = a**steps
+        offset = c / (1 - a) * (1 - reach)
+        spread = s2 * (1 - a ** (2 * steps)) / (1 - a**2)
+    else:
+        reach, offset, spread = 1.0, steps * c, s2 * steps
+    variance = 1 / (1 / s2 + reach**2 / spread)
+    mean = variance * ((c + a * previous) / s2 + reach * (right - offset) / spread)
+    return mean + np.sqrt(variance) * rng.standard_normal(len(previous))
+
+
 def simulate(
     model,
     plan: ScenarioPlan,
@@ -361,7 +407,7 @@ def simulate(
         ids=model.ids,
         months=[shift(model.months[-1], t) for t in range(plan.horizon + 1)],
         paths=paths,
-        history=paths[:, :1].copy(),
+        history=recent(model, paths[:, 0], seed),
         group=np.repeat(np.arange(draws), plan.inner),
         diagnostics=_diagnostics(scales, sizes, ess, candidates),
     )

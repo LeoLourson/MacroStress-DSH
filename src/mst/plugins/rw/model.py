@@ -38,13 +38,15 @@ class JointWalk:
     scale_persistence: float
     scale_volatility: float
     diagnostics: dict
+    tail: np.ndarray
+    """The last months of the panel, from the latest one at which every variable was known."""
 
 
 class RwModel(MacroModel):
     """No lags: joint Student monthly changes with a common crisis multiplier."""
 
     model_id = "rw.joint"
-    version = "0.3.0"
+    version = "0.4.0"
     latents = ("scale_path",)
     label = "Joint random walk with heavy tails"
     description = (
@@ -101,6 +103,7 @@ class RwModel(MacroModel):
             weights=arrays["weights"],
             start_mean=arrays["start_mean"],
             start_sd=arrays["start_sd"],
+            tail=arrays["tail"],
         )
 
     def structural_form(self, model: JointWalk) -> StructuralForm:

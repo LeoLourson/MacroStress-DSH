@@ -5,6 +5,7 @@ from collections.abc import Sequence
 import numpy as np
 from scipy.optimize import minimize_scalar
 from scipy.special import gammaln
+from scipy.stats import norm, rankdata
 
 from mst.macro.panel import Panel
 from mst.model_sdk import ShortHistory
@@ -159,28 +160,106 @@ def _weights(groups: list, scale: np.ndarray, nu: float, count: int) -> np.ndarr
     return result
 
 
+def shrinkage(data: np.ndarray) -> float:
+    """The weight of the diagonal target in the scale: the Schäfer–Strimmer intensity on the
+    normal scores of the changes.
+
+    Over the pairs of variables, the sum of the sampling variances of their correlations over
+    the sum of the squared correlations, clipped to ``[0, 1]``; every pair reads the months
+    where both are known. A long history estimates its correlations well and the weight is
+    small; a history with about as many months as variables gets a large one. The variance of
+    a correlation is a fourth moment, which Student changes with ``nu`` below four do not
+    have: on the raw changes it would grow with the crisis months instead of the history's
+    shortness, so every variable enters by its normal scores. A variable without spread has no
+    correlation to estimate and adds nothing.
+    """
+    x = np.asarray(data, dtype=float)
+    known = np.isfinite(x)
+    variance = 0.0
+    squares = 0.0
+    z = np.full(x.shape, np.nan)
+    for j in range(x.shape[1]):
+        rows = known[:, j]
+        if rows.sum() > 1 and np.ptp(x[rows, j]) > 0:
+            z[rows, j] = norm.ppf((rankdata(x[rows, j]) - 0.5) / rows.sum())
+    for i in range(x.shape[1]):
+        for j in range(i):
+            both = known[:, i] & known[:, j]
+            n = int(both.sum())
+            products = z[both, i] * z[both, j]
+            if n < 3 or not np.isfinite(products).all():
+                continue
+            correlation = n / (n - 1) * products.mean()
+            variance += n / (n - 1) ** 3 * float(((products - products.mean()) ** 2).sum())
+            squares += correlation**2
+    return 1.0 if squares == 0 else float(min(1.0, variance / squares))
+
+
 def ecme(
-    data: np.ndarray, mu: np.ndarray, spec: Spec
+    data: np.ndarray, mu: np.ndarray, spec: Spec, *, shrink: float = 0.0
 ) -> tuple[np.ndarray, float, np.ndarray, list[float]]:
+    """The Student scale and ``nu`` of the changes, with the month weights and the trace.
+
+    ``shrink`` is the weight ``lambda`` of the diagonal target ``D`` in every scale step:
+    ``Sigma = (1 - lambda) S + lambda D``, the posterior mode under an inverse-Wishart prior
+    worth ``n lambda / (1 - lambda)`` months, so the ECME stays monotone in the penalised
+    likelihood and the trace holds that objective. ``D`` is the scale of the ECME with a
+    diagonal ``Sigma``, which every variable's own changes identify however short the panel.
+    Zero is the plain ECME; one is the diagonal scale.
+    """
     data = np.asarray(data, dtype=float)
     if data.ndim != 2 or data.shape[1] == 0 or not np.isfinite(data).any(axis=0).all():
         raise ValueError("ECME requires observed changes for every variable")
+    if not 0 <= shrink <= 1:
+        raise ValueError(f"the shrinkage weight must lie in [0, 1], not {shrink}")
     groups = _groups(data, mu)
-    scale = _initial_scale(data, spec)
+    initial = _initial_scale(data, spec)
+    if shrink == 0:
+        scale, nu, trace = _ecme_steps(groups, initial, spec, lambda step: step)
+    else:
+        target, nu, trace = _ecme_steps(
+            groups, np.diag(np.diag(initial)), spec, lambda step: np.diag(np.diag(step))
+        )
+        scale = target
+        if shrink < 1:
+            months = sum(len(rows) for rows, _, _ in groups)
+            weight = months * shrink / (1 - shrink)
+            scale, nu, trace = _ecme_steps(
+                groups,
+                (1 - shrink) * initial + shrink * target,
+                spec,
+                lambda step: (1 - shrink) * step + shrink * target,
+                lambda candidate: _wishart_penalty(candidate, target, weight),
+            )
+    return scale, nu, _weights(groups, scale, nu, len(data)), trace
+
+
+def _wishart_penalty(scale: np.ndarray, target: np.ndarray, weight: float) -> float:
+    """The log density, up to a constant, of the inverse-Wishart prior worth ``weight``
+    months and centred on ``target``: ``-(weight / 2) (log det Sigma + tr(D Sigma^-1))``."""
+    _, logdet = np.linalg.slogdet(scale)
+    return -weight / 2 * (logdet + float(np.trace(np.linalg.solve(scale, target))))
+
+
+def _ecme_steps(groups: list, scale: np.ndarray, spec: Spec, update, penalty=None):
+    """ECME from ``scale``: the scale step mapped by ``update``, then ``nu`` by the observed
+    likelihood. The objective is that likelihood plus ``penalty`` of the scale; a step that
+    lowers it is an error, as is no convergence within ``spec.em_iterations``."""
+    penalty = penalty or (lambda _: 0.0)
     nu = float(np.clip(10, *spec.nu_bounds))
-    trace = [_likelihood(_likelihood_terms(groups, scale), nu)]
+    trace = [_likelihood(_likelihood_terms(groups, scale), nu) + penalty(scale)]
     for _ in range(spec.em_iterations):
-        candidate = _scale_step(groups, scale, nu)
+        candidate = update(_scale_step(groups, scale, nu))
         terms = _likelihood_terms(groups, candidate)
         candidate_nu = _fit_nu(terms, spec)
-        likelihood = _likelihood(terms, candidate_nu)
-        delta = likelihood - trace[-1]
+        objective = _likelihood(terms, candidate_nu) + penalty(candidate)
+        delta = objective - trace[-1]
         if delta < -1e-8:
             raise ValueError(f"ECME likelihood decreased: delta={delta:.12g}")
-        trace.append(likelihood)
+        trace.append(objective)
         scale, nu = candidate, candidate_nu
         if abs(delta) < spec.em_tol:
-            return scale, nu, _weights(groups, scale, nu, len(data)), trace
+            return scale, nu, trace
     raise ValueError(
         f"ECME did not converge after {spec.em_iterations} iterations: "
         f"likelihood delta={delta:.12g}"
@@ -351,20 +430,27 @@ def scale_path_parameters(weights: np.ndarray) -> dict:
     }
 
 
-def sample_covariance(panel: Panel, data: np.ndarray, spec: Spec) -> tuple[np.ndarray, list[int]]:
-    """The unweighted sample covariance of the changes, as a positive-definite matrix.
+def sample_covariance(
+    panel: Panel, data: np.ndarray, spec: Spec
+) -> tuple[np.ndarray, list[int], float]:
+    """The unweighted sample covariance of the changes, as a positive-definite matrix, with
+    its correlations shrunk to zero by the weight ``shrinkage`` gives the window.
 
     The ECME weight of a crisis month is small, so the t-scale it estimates is below the
     sample second moment of a variable whose large changes cluster. This matrix is the
     second step of the scale estimate: the level and the correlations the innovation
-    covariance is matched to, over the months from ``scale_start`` on. Housing has no monthly
-    changes and is left to the interval estimate.
+    covariance is matched to, over the months from ``scale_start`` on. A window with about as
+    many months as variables estimates its correlations badly, and the scenario carries them
+    to every quantity it does not fix, so they are shrunk; the variances stay the sample's.
+    Housing has no monthly changes and is left to the interval estimate.
     """
     ordinary = [i for i, variable in enumerate(panel.ids) if variable != HOUSING]
     months = np.array([month >= spec.scale_start for month in panel.months[1:]])
     rows = data[months][:, ordinary]
     matrix = _pairwise_covariance(rows)
-    return _positive_scale(matrix, spec.eig_floor), ordinary
+    weight = shrinkage(rows)
+    shrunk = (1 - weight) * matrix + weight * np.diag(np.diag(matrix))
+    return _positive_scale(shrunk, spec.eig_floor), ordinary, weight
 
 
 def _pairwise_covariance(data: np.ndarray) -> np.ndarray:
@@ -424,6 +510,23 @@ def _start(
     return mean, sd
 
 
+def _tail(panel: Panel) -> np.ndarray:
+    """The last months of the panel, from the latest one at which every variable was known.
+
+    The forecast draws the months between, which a satellite reads as the recent past of a
+    series published with a lag (``forecast.recent``)."""
+    first = len(panel.y) - 1
+    while True:
+        moved = first
+        for i, variable in enumerate(panel.ids):
+            known = np.flatnonzero(np.isfinite(panel.y[: first + 1, i]))
+            if not len(known):
+                raise ValueError(f"{variable} has no value by {panel.months[first]:%Y-%m}")
+            first = min(first, int(known[-1]))
+        if first == moved:
+            return panel.y[first:].copy()
+
+
 def estimate(
     panel: Panel, spec: Spec, *, left_out: Sequence[str] = ()
 ) -> tuple[dict, dict, float]:
@@ -436,7 +539,8 @@ def estimate(
     ordinary = [i for i, variable in enumerate(panel.ids) if variable != HOUSING]
     if not ordinary:
         raise ValueError("ECME requires at least one non-housing variable")
-    fitted, nu, weights, trace = ecme(data[:, ordinary], mu[ordinary], spec)
+    shrunk = {"ecme": shrinkage(data[:, ordinary])}
+    fitted, nu, weights, trace = ecme(data[:, ordinary], mu[ordinary], spec, shrink=shrunk["ecme"])
     scale = np.zeros((len(panel.ids), len(panel.ids)))
     scale[np.ix_(ordinary, ordinary)] = fitted
     ecme_variance = {
@@ -447,7 +551,7 @@ def estimate(
     if spec.sample_scale:
         # The Student law has monthly covariance nu / (nu - 2) * Sigma, so this rescaled
         # sample covariance makes that covariance the sample covariance of the changes.
-        sample, ordinary = sample_covariance(panel, data, spec)
+        sample, ordinary, shrunk["sample"] = sample_covariance(panel, data, spec)
         scale[np.ix_(ordinary, ordinary)] = (nu - 2) / nu * sample
         sample_variance = {
             panel.ids[i]: float(np.diag(sample)[k]) for k, i in enumerate(ordinary)
@@ -494,6 +598,7 @@ def estimate(
         "last_likelihood_delta": trace[-1] - trace[-2],
         "trace": trace,
         "counts": counts,
+        "shrinkage": shrunk,
         "higham_distance": distance,
         "smallest_weights": [
             {"month": panel.months[i + 1].isoformat(), "weight": float(weights[i])} for i in chosen
@@ -524,5 +629,6 @@ def estimate(
         "momentum": phi,
         # The month before t = 0: the last observed change the momentum starts from.
         "previous": panel.y[-2] if len(panel.y) > 1 else np.full(len(panel.ids), np.nan),
+        "tail": _tail(panel),
     }
     return diagnostics, arrays, nu

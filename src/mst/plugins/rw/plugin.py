@@ -8,7 +8,7 @@ MODEL = RwModel()
 
 plugin = Plugin(
     plugin_id="rw",
-    version="0.3.0",
+    version="0.4.0",
     model_sdk=">=4.0,<5.0",
     label=MODEL.label,
     description=MODEL.description,

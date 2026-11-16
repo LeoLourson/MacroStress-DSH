@@ -97,6 +97,16 @@ $\Sigma$ and $\nu$ are the maximum likelihood estimates of a multivariate Studen
 
 The iterations stop when the log likelihood changes by less than `em_tol`, or after `em_iterations` iterations; in the latter case the estimation stops with an error that names the change reached. The starting values are the sample covariance over pairwise known months, corrected to positive definiteness, and $\nu=10$.
 
+On the dates of 2014 the 23 variables have only 20–30 months of changes, too few to pin down a full $\Sigma$, and the plain ECME did not converge there. ECME therefore maximises the posterior density under an inverse-Wishart initial assumption centred on the diagonal scale $D$ of the same Student law, which ECME finds with a diagonal matrix. Step 3 becomes
+
+$$
+\Sigma=(1-\lambda)M+\lambda D,\qquad \kappa=\frac{T\lambda}{1-\lambda},
+$$
+
+where $M$ is the former update, and the log likelihood gets the penalty $-\tfrac{\kappa}{2}\bigl(\log\det\Sigma+\operatorname{tr}(D\Sigma^{-1})\bigr)$; the stopping rule reads the penalised likelihood. The data set the weight $\lambda$: the Schäfer–Strimmer intensity for correlations, computed on the normal rank scores $\Phi^{-1}(r_{it}/(T_i+1))$ of every series, where $r_{it}$ is the rank of a change among the $T_i$ known ones. Rank scores ignore the heavy tails: on raw changes the weight over 176 months was 0.32, on the scores it is 0.13 on 2026-10-29 and 0.47 in June 2014. With $\lambda=0$ the estimate is the former ECME.
+
+With the shrinkage ECME converges on every date of 2014, and $\nu$ is lower: 2.74 instead of 3.35 on 2026-10-29, 2.74 instead of 4.62 in December 2016, 3.19 instead of 4.09 in December 2020, while December 2013 and February 2015 sit at the lower bound 2.5. Whether the heavier tail forecasts better is for the backtest of version 0.4.0 to show.
+
 A crisis month gets a small weight $w_t$, so the correlations come mostly from ordinary months, and crises enter the tail of the law through $\nu$. The same mechanism weakens the bias described above: the correlation of the rate with the rouble is no longer set by 9 crisis months.
 
 ### Level of the scale
@@ -107,7 +117,7 @@ $$
 C=\frac{1}{T-1}\sum_{t\in T}(d_t-\bar d)(d_t-\bar d)^\top,\qquad \Sigma=\frac{\nu-2}{\nu}\,C,
 $$
 
-so that the monthly covariance of the law, $\frac{\nu}{\nu-2}\Sigma$, equals $C$. The matrix $C$ is computed over pairwise known months with the breaks excluded, and its correlation part is projected onto a positive-definite one when needed (as for the housing price). The window $T$ starts at `scale_start = 2012-01-01`, with the panel, so the scale sees the 2014 crisis. With a window from 2015, after the rouble floated, the out-of-sample forecasts of quarterly dates 2017–2025 held the fact in the 90 % band in 77 % of the macro cells over 12 months; with 2012, in 81 %. The window was chosen on those same dates, with no separate validation half. Housing has no monthly changes and keeps the interval estimate.
+so that the monthly covariance of the law, $\frac{\nu}{\nu-2}\Sigma$, equals $C$. The matrix $C$ is computed over pairwise known months with the breaks excluded, and its correlation part is projected onto a positive-definite one when needed (as for the housing price). The window $T$ starts at `scale_start = 2012-01-01`, with the panel, so the scale sees the 2014 crisis. The correlations of $C$ are shrunk toward zero by the same Schäfer–Strimmer weight, computed on the window: $C\mapsto(1-\lambda)C+\lambda\operatorname{diag}C$ keeps the variances and damps chance correlations of a short history. With a window from 2015, after the rouble floated, the out-of-sample forecasts of quarterly dates 2017–2025 held the fact in the 90 % band in 77 % of the macro cells over 12 months; with 2012, in 81 %. The window was chosen on those same dates, with no separate validation half. Housing has no monthly changes and keeps the interval estimate.
 
 In substance this restores the sample correlations of the joint law. A regression of the monthly IMOEX change on the key-rate change gives −1.34 % per 1 pp instead of −0.46 % for the ECME estimate; BBB +0.61 pp, USD/RUB +2.81 % (see "Implementation checks"). The signs and orders are those of the data; this is a statistical transfer, not a causal effect.
 
@@ -133,6 +143,15 @@ The uncertainty of $\theta$ is not counted: the version stores one estimate. Wit
 ## Starting value
 
 Series are published with different lags, so in month 0 — the last month in which at least one variable is known — some variables are unknown. The model carries an unknown component to month 0 by its own independent steps from the last known value: $k$ steps give the law $N\!\left(m_i+a_i^k(y_i-m_i),\ \frac{1-a_i^{2k}}{1-a_i^2}\,\frac{\nu}{\nu-2}\Sigma_{ii}\right)$, written as $m_0+L_0u$ with a diagonal $L_0$; at $a_i=1$ this is the former $N\!\left(k\mu_i,\,k\,\frac{\nu}{\nu-2}\Sigma_{ii}\right)$, and a known value has no spread. The baseline does the same. Conditioning on the known moves of other variables (a Kalman filter) is deferred: on the panel to 2026-09 the real wage lags by two months, unemployment, retail, credit and the mortgage rate by one, the rest are known in month 0.
+
+A satellite also needs the months between the last known value and month 0: the housing-price driver reads the real wage, published two months late. The version keeps the tail of the panel, `tail`, from the latest month in which every variable is known, and the forecast returns those months in `history` for every path. Known values come from the panel; a missed month $m$ is drawn from the same AR(1) law given the month before it and the next known value $b$, $h$ months later ($b$ is the path's month 0 for the last gap):
+
+$$
+\operatorname{Var}y_{i,m}=\Bigl(\frac1{s^2}+\frac{a_i^{2h}}{V_h}\Bigr)^{-1},\qquad
+\mathbb E y_{i,m}=\operatorname{Var}y_{i,m}\cdot\Bigl(\frac{c_i+a_iy_{i,m-1}}{s^2}+\frac{a_i^h(b-o_h)}{V_h}\Bigr),
+$$
+
+with $s^2=\nu\Sigma_{ii}/(\nu-2)$, $V_h=s^2\sum_{j<h}a_i^{2j}$ and $o_h=c_i\sum_{j<h}a_i^j$. At $a_i=1$ this is a Brownian bridge: the mean lies on the line between the ends and the variance is $s^2h/(h+1)$. Without the bridge hier refused to simulate a driver whose regressor was unknown between its last value and month 0, and the calculation failed.
 
 ## Interventions and observations
 
@@ -243,13 +262,13 @@ By default there is no mean reversion: the spread grows as $\sqrt t$, rates and 
 | `min_changes` | 3 | the least number of changes or intervals of a variable |
 | `seed` | 20261029 | the seed of the model's draws |
 
-The estimated parameters are written to the version meta. `diagnostics.mean_reversion` is a row per panel variable: the coefficient $a_i$, the mean level $m_i$ and the source (`ar1`, `walk`, `short`). `diagnostics.scale_path` holds $\phi$, $\sigma$, the number of months and the regression constant. `diagnostics.scale_correction` holds the mode (`sample` or `ecme`) and the sample and ECME standard deviations of the changes of every variable. `diagnostics.momentum` is a row per variable: $arphi_i$, the variance ratio it matches and the source (`fit`, `off`, `short`). The version arrays carry `persistence` ($a_i$), `intercept` ($c_i$), `momentum` ($arphi_i$) and `previous` (the panel values of month $-1$).
+The estimated parameters are written to the version meta. `diagnostics.mean_reversion` is a row per panel variable: the coefficient $a_i$, the mean level $m_i$ and the source (`ar1`, `walk`, `short`). `diagnostics.scale_path` holds $\phi$, $\sigma$, the number of months and the regression constant. `diagnostics.scale_correction` holds the mode (`sample` or `ecme`) and the sample and ECME standard deviations of the changes of every variable. `diagnostics.momentum` is a row per variable: $\varphi_i$, the variance ratio it matches and the source (`fit`, `off`, `short`). The version arrays carry `persistence` ($a_i$), `intercept` ($c_i$), `momentum` ($\varphi_i$) and `previous` (the panel values of month $-1$).
 
 ## Plugin and version
 
 `plugin = Plugin(plugin_id="rw", ..., model_sdk=">=4.0,<5.0", macro=(MODEL,))`, the variables are the whole registry, `latents = ("scale_path",)`. The model executes the interventions itself, so `structural_form` returns a `StructuralForm` with registry order as its base order (all set variables move first in each intervened month) and `time_recursion = True`; the platform does not apply the interventions again. The plugin imports only `mst.model_sdk`, `mst.macro.panel`, `mst.macro.registry`, `mst.plugin_sdk` and its own package; the plugin rules forbid importing from `mst.plugins.bvar`.
 
-`estimate` writes to the meta `as_of`, `ids`, `n_global`, `months`, `shocks` (the variable ids in panel order), `nu`, `diagnostics`, `spec` and `structural_form`, and to the arrays `panel_y`, `panel_approximate`, `drift` of length $n$, `scale` of size $n\times n$ ($\Sigma$), `weights` (the weights $w_t$ of the months at the last iteration), `start_mean` of length $n$, `start_sd` of length $n$, `persistence` ($a_i$) and `intercept` ($c_i$). `load` restores the model without re-estimating; a version without `persistence` and `intercept` (estimated before 0.2.0) reads as the former walk: $a_i=1$, $c_i=\mu_i$, $\phi=\sigma=0$. A version without `momentum` and `previous` reads with $arphi=0$. `simulate` returns a `MacroSimulation`: shadow paths of shape $(R,H+1,n)$ with the interventions executed, where row $t=0$ is the path's $y_0$, `history` is the same $y_0$, and the group numbers.
+`estimate` writes to the meta `as_of`, `ids`, `n_global`, `months`, `shocks` (the variable ids in panel order), `nu`, `diagnostics`, `spec` and `structural_form`, and to the arrays `panel_y`, `panel_approximate`, `drift` of length $n$, `scale` of size $n\times n$ ($\Sigma$), `weights` (the weights $w_t$ of the months at the last iteration), `start_mean` of length $n$, `start_sd` of length $n$, `persistence` ($a_i$), `intercept` ($c_i$) and `tail` (the last months of the panel). `load` restores the model without re-estimating; a version without `persistence` and `intercept` (estimated before 0.2.0) reads as the former walk: $a_i=1$, $c_i=\mu_i$, $\phi=\sigma=0$. A version without `momentum` and `previous` reads with $\varphi=0$. `simulate` returns a `MacroSimulation`: shadow paths of shape $(R,H+1,n)$ with the interventions executed, where row $t=0$ is the path's $y_0$, `history` holds the months of `tail` with the missed ones drawn and $y_0$ last, and the group numbers. Version 0.4.0 added the shrinkage toward the diagonal and the required tail, so versions 0.3.0 and older do not load and are estimated again.
 
 In `diagnostics` the version writes $\nu$, the number of iterations and the last change of the likelihood, the ten months with the smallest weight $w_t$ (the model's crisis months), the number of changes of every variable, the distance of the Higham correction if one was needed, and the three blocks above (`mean_reversion`, `scale_path`, `scale_correction`).
 
@@ -283,6 +302,8 @@ Checks for the code:
 15. `mean_reversion` on a simulated AR(1) recovers the slope and the mean level, and a variable outside `reversion` stays a walk.
 16. `sample_covariance` uses the `scale_start` window and gives the sample covariance of the changes in the Student scale; `estimate` with `sample_scale = true` reproduces it up to the projection.
 17. `scale_path_parameters` recovers $\phi$ and $\sigma$ of the log AR(1); `scale_candidates` with $\sigma>0$ keeps $E[\lambda]=\nu/(\nu-2)$ and correlates neighbouring months; at $a<1$ the base law converges to the mean, and the same-month response to a set is computed from $a y+c$, not from the level.
+18. The shrunk ECME converges on 30 months where the plain one does not; the weight is near zero on a long sample and above 0.3 on a short one, and full shrinkage gives the diagonal.
+19. In the history of a path the known months repeat the panel, the last one is month 0, and a gap between them has the mean and variance of the bridge.
 
 Acceptance on the data — the same calculations as for `bvar.sv`:
 

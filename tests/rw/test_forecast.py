@@ -29,6 +29,7 @@ def model(scale=None, start_sd=None):
         nu=8.0,
         start_mean=np.array([10.0, 20.0]),
         start_sd=np.zeros(2) if start_sd is None else start_sd,
+        tail=np.array([[10.0, 20.0]]),
     )
 
 
@@ -227,6 +228,7 @@ def test_reordering_registry_preserves_base_and_intervened_laws():
     reverse.scale = m.scale[::-1, ::-1]
     reverse.start_mean = m.start_mean[::-1]
     reverse.start_sd = m.start_sd[::-1]
+    reverse.tail = m.tail[:, ::-1]
     left = simulate(m, ScenarioPlan(3), draws=5000, seed=88).paths
     right = simulate(reverse, ScenarioPlan(3), draws=5000, seed=89).paths[:, :, ::-1]
     for t in (1, 3):
@@ -313,3 +315,24 @@ def test_momentum_law_matches_the_simulated_paths_under_a_set():
     # The standard error of the simulated mean of gl.x is 0.021: four of them.
     assert_allclose(p[:, 3].mean(axis=0), law.means.mean(axis=0), atol=0.085)
     assert_allclose(np.cov(p[:, 3].T), law.covs.mean(axis=0), rtol=0.06)
+
+
+def test_the_history_draws_the_months_the_panel_missed_between_known_ones():
+    # ru.y was last published two months before t = 0, as the real wage is: a satellite that
+    # reads it needs the month between, drawn on the law of the month-zero draw.
+    m = model(start_sd=np.array([0.0, 2.0]))
+    m.persistence, m.intercept = np.ones(2), m.drift
+    m.tail = np.array([[9.8, 19.0], [9.9, np.nan], [10.0, np.nan]])
+
+    found = simulate(m, ScenarioPlan(2), draws=20000, seed=5)
+
+    history = found.history
+    assert history.shape == (20000, 3, 2)
+    assert_array_equal(history[:, :, 0], np.broadcast_to(m.tail[:, 0], (20000, 3)))
+    assert_array_equal(history[:, 0, 1], 19.0)
+    assert_array_equal(history[:, -1], found.paths[:, 0])
+    # A random walk pinned at both ends: the middle month is their mean, with half a step of
+    # variance around it.
+    middle = history[:, 1, 1] - (19.0 + found.paths[:, 0, 1]) / 2
+    assert middle.mean() == pytest.approx(0.0, abs=0.03)
+    assert middle.var() == pytest.approx(0.5 * m.nu / (m.nu - 2) * m.scale[1, 1], rel=0.05)

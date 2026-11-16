@@ -17,6 +17,7 @@ from mst.plugins.rw.estimate import (
     nearest_correlation,
     sample_covariance,
     scale_path_parameters,
+    shrinkage,
 )
 from mst.plugins.rw.spec import Break, Spec
 
@@ -79,6 +80,45 @@ def test_ecme_student_recovery_missingness_and_monotonicity():
     assert weights.shape == (len(d),)
     assert np.isnan(weights[~np.isfinite(d).any(axis=1)]).all()
     assert np.isfinite(weights[np.isfinite(d).any(axis=1)]).all()
+
+
+def short_sample(seed: int, months: int, variables: int = 21, missing: float = 0.15):
+    """Student changes of many variables over few months, with gaps: the 2014 panel's shape."""
+    rng = np.random.default_rng(seed)
+    loadings = rng.normal(size=(variables, variables))
+    covariance = loadings @ loadings.T / variables + 0.1 * np.eye(variables)
+    d = rng.multivariate_normal(np.zeros(variables), covariance, months)
+    d /= np.sqrt(rng.chisquare(5, months) / 5)[:, None]
+    d[rng.random(d.shape) < missing] = np.nan
+    return d
+
+
+@pytest.mark.parametrize("seed", [0, 1, 2])
+def test_shrunk_ecme_converges_when_the_months_barely_outnumber_the_variables(seed):
+    """21 variables over 30 months with gaps: the plain ECME breaks (a singular block or a
+    falling likelihood), the one shrunk to the diagonal converges and its objective rises."""
+    d = short_sample(seed, 30)
+    spec = Spec(drifts=[], breaks=[])
+    with pytest.raises((ValueError, np.linalg.LinAlgError)):
+        ecme(d, np.zeros(d.shape[1]), spec)
+    weight = shrinkage(d)
+    scale, nu, weights, trace = ecme(d, np.zeros(d.shape[1]), spec, shrink=weight)
+    assert 0.3 < weight < 1
+    assert np.diff(trace).min() >= -1e-8
+    assert np.linalg.eigvalsh(scale)[0] > 0
+    assert spec.nu_bounds[0] <= nu <= spec.nu_bounds[1]
+    assert np.isfinite(weights[np.isfinite(d).any(axis=1)]).all()
+
+
+def test_shrinkage_is_small_on_a_long_history_and_large_on_a_short_one():
+    assert shrinkage(short_sample(3, 2000, missing=0.0)) < 0.05
+    assert shrinkage(short_sample(3, 30, missing=0.0)) > 0.3
+
+
+def test_full_shrinkage_is_the_diagonal_scale():
+    d = short_sample(4, 40, variables=3, missing=0.0)
+    scale, _, _, _ = ecme(d, np.zeros(3), Spec(drifts=[], breaks=[]), shrink=1.0)
+    assert_allclose(scale, np.diag(np.diag(scale)))
 
 
 def test_ecme_gaussian_nu_reaches_upper_bound():
@@ -221,9 +261,25 @@ def test_sample_scale_is_the_sample_covariance_in_the_student_scale():
     d = rng.multivariate_normal([0, 0], scale, 800)
     p = panel(np.vstack([np.zeros(2), np.cumsum(d, axis=0)]), ["x", "y"])
     spec = Spec(drifts=[], breaks=[], sample_scale=True, momentum=False)
-    _, arrays, nu = estimate(p, spec)
-    expected = (nu - 2) / nu * np.cov(d.T, ddof=1)
+    meta, arrays, nu = estimate(p, spec)
+    # The correlation of the sample is shrunk to zero by the weight its history earns; the
+    # variances stay the sample's.
+    weight = meta["shrinkage"]["sample"]
+    assert weight == pytest.approx(shrinkage(d))
+    sample = np.cov(d.T, ddof=1)
+    expected = (nu - 2) / nu * ((1 - weight) * sample + weight * np.diag(np.diag(sample)))
     assert_allclose(arrays["scale"], expected, rtol=1e-6, atol=1e-10)
+
+
+def test_a_short_sample_shrinks_its_correlations_and_keeps_its_variances():
+    d = short_sample(5, 30, missing=0.0)
+    p = panel(np.vstack([np.zeros(d.shape[1]), np.cumsum(d, axis=0)]), [f"v{k}" for k in range(21)])
+    matrix, _, weight = sample_covariance(p, d, Spec(drifts=[], breaks=[]))
+    raw = np.cov(d.T, ddof=1)
+    assert weight > 0.3
+    assert_allclose(np.diag(matrix), np.diag(raw), rtol=1e-6)
+    off = ~np.eye(21, dtype=bool)
+    assert np.abs(matrix[off]).sum() < (1 - weight + 0.01) * np.abs(raw[off]).sum()
 
 
 def test_sample_covariance_uses_the_window():
@@ -278,10 +334,13 @@ def test_momentum_keeps_the_sample_monthly_covariance():
     d[:, 1] += 0.5 * d[:, 0]
     p = panel(np.vstack([np.zeros(2), np.cumsum(d, axis=0)]), ["x", "y"])
     spec = Spec(drifts=[], breaks=[], scale_start=p.months[0])
-    _, arrays, nu = estimate(p, spec)
+    meta, arrays, nu = estimate(p, spec)
     phi = arrays["momentum"]
     monthly = nu / (nu - 2) * arrays["scale"] / (1 - np.outer(phi, phi))
-    assert_allclose(monthly, np.cov(d.T, ddof=1), rtol=1e-6)
+    weight = meta["shrinkage"]["sample"]
+    sample = np.cov(d.T, ddof=1)
+    shrunk = (1 - weight) * sample + weight * np.diag(np.diag(sample))
+    assert_allclose(monthly, shrunk, rtol=1e-6)
     assert_allclose(arrays["previous"], p.y[-2])
 
 

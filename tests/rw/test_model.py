@@ -86,6 +86,12 @@ def test_estimate_load_round_trip_and_intervention_contract(monkeypatch, tmp_pat
     assert loaded.start_sd[0] == 0
     assert loaded.start_sd[1] > 0
     assert_allclose(loaded.start_mean[1], data.y[-3, 1])
+    # ru.y is two months behind: the history of a path covers them, and the known months
+    # repeat the panel.
+    assert_array_equal(loaded.tail, data.y[-3:])
+    assert first.history.shape == (6, 3, 2)
+    assert_array_equal(first.history[:, :2, 0], np.broadcast_to(data.y[-3:-1, 0], (6, 2)))
+    assert np.isfinite(first.history).all()
     assert_array_equal(loaded.persistence, np.ones(2))
     assert_array_equal(loaded.intercept, loaded.drift)
     assert loaded.scale_persistence == 0
@@ -106,6 +112,7 @@ def test_load_of_a_version_without_the_new_arrays_keeps_the_random_walk():
         "weights": np.array([1.0]),
         "start_mean": np.zeros(2),
         "start_sd": np.zeros(2),
+        "tail": np.zeros((1, 2)),
     }
     model = MODEL.load(meta, arrays)
     assert_array_equal(model.persistence, np.ones(2))
