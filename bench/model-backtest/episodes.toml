@@ -260,3 +260,139 @@ observations = ["ru.usdrub"]
 interventions = ["ru.key_rate"]
 reason = "охлаждение спроса жёсткой политикой, укрепление рубля, начало снижения ставки"
 sources = ["S1/2025", "S2/2025-2"]
+
+# Added on 17.11.2026 by the agent (source = "llm"): market shocks without a rate decision.
+# The global episodes rest on the movements their cards measure in FRED (D3); the corpus holds
+# no narrative of them, so the reason names the event and the variables only.
+
+[[episodes]]
+id = "R33"
+start = "2024-06"
+card = "R33"
+half = "validation"
+source = "llm"
+observations = ["ru.usdrub", "ru.cnyrub", "ru.imoex"]
+interventions = []
+reason = "санкции против Московской биржи увели валютные торги на внебиржевой рынок, граждане продавали акции, в ноябре санкции против банков ослабили рубль"
+sources = ["S2/2024-2", "S2/2025-1"]
+
+[[episodes]]
+id = "R34"
+start = "2024-11"
+card = "R34"
+half = "validation"
+source = "llm"
+observations = ["ru.usdrub", "ru.cnyrub"]
+interventions = []
+reason = "санкции против банков ослабили рубль до 110 за доллар, затем профицит торговли и спрос на рублёвые активы укрепили его на пятую часть"
+sources = ["S2/2024-2", "S2/2025-1"]
+
+[[episodes]]
+id = "R35"
+start = "2025-04"
+card = "R35"
+half = "validation"
+source = "llm"
+observations = ["ru.imoex"]
+interventions = []
+reason = "затяжное падение рынка акций на геополитических новостях и слабых прибылях при сокращении оборота"
+sources = ["S2/2025-2"]
+
+[[episodes]]
+id = "G26"
+start = "2014-06"
+card = "G26"
+half = "tuning"
+source = "llm"
+observations = ["gl.brent"]
+interventions = []
+reason = "обвал нефти 2014–2016 годов"
+sources = ["D3"]
+
+[[episodes]]
+id = "G27"
+start = "2014-10"
+card = "G27"
+half = "tuning"
+source = "llm"
+observations = ["gl.ust_10y", "gl.vix"]
+interventions = []
+reason = "резкое падение доходностей Treasuries и всплеск волатильности в октябре 2014 года"
+sources = ["D3"]
+
+[[episodes]]
+id = "G29"
+start = "2016-02"
+card = "G29"
+half = "tuning"
+source = "llm"
+observations = ["gl.brent"]
+interventions = []
+reason = "дно нефти в начале 2016 года и её восстановление"
+sources = ["D3"]
+
+[[episodes]]
+id = "G31"
+start = "2018-02"
+card = "G31"
+half = "tuning"
+source = "llm"
+observations = ["gl.vix"]
+interventions = []
+reason = "всплеск волатильности американского рынка акций в феврале 2018 года"
+sources = ["D3"]
+
+[[episodes]]
+id = "G33"
+start = "2018-12"
+card = "G33"
+half = "tuning"
+source = "llm"
+observations = ["gl.vix", "gl.brent"]
+interventions = []
+reason = "распродажа на рынке акций США и падение нефти в конце 2018 года"
+sources = ["D3"]
+
+[[episodes]]
+id = "G36"
+start = "2020-04"
+card = "G36"
+half = "tuning"
+source = "llm"
+observations = ["gl.brent"]
+interventions = []
+reason = "дно нефти в апреле 2020 года и её восстановление"
+sources = ["D3"]
+
+[[episodes]]
+id = "G41"
+start = "2023-03"
+card = "G41"
+half = "validation"
+source = "llm"
+observations = ["gl.ust_10y", "gl.vix"]
+interventions = []
+reason = "банкротство SVB и Credit Suisse, затем рост доходностей Treasuries"
+sources = ["D3"]
+
+[[episodes]]
+id = "G42"
+start = "2024-08"
+card = "G42"
+half = "validation"
+source = "llm"
+observations = ["gl.vix"]
+interventions = []
+reason = "разворот carry trade в иене и всплеск волатильности в августе 2024 года"
+sources = ["D3"]
+
+[[episodes]]
+id = "G43"
+start = "2025-04"
+card = "G43"
+half = "validation"
+source = "llm"
+observations = ["gl.vix", "gl.ust_10y"]
+interventions = []
+reason = "пошлины США: всплеск волатильности и колебания доходностей Treasuries в апреле 2025 года"
+sources = ["D3"]

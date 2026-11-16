@@ -3696,6 +3696,56 @@
       ],
       "path": "episodes/dm/G43.md",
       "status": "draft"
+    },
+    {
+      "id": "R33",
+      "start": "2024-06",
+      "region": "ru",
+      "country": "RU",
+      "title": "Санкции против Московской биржи: внебиржевой курс",
+      "factors": [
+        "sanctions",
+        "fx",
+        "equity.index"
+      ],
+      "data": [
+        "D1",
+        "D2"
+      ],
+      "path": "episodes/ru/R33.md",
+      "status": "draft"
+    },
+    {
+      "id": "R34",
+      "start": "2024-11",
+      "region": "ru",
+      "country": "RU",
+      "title": "Санкции против банков: рубль за 110",
+      "factors": [
+        "sanctions",
+        "fx"
+      ],
+      "data": [
+        "D1",
+        "D2"
+      ],
+      "path": "episodes/ru/R34.md",
+      "status": "draft"
+    },
+    {
+      "id": "R35",
+      "start": "2025-04",
+      "region": "ru",
+      "country": "RU",
+      "title": "Падение рынка акций 2025 года",
+      "factors": [
+        "equity.index"
+      ],
+      "data": [
+        "D2"
+      ],
+      "path": "episodes/ru/R35.md",
+      "status": "draft"
     }
   ]
 }
