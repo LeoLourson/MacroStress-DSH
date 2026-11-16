@@ -21,7 +21,7 @@ so a model plugin never sees the platform's orchestration.
 
 import math
 from abc import ABC, abstractmethod
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from datetime import date
 from pathlib import Path
@@ -412,6 +412,29 @@ class MacroEstimateContext:
     inputs: Path | None = None
     checkpoints: Path | None = None
     fragment: Callable[[str], bool] | None = None
+    left_out: Mapping[str, str] = field(default_factory=dict)
+    """The variables of the platform's registry left out of ``registry``, with the reason: a
+    model whose own configuration names one of them knows it was not forgotten."""
+
+
+class ShortHistory(ValueError):
+    """The history known on the date is too short for the model to estimate these variables.
+
+    ``variables`` maps each variable to the reason, in the model's own words. Only the model
+    knows how much history it needs, so it raises this instead of a plain error; a check over
+    past dates (``mst.metrics``) then estimates the model again without these variables and
+    leaves out their cells alone, instead of the whole date. Outside such a check it is the
+    error it derives from.
+    """
+
+    def __init__(self, variables: Mapping[str, str]):
+        if not variables:
+            raise ValueError("ShortHistory names no variable")
+        self.variables = dict(variables)
+        super().__init__(
+            "too short a history: "
+            + "; ".join(f"{name} ({reason})" for name, reason in self.variables.items())
+        )
 
 
 @dataclass(frozen=True)

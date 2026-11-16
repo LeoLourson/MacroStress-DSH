@@ -63,7 +63,10 @@ from mst.model_sdk.bounds import lower_bounds, observed
 from mst.model_sdk.contracts import (
     Intervention,
     LinearTerm,
+    MacroEstimate,
+    MacroEstimateContext,
     ScenarioPlan,
+    ShortHistory,
 )
 from mst.model_sdk.interventions import apply_default
 from mst.model_sdk.version import MODEL_SDK_VERSION
@@ -275,6 +278,15 @@ def _episode(
     start = check.start
     as_of = calculation_date(start)
     macro = _episode_macro(plugin, data, registry, as_of, root, inputs)
+    left_out = macro.meta.get("left_out", {})
+    lost = [name for name in check.constrained if name in left_out]
+    if lost:
+        raise ValueError(
+            "; ".join(
+                f"the model left out {name}, which the episode fixes: {left_out[name]}"
+                for name in lost
+            )
+        )
     panel, _ = macro_version.panel_of(root, macro.name)
     unknown = [name for name in check.constrained if name not in panel.ids]
     if unknown:
@@ -443,15 +455,49 @@ def _episode_macro(
         name = pointer.read_text(encoding="utf-8").strip()
         if (root / "macro" / name).is_dir():
             return macro_version.load(root, name, installed)
-    from mst.model_sdk.contracts import MacroEstimateContext
-
-    estimate = plugin.estimate(
-        MacroEstimateContext(store=data, registry=registry, as_of=as_of, inputs=inputs)
-    )
-    name = macro_version.save(plugin.model_id, estimate.meta, estimate.arrays, root)
+    estimate, left_out = _estimate_known(plugin, data, registry, as_of, inputs)
+    meta = {**estimate.meta, "left_out": left_out}
+    name = macro_version.save(plugin.model_id, meta, estimate.arrays, root)
     pointer.parent.mkdir(parents=True, exist_ok=True)
     pointer.write_text(name + "\n", encoding="utf-8")
     return macro_version.load(root, name, installed)
+
+
+def _estimate_known(
+    plugin, data: SeriesStore, registry: Registry, as_of: date, inputs: Path | None
+) -> tuple[MacroEstimate, dict[str, str]]:
+    """The estimate on the data known on ``as_of``, without the variables too short for it.
+
+    A model that finds the history of some variables too short says so with ``ShortHistory``;
+    it is estimated again on the registry without them, and they come back with the reason.
+    Every round removes at least one variable it was given, so the rounds end. A short variable
+    leaves out its own cells; only an episode that fixes it is lost with it.
+    """
+    left_out: dict[str, str] = {}
+    while True:
+        given = registry.model_copy(
+            update={"variables": [v for v in registry.variables if v.id not in left_out]}
+        )
+        try:
+            estimate = plugin.estimate(
+                MacroEstimateContext(
+                    store=data,
+                    registry=given,
+                    as_of=as_of,
+                    inputs=inputs,
+                    left_out=dict(left_out),
+                )
+            )
+        except ShortHistory as short:
+            known = {variable.id for variable in given.variables}
+            stray = sorted(set(short.variables) - known)
+            if stray:
+                raise ValueError(
+                    f"{plugin.model_id} calls short variables it was not given: {', '.join(stray)}"
+                ) from short
+            left_out.update(short.variables)
+            continue
+        return estimate, left_out
 
 
 def _configuration_paths(plugin) -> list[Path]:
@@ -741,6 +787,7 @@ def _report(
                 "macro_model": episode.macro.plugin.model_id,
                 "macro_version": episode.macro.name,
                 "satellite_version": episode.bundle_name,
+                "left_out": episode.macro.meta.get("left_out", {}),
                 "constraint_probabilities": constraint_shares[episode.id],
             }
             for episode in episodes

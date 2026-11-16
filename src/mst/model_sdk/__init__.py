@@ -43,6 +43,7 @@ from .contracts import (
     SatelliteModel,
     SatellitePart,
     ScenarioPlan,
+    ShortHistory,
     StructuralForm,
 )
 from .interventions import (
@@ -90,6 +91,7 @@ __all__ = [
     "SatelliteModel",
     "SatellitePart",
     "ScenarioPlan",
+    "ShortHistory",
     "box_gibbs",
     "check_shocks",
     "dependent_rows",

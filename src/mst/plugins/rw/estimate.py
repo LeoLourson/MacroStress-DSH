@@ -1,10 +1,13 @@
 """Missing-data Student ECME and the housing interval approximation."""
 
+from collections.abc import Sequence
+
 import numpy as np
 from scipy.optimize import minimize_scalar
 from scipy.special import gammaln
 
 from mst.macro.panel import Panel
+from mst.model_sdk import ShortHistory
 
 from .spec import Spec
 
@@ -383,11 +386,13 @@ def _counts(panel: Panel, data: np.ndarray, spec: Spec) -> dict[str, int]:
     counts = {variable: int(np.isfinite(data[:, i]).sum()) for i, variable in enumerate(panel.ids)}
     if HOUSING in panel.ids:
         counts[HOUSING] = len(_intervals(panel, panel.ids.index(HOUSING), spec))
-    short = [
-        f"{variable} ({count})" for variable, count in counts.items() if count < spec.min_changes
-    ]
+    short = {
+        variable: f"{count} changes or intervals, the model needs {spec.min_changes}"
+        for variable, count in counts.items()
+        if count < spec.min_changes
+    }
     if short:
-        raise ValueError(f"fewer than {spec.min_changes} changes or intervals: {', '.join(short)}")
+        raise ShortHistory(short)
     return counts
 
 
@@ -419,8 +424,12 @@ def _start(
     return mean, sd
 
 
-def estimate(panel: Panel, spec: Spec) -> tuple[dict, dict, float]:
-    spec.validate_ids(panel.ids)
+def estimate(
+    panel: Panel, spec: Spec, *, left_out: Sequence[str] = ()
+) -> tuple[dict, dict, float]:
+    """The version of the panel; ``left_out`` are variables the spec may name but the panel
+    lacks, because the platform left them out as too short."""
+    spec.validate_ids([*panel.ids, *left_out])
     data = changes(panel, spec)
     counts = _counts(panel, data, spec)
     mu = drift(data, panel.ids, spec)

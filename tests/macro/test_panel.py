@@ -77,3 +77,26 @@ def test_panel_starts_at_start_even_without_data_there(tmp_path):
     panel = build_panel(store, registry(), start=date(2020, 1, 1), as_of=date(2020, 5, 1))
     assert panel.months[0] == date(2020, 1, 1)
     assert np.isnan(panel.y[:2]).all()
+
+
+def test_a_seasonal_variable_without_every_calendar_month_is_named_as_short(tmp_path):
+    from mst.model_sdk import ShortHistory
+
+    store = SeriesStore(tmp_path)
+    months = months_between(date(2020, 3, 1), date(2021, 1, 1))
+    for id_ in ("ru.cpi", "gl.vix"):
+        store.write(
+            id_,
+            [Observation(m, 100.0 + k, m, False) for k, m in enumerate(months)],
+        )
+    with pytest.raises(ShortHistory) as raised:
+        build_panel(
+            store,
+            registry(),
+            start=months[0],
+            as_of=date(2021, 2, 1),
+            seasonal=["ru.cpi"],
+        )
+    assert raised.value.variables == {
+        "ru.cpi": "no change into calendar month 2 to estimate seasonality"
+    }

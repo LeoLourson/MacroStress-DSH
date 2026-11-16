@@ -14,6 +14,7 @@ from datetime import date
 import numpy as np
 
 from mst.data.store import SeriesStore, shift
+from mst.model_sdk.contracts import ShortHistory
 
 from .registry import Registry
 
@@ -79,12 +80,19 @@ def build_panel(
     index = {month: t for t, month in enumerate(months)}
     y = np.full((len(months), len(variables)), np.nan)
     approximate = np.zeros(y.shape, dtype=bool)
+    short: dict[str, str] = {}
     for i, variable in enumerate(variables):
         for row in rows[variable.id]:
             y[index[row.month], i] = variable.to_model(row.value)
             approximate[index[row.month], i] = row.approximate
         if variable.id in seasonal:
-            y[:, i] = deseasonalize(y[:, i], months)
+            try:
+                y[:, i] = deseasonalize(y[:, i], months)
+            except ValueError as error:
+                # Every calendar month needs a change: a history that has not seen one is short.
+                short[variable.id] = str(error)
+    if short:
+        raise ShortHistory(short)
     return Panel(
         ids=[v.id for v in variables],
         n_global=sum(v.block == "gl" for v in variables),

@@ -384,3 +384,28 @@ def test_an_event_of_two_terms_reads_their_sum():
     missing = (LinearTerm("c", 1, 1.0),)
     absent = LinearConstraint(terms=missing, low=0.0, high=1.0)
     assert _happened(grid, when, missing, absent) is None
+
+
+class ShortRate(WalkMacro):
+    """The walk with a rate history it finds too short on every date."""
+
+    def estimate(self, context):
+        from mst.model_sdk import ShortHistory
+
+        given = {variable.id for variable in context.registry.variables}
+        if "ru.key_rate" in given:
+            raise ShortHistory({"ru.key_rate": "too few changes"})
+        self.variables = tuple(id_ for id_ in simulated.VARIABLES if id_ in given)
+        return super().estimate(context)
+
+
+def test_a_short_variable_is_left_out_of_its_dates_not_the_dates(tmp_path, monkeypatch):
+    found = report_of(tmp_path, monkeypatch, macro=ShortRate())
+
+    assert not found["refused"] and not found["skipped"]
+    assert found["dates"] > 0
+    assert set(found["left_out"]) == {row["date"] for row in found["quality"]["rows"]}
+    assert all(
+        reasons == {"ru.key_rate": "too few changes"} for reasons in found["left_out"].values()
+    )
+    assert {row["quantity"] for row in found["quality"]["rows"]} == {"gl.brent"}

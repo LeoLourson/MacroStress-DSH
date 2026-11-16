@@ -77,6 +77,8 @@ class Grid:
     """The dates whose data are too short for any model, with the reason."""
     refused: dict = field(default_factory=dict)
     """The dates with enough data where the model gave no version, with the reason."""
+    left_out: dict = field(default_factory=dict)
+    """The variables each date's version left out as too short, with the reason."""
 
 
 def rolling_report(
@@ -105,6 +107,7 @@ def rolling_report(
         "dates": len(grid.dates),
         "skipped": {when.isoformat(): reason for when, reason in grid.skipped.items()},
         "refused": {when.isoformat(): reason for when, reason in grid.refused.items()},
+        "left_out": {when.isoformat(): found for when, found in grid.left_out.items() if found},
     }
     report["base_uniformity"] = _uniformity(grid, plan)
     report["quality"] = _quality(grid, plan, registry)
@@ -168,7 +171,7 @@ def _grid(plugin, store, registry, root, plan, known_on, macro_of, *, only=None)
     if only is not None:
         dates = [when for when in dates if when in set(only)]
     reach = max([plan.after_months, *(event.horizon for event in plan.rolling.price_events)])
-    versions, forecasts, facts, panels, skipped, refused = {}, {}, {}, {}, {}, {}
+    versions, forecasts, facts, panels, skipped, refused, left_out = {}, {}, {}, {}, {}, {}, {}
     kept = []
     for when in dates:
         as_of = calculation_date(when)
@@ -179,6 +182,7 @@ def _grid(plugin, store, registry, root, plan, known_on, macro_of, *, only=None)
             (skipped if short else refused)[when] = str(error)
             continue
         kept.append(when)
+        left_out[when] = version.meta.get("left_out", {})
         if plan.rolling.price_events:
             versions[when] = version
         panels[when] = version.panel
@@ -212,6 +216,7 @@ def _grid(plugin, store, registry, root, plan, known_on, macro_of, *, only=None)
         panels=panels,
         skipped=skipped,
         refused=refused,
+        left_out=left_out,
     )
 
 

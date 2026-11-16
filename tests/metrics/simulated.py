@@ -67,8 +67,10 @@ class FakeMacro(MacroModel):
 
     def estimate(self, context: MacroEstimateContext) -> MacroEstimate:
         self.calls.append(context.as_of)
+        given = {variable.id for variable in context.registry.variables}
+        ids = [id_ for id_ in VARIABLES if id_ in given]
         months, columns = [], []
-        for id_ in VARIABLES:
+        for id_ in ids:
             rows = context.store.as_of(id_, context.as_of)
             months = [row.month for row in rows]
             columns.append([row.value for row in rows])
@@ -76,7 +78,7 @@ class FakeMacro(MacroModel):
         return MacroEstimate(
             meta={
                 "as_of": context.as_of.isoformat(),
-                "ids": list(VARIABLES),
+                "ids": ids,
                 "n_global": 1,
                 "months": [m.isoformat() for m in months],
                 "shocks": list(SHOCKS),

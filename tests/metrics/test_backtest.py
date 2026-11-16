@@ -1093,3 +1093,56 @@ def test_wild_interval_takes_episodes_with_unequal_cell_counts():
     # The cell-weighted mean is 4; the interval moves whole episodes, so it spans their spread.
     assert low < 4.0 < high
     assert high - low > 1.0
+
+
+class _ShortRate(simulated.FakeMacro):
+    """The fake model with a rate history it finds too short on every date."""
+
+    def estimate(self, context):
+        if any(variable.id == "ru.key_rate" for variable in context.registry.variables):
+            from mst.model_sdk import ShortHistory
+
+            raise ShortHistory({"ru.key_rate": "2 changes, the model needs 3"})
+        assert context.left_out == {"ru.key_rate": "2 changes, the model needs 3"}
+        return super().estimate(context)
+
+
+def test_a_short_variable_leaves_out_its_cells_not_the_episode(workspace, tmp_path, monkeypatch):
+    macro = _ShortRate()
+    monkeypatch.setattr(models_pkg, "selected", lambda model_id=None: macro)
+    plan = plan_file(tmp_path, [("R1", "gl.brent"), ("R2", "gl.brent")])
+
+    code, report = run_episodes(workspace, plan, tmp_path, rolling=False)
+
+    assert [row["id"] for row in report["episodes"]] == ["R1", "R2"]
+    assert all(
+        row["left_out"] == {"ru.key_rate": "2 changes, the model needs 3"}
+        for row in report["episodes"]
+    )
+    assert "ru.key_rate" not in report["quantities"]
+    assert "gl.brent" in report["quantities"]
+    assert report["problems"] == []
+    assert code == 0
+
+
+def test_an_episode_fixing_a_short_variable_is_dropped_with_the_reason(
+    workspace, tmp_path, monkeypatch
+):
+    macro = _ShortRate()
+    monkeypatch.setattr(models_pkg, "selected", lambda model_id=None: macro)
+    plan = plan_file(tmp_path, [("R1", "gl.brent"), ("R2", [], "ru.key_rate")])
+
+    code, report = run_episodes(workspace, plan, tmp_path, rolling=False)
+
+    assert [row["id"] for row in report["episodes"]] == ["R1"]
+    assert report["problems"] == [
+        "R2: the model left out ru.key_rate, which the episode fixes: 2 changes, the model needs 3"
+    ]
+    assert code == 1
+
+
+def test_a_short_history_that_names_nothing_is_no_contract():
+    from mst.model_sdk import ShortHistory
+
+    with pytest.raises(ValueError, match="names no variable"):
+        ShortHistory({})

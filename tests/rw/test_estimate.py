@@ -159,15 +159,33 @@ def test_housing_break_excludes_whole_crossing_interval():
 
 
 @pytest.mark.parametrize(
-    "ids,y,expected",
+    "ids,y,expected,count",
     [
-        (["x", "y"], [[1, 2], [2, np.nan], [3, np.nan], [4, 3]], "y"),
-        (["x", "ru.housing_price"], [[1, 2], [2, np.nan], [3, np.nan], [4, 3]], "ru.housing_price"),
+        (["x", "y"], [[1, 2], [2, np.nan], [3, np.nan], [4, 3]], "y", 0),
+        (
+            ["x", "ru.housing_price"],
+            [[1, 2], [2, np.nan], [3, np.nan], [4, 3]],
+            "ru.housing_price",
+            1,
+        ),
     ],
 )
-def test_insufficient_data_names_variable(ids, y, expected):
-    with pytest.raises(ValueError, match=expected):
+def test_insufficient_data_names_variable(ids, y, expected, count):
+    from mst.model_sdk import ShortHistory
+
+    with pytest.raises(ShortHistory) as raised:
         estimate(panel(y, ids), Spec(drifts=[], breaks=[]))
+    assert list(raised.value.variables) == [expected]
+    assert raised.value.variables[expected] == f"{count} changes or intervals, the model needs 3"
+
+
+def test_a_variable_the_platform_left_out_may_stay_in_the_spec():
+    y = np.cumsum(np.random.default_rng(7).standard_normal((30, 2)), axis=0)
+    spec = Spec(drifts=["ru.housing_price"], breaks=[])
+    with pytest.raises(ValueError, match="unknown variables: ru.housing_price"):
+        estimate(panel(y, ["x", "y"]), spec)
+    diagnostics, _, _ = estimate(panel(y, ["x", "y"]), spec, left_out=["ru.housing_price"])
+    assert set(diagnostics["counts"]) == {"x", "y"}
 
 
 def test_mean_reversion_recovers_the_ar1_coefficient_and_the_neutral():

@@ -55,7 +55,9 @@ class RwModel(MacroModel):
 
     def estimate(self, context: MacroEstimateContext) -> MacroEstimate:
         spec = load_spec()
-        spec.validate_ids([variable.id for variable in context.registry.variables])
+        spec.validate_ids(
+            [*(variable.id for variable in context.registry.variables), *context.left_out]
+        )
         panel = build_panel(
             context.store,
             context.registry,
@@ -63,7 +65,7 @@ class RwModel(MacroModel):
             as_of=context.as_of,
             seasonal=[v.id for v in context.registry.variables if v.seasonal],
         )
-        diagnostics, arrays, nu = estimate(panel, spec)
+        diagnostics, arrays, nu = estimate(panel, spec, left_out=list(context.left_out))
         return MacroEstimate(
             meta={
                 "as_of": context.as_of.isoformat(),
