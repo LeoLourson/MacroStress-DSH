@@ -36,7 +36,8 @@ def driver_series(registry, driver: str) -> str:
 
 
 def inputs(position, satellites, as_of: date, horizon: int, base_currency: str):
-    """The macro variables and the drivers one position reads."""
+    """The macro variables and the drivers one position reads; None when the bundle serves
+    no driver it needs, as for a share listed after the date."""
     model = catalog.model_for(position)
     options = RunOptions(as_of=as_of, horizon=horizon, base_currency=base_currency)
     needs = model.requirements(position, options)
@@ -49,7 +50,7 @@ def inputs(position, satellites, as_of: date, horizon: int, base_currency: str):
             among=satellites.served(),
         )
         if driver is None:
-            raise ValueError(f"{position.id}: no served driver of {requirement.quantity}")
+            return None
         drivers.append(driver)
     return list(needs.macro), drivers
 
@@ -99,7 +100,11 @@ def replay(macro, satellites, portfolio, store, *, horizon: int, as_of: date) ->
     changes = np.full((len(ids), len(starts), horizon), np.nan)
     values = np.full((len(ids), len(starts)), np.nan)
     for p, position in enumerate(portfolio.positions):
-        variables, drivers = inputs(position, satellites, as_of, horizon, portfolio.base_currency)
+        found = inputs(position, satellites, as_of, horizon, portfolio.base_currency)
+        if found is None:
+            # Never observed: no window counts the position, and the forecast excludes it too.
+            continue
+        variables, drivers = found
         driver_rows = {}
         for driver in drivers:
             found = monthly(store, driver_series(satellites.registry, driver), as_of)

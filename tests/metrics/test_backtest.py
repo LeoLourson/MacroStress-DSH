@@ -464,6 +464,36 @@ def test_the_portfolio_tail_is_reported_with_its_horizon(workspace, tmp_path, ca
     assert "## Episodes: tail of the portfolio (Acerbi-Székely)" in capsys.readouterr().out
 
 
+def test_a_position_without_a_served_driver_leaves_out_only_itself(workspace, tmp_path):
+    from mst.portfolio import tool as portfolio_tool
+
+    plan = plan_file(tmp_path, [("R1", "gl.brent"), ("R2", "ru.key_rate")])
+    catalog = with_drivers(workspace, tmp_path)
+    # GAZP has no driver in the catalog, as a share listed after the date has none.
+    portfolio_tool.save(
+        tmp_path / "portfolios",
+        "two",
+        {
+            "name": "two",
+            "base_currency": "RUB",
+            "positions": [
+                {"id": name, "type": "common_stock", "notional": 10.0, "codes": {"secid": code}}
+                for name, code in (("sber", "SBER"), ("gazp", "GAZP"))
+            ],
+        },
+    )
+
+    _, report = run_episodes(workspace, plan, tmp_path, drivers=catalog, portfolio="two")
+
+    # The windows are judged on the position that can be valued; the other is named.
+    assert report["dropped"]["refused"] == {}
+    assert report["quantities"]["sber"]["level"] == "position"
+    assert "gazp" not in report["quantities"]
+    excluded = report["dropped"]["excluded"]
+    assert set(excluded) == {"R1", "R2"}
+    assert all("share_price" in found["gazp"] for found in excluded.values())
+
+
 def test_an_unknown_portfolio_is_a_named_error(workspace, tmp_path):
     plan = plan_file(tmp_path, [("R1", "gl.brent"), ("R2", "ru.key_rate")])
 
