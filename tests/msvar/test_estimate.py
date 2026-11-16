@@ -92,3 +92,16 @@ def test_one_regime_is_refused():
     y, _ = sim.simulate(60, np.random.default_rng(3))
     with pytest.raises(ValueError, match="at least two regimes"):
         estimate(sim.panel(y), sim.spec(draws=4, burn=4), 1)
+
+
+def test_a_variable_with_two_values_is_named_short():
+    from mst.model_sdk import ShortHistory
+    from mst.plugins.msvar.estimate import minnesota
+
+    y, _ = sim.simulate(60, np.random.default_rng(4))
+    y[:-2, 2] = np.nan  # ru.c published only in the last two months, as housing in 2014
+
+    with pytest.raises(ShortHistory) as raised:
+        minnesota(sim.panel(y), sim.spec())
+
+    assert raised.value.variables == {"ru.c": "fewer than three values"}

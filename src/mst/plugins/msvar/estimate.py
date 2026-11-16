@@ -67,6 +67,8 @@ from scipy.special import logsumexp
 from scipy.stats import invwishart
 
 from mst.macro.panel import Panel
+from mst.model_sdk import ShortHistory
+from mst.model_sdk.missing import draw_missing
 
 from .spec import Spec
 from .var import allowed, regressors, split
@@ -116,14 +118,17 @@ class Prior:
     observation_x: np.ndarray | None = None  # (d, k) regressors of the dummy rows
 
 
-def scales(y: np.ndarray) -> np.ndarray:
+def scales(y: np.ndarray, ids: list[str]) -> np.ndarray:
     """``sigma_k``: the standard deviation of monthly changes, from consecutive observations
-    ``(y_t - y_s) / sqrt(t - s)``, so sparse series count too."""
+    ``(y_t - y_s) / sqrt(t - s)``, so sparse series count too. A variable with fewer than three
+    values on the date is too short for it: ``ShortHistory`` names every such variable."""
+    counts = np.isfinite(y).sum(axis=0)
+    short = {ids[k]: "fewer than three values" for k in np.flatnonzero(counts < 3)}
+    if short:
+        raise ShortHistory(short)
     result = np.empty(y.shape[1])
     for k in range(y.shape[1]):
         months = np.flatnonzero(~np.isnan(y[:, k]))
-        if len(months) < 3:
-            raise ValueError(f"variable {k} has fewer than three values")
         changes = np.diff(y[months, k]) / np.sqrt(np.diff(months))
         result[k] = changes.std()
     if np.any(result <= 0):
@@ -179,7 +184,7 @@ def minnesota(panel: Panel, spec: Spec) -> Prior:
     unknown = set(spec.stationary) - set(panel.ids)
     if unknown:
         raise ValueError(f"stationary names unknown variables: {', '.join(sorted(unknown))}")
-    sigma = scales(panel.y)
+    sigma = scales(panel.y, panel.ids)
     mean = np.zeros((n, 1 + n * p))
     var = np.full(mean.shape, LOOSE)
     for i, id_ in enumerate(panel.ids):
@@ -494,20 +499,7 @@ def impute(
         (blocks.ravel(), (rows.ravel(), columns.ravel())),
         shape=(count * n, len(y) * n),
     ).tocsr()
-    weight = sparse.block_diag(list(precisions), format="csr")
-    precision = (equation.T @ weight @ equation).tocsr()
-    linear = equation.T @ (weight @ intercept.ravel())
-    flat_missing = np.flatnonzero(missing.ravel())
-    known = np.nan_to_num(y.ravel())
-    known[flat_missing] = 0.0
-    of_missing = precision[flat_missing][:, flat_missing].toarray()
-    rhs = linear[flat_missing] - precision[flat_missing] @ known
-    root_mm = np.linalg.cholesky(of_missing)
-    mean = np.linalg.solve(root_mm.T, np.linalg.solve(root_mm, rhs))
-    draw = mean + np.linalg.solve(root_mm.T, rng.standard_normal(len(mean)))
-    completed = known.copy()
-    completed[flat_missing] = draw
-    return completed.reshape(y.shape)
+    return draw_missing(y, missing, equation, precisions, intercept, rng)
 
 
 def _initial(panel: Panel, prior: Prior, spec: Spec, n_regimes: int):

@@ -138,3 +138,16 @@ def test_the_sampler_finds_the_jumps_of_a_named_variable():
     assert np.all(posterior.jump_prob[:, [0, 2]] == 0.0)
     assert np.all(posterior.jump_scale[:, [0, 2]] == 1.0)
     assert np.all(np.isinf(posterior.dof[:, 1]))
+
+
+def test_a_variable_with_two_values_is_named_short():
+    from mst.model_sdk import ShortHistory
+    from mst.plugins.bvar.estimate import minnesota
+
+    y = sim.simulate(60, np.random.default_rng(4))
+    y[:-2, 2] = np.nan  # ru.c published only in the last two months, as housing in 2014
+
+    with pytest.raises(ShortHistory) as raised:
+        minnesota(sim.panel(y), sim.spec())
+
+    assert raised.value.variables == {"ru.c": "fewer than three values"}

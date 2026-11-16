@@ -46,6 +46,8 @@ from scipy.linalg import solve_triangular
 from scipy.stats import invwishart
 
 from mst.macro.panel import Panel, shift
+from mst.model_sdk import ShortHistory
+from mst.model_sdk.missing import draw_missing
 
 from . import sv
 from .spec import Dummy, Spec
@@ -110,14 +112,17 @@ class Prior:
     observation_x: np.ndarray | None = None  # (d, k) regressors of the dummy rows
 
 
-def scales(y: np.ndarray) -> np.ndarray:
+def scales(y: np.ndarray, ids: list[str]) -> np.ndarray:
     """``sigma_k``: the standard deviation of monthly changes, from consecutive observations
-    ``(y_t - y_s) / sqrt(t - s)``, so sparse series count too."""
+    ``(y_t - y_s) / sqrt(t - s)``, so sparse series count too. A variable with fewer than three
+    values on the date is too short for it: ``ShortHistory`` names every such variable."""
+    counts = np.isfinite(y).sum(axis=0)
+    short = {ids[k]: "fewer than three values" for k in np.flatnonzero(counts < 3)}
+    if short:
+        raise ShortHistory(short)
     result = np.empty(y.shape[1])
     for k in range(y.shape[1]):
         months = np.flatnonzero(~np.isnan(y[:, k]))
-        if len(months) < 3:
-            raise ValueError(f"variable {k} has fewer than three values")
         changes = np.diff(y[months, k]) / np.sqrt(np.diff(months))
         result[k] = changes.std()
     if np.any(result <= 0):
@@ -271,7 +276,7 @@ def minnesota(panel: Panel, spec: Spec, dummy_mask: np.ndarray | None = None) ->
     unknown = set(spec.stationary) - set(panel.ids)
     if unknown:
         raise ValueError(f"stationary names unknown variables: {', '.join(sorted(unknown))}")
-    sigma = scales(panel.y)
+    sigma = scales(panel.y, panel.ids)
     mean = np.zeros((n, 1 + n * p + d))
     var = np.full(mean.shape, LOOSE)
     for i, id_ in enumerate(panel.ids):
@@ -384,20 +389,7 @@ def impute(y, missing, coefficients, precisions, dummies, p, rng):
         ),
         shape=((count - p) * n, count * n),
     )
-    s = sparse.block_diag(precisions, format="csr")
-    precision = (k.T @ s @ k).tocsr()
-    linear = k.T @ (s @ intercept.ravel())
-    flat_missing = np.flatnonzero(missing.ravel())
-    known = np.nan_to_num(y.ravel())
-    known[flat_missing] = 0.0
-    p_mm = precision[flat_missing][:, flat_missing].toarray()
-    rhs = linear[flat_missing] - precision[flat_missing] @ known
-    root = np.linalg.cholesky(p_mm)
-    mean = np.linalg.solve(root.T, np.linalg.solve(root, rhs))
-    draw = mean + np.linalg.solve(root.T, rng.standard_normal(len(mean)))
-    completed = known.copy()
-    completed[flat_missing] = draw
-    return completed.reshape(count, n)
+    return draw_missing(y, missing, k, precisions, intercept, rng)
 
 
 def unit_lower(sigma: np.ndarray):

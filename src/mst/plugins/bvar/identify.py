@@ -100,7 +100,7 @@ def rotate(
     floor = shares * (response[0] ** 2).sum(axis=1)[None, :]
     for start in range(0, tries, BATCH):
         q = haar_columns(size, named, min(BATCH, tries - start), rng)
-        moved = np.einsum("hvn,bnk->bhvk", response, q)
+        moved = np.matmul(response[None], q[:, None])  # (batch, months, n, named)
         ok = np.ones(len(q), dtype=bool)
         flips = np.ones((len(q), named))
         for j, sign in enumerate(signs):
