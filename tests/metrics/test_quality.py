@@ -219,3 +219,13 @@ def test_a_rename_that_never_passes_raises_and_leaves_no_draft(tmp_path, monkeyp
     with pytest.raises(PermissionError):
         versions.save(tmp_path, {"a": 1}, {"x": np.zeros(2)})
     assert list(tmp_path.iterdir()) == []
+
+
+def test_one_unit_has_no_interval():
+    rows = [
+        {"date": "d1", "month": t, "quantity": "a", "model": 1.0 + t, "walk": 2.0 + t}
+        for t in (1, 2, 3)
+    ]
+    found = interval(rows, "model", "walk", unit="date", seed=1)
+    assert found["point"] is not None
+    assert found["log_se"] is None and found["low"] is None

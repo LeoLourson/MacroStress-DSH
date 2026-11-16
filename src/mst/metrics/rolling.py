@@ -43,9 +43,11 @@ from mst.model_sdk.bounds import lower_bounds, observed
 
 from .baselines import DOMAIN, WIDTH, band_problems, macro_domain, random_walk
 from .cells import crps, finite_draws, history_range, pit
-from .decision import decide
+from .decision import on_rows
 from .episodes import Episodes, load_episodes
-from .quality import interval, paired, relative
+from .quality import interval, relative
+from .sanity import check, worst_shares
+from .tables import interval_text, number, print_left_out, print_sanity
 
 BUCKETS = (0.05, 0.5, 0.95)
 """The canon's calibration buckets: below a, between a and the median, median to b, above b."""
@@ -265,10 +267,13 @@ def _quality_rows(grid: Grid, plan: Episodes, registry) -> list[dict]:
                         "half": half_of(when, plan),
                         "month": t,
                         "quantity": id_,
+                        "level": "macro",
                         "model": crps(draws, value),
                         "walk": crps(known, value) if len(known) else None,
                         "pit": pit(draws, value),
                         "inside": bool(band[0] <= value <= band[1]),
+                        "width": float(band[1] - band[0]),
+                        "history_range": spread,
                         DOMAIN: DOMAIN in broken,
                         WIDTH: WIDTH in broken,
                     }
@@ -277,9 +282,10 @@ def _quality_rows(grid: Grid, plan: Episodes, registry) -> list[dict]:
 
 
 def _summary(rows: list[dict], block: int, seed: int) -> dict:
-    """The relative CRPS with its interval, the calibration and the admission of some rows."""
+    """The sanity of some rows, then the relative CRPS with its interval and the calibration."""
     score = relative(rows, "model", "walk")
     return {
+        "sanity": check(rows, benchmark="walk"),
         "dates": len({row["date"] for row in rows}),
         "cells": len(rows),
         "vs_walk": score["score"],
@@ -293,9 +299,6 @@ def _summary(rows: list[dict], block: int, seed: int) -> dict:
             if any(row["month"] == t for row in rows)
         },
         "coverage_90": float(np.mean([row["inside"] for row in rows])),
-        "admission": {
-            rule: float(np.mean([row[rule] for row in rows])) for rule in (DOMAIN, WIDTH)
-        },
     }
 
 
@@ -313,36 +316,31 @@ def rolling_decision(report: dict, against: Path, *, seed: int) -> dict:
     """The four steps of the decision rule on the logarithm of the relative CRPS.
 
     The reports must share their cells, and the comparison runs on the validation half when
-    there is one: the benchmark, at zero, is the walk; the incumbent is the other report. A
-    candidate that refused a date both reports should cover has failed whatever its score.
+    there is one: the benchmark, at zero, is the walk; the incumbent is the other report, read
+    from its details file — the only file that keeps the cells. A candidate that refused a date
+    both reports should cover has failed whatever its score.
     """
     other = json.loads(Path(against).read_text(encoding="utf-8"))
     other = other.get("rolling", other)
     if other.get("step_months") != report["step_months"]:
         raise ValueError(f"--against {against}: the grid has another step")
+    if "rows" not in other.get("quality", {}):
+        raise ValueError(f"--against {against}: no cells; pass the --details file of that check")
     rows, others = report["quality"]["rows"], other["quality"]["rows"]
-    key = lambda row: (row["date"], row["month"], row["quantity"])  # noqa: E731
-    difference = {key(row) for row in rows} ^ {key(row) for row in others}
-    if difference:
-        sample = ", ".join(f"{d}/{q}/t{t}" for d, t, q in sorted(difference)[:10])
-        raise ValueError(f"the two reports do not share {len(difference)} cells: {sample}")
     half = "validation" if any(row["half"] == "validation" for row in rows) else "tuning"
     mine = [row for row in rows if row["half"] == half]
     theirs = [row for row in others if row["half"] == half]
-    block = report["quality"]["block_dates"]
-    versus_walk = interval(mine, "model", "walk", unit="date", block=block, seed=seed)
-    versus_other = paired(mine, theirs, "model", unit="date", block=block, seed=seed)
-    incumbent = relative(theirs, "model", "walk")["score"]
-    verdict = decide(
-        candidate_crps=float(np.log(versus_walk["point"])),
-        benchmark_crps=0.0,
-        incumbent_crps=None if incumbent is None else float(np.log(incumbent)),
-        se_vs_benchmark=versus_walk["log_se"] or 0.0,
-        se_vs_incumbent=versus_other["log_se"] or 0.0,
-        candidate_admission_shares=report["quality"]["halves"][half]["admission"],
-        incumbent_admission_shares=other["quality"]["halves"][half]["admission"],
+    verdict = on_rows(
+        mine,
+        theirs,
+        unit="date",
+        benchmark="walk",
+        block=report["quality"]["block_dates"],
+        seed=seed,
+        admission=worst_shares(report["quality"]["halves"][half]["sanity"]["admission"]),
+        incumbent_admission=worst_shares(other["quality"]["halves"][half]["sanity"]["admission"]),
     )
-    verdict.update(half=half, vs_walk=versus_walk, vs_incumbent=versus_other)
+    verdict.update(half=half)
     if report["refused"]:
         verdict["verdict"] = "rejected"
         verdict["reason"] = f"the model refused {len(report['refused'])} date(s) of the grid"
@@ -362,8 +360,8 @@ def run(
     against: Path | None = None,
     inputs: Path | None = None,
 ) -> int:
-    """The rolling check from the command line; returns 1 when the model refused a date or no date
-    could be judged."""
+    """The rolling check from the command line; returns 1 when the model refused a date, no date
+    could be judged or a quantity failed admission."""
     from mst import models as models_pkg
     from mst.data.store import SeriesStore
     from mst.macro.registry import load_registry
@@ -400,67 +398,74 @@ def run(
             json.dumps(report, ensure_ascii=False, indent=1, default=_jsonable),
             encoding="utf-8",
         )
-    return 0 if report["quality"]["rows"] and not report["refused"] else 1
+    return 0 if _passed(report) else 1
+
+
+def _passed(report: dict) -> bool:
+    """Whether the grid judged some cells, the model refused no date and admission passed."""
+    top = report["quality"]["halves"].get("all")
+    return bool(
+        report["quality"]["rows"]
+        and not report["refused"]
+        and top is not None
+        and not top["sanity"]["admission"]["failed"]
+    )
 
 
 def print_rolling(report: dict) -> None:
-    """The forecast quality over the grid as Markdown tables."""
-    from .backtest import _interval_text, _number
-
+    """The grid as Markdown: what fell out and the sanity of the quantities, then the scores."""
     quality = report["quality"]
-    print("\n## Forecast quality over the grid\n")
-    print("Relative CRPS: below one the model beats the walk.\n")
-    print(
-        f"{report['dates']} dates, step {report['step_months']} month(s); "
-        f"block of {quality['block_dates']} dates in the intervals."
-    )
-    print(
-        "\n| half | dates | cells | model / walk | 95 % interval | coverage of p5..p95 "
-        "| shares p5/p50/p95 (0.05 0.45 0.45 0.05) | domain | width |"
-    )
-    print("|---|---:|---:|---:|---|---:|---|---:|---:|")
-    for name, block in quality["halves"].items():
-        found = block["interval"]
-        bounds = None if found["low"] is None else (found["low"], found["high"])
-        shares = " ".join(f"{share:.2f}" for share in block["calibration"])
-        print(
-            f"| {name} | {block['dates']} | {block['cells']} | {_number(block['vs_walk'])} "
-            f"| {_interval_text(bounds)} | {block['coverage_90']:.3f} | {shares} "
-            f"| {block['admission'][DOMAIN]:.3f} | {block['admission'][WIDTH]:.3f} |"
-        )
-    top = quality["halves"].get("all")
-    if top:
-        print("\n| horizon | model / walk | shares p5/p50/p95 |")
-        print("|---:|---:|---|")
-        for t in HORIZONS:
-            if t in top["calibration_by_horizon"]:
-                shares = " ".join(f"{share:.2f}" for share in top["calibration_by_horizon"][t])
-                print(f"| {t} | {_number(top['by_horizon'].get(t))} | {shares} |")
-        print("\n| quantity | model / walk |")
-        print("|---|---:|")
-        for quantity, value in sorted(top["by_quantity"].items(), key=lambda item: item[1]):
-            print(f"| {quantity} | {_number(value)} |")
+    print("\n## Rolling grid: what fell out\n")
+    print(f"{report['dates']} dates judged, step {report['step_months']} month(s).")
     if report["skipped"]:
-        print(f"\nDates left out, too little history: {len(report['skipped'])}")
+        print(f"\nDates left out, too little history for any model: {len(report['skipped'])}")
         for when, reason in report["skipped"].items():
             print(f"- {when}: {reason}")
     if report["refused"]:
         print(
             f"\n**The model refused {len(report['refused'])} of "
             f"{len(report['refused']) + report['dates']} dates with enough data.** "
-            "The scores above cover only the dates it survived."
+            "The scores below cover only the dates it survived."
         )
         for when, reason in report["refused"].items():
             print(f"- {when}: {reason}")
+    print_left_out(report.get("left_out", {}), "dates")
+    top = quality["halves"].get("all")
+    if top:
+        print("\n## Rolling grid: sanity of the quantities\n")
+        print_sanity(top["sanity"], benchmark="walk")
+    print("\n## Rolling grid: forecast quality\n")
+    print("Relative CRPS: below one the model beats the walk.")
+    print(f"Block of {quality['block_dates']} dates in the intervals.")
+    print(
+        "\n| half | dates | cells | model / walk | 95 % interval | coverage of p5..p95 "
+        "| shares p5/p50/p95 (0.05 0.45 0.45 0.05) | admission |"
+    )
+    print("|---|---:|---:|---:|---|---:|---|---|")
+    for name, block in quality["halves"].items():
+        found = block["interval"]
+        shares = " ".join(f"{share:.2f}" for share in block["calibration"])
+        admitted = "fails" if block["sanity"]["admission"]["failed"] else "passes"
+        print(
+            f"| {name} | {block['dates']} | {block['cells']} | {number(block['vs_walk'])} "
+            f"| {interval_text((found['low'], found['high']))} | {block['coverage_90']:.3f} "
+            f"| {shares} | {admitted} |"
+        )
+    if top:
+        print("\n| horizon | model / walk | shares p5/p50/p95 |")
+        print("|---:|---:|---|")
+        for t in HORIZONS:
+            if t in top["calibration_by_horizon"]:
+                shares = " ".join(f"{share:.2f}" for share in top["calibration_by_horizon"][t])
+                print(f"| {t} | {number(top['by_horizon'].get(t))} | {shares} |")
     verdict = report.get("decision")
     if verdict:
         print(
             f"\nDecision on the {verdict['half']} half: **{verdict['verdict']}** "
             f"(step {verdict['step']}) — {verdict['note']}; against the walk "
-            f"{_number(verdict['vs_walk']['point'])}, against the incumbent "
-            f"{_number(verdict['vs_incumbent']['point'])} "
-            f"[{_number(verdict['vs_incumbent']['low'])}, "
-            f"{_number(verdict['vs_incumbent']['high'])}]."
+            f"{number(verdict['vs_benchmark']['point'])}, against the incumbent "
+            f"{number(verdict['vs_incumbent']['point'])} "
+            f"{interval_text((verdict['vs_incumbent']['low'], verdict['vs_incumbent']['high']))}."
         )
 
 

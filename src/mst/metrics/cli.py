@@ -15,21 +15,22 @@ by date, in parallel processes; ``--against`` names the incumbent report for the
 
 ``backtest`` estimates the macro model (the named one, or the only one installed) on the day
 before every episode of the plan ``--episodes`` starts, builds the scenario from what actually
-happened, scores the conditional forecast against the fact — CRPS normalised by the typical
-movement known at that episode's calculation date, calibration, sharpness, coverage, the
-admission rules pooled per rule — and reports it next to the random walk with drift, the
-unconditional base run and, for targets, the naive forecast of a year earlier. Every score comes
-with the 95 % episode-bootstrap interval, re-checked by the wild cluster bootstrap with Webb
-weights; the equal-weight aggregate is reported per level and horizon, with the
-utility of the scenario split by the manual/llm mark, and the tuning/validation halves apart.
-``--against`` names the incumbent report's JSON for the four-step 2-SE decision;
+happened and judges the forecast on the cells the scenario does not fix. The report reads what
+fell out first — the episodes not judged and the variables a model left out as too short, with
+the reasons — then the sanity of every quantity (admission per quantity, the band against the
+history range, the direction the scenario moved the forecast, the score of the level without
+the quantity), and only then the relative CRPS: the forecast against the walk that knows the
+scenario's path, against the plain walk with drift, against its own base run and, for targets,
+against the naive forecast of a year earlier, with 95 % episode-bootstrap intervals, per level,
+the usefulness of the scenario split by the manual/llm mark, and the tuning/validation halves
+apart. ``--against`` names the incumbent's ``--details`` JSON for the four-step 2-SE decision;
 ``--portfolio`` names a stored portfolio for the Acerbi-Székely tail section;
-``--mc-bootstrap`` adds the Monte-Carlo interval of the aggregate, separated from the
-episode-sampling intervals. With ``--satellites`` the served drivers are scored too, on the
-bundle estimated on each episode's macro version. It exits with 1 when an episode could not be
-checked or an admission rule failed. ``--save`` keeps the JSON report and the tables in
-``results/<model>.json`` and ``results/<model>.md`` beside the plan, over the last result of the
-model. Nothing is fetched.
+``--mc-bootstrap`` adds the Monte-Carlo interval of the forecast against the walk, separated
+from the episode-sampling interval. With ``--satellites`` the served drivers are scored too, on
+the bundle estimated on each episode's macro version. It exits with 1 when an episode could
+not be checked or a quantity failed admission. ``--save`` keeps the report without its cells
+and the tables in ``results/<model>.json`` and ``results/<model>.md`` beside the plan, over
+the last result of the model. Nothing is fetched.
 """
 
 import argparse
@@ -62,7 +63,7 @@ def main(argv: list[str] | None = None) -> int:
     check.add_argument(
         "--against",
         type=Path,
-        help="the incumbent report's JSON, same episode plan: the two-standard-error decision",
+        help="the incumbent's --details JSON, same episode plan: the two-standard-error decision",
     )
     check.add_argument(
         "--portfolio",
@@ -71,7 +72,7 @@ def main(argv: list[str] | None = None) -> int:
     check.add_argument(
         "--mc-bootstrap",
         action="store_true",
-        help="bootstrap the draws for the Monte-Carlo interval of the aggregate",
+        help="bootstrap the draws for the Monte-Carlo interval of the forecast against the walk",
     )
     check.add_argument(
         "--target-level",
@@ -89,7 +90,7 @@ def main(argv: list[str] | None = None) -> int:
     check.add_argument(
         "--save",
         action="store_true",
-        help="keep the report in results/ beside the plan, over the model's last result",
+        help="keep the report without its cells in results/ beside the plan, over the last one",
     )
     grid = commands.add_parser("rolling", help="the forecast quality over a grid of dates")
     grid.add_argument("model_id", nargs="?", help="the macro model id; the only one installed")
@@ -102,7 +103,7 @@ def main(argv: list[str] | None = None) -> int:
     )
     grid.add_argument("--half", choices=("tuning", "validation"), help="only this half of the grid")
     grid.add_argument("--details", type=Path, help="write the full report as JSON here")
-    grid.add_argument("--against", type=Path, help="the incumbent's rolling report as JSON")
+    grid.add_argument("--against", type=Path, help="the incumbent's rolling --details JSON")
     grid.add_argument(
         "--inputs",
         type=Path,

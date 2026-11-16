@@ -10,18 +10,12 @@ from mst.metrics.baselines import (
     random_walk,
 )
 from mst.metrics.cells import (
-    BUCKET_SHARES,
-    Cell,
     bootstrap,
     crps,
     finite_draws,
     history_range,
-    movement_pairs,
     pit,
     quantiles,
-    score_cells,
-    sigma_of_month,
-    sigma_with_fallback,
     typical_movement,
 )
 
@@ -78,90 +72,6 @@ def test_history_range_ignores_the_gaps():
 
 def test_finite_draws_drops_the_non_finite_values():
     assert finite_draws(np.array([1.0, np.nan, np.inf, 2.0])).tolist() == [1.0, 2.0]
-
-
-def test_sigma_of_month_covers_every_month_of_the_cells():
-    cells = [
-        Cell("e", 1, "q", 0.0, np.zeros(3)),
-        Cell("e", 2, "q", 0.0, np.zeros(3)),
-    ]
-    history = np.array([0.0, 1.0, 3.0, 6.0, 10.0, 15.0])
-    sigma = sigma_of_month(cells, history)
-    assert sigma[1] == pytest.approx(3.0)  # median of 1, 2, 3, 4, 5
-    assert sigma[2] == pytest.approx(6.0)  # median of 3, 5, 7, 9
-
-
-def test_score_cells_keeps_the_random_walk_and_the_base_run_apart():
-    model = draws_normal(500, seed=4)
-    cells = [
-        Cell(
-            "e1",
-            1,
-            "q",
-            0.0,
-            model,
-            baseline=draws_normal(500, seed=5, loc=2.0),
-            base=model,
-            sigma=1.0,
-        ),
-        Cell(
-            "e1",
-            2,
-            "q",
-            0.0,
-            draws_normal(500, seed=6, loc=0.5),
-            baseline=draws_normal(500, seed=7, loc=2.0),
-            sigma=2.0,
-        ),
-        Cell("e1", 1, "q", 0.0, np.zeros(2), constrained=True),
-        Cell(
-            "e2",
-            1,
-            "q",
-            0.0,
-            draws_normal(500, seed=8),
-            baseline=draws_normal(500, seed=9, loc=2.0),
-            sigma=1.0,
-        ),
-    ]
-    row = score_cells(cells)
-    assert row["cells"] == 4 and row["constrained"] == 1 and row["scored"] == 3
-    assert row["normalized_cells"] == 3 and row["dropped"] == 0
-    assert row["crps"] > 0
-    # The base run is the model itself, so its score is the model's; the random walk is not.
-    assert row["months"][0]["base_crps"] == pytest.approx(row["months"][0]["crps"])
-    assert row["base_crps"] is not None
-    assert row["baseline_crps"] > row["crps"]
-    # The month-2 cell divides by sigma 2, so the normalised mean is below the raw one.
-    assert 0 < row["normalized_crps"] < row["crps"]
-    shares = row["calibration"]["shares"]
-    assert len(shares) == 4 and sum(shares) == pytest.approx(1.0)
-    assert row["calibration"]["expected"] == list(BUCKET_SHARES)
-    assert row["coverage"] == pytest.approx(1.0)
-    assert row["months"][0]["difference"] == pytest.approx(
-        row["months"][0]["normalized"] - row["months"][0]["baseline_normalized"]
-    )
-
-
-def test_score_cells_without_a_scale_leaves_the_normalised_mean_empty():
-    row = score_cells(
-        [
-            Cell("e", 1, "q", 0.0, draws_normal(50, seed=1), sigma=float("nan")),
-            Cell("e", 2, "q", 0.0, draws_normal(50, seed=2), sigma=0.0),
-        ]
-    )
-    assert row["scored"] == 2 and row["normalized_cells"] == 0
-    assert row["normalized_crps"] is None and row["crps"] is not None
-
-
-def test_score_cells_drops_a_cell_without_finite_draws():
-    row = score_cells([Cell("e", 1, "q", 0.0, np.array([np.nan, np.nan]))])
-    assert row["dropped"] == 1 and row["scored"] == 0 and row["crps"] is None
-
-
-def test_score_cells_without_scored_cells_is_empty_but_complete():
-    row = score_cells([Cell("e", 1, "q", 0.0, np.zeros(2), constrained=True)])
-    assert row["scored"] == 0 and row["crps"] is None and row["calibration"] is None
 
 
 def test_bootstrap_resamples_the_same_cell_weighted_statistic():
@@ -252,78 +162,8 @@ def test_random_walk_gappy_history_with_two_pairs_is_nan():
     assert np.all(np.isnan(draws))
 
 
-def test_movement_pairs_count_only_the_pairs_with_two_known_ends():
-    history = np.array([0.0, np.nan, 3.0, 6.0, np.nan, 15.0])
-    assert movement_pairs(history, 1) == 1
-    assert movement_pairs(history, 2) == 2
-    assert movement_pairs(history, 3) == 2
-    assert movement_pairs(history, 6) == 0
-
-
-def test_sigma_with_fallback_borrows_the_nearest_valid_month():
-    # A six-point history: sigma(3) = median of [6, 9, 12] = 9, sigma(4) = 12, sigma(5) = 15;
-    # months 6 and 7 are past the history and borrow the largest valid month below, 5.
+def test_the_walk_is_deterministic():
     history = np.array([0.0, 1.0, 3.0, 6.0, 10.0, 15.0])
-    fallback = sigma_with_fallback(history, [3, 4, 5, 6, 7])
-    assert fallback[3] == (9.0, "t", 3)
-    assert fallback[4] == (12.0, "t", 2)
-    assert fallback[5] == (15.0, "t", 1)
-    assert fallback[6] == (15.0, "t*", 1)
-    assert fallback[7] == (15.0, "t*", 1)
-
-
-def test_sigma_with_fallback_takes_the_nearest_month_above_when_below_is_empty():
-    # Adjacent changes are mostly zeros (sigma(1) = NaN), while the pairs of months two and
-    # three apart move (sigma(2) = 0.5, sigma(3) = 1): month 1 borrows the smallest valid
-    # month above, month 4 — which does not move over four months — the largest below.
-    history = np.array([5.0, 5.0, 5.0, 6.0, 5.0, 5.0, 5.0, 6.0])
-    fallback = sigma_with_fallback(history, [1, 2, 4])
-    assert fallback[1] == (0.5, "t+", 6)
-    assert fallback[2] == (0.5, "t", 6)
-    assert fallback[4] == (0.5, "t*", 6)
-
-
-def test_sigma_with_fallback_pools_the_peers_for_the_last_resort():
-    # The own history is too short for month 6 and no neighbour month helps, so the median
-    # of the peers' valid sigma(6) stands in; without a valid peer the source is "none".
-    history = np.array([0.0, 1.0, 3.0, 6.0, 10.0, 15.0])
-    peers = {
-        "r1": np.array([0.0, 2.0, 4.0, 6.0]),  # four points: no sigma(6)
-        "r2": np.array([5.0, 7.0, 8.0]),  # three points: no sigma(6)
-        "r3": np.array([0.0, 1.0, 5.0, 3.0, 9.0, 2.0, 4.0]),  # sigma(6) = 4.0
-    }
-    fallback = sigma_with_fallback(history, [6], peers=peers)
-    assert fallback[6] == (4.0, "pooled", 1)
-    peers["r1"] = np.array([0.0, 2.0, 4.0, 6.0, 1.0, 3.0, 5.0, 2.0])  # sigma(6) = 2.5
-    fallback = sigma_with_fallback(history, [6], peers=peers)
-    assert fallback[6] == (3.25, "pooled", 2)  # the median of [2.5, 4.0]
-    none = sigma_with_fallback(history, [6], peers={"r2": peers["r2"]})[6]
-    assert np.isnan(none[0]) and none[1] == "none" and none[2] == 0
-    none = sigma_with_fallback(history, [6], peers={})[6]
-    assert np.isnan(none[0]) and none[1] == "none" and none[2] == 0
-    none = sigma_with_fallback(history, [6])[6]
-    assert np.isnan(none[0]) and none[1] == "none" and none[2] == 0
-
-
-def test_sigma_with_fallback_zero_sigma_falls_back_to_the_peers():
-    # A constant history does not move: the median absolute change is zero, which is no
-    # scale — typical_movement is NaN and the fallback goes to the peers.
-    constant = np.full(8, 5.0)
-    assert np.isnan(typical_movement(constant, 3))
-    peers = {"r1": np.arange(10.0)}  # sigma(3) = 3
-    fallback = sigma_with_fallback(constant, [3], peers=peers)
-    assert fallback[3] == (3.0, "pooled", 1)
-    none = sigma_with_fallback(constant, [3], peers=None)[3]
-    assert np.isnan(none[0]) and none[1] == "none" and none[2] == 0
-
-
-def test_sigma_with_fallback_and_the_walk_are_deterministic():
-    history = np.array([0.0, 1.0, 3.0, 6.0, 10.0, 15.0])
-    peers = {"r1": np.arange(9.0), "r2": np.arange(12.0)}
-    months = [2, 5, 8]
-    assert sigma_with_fallback(history, months, peers=peers) == sigma_with_fallback(
-        history, months, peers=peers
-    )
     walk = random_walk(history, 4, draws=8, seed=5, months=2)
     assert np.array_equal(walk, random_walk(history, 4, draws=8, seed=5, months=2))
 

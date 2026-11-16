@@ -99,7 +99,12 @@ def paired(
 
 
 def _spread(logs_of, cube: dict, block: int, repetitions: int, seed: int) -> dict:
-    """The SE of the log score and the 95 % bounds of the score, by moving blocks of units."""
+    """The SE of the log score and the 95 % bounds of the score, by moving blocks of units.
+
+    One unit has no spread to resample: its error is unknown, not zero.
+    """
+    if cube["units"] < 2:
+        return {"log_se": None, "low": None, "high": None}
     rng = np.random.default_rng(seed)
     samples = np.full(repetitions, np.nan)
     for repetition in range(repetitions):

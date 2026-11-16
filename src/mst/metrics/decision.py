@@ -7,10 +7,19 @@ share grown — is accepted. A candidate worse by more than two standard errors 
 Between the two, the difference is undetected and the incumbent stays: the default action
 changes nothing.
 
-This module holds the rule only: the standard errors are the ones the report's aggregate
-bootstrap gives (``mst.metrics.aggregate.aggregate_bootstrap``), and the wild cluster bootstrap
-re-checks the verdict. The rule reads the numbers it is handed and decides nothing else.
+``decide`` holds the rule and reads the numbers it is handed. ``on_rows`` feeds it from the
+scored cells of two versions, the same way for the episodes and for the rolling grid: the score
+is the logarithm of the relative CRPS (``mst.metrics.quality``), so the benchmark sits at zero,
+and the standard errors are those of the logarithm over resampled units — episodes or blocks of
+dates. The admission shares are the worst quantity's (``mst.metrics.sanity``).
 """
+
+from collections.abc import Mapping, Sequence
+
+import numpy as np
+
+from .quality import interval, paired, relative
+from .sanity import ADMISSION_SHARE
 
 
 def decide(
@@ -40,7 +49,7 @@ def decide(
         "admission_shares": dict(candidate_admission_shares),
         "threshold": 2.0,
     }
-    if any(share >= 0.05 for share in candidate_admission_shares.values()):
+    if any(share >= ADMISSION_SHARE for share in candidate_admission_shares.values()):
         verdict.update(
             verdict="rejected_admission",
             step=1,
@@ -88,3 +97,58 @@ def decide(
         note="the difference is undetected; the incumbent stays",
     )
     return verdict
+
+
+def on_rows(
+    mine: Sequence[Mapping[str, object]],
+    theirs: Sequence[Mapping[str, object]],
+    *,
+    unit: str,
+    benchmark: str,
+    block: int,
+    seed: int,
+    admission: Mapping[str, float],
+    incumbent_admission: Mapping[str, float],
+) -> dict:
+    """The verdict on the candidate's rows against the incumbent's, cell for cell.
+
+    ``unit`` names the key of the resampled unit (``episode`` or ``date``), ``benchmark`` the
+    CRPS column both versions are measured against. Two versions judged on different cells are
+    an error naming the cells: a comparison on the intersection would hide what one of them
+    could not forecast.
+    """
+
+    def key(row):
+        return (str(row[unit]), int(row["month"]), str(row["quantity"]))
+
+    difference = {key(row) for row in mine} ^ {key(row) for row in theirs}
+    if difference:
+        sample = ", ".join(f"{u}/{q}/t{t}" for u, t, q in sorted(difference)[:10])
+        more = "..." if len(difference) > 10 else ""
+        raise ValueError(f"the two reports do not share {len(difference)} cells: {sample}{more}")
+    versus_benchmark = interval(mine, "model", benchmark, unit=unit, block=block, seed=seed)
+    if versus_benchmark["point"] is None:
+        raise ValueError(f"no cell has both the model and the {benchmark} scored")
+    versus_incumbent = paired(mine, theirs, "model", unit=unit, block=block, seed=seed)
+    incumbent = relative(theirs, "model", benchmark)["score"]
+    # A single unit leaves the error of a score unknown: an infinite SE detects no difference.
+    verdict = decide(
+        candidate_crps=float(np.log(versus_benchmark["point"])),
+        benchmark_crps=0.0,
+        incumbent_crps=None if incumbent is None else float(np.log(incumbent)),
+        se_vs_benchmark=_known(versus_benchmark["log_se"]),
+        se_vs_incumbent=_known(versus_incumbent["log_se"]),
+        candidate_admission_shares=admission,
+        incumbent_admission_shares=incumbent_admission,
+    )
+    verdict.update(
+        benchmark=benchmark,
+        cells=len(mine),
+        vs_benchmark=versus_benchmark,
+        vs_incumbent=versus_incumbent,
+    )
+    return verdict
+
+
+def _known(se: float | None) -> float:
+    return np.inf if se is None else float(se)

@@ -1,4 +1,4 @@
-"""The episode backtest: CRPS, calibration and admission of the models on historical events.
+"""The episode backtest: what fell out, the sanity and the scores of a model on historical events.
 
 For an episode of the plan the calculation date is the day before it starts; every model is
 estimated on the data known that day — the macro model as an episode version under
@@ -17,27 +17,28 @@ win over it says little. The quality of the forecast itself is judged by the rol
 model does when the event is known.
 
 The quantities are every unconstrained macro variable the episode window knows and, with
-``--satellites``, every served driver with a realized series. The report aggregates the cells
-per quantity: CRPS normalised by the typical movement of the quantity as known at the episode's
-calculation date, the baselines alongside, the calibration buckets, the sharpness, the coverage
-(for reference only), the per-rule admission counts pooled over all cells, the intervals of the
-scores and of the paired model-less-random-walk difference, and the share of the base run's
-paths that satisfy each informative constraint — a scenario resting on a rare tail is marked as
-such. The equal-weight aggregate — inside a quantity over the episodes, then with
-equal weights over the quantities, separately per level and horizon — is computed on the same
-cell rows and reported with its own block, together with the four-step 2-SE decision against
-``--against`` and the utility of the scenario: the share of episodes whose conditional forecast
-beats the base run, split by the manual/llm mark. The wild cluster bootstrap with
-Webb weights re-checks the paired intervals. Monte-Carlo error is separated from sampling
-error with ``--mc-bootstrap``. Episodes are split into tuning and validation halves by the
-plan's marks; the halves are reported apart and the final tables stay over all episodes. The
-driver whose simulated path leaves the range of its own
-training history carries an unverified tail. ``--portfolio`` adds the Acerbi-Székely section:
-the portfolio's
-predictive losses on the episodes' conditional paths, its realized loss on the facts of the
-window, ``Z``, the episode and wild intervals and the 1 % trimming. The accept/reject verdict is
-spoken only in the ``decision`` block behind ``--against``: the per-quantity tables stay
-descriptive, and ``meta["missing"]`` names no metric the report cannot compute.
+``--satellites``, every served driver with a realized series. The report reads in the order a
+reader should: first what fell out — the episodes not judged and why, the variables a model
+left out as too short (``mst.model_sdk.ShortHistory``), the cells without a finite draw — then
+the sanity of every quantity (``mst.metrics.sanity``: admission per quantity, the band against
+the history range, the direction the scenario moved the forecast, the score of the level
+without the quantity), and only then the scores. A score is relative: the mean CRPS of one
+forecast over another's on the same cells, pooled in logarithms with equal weights over the
+quantities and the months (``mst.metrics.quality``), so a series that rarely moves weighs as
+much as any other and no scale is divided by. The pairs are the forecast against the
+conditional walk, against the plain walk, the base run against the walk, the forecast against
+the base run — what the scenario adds, also per episode and per source of the markup — and,
+for drivers, against the naive forecast. The intervals resample whole episodes; neighbouring
+windows overlap, so they are too narrow. ``--mc-bootstrap`` adds the Monte-Carlo error of the
+paths apart from it. Episodes are split into tuning and validation halves by the plan's marks;
+the halves are reported apart and the final tables stay over all episodes. The four-step 2-SE
+decision against ``--against`` (``mst.metrics.decision.on_rows``) reads the cells of the
+incumbent's ``--details`` file; the saved result keeps no cells. The driver whose simulated
+path leaves the range of its own training history carries an unverified tail.
+``--portfolio`` adds the Acerbi-Székely section: the portfolio's predictive losses on the
+episodes' conditional paths, its realized loss on the facts of the window, ``Z``, the episode
+and wild intervals and the 1 % trimming. ``meta["missing"]`` names no metric the report cannot
+compute.
 """
 
 import contextlib
@@ -86,23 +87,16 @@ from .baselines import (
     quantity_domain,
     random_walk,
 )
-from .cells import (
-    ADMISSION_SHARE,
-    Cell,
-    crps,
-    finite_draws,
-    history_range,
-    score_cells,
-    sigma_with_fallback,
-)
+from .cells import BUCKET_EDGES, Cell, crps, finite_draws, history_range, pit, quantiles
+from .decision import on_rows
 from .episodes import Episodes, calculation_date, load_episodes
+from .quality import interval, relative
+from .sanity import check as sanity_check
+from .sanity import worst_shares
+from .tables import interval_text, number, print_left_out, print_sanity
 
 INTERVAL_REPETITIONS = 1000
 """The repetitions of the episode bootstrap behind every reported interval."""
-
-WILD_PRIMARY_BELOW = 8
-"""Fewer episodes than this: the ordinary cluster bootstrap understates the interval, so the
-wild interval is read as the primary one."""
 
 MISSING = ()
 """What the report cannot compute; empty when every metric is computed."""
@@ -203,7 +197,7 @@ def run(
     registry = load_registry()
     data = SeriesStore(store)
     root = Path(models) / "backtest"
-    problems: list[str] = []
+    problems: dict[str, str] = {}
     episodes: list[Episode] = []
     for check in plan.episodes:
         if only and check.id not in only:
@@ -211,7 +205,7 @@ def run(
         try:
             episode = _episode(plugin, data, registry, plan, check, root, as_of, inputs)
         except ValueError as error:
-            problems.append(f"{check.id}: {error}")
+            problems[check.id] = str(error)
             continue
         if satellites:
             if drivers is None:
@@ -221,7 +215,7 @@ def run(
             except ValueError as error:
                 # A driver series that starts after the calculation date (or another estimation
                 # problem) voids that episode, not the whole check: it is named and skipped.
-                problems.append(f"{check.id}: satellites: {error}")
+                problems[check.id] = f"satellites: {error}"
                 continue
         if episode.bundle is not None and episode.bundle.as_of > episode.as_of:
             raise ValueError(
@@ -238,6 +232,7 @@ def run(
         store=store,
         models=models,
         root=root,
+        dropped=problems,
         against=against,
         portfolio_id=portfolio,
         mc_bootstrap=mc_bootstrap,
@@ -248,17 +243,14 @@ def run(
     tables = io.StringIO()
     with contextlib.redirect_stdout(tables):
         _print(report)
-        for problem in problems:
-            print(problem)
     print(tables.getvalue(), end="")
-    report["problems"] = problems
     if details is not None:
         details.write_text(
             json.dumps(report, ensure_ascii=False, indent=1, default=_jsonable),
             encoding="utf-8",
         )
     if save:
-        plain = json.loads(json.dumps(report, default=_jsonable))
+        plain = json.loads(json.dumps(_compact(report), default=_jsonable))
         folder = bench.results(plan.path.parent)
         bench.save_result(folder, plugin.model_id, plain, tables.getvalue())
     return 1 if problems or report["admission_failed"] else 0
@@ -660,6 +652,7 @@ def _report(
     store: Path,
     models: Path,
     root: Path,
+    dropped: dict[str, str],
     against: Path | None = None,
     portfolio_id: str | None = None,
     mc_bootstrap: bool = False,
@@ -667,7 +660,10 @@ def _report(
     run_rolling: bool = True,
     inputs: Path | None = None,
 ) -> dict:
-    """The scores of every quantity over the episodes, with the gates, intervals and metadata."""
+    """What fell out and the sanity of the quantities, then the scores, gates and metadata.
+
+    ``dropped`` names the episodes of the plan that could not be judged, with the reason.
+    """
     cells: list[Cell] = []
     levels: dict[str, str] = {}
     unverified: set[str] = set()
@@ -698,56 +694,14 @@ def _report(
             _driver_cells(episode, drivers, episode_cells, levels, unverified, plan)
         cells.extend(episode_cells)
 
-    by_quantity: dict[str, list[Cell]] = {}
-    for cell in cells:
-        by_quantity.setdefault(cell.quantity, []).append(cell)
-    quantities = {}
-    for quantity in sorted(by_quantity):
-        own = by_quantity[quantity]
-        row = score_cells(own)
-        row["level"] = levels.get(quantity, "")
-        row["unverified_tail"] = quantity in unverified
-        row["admission"] = _quantity_rules(own)
-        row["intervals"] = {
-            "crps": _interval(row["months"], "crps", plan),
-            "normalized": _interval(row["months"], "normalized", plan),
-            "baseline_normalized": _interval(row["months"], "baseline_normalized", plan),
-            "base_normalized": _interval(row["months"], "base_normalized", plan),
-            "vs_baseline": _interval(row["months"], "difference", plan),
-            "vs_baseline_wild": _wild_interval(row["months"], "difference", plan),
-        }
-        quantities[quantity] = row
-
     rows = _cell_rows(cells, levels)
+    if rows and target_level not in {row["level"] for row in rows}:
+        known = ", ".join(sorted({row["level"] for row in rows}))
+        raise ValueError(f"target_level {target_level!r} has no cells; levels present: {known}")
+    sanity = sanity_check(rows, benchmark="walk")
+    scores = _scores(rows, plan)
     halves = {episode.id: episode.half for episode in episodes}
     sources = {episode.id: episode.source for episode in episodes}
-    from .aggregate import equal_weight, utility_by_episode
-
-    if rows:
-        aggregate = equal_weight(rows, target_level=target_level)
-        aggregate["utility"] = utility_by_episode(rows, sources, target_level=target_level)
-        aggregate["intervals"] = {
-            "sampling": _aggregate_interval(
-                rows, halves=halves, plan=plan, target_level=target_level
-            ),
-        }
-        if mc_bootstrap:
-            aggregate["intervals"]["monte_carlo"] = _mc_interval(
-                cells, levels, plan, target_level=target_level
-            )
-    else:
-        # Every cell was constrained by the scenario, dropped for a missing fact or had no
-        # normalising scale: the aggregate says so instead of inventing a number.
-        aggregate = {
-            "levels": {},
-            "target": target_level,
-            "utility": {"by_source": {}},
-            "intervals": {},
-            "note": "no scored cells: every cell was constrained, dropped or had no fact",
-        }
-    aggregate["rows"] = rows
-    aggregate["relative"] = _episode_relative(rows, target_level, plan)
-    admission = _admission(cells)
     gate = _constraint_gate(constraint_shares)
     rolling = {}
     if plan.rolling is not None and run_rolling:
@@ -773,6 +727,18 @@ def _report(
             root=root,
             target_level=target_level,
         ),
+        "dropped": {
+            "episodes": dict(dropped),
+            "left_out": {
+                episode.id: episode.macro.meta.get("left_out", {})
+                for episode in episodes
+                if episode.macro.meta.get("left_out")
+            },
+            "non_finite": _non_finite(cells),
+        },
+        "sanity": sanity,
+        "constraint_gate": gate,
+        "admission_failed": sanity["admission"]["failed"] or gate["failed"],
         "episodes": [
             {
                 "id": episode.id,
@@ -792,61 +758,47 @@ def _report(
             }
             for episode in episodes
         ],
-        "quantities": quantities,
-        "aggregate": aggregate,
-        "halves": _halves_block(
-            episodes, cells, rows, constraint_shares, target_level=target_level
-        ),
         "target_level": target_level,
-        "admission": admission,
+        "scores": scores,
+        "utility": _utility(rows, sources, target_level),
+        "halves": _halves_block(episodes, rows, constraint_shares, plan, target_level),
+        "quantities": _quantities(cells, rows, levels, unverified, scores),
         "rolling": rolling,
-        "constraint_gate": gate,
-        "admission_failed": admission["failed"] or gate["failed"],
-        "problems": [],
+        "rows": rows,
     }
+    if mc_bootstrap:
+        report["monte_carlo"] = _mc_interval(cells, rows, plan, target_level)
     if against is not None:
         report["decision"] = _decision_block(
-            rows,
-            against,
-            admission=admission,
-            halves=halves,
-            plan=plan,
-            target_level=target_level,
+            rows, against, sanity=sanity, halves=halves, plan=plan, target_level=target_level
         )
     if portfolio_id is not None:
         report["tail"] = _tail_section(episodes, plan, portfolio_id, store=store, known_on=known_on)
     return report
 
 
-def _episode_relative(rows: list[dict], target_level: str, plan: Episodes) -> dict:
-    """The scale-free scores of the episodes: the forecast against its benchmarks.
-
-    The windows of neighbouring episodes overlap, so the episode intervals are too narrow: they
-    are read as a lower bound of the error, and the rolling check carries the verdict.
-    """
-    from .quality import interval, relative
-
-    chosen = [row for row in rows if row["level"] == target_level]
-    pairs = {
-        "conditional_vs_conditional_walk": ("crps", "conditional_crps"),
-        "conditional_vs_walk": ("crps", "baseline_crps"),
-        "base_vs_walk": ("base_crps", "baseline_crps"),
-    }
-    return {
-        name: {
-            **relative(chosen, first, second),
-            "interval": interval(chosen, first, second, unit="episode", seed=plan.seed),
-        }
-        for name, (first, second) in pairs.items()
-    }
+PAIRS = (
+    ("model", "conditional_walk"),
+    ("model", "walk"),
+    ("base", "walk"),
+    ("model", "base"),
+    ("model", "naive"),
+)
+"""The relative scores of the episodes: the forecast against the walk that knows the scenario's
+path, against the plain walk, the base run against the walk, the forecast against the base run
+(what the scenario adds) and, for drivers, against the naive forecast of a year earlier."""
+HALF_PAIRS = PAIRS[:4]
+MC_STREAM = 13
+"""The second word of the Monte-Carlo seed, apart from the episode bootstrap's stream."""
 
 
 def _cell_rows(cells: list[Cell], levels: dict[str, str]) -> list[dict]:
-    """The scored cells as flat rows, the input of the equal-weight aggregate.
+    """The scored cells as flat rows: the CRPS of every forecast and the band of the model.
 
-    A constrained cell says nothing about the forecast and never enters the aggregate; a cell
-    whose draws are all non-finite was already counted in ``dropped`` by ``score_cells`` and
-    carries no normalized score, so it drops out here with the counters.
+    A constrained cell says nothing about the forecast and is left out; so is a cell whose draws
+    are all non-finite, which ``_non_finite`` counts. The band columns feed the sanity of the
+    quantities: the width against the history range, the admission rules and, beside the base
+    run, the move of the median the scenario made and the miss of the base run's median.
     """
     rows = []
     for cell in cells:
@@ -855,39 +807,329 @@ def _cell_rows(cells: list[Cell], levels: dict[str, str]) -> list[dict]:
         draws = finite_draws(cell.draws)
         if not len(draws):
             continue
-        movement = cell.sigma
-        known_scale = bool(np.isfinite(movement) and movement > 0)
-        value = crps(draws, cell.fact)
+        band = quantiles(draws)
+        broken = band_problems(
+            draws, cell.fact, domain=cell.domain, history_range=cell.history_range
+        )
         row = {
             "episode": cell.episode,
             "month": cell.month,
             "quantity": cell.quantity,
             "level": levels.get(cell.quantity, ""),
-            "normalized": value / movement if known_scale else None,
-            "sigma_source": cell.sigma_source,
-            "sigma_pairs": cell.sigma_pairs,
-            "crps": value,
-            "baseline_normalized": None,
-            "base_normalized": None,
-            "naive_normalized": None,
-            "conditional_normalized": None,
+            "model": crps(draws, cell.fact),
+            "walk": None,
+            "conditional_walk": None,
+            "base": None,
+            "naive": None,
+            "pit": pit(draws, cell.fact),
+            "inside": bool(band[0] <= cell.fact <= band[2]),
+            "width": float(band[2] - band[0]),
+            "history_range": cell.history_range,
+            DOMAIN: DOMAIN in broken,
+            WIDTH: WIDTH in broken,
+            "shift": None,
+            "miss": None,
+            "base_width": None,
         }
         for name, column in (
-            ("baseline", cell.baseline),
+            ("walk", cell.baseline),
+            ("conditional_walk", cell.conditional),
             ("base", cell.base),
             ("naive", cell.naive),
-            ("conditional", cell.conditional),
         ):
-            if column is None:
-                continue
-            known = finite_draws(column)
-            if not len(known):
-                continue
-            score = crps(known, cell.fact)
-            row[f"{name}_crps"] = score
-            row[f"{name}_normalized"] = score / movement if known_scale else None
+            known = np.array([]) if column is None else finite_draws(column)
+            if len(known):
+                row[name] = crps(known, cell.fact)
+        base = np.array([]) if cell.base is None else finite_draws(cell.base)
+        if len(base):
+            base_band = quantiles(base)
+            row["shift"] = float(band[1] - base_band[1])
+            row["miss"] = float(cell.fact - base_band[1])
+            row["base_width"] = float(base_band[2] - base_band[0])
         rows.append(row)
     return rows
+
+
+def _non_finite(cells: list[Cell]) -> dict[str, int]:
+    """The unconstrained cells with a fact whose draws are all non-finite, per quantity."""
+    found: dict[str, int] = {}
+    for cell in cells:
+        if cell.constrained or not np.isfinite(cell.fact) or len(finite_draws(cell.draws)):
+            continue
+        found[cell.quantity] = found.get(cell.quantity, 0) + 1
+    return found
+
+
+def _scores(rows: list[dict], plan: Episodes) -> dict:
+    """Per level, every pair of ``PAIRS`` the rows carry, with its interval over the episodes.
+
+    The windows of neighbouring episodes overlap, so the intervals are too narrow: they are a
+    lower bound of the error, and the rolling grid carries the verdict on the forecast.
+    """
+    found = {}
+    for level in sorted({row["level"] for row in rows}):
+        own = [row for row in rows if row["level"] == level]
+        entries = {}
+        for first, second in PAIRS:
+            score = relative(own, first, second)
+            if score["score"] is None:
+                continue
+            entries[f"{first}/{second}"] = {
+                **score,
+                "interval": interval(
+                    own,
+                    first,
+                    second,
+                    unit="episode",
+                    repetitions=INTERVAL_REPETITIONS,
+                    seed=plan.seed,
+                ),
+            }
+        found[level] = entries
+    return found
+
+
+def _utility(rows: list[dict], sources: dict[str, str], target_level: str) -> dict:
+    """What the scenario adds: the forecast against the base run, per episode and per source.
+
+    An episode counts as helped when its ratio is below one. The sources are reported apart:
+    a language model may have known the outcome of a historical event from its training.
+    """
+    chosen = [row for row in rows if row["level"] == target_level and row["base"] is not None]
+    by_episode: dict[str, list[dict]] = {}
+    for row in chosen:
+        by_episode.setdefault(row["episode"], []).append(row)
+    ratios = {
+        episode: relative(own, "model", "base")["score"] for episode, own in by_episode.items()
+    }
+    found = {}
+    for source in sorted({sources[episode] for episode in ratios}):
+        named = sorted(episode for episode in ratios if sources[episode] == source)
+        judged = [ratios[episode] for episode in named if ratios[episode] is not None]
+        found[source] = {
+            "episodes": len(named),
+            "judged": len(judged),
+            "share_helped": float(np.mean([ratio < 1 for ratio in judged])) if judged else None,
+            "score": relative(
+                [row for row in chosen if sources[row["episode"]] == source], "model", "base"
+            )["score"],
+        }
+    return {"target": target_level, "by_episode": ratios, "by_source": found}
+
+
+def _halves_block(
+    episodes: list[Episode],
+    rows: list[dict],
+    constraint_shares: dict[str, dict[int, float | None]],
+    plan: Episodes,
+    target_level: str,
+) -> dict:
+    """The scores of the target level, the admission and the constraint gate of each half.
+
+    The models are fitted on the tuning half and checked on the validation one, while the final
+    table is built over all episodes; the block keeps the three side by side, so a reader sees
+    whether the halves agree.
+    """
+    chosen = {"all": [episode.id for episode in episodes]}
+    for half in ("tuning", "validation"):
+        named = [episode.id for episode in episodes if episode.half == half]
+        if named:
+            chosen[half] = named
+    found: dict[str, dict] = {}
+    for name, ids in chosen.items():
+        named = set(ids)
+        own = [row for row in rows if row["episode"] in named]
+        level = [row for row in own if row["level"] == target_level]
+        found[name] = {
+            "episodes": sorted(named),
+            "cells": len(own),
+            "scores": {
+                f"{first}/{second}": interval(
+                    level,
+                    first,
+                    second,
+                    unit="episode",
+                    repetitions=INTERVAL_REPETITIONS,
+                    seed=plan.seed,
+                )
+                for first, second in HALF_PAIRS
+            },
+            "admission_failed": sanity_check(own)["admission"]["failed"] if own else None,
+            "constraint_gate": _constraint_gate(
+                {
+                    episode: shares
+                    for episode, shares in constraint_shares.items()
+                    if episode in named
+                }
+            ),
+        }
+    return found
+
+
+def _quantities(
+    cells: list[Cell],
+    rows: list[dict],
+    levels: dict[str, str],
+    unverified: set[str],
+    scores: dict,
+) -> dict:
+    """Per quantity: the cells, the relative scores, the calibration and the sharpness.
+
+    A constrained cell is counted and never scored. Calibration reads the transform of the
+    facts, ``u = F(y)``; the shares of its four buckets are a target for a continuous forecast
+    and, on selected episodes, for reference only. Sharpness is the median width of the band,
+    meaningful only beside the calibration.
+    """
+    found = {}
+    for quantity in sorted({cell.quantity for cell in cells}):
+        own_cells = [cell for cell in cells if cell.quantity == quantity]
+        own = [row for row in rows if row["quantity"] == quantity]
+        level = levels.get(quantity, "")
+        entry = {
+            "level": level,
+            "cells": len(own_cells),
+            "constrained": sum(1 for cell in own_cells if cell.constrained),
+            "scored": len(own),
+            "unverified_tail": quantity in unverified,
+            "ratios": {
+                name: score["by_quantity"].get(quantity)
+                for name, score in scores.get(level, {}).items()
+            },
+            "calibration": None,
+            "coverage": None,
+            "sharpness": None,
+        }
+        if own:
+            transforms = np.array([row["pit"] for row in own])
+            buckets = np.bincount(
+                np.searchsorted(BUCKET_EDGES, transforms, side="right"), minlength=4
+            )
+            entry["calibration"] = (buckets / len(own)).tolist()
+            entry["coverage"] = float(np.mean([row["inside"] for row in own]))
+            entry["sharpness"] = float(np.median([row["width"] for row in own]))
+        found[quantity] = entry
+    return found
+
+
+def _mc_interval(cells: list[Cell], rows: list[dict], plan: Episodes, target_level: str) -> dict:
+    """The Monte-Carlo interval of the forecast against the walk at the target level.
+
+    The cells of one calculation share the draws, so a repetition resamples one index vector
+    per number of draws and applies it to every cell; the CRPS of the forecast and the relative
+    score are recomputed. This measures the error of the finite number of paths; the episode
+    interval of ``_scores`` measures the error of the sample of episodes.
+    """
+    keyed = {
+        (row["episode"], row["month"], row["quantity"]): row
+        for row in rows
+        if row["level"] == target_level and row["walk"] is not None
+    }
+    pairs = [
+        (cell, keyed[key])
+        for cell in cells
+        if (key := (cell.episode, cell.month, cell.quantity)) in keyed
+    ]
+    point = relative([row for _, row in pairs], "model", "walk")["score"]
+    if point is None:
+        return {"point": None, "interval": None}
+    rng = np.random.default_rng([plan.seed, MC_STREAM])
+    sizes = sorted({len(cell.draws) for cell, _ in pairs})
+    logs = []
+    for _ in range(INTERVAL_REPETITIONS):
+        index = {size: rng.integers(0, size, size) for size in sizes}
+        resampled = [
+            {**row, "model": crps(finite_draws(cell.draws[index[len(cell.draws)]]), cell.fact)}
+            for cell, row in pairs
+        ]
+        score = relative(resampled, "model", "walk")["score"]
+        if score is not None:
+            logs.append(np.log(score))
+    low, high = np.exp(np.percentile(logs, [2.5, 97.5]))
+    return {
+        "point": point,
+        "interval": (float(low), float(high)),
+        "note": (
+            "bootstrap over the draws (Monte-Carlo error); the episode interval measures the "
+            "error of the sample of episodes"
+        ),
+    }
+
+
+def _decision_block(
+    rows: list[dict],
+    against: Path,
+    *,
+    sanity: dict,
+    halves: dict[str, str],
+    plan: Episodes,
+    target_level: str = "macro",
+) -> dict:
+    """The two-standard-error verdict against the incumbent's details file.
+
+    The incumbent must come from the same episode plan and carry its cells (the ``--details``
+    file of its check). The comparison reads the target level on the validation half; the
+    benchmark is the conditional walk where the level has one, since it knows what the forecast
+    knows, and the plain walk otherwise. The admission shares are the worst quantity's.
+    """
+    if not against.exists():
+        raise ValueError(f"--against {against}: the file does not exist")
+    incumbent = json.loads(against.read_text(encoding="utf-8"))
+    if incumbent.get("meta", {}).get("episodes_toml") != _file_digest(plan.path):
+        raise ValueError(
+            "--against was produced from a different episode plan; "
+            "the two versions must be compared on the same cells"
+        )
+    if "rows" not in incumbent:
+        raise ValueError(f"--against {against}: no cells; pass the --details file of that version")
+    validation = {episode for episode, half in halves.items() if half == "validation"}
+    present = {row["episode"] for row in rows}
+    chosen = (validation & present) or present
+
+    def pick(found):
+        return [row for row in found if row["level"] == target_level and row["episode"] in chosen]
+
+    mine, theirs = pick(rows), pick(incumbent["rows"])
+    if not mine:
+        raise ValueError(f"--against {against}: level {target_level!r} has no scored cells")
+    benchmark = (
+        "conditional_walk" if any(row["conditional_walk"] is not None for row in mine) else "walk"
+    )
+    verdict = on_rows(
+        mine,
+        theirs,
+        unit="episode",
+        benchmark=benchmark,
+        block=1,
+        seed=plan.seed,
+        admission=worst_shares(sanity["admission"]),
+        incumbent_admission=worst_shares(incumbent["sanity"]["admission"]),
+    )
+    verdict.update(
+        target_level=target_level,
+        half="validation" if validation & chosen else "all episodes",
+    )
+    return verdict
+
+
+def _compact(report: dict) -> dict:
+    """The report without its cells, small enough to keep in the repository.
+
+    The cells stay in the ``--details`` file: a decision against this version reads them there.
+    """
+    plain = {key: value for key, value in report.items() if key != "rows"}
+    rolling = plain.get("rolling")
+    if rolling:
+        rolling = dict(rolling)
+        if "quality" in rolling:
+            rolling["quality"] = {
+                key: value for key, value in rolling["quality"].items() if key != "rows"
+            }
+        if "price" in rolling:
+            rolling["price"] = {
+                key: value for key, value in rolling["price"].items() if key != "rows"
+            }
+        plain["rolling"] = rolling
+    return plain
 
 
 def _macro_cells(
@@ -903,8 +1145,6 @@ def _macro_cells(
     panel = episode.panel
     column_of = {id_: i for i, id_ in enumerate(draws.ids)}
     pinned = _pinned(episode.scenario.constraints) | _installed(episode.scenario.interventions)
-    months = list(range(1, len(episode.months) + 1))
-    peers = {id_: panel.y[:, j] for j, id_ in enumerate(panel.ids) if id_ in column_of}
     given = [panel.ids.index(id_) for id_ in episode.constrained]
     for j, id_ in enumerate(panel.ids):
         i = column_of.get(id_)
@@ -929,12 +1169,10 @@ def _macro_cells(
                 lower=lower,
             )
         )
-        scale = sigma_with_fallback(history, months, peers=peers)
         for k in range(len(episode.months)):
             fact = episode.realized[k, j]
             if np.isnan(fact):
                 continue
-            sigma, source, pairs = scale[k + 1]
             cells.append(
                 Cell(
                     episode=episode.id,
@@ -946,9 +1184,6 @@ def _macro_cells(
                     base=base.paths[:, k + 1, i],
                     conditional=None if knowing is None else knowing[:, k],
                     constrained=(id_, k + 1) in pinned,
-                    sigma=sigma,
-                    sigma_source=source,
-                    sigma_pairs=pairs,
                     history_range=spread,
                     domain=domain,
                 )
@@ -991,7 +1226,6 @@ def _driver_cells(
     bundle = episode.bundle
     driver_registry = bundle.registry
     series_of = {driver.id: driver.series for driver in driver_registry.drivers}
-    months = list(range(1, len(episode.months) + 1))
     own_of: dict[str, np.ndarray] = {}
     quantity_of: dict[str, str] = {}
     for driver in paths.ids:
@@ -999,9 +1233,6 @@ def _driver_cells(
         quantity_of[driver] = quantity
         d = bundle.arrays.get(f"{quantity}.d")
         own_of[driver] = d[:, node] if d is not None else np.array([])
-    peers: dict[str, dict[str, np.ndarray]] = {}
-    for driver in paths.ids:
-        peers.setdefault(quantity_of[driver], {})[driver] = own_of[driver]
     for k, driver in enumerate(paths.ids):
         quantity = quantity_of[driver]
         declared = driver_registry.quantity(quantity)
@@ -1013,12 +1244,10 @@ def _driver_cells(
         spread = history_range(own)
         walk = random_walk(own, episode.horizon, draws=plan.draws, seed=plan.seed)
         naive = naive_annual(own, episode.horizon, draws=plan.draws, seed=plan.seed)
-        scale = sigma_with_fallback(own, months, peers=peers[quantity])
         for t, month in enumerate(episode.months):
             fact = _driver_fact(episode, series_of.get(driver), month, declared)
             if fact is None:
                 continue
-            sigma, source, pairs = scale[t + 1]
             cells.append(
                 Cell(
                     episode=episode.id,
@@ -1028,9 +1257,6 @@ def _driver_cells(
                     draws=paths.paths[:, t + 1, k],
                     baseline=walk[:, t] if walk.size else None,
                     naive=naive[:, t] if naive is not None else None,
-                    sigma=sigma,
-                    sigma_source=source,
-                    sigma_pairs=pairs,
                     history_range=spread,
                     domain=domain,
                 )
@@ -1055,60 +1281,6 @@ def _driver_fact(episode: Episode, series, month: date, declared):
         return None
 
 
-def _admission(cells: list[Cell]) -> dict:
-    """The pooled admission of a version: one share per rule over every scored cell.
-
-    The admission rule admits a version when fewer than five percent of cells break *each*
-    condition.
-    The shares are computed over all scored cells of all quantities — not per quantity and not
-    as the union of the rules — so a version that breaks one rule on six percent of the cells
-    fails, while eight percent of cells breaking different rules four percent each passes.
-    """
-    scored = [
-        cell
-        for cell in cells
-        if not cell.constrained and np.isfinite(cell.fact) and len(finite_draws(cell.draws))
-    ]
-    broken: dict[str, list[Cell]] = {DOMAIN: [], WIDTH: []}
-    for cell in scored:
-        for name in band_problems(
-            cell.draws, cell.fact, domain=cell.domain, history_range=cell.history_range
-        ):
-            broken[name].append(cell)
-    total = len(scored)
-    rules = {}
-    for name in (DOMAIN, WIDTH):
-        found = broken[name]
-        share = len(found) / total if total else 0.0
-        rules[name] = {
-            "cells": len(found),
-            "share": share,
-            "failed": bool(total) and share >= ADMISSION_SHARE,
-            "episodes": sorted({cell.episode for cell in found}),
-        }
-    return {
-        "cells": total,
-        "rules": rules,
-        "failed": any(rule["failed"] for rule in rules.values()),
-    }
-
-
-def _quantity_rules(cells: list[Cell]) -> dict:
-    """The per-quantity counts of the two rules; the verdict itself is pooled by ``_admission``."""
-    scored = [
-        cell
-        for cell in cells
-        if not cell.constrained and np.isfinite(cell.fact) and len(finite_draws(cell.draws))
-    ]
-    counts = {DOMAIN: 0, WIDTH: 0}
-    for cell in scored:
-        for name in band_problems(
-            cell.draws, cell.fact, domain=cell.domain, history_range=cell.history_range
-        ):
-            counts[name] += 1
-    return {"scored": len(scored), DOMAIN: counts[DOMAIN], WIDTH: counts[WIDTH]}
-
-
 def _constraint_gate(shares: dict[str, dict[int, float | None]]) -> dict:
     """``pi_c > 1 %`` for every informative constraint, per episode.
 
@@ -1121,13 +1293,13 @@ def _constraint_gate(shares: dict[str, dict[int, float | None]]) -> dict:
     not_applicable = 0
     failed = []
     for episode, found in shares.items():
-        for number, share in found.items():
+        for position, share in found.items():
             if share is None:
                 not_applicable += 1
                 continue
             applicable += 1
             if share <= CONSTRAINT_THRESHOLD:
-                failed.append(f"{episode}#{number}")
+                failed.append(f"{episode}#{position}")
     return {
         "rule": CONSTRAINT,
         "threshold": CONSTRAINT_THRESHOLD,
@@ -1141,409 +1313,6 @@ def _constraint_gate(shares: dict[str, dict[int, float | None]]) -> dict:
             "not an observation, and is not in the gate at all; a range constraint keeps pi_c"
         ),
     }
-
-
-def _interval(rows: list[dict], key: str, plan: Episodes) -> tuple[float, float] | None:
-    """The 95% interval of a per-cell score, resampling the episodes with ``plan.seed``."""
-    from .cells import bootstrap
-
-    samples: dict[str, list[float]] = {}
-    for row in rows:
-        value = row.get(key)
-        if value is None or not np.isfinite(value):
-            continue
-        samples.setdefault(row["episode"], []).append(float(value))
-    if not samples:
-        return None
-    low, high = bootstrap(samples, repetitions=INTERVAL_REPETITIONS, seed=plan.seed)
-    if not (np.isfinite(low) and np.isfinite(high)):
-        return None
-    return (low, high)
-
-
-def _wild_interval(rows: list[dict], key: str, plan: Episodes) -> tuple[float, float] | None:
-    """The wild cluster bootstrap interval of a per-cell score, paired to ``_interval``.
-
-    The statistic is the same cell-weighted mean; the null is the point estimate, because the
-    interval reads the spread of a mean, not a difference from zero.
-    """
-    samples: dict[str, list[float]] = {}
-    point: list[float] = []
-    for row in rows:
-        value = row.get(key)
-        if value is None or not np.isfinite(value):
-            continue
-        samples.setdefault(row["episode"], []).append(float(value))
-        point.append(float(value))
-    if not samples:
-        return None
-    from .wild import wild_interval
-
-    # One number per episode, scaled by its share of cells, so their plain mean is the
-    # cell-weighted mean and the bootstrap moves whole episodes.
-    scale = len(samples) / len(point)
-    contributions = {episode: sum(values) * scale for episode, values in samples.items()}
-    low, high = wild_interval(
-        contributions,
-        repetitions=INTERVAL_REPETITIONS,
-        seed=plan.seed,
-        null=float(np.mean(point)),
-    )
-    if not (np.isfinite(low) and np.isfinite(high)):
-        return None
-    return (low, high)
-
-
-def _halves_block(
-    episodes: list[Episode],
-    cells: list[Cell],
-    rows: list[dict],
-    constraint_shares: dict[str, dict[int, float | None]],
-    *,
-    target_level: str,
-) -> dict:
-    """The aggregate, admission and constraint gate of each half, and of all episodes.
-
-    The backtest fits the models on the tuning half and checks them on the validation one, while
-    the final table is built over all episodes; the block keeps the three side by side so a
-    reader sees whether the halves agree. The ``all`` entry repeats the top-level tables.
-    """
-    from .aggregate import equal_weight
-
-    chosen = {"all": [episode.id for episode in episodes]}
-    for half in ("tuning", "validation"):
-        named = [episode.id for episode in episodes if episode.half == half]
-        if named:
-            chosen[half] = named
-    found: dict[str, dict] = {}
-    for name, ids in chosen.items():
-        named = set(ids)
-        block_rows = [row for row in rows if row["episode"] in named]
-        block_cells = [cell for cell in cells if cell.episode in named]
-        found[name] = {
-            "episodes": sorted(named),
-            "cells": len(block_cells),
-            "aggregate": (
-                equal_weight(block_rows, target_level=target_level) if block_rows else None
-            ),
-            "admission": _admission(block_cells) if block_cells else None,
-            "constraint_gate": _constraint_gate(
-                {
-                    episode: shares
-                    for episode, shares in constraint_shares.items()
-                    if episode in named
-                }
-            ),
-        }
-    return found
-
-
-def _aggregate_interval(
-    rows: list[dict], *, halves: dict[str, str], plan: Episodes, target_level: str
-) -> dict:
-    """The sampling and wild intervals of the equal-weight aggregate, per half and over all.
-
-    The statistic is the reported aggregate itself: the episodes are the resampling unit, so a
-    repetition redraws episodes and recomputes the equal-weight aggregate of the target level
-    (``aggregate.aggregate_bootstrap``). The wild cluster bootstrap reweights the per-episode
-    contributions of the same statistic (``aggregate.episode_contributions``); a paired
-    difference against a comparison is tested against zero, the mean against its point value.
-    """
-    from .aggregate import aggregate_bootstrap, episode_contributions, equal_weight
-    from .wild import disagrees, wild_interval
-
-    blocks = {"all": rows}
-    for half in ("tuning", "validation"):
-        chosen = [row for row in rows if halves.get(row["episode"]) == half]
-        if chosen:
-            blocks[half] = chosen
-    intervals: dict[str, dict] = {}
-    for name, block in blocks.items():
-        level_rows = [row for row in block if row["level"] == target_level]
-        if not level_rows:
-            continue
-        aggregate = equal_weight(block, target_level=target_level)
-        level = aggregate["levels"][target_level]
-        found = aggregate_bootstrap(
-            level_rows,
-            ("model", "diff_vs_baseline", "diff_vs_base"),
-            level=target_level,
-            repetitions=INTERVAL_REPETITIONS,
-            seed=plan.seed,
-        )
-        entry: dict = {
-            "episodes": sorted({row["episode"] for row in level_rows}),
-            "by_horizon": {
-                str(month): value for month, value in sorted(level["by_horizon"].items())
-            },
-            "counters": level["counters"],
-        }
-        entry["primary"] = "wild" if len(entry["episodes"]) < WILD_PRIMARY_BELOW else "pair"
-        for column, null in (
-            ("model", None),
-            ("diff_vs_baseline", 0.0),
-            ("diff_vs_base", 0.0),
-        ):
-            sample = found[column]
-            if sample["point"] is None:
-                entry[column] = None
-                continue
-            pair = (sample["low"], sample["high"])
-            contributions = episode_contributions(level_rows, column, level=target_level)
-            wild = (
-                wild_interval(
-                    {
-                        episode: value * len(contributions)
-                        for episode, value in contributions.items()
-                    },
-                    repetitions=INTERVAL_REPETITIONS,
-                    seed=plan.seed,
-                    null=null,
-                )
-                if contributions
-                else None
-            )
-            entry[column] = {
-                "point": sample["point"],
-                "se": sample["se"],
-                "pair": pair,
-                "wild": wild,
-                "wild_disagrees": disagrees(pair, wild) if wild is not None else None,
-            }
-        intervals[name] = entry
-    return intervals
-
-
-def _mc_interval(
-    cells: list[Cell], levels: dict[str, str], plan: Episodes, *, target_level: str = "macro"
-) -> dict:
-    """The Monte-Carlo interval of the equal-weight aggregate: the bootstrap over the draws.
-
-    The cells of one calculation share the draws, so a repetition resamples one common index
-    vector and applies it to every cell; the CRPS and the equal-weight aggregate are
-    recomputed on every repetition. This measures the Monte-Carlo error of the draws; the
-    episode bootstrap of ``_aggregate_interval`` measures the sampling error of the episodes,
-    and the report labels the two apart. Only the cells of ``target_level`` enter.
-    """
-    from .aggregate import MC_STREAM, equal_weight, mc_interval
-
-    cells_mc = []
-    for cell in cells:
-        if cell.constrained or not np.isfinite(cell.fact):
-            continue
-        if levels.get(cell.quantity, "") != target_level:
-            continue
-        if not (np.isfinite(cell.sigma) and cell.sigma > 0):
-            continue
-        draws = finite_draws(cell.draws)
-        if not len(draws):
-            continue
-        cells_mc.append(
-            {
-                "quantity": cell.quantity,
-                "month": cell.month,
-                "level": levels.get(cell.quantity, ""),
-                "draws": draws,
-                "fact": float(cell.fact),
-            }
-        )
-    if not cells_mc:
-        return {"point": None, "interval": None}
-    rows = [
-        {
-            "episode": "mc",
-            "month": entry["month"],
-            "quantity": entry["quantity"],
-            "level": entry["level"],
-            "normalized": crps(entry["draws"], entry["fact"]),
-            "baseline_normalized": None,
-            "base_normalized": None,
-            "naive_normalized": None,
-        }
-        for entry in cells_mc
-    ]
-    point = equal_weight(rows, target_level=target_level)
-    low, high = mc_interval(
-        cells_mc,
-        repetitions=INTERVAL_REPETITIONS,
-        seed=[plan.seed, MC_STREAM],
-    )
-    return {
-        "point": point["levels"][target_level]["overall"]["model"],
-        "interval": (low, high) if (np.isfinite(low) and np.isfinite(high)) else None,
-        "note": (
-            "bootstrap over the draws (Monte-Carlo error); the sampling block above measures "
-            "the episode-sampling error"
-        ),
-    }
-
-
-def _decision_block(
-    rows: list[dict],
-    against: Path,
-    *,
-    admission: dict,
-    halves: dict[str, str],
-    plan: Episodes,
-    target_level: str = "macro",
-) -> dict:
-    """The two-standard-error verdict: the candidate report against the incumbent's JSON.
-
-    The incumbent report is read and checked against the same episode plan: a cell the two
-    reports do not share is an error naming the missing cells, not a silent comparison on the
-    intersection. The comparison happens on the equal-weight aggregates of ``target_level``
-    over the validation half — the half the plan checks on; the block names it. The standard
-    error of every paired difference is the spread of that aggregate over an episode bootstrap
-    — the same statistic the report shows — and the wild cluster bootstrap re-checks it. The
-    benchmark is the conditional walk where the level has one, since it knows what the forecast
-    knows, and the plain walk otherwise. Cells where either report has no normalised score
-    cannot be paired; they are counted and named instead of shrinking the comparison silently.
-    """
-    from .aggregate import aggregate_bootstrap, episode_contributions
-    from .decision import decide
-    from .wild import disagrees, wild_interval
-
-    if not against.exists():
-        raise ValueError(f"--against {against}: the file does not exist")
-    incumbent = json.loads(against.read_text(encoding="utf-8"))
-    if incumbent.get("meta", {}).get("episodes_toml") != _file_digest(plan.path):
-        raise ValueError(
-            "--against was produced from a different episode plan; "
-            "the two versions must be compared on the same cells"
-        )
-    incumbent_rows = incumbent.get("aggregate", {}).get("rows", [])
-    if not incumbent_rows:
-        raise ValueError(
-            f"--against {against}: the report carries no aggregate rows; "
-            "rerun that version with this code to compare the two"
-        )
-    by_key_c = {(row["episode"], row["month"], row["quantity"]): row for row in rows}
-    by_key_i = {(row["episode"], row["month"], row["quantity"]): row for row in incumbent_rows}
-    missing = sorted(set(by_key_i) ^ set(by_key_c))
-    if missing:
-        sample = ", ".join(f"{e}/{q}/t{t}" for e, t, q in missing[:10])
-        raise ValueError(
-            f"the two reports do not share cells: {len(missing)} differ ({sample}"
-            f"{'...' if len(missing) > 10 else ''})"
-        )
-    validation = {e for e, half in halves.items() if half == "validation"}
-    chosen = {row["episode"] for row in rows if row["episode"] in validation} or {
-        row["episode"] for row in rows
-    }
-    paired_rows: list[dict] = []
-    incumbent_paired: list[dict] = []
-    not_compared: list[str] = []
-    for key in sorted(key for key in by_key_c if key[0] in chosen):
-        candidate_row, other = by_key_c[key], by_key_i[key]
-        if candidate_row.get("normalized") is None or other.get("normalized") is None:
-            not_compared.append(f"{key[0]}/{key[2]}/t{key[1]}")
-            continue
-        paired_rows.append(
-            {
-                **candidate_row,
-                "diff_vs_incumbent": candidate_row["normalized"] - other["normalized"],
-            }
-        )
-        incumbent_paired.append(other)
-    if not paired_rows:
-        raise ValueError(
-            f"--against {against}: no cell of the comparison has a normalised score in both reports"
-        )
-    candidate_rows = [
-        {key: value for key, value in row.items() if key != "diff_vs_incumbent"}
-        for row in paired_rows
-    ]
-    known_conditional = any(row.get("conditional_normalized") is not None for row in candidate_rows)
-    benchmark = "conditional" if known_conditional else "baseline"
-    difference_column = f"diff_vs_{benchmark}"
-    found = aggregate_bootstrap(
-        candidate_rows,
-        ("model", benchmark, difference_column),
-        level=target_level,
-        repetitions=INTERVAL_REPETITIONS,
-        seed=plan.seed,
-    )
-    incumbent_found = aggregate_bootstrap(
-        incumbent_paired,
-        ("model",),
-        level=target_level,
-        repetitions=INTERVAL_REPETITIONS,
-        seed=plan.seed,
-    )
-    paired_found = aggregate_bootstrap(
-        paired_rows,
-        ("diff_vs_incumbent",),
-        level=target_level,
-        repetitions=INTERVAL_REPETITIONS,
-        seed=[plan.seed, 19],
-    )
-    candidate_crps = found["model"]["point"]
-    benchmark_crps = found[benchmark]["point"]
-    incumbent_crps = incumbent_found["model"]["point"]
-    difference = found[difference_column]["point"]
-    if candidate_crps is None or benchmark_crps is None:
-        raise ValueError(
-            f"--against {against}: level {target_level!r} has no scored cells in the "
-            "validation half to decide on"
-        )
-    notes = []
-    se_benchmark = found[difference_column]["se"]
-    se_incumbent = paired_found["diff_vs_incumbent"]["se"]
-    if se_benchmark is None:
-        notes.append("the benchmark SE is undefined on one episode; it is read as zero")
-        se_benchmark = 0.0
-    if se_incumbent is None:
-        notes.append("the incumbent SE is undefined on one episode; it is read as zero")
-        se_incumbent = 0.0
-    pair = (found[difference_column]["low"], found[difference_column]["high"])
-    contributions = episode_contributions(candidate_rows, difference_column, level=target_level)
-    wild = (
-        wild_interval(
-            {episode: value * len(contributions) for episode, value in contributions.items()},
-            repetitions=INTERVAL_REPETITIONS,
-            seed=[plan.seed, 11],
-            null=0.0,
-        )
-        if contributions
-        else None
-    )
-    verdict = decide(
-        candidate_crps=candidate_crps,
-        benchmark_crps=benchmark_crps,
-        incumbent_crps=incumbent_crps,
-        se_vs_benchmark=se_benchmark,
-        se_vs_incumbent=se_incumbent,
-        candidate_admission_shares={
-            rule: found["share"] for rule, found in admission["rules"].items()
-        },
-        incumbent_admission_shares={
-            rule: found["share"] for rule, found in incumbent["admission"]["rules"].items()
-        },
-    )
-    verdict.update(
-        {
-            "target_level": target_level,
-            "benchmark": "conditional walk" if benchmark == "conditional" else "random walk",
-            "half": "validation" if validation & chosen else "all episodes",
-            "primary": (
-                "wild"
-                if len({row["episode"] for row in paired_rows}) < WILD_PRIMARY_BELOW
-                else "pair"
-            ),
-            "cells": len(paired_rows),
-            "cells_not_compared": len(not_compared),
-            "not_compared": not_compared[:10],
-            "diff_vs_baseline": difference,
-            "se_vs_incumbent": se_incumbent,
-            "pair_interval": pair,
-            "wild_interval": wild,
-            "wild_disagrees": (
-                disagrees(pair, wild) if wild is not None and all(np.isfinite(wild)) else None
-            ),
-            "notes": notes,
-        }
-    )
-    return verdict
 
 
 def _tail_section(
@@ -1652,16 +1421,17 @@ def _meta(
         "model_sdk": MODEL_SDK_VERSION,
         "target_level": target_level,
         "intervals": {
-            "sampling": "episodes resampled with replacement, the aggregate recomputed",
-            "wild": "the same statistic, episodes reweighted by Webb weights",
+            "sampling": "episodes resampled with replacement, the relative score recomputed",
             "monte_carlo": "draws resampled; only with --mc-bootstrap",
         },
         "assumptions": [
-            "sigma_q(t) falls back: the nearest valid month below, then above, then the peers "
-            "of the level",
+            "scores are relative: the mean CRPS of a forecast over the benchmark's on the same "
+            "cells, pooled in logarithms with equal weights over quantities and months",
+            "admission: every quantity keeps each band rule under 5 % of its cells",
+            "direction: only a move of the median above a tenth of the base band is read",
             "the target level of the decision and of the utility is --target-level",
-            "utility: an episode counts when the paired CRPS difference against the base run "
-            "is negative; the split by source is manual against llm",
+            "utility: an episode is helped when its forecast beats the base run, model/base < 1; "
+            "the split by source is manual against llm",
             "realized loss: the portfolio valued on the facts at t = 0 and t = H; an episode "
             "without the fact at t = H is dropped by name",
             "dist(s) = E_P[-log P(S | R)] on the constraint law (docs/concept/formalization.md)",
@@ -1732,78 +1502,25 @@ def _git_commit() -> str | None:
 
 
 def _print(report: dict) -> None:
-    """The report as Markdown tables and the list of metrics it cannot compute."""
-    print("## Episodes\n")
+    """The report as Markdown: what fell out and the sanity first, the scores after them."""
+    _print_dropped(report)
+    print("\n## Sanity of the quantities\n")
     print(
-        "| episode | as of | horizon | observations | interventions | min constraint probability |"
+        "Read before any score: a quantity over the admission share, a band wider than the "
+        "history or a scenario that moves the forecast away from the fact is named here."
     )
-    print("|---|---|---|---|---|---|")
-    for row in report["episodes"]:
-        shares = row["constraint_probabilities"]
-        known = [share for share in shares.values() if share is not None]
-        exact = sum(1 for share in shares.values() if share is None)
-        worst = f"{min(known):.2f}" if known else "n/a"
-        if exact:
-            worst += f" ({exact} n/a)"
-        observations = ", ".join(row["observations"]) or "-"
-        interventions = ", ".join(row["interventions"]) or "-"
-        print(
-            f"| {row['id']} | {row['as_of']} | {row['horizon']} "
-            f"| {observations} | {interventions} | {worst} |"
-        )
-    admission = report["admission"]
-    print("\n## Admission\n")
-    print("| rule | broken cells | share | failing episodes |")
-    print("|---|---:|---:|---|")
-    for name, rule in admission["rules"].items():
-        episodes = ", ".join(rule["episodes"]) or "-"
-        print(
-            f"| {name} | {rule['cells']} of {admission['cells']} "
-            f"| {rule['share']:.3f} | {episodes} |"
-        )
+    print_sanity(report["sanity"], benchmark="walk")
     gate = report["constraint_gate"]
-    verdict = "failed" if gate["failed"] else "pass"
     print(
         f"\n`{gate['rule']}`: {gate['applicable']} applicable constraint(s), "
         f"{gate['not_applicable']} not applicable (exact point constraints), "
-        f"threshold {gate['threshold']:.3f} — {verdict}."
+        f"threshold {gate['threshold']:.3f} — {'failed' if gate['failed'] else 'pass'}."
     )
-    _print_aggregate(report)
+    _print_episodes(report)
+    _print_scores(report)
     _print_utility(report)
     _print_halves(report)
-    print("\n## Quantities\n")
-    print(
-        "| quantity | level | scored | CRPS/sigma | 95% interval | random walk/sigma "
-        "| base run/sigma | naive/sigma | PIT p5/p50/p95 | sharpness | rules domain/width |"
-    )
-    print("|---|---|---|---:|---|---:|---:|---:|---|---:|---|")
-    for quantity, row in report["quantities"].items():
-        if row["calibration"] is None:
-            print(f"| {quantity} | {row['level']} | 0 | - | - | - | - | - | - | - | - |")
-            continue
-        shares = " / ".join(f"{share:.2f}" for share in row["calibration"]["shares"])
-        intervals = row["intervals"]
-        admission_text = f"{row['admission'][DOMAIN]}/{row['admission'][WIDTH]}"
-        if row["unverified_tail"]:
-            admission_text += ", tail unverified"
-        print(
-            f"| {quantity} | {row['level']} | {row['scored']} "
-            f"| {_number(row['normalized_crps'])} | {_interval_text(intervals['normalized'])} "
-            f"| {_number(row['baseline_normalized_crps'])} "
-            f"| {_number(row['base_normalized_crps'])} "
-            f"| {_number(row['naive_normalized_crps'])} | {shares} "
-            f"| {row['sharpness']:.3f} | {admission_text} |"
-        )
-    hidden = [
-        quantity
-        for quantity, row in report["quantities"].items()
-        if row["scored"] and row["normalized_cells"] < row["scored"]
-    ]
-    if hidden:
-        print(
-            "\nNormalised scores cover only the cells with a finite positive sigma at the "
-            f"episode's calculation date: {', '.join(hidden)}."
-        )
+    _print_quantities(report)
     if "decision" in report:
         _print_decision(report)
     if report.get("rolling"):
@@ -1831,173 +1548,151 @@ def _print(report: dict) -> None:
         print("- none: the report computes every metric")
 
 
-def _print_relative(report: dict) -> None:
-    """The scale-free scores of the episodes: below one the forecast wins."""
-    print("\n## Relative CRPS of the episodes (below one the forecast wins)\n")
-    print("| comparison | score | 95 % episode interval, too narrow: the windows overlap |")
-    print("|---|---:|---|")
-    for name, block in report["aggregate"].get("relative", {}).items():
-        found = block["interval"]
-        bounds = None if found["low"] is None else (found["low"], found["high"])
-        print(f"| {name} | {_number(block['score'])} | {_interval_text(bounds)} |")
+def _print_dropped(report: dict) -> None:
+    """The episodes the plan names that were not judged, and the cells that were left out."""
+    dropped = report["dropped"]
+    print("## What fell out\n")
+    judged = len(report["episodes"])
+    print(f"{judged} of {judged + len(dropped['episodes'])} episodes judged.")
+    if dropped["episodes"]:
+        print("\nEpisodes not judged:\n")
+        for episode, reason in dropped["episodes"].items():
+            print(f"- {episode}: {reason}")
+    print_left_out(dropped["left_out"], "episodes")
+    if dropped["non_finite"]:
+        print("\nCells whose draws are all non-finite, left out:\n")
+        for quantity, count in dropped["non_finite"].items():
+            print(f"- {quantity}: {count}")
 
 
-def _print_aggregate(report: dict) -> None:
-    """The equal-weight table of the level × horizon aggregate, the model and its comparisons."""
-    aggregate = report["aggregate"]
-    target = report["target_level"]
-    _print_relative(report)
-    print(f"\n## Aggregate (equal weights across quantities; target level `{target}`)\n")
+def _print_episodes(report: dict) -> None:
+    print("\n## Episodes\n")
     print(
-        "| level | horizon | model | random walk | base run | naive | conditional walk "
-        "| model - random walk | model - base run | model - conditional walk |"
+        "| episode | as of | horizon | observations | interventions | min constraint probability |"
     )
-    print("|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|")
-    for level, block in aggregate["levels"].items():
-        for month, values in sorted(block["by_horizon"].items()):
-            print(f"| {level} | {month} | {_aggregate_text(values)} |")
-        print(f"| {level} | all | {_aggregate_text(block['overall'])} |")
-        counters = block["counters"]
+    print("|---|---|---|---|---|---|")
+    for row in report["episodes"]:
+        shares = row["constraint_probabilities"]
+        known = [share for share in shares.values() if share is not None]
+        exact = sum(1 for share in shares.values() if share is None)
+        worst = f"{min(known):.2f}" if known else "n/a"
+        if exact:
+            worst += f" ({exact} n/a)"
+        observations = ", ".join(row["observations"]) or "-"
+        interventions = ", ".join(row["interventions"]) or "-"
         print(
-            f"\n`{level}`: {counters['model']['cells']} cells, "
-            f"{counters['model']['normalized']} normalised (model), "
-            f"{counters['baseline']['normalized']} scored against the random walk."
+            f"| {row['id']} | {row['as_of']} | {row['horizon']} "
+            f"| {observations} | {interventions} | {worst} |"
         )
-    sampling = aggregate["intervals"].get("sampling", {}).get("all")
-    if sampling and sampling.get("model"):
-        model = sampling["model"]
-        text = (
-            f"\nTarget level `{target}`: CRPS/sigma {_number(model['point'])}, "
-            f"95 % episode interval {_interval_text(model['pair'])}, "
-            f"wild {_interval_text(model['wild'])}"
-        )
-        difference = model.get("diff_vs_baseline")
-        if difference:
-            text += (
-                f"; against the random walk {_number(difference['point'])}, "
-                f"interval {_interval_text(difference['pair'])}, "
-                f"wild {_interval_text(difference['wild'])}"
+
+
+def _print_scores(report: dict) -> None:
+    """The relative CRPS of every level: below one the first forecast wins."""
+    print("\n## Relative CRPS (below one the first forecast wins)\n")
+    print(
+        "Mean CRPS of the first forecast over the second on the same cells, pooled in "
+        "logarithms with equal weights over quantities and horizon months. The episode "
+        "interval is too narrow: neighbouring windows overlap."
+    )
+    print("\n| level | comparison | score | 95 % episode interval | cells |")
+    print("|---|---|---:|---|---:|")
+    for level, entries in report["scores"].items():
+        for name, entry in entries.items():
+            found = entry["interval"]
+            print(
+                f"| {level} | {name} | {number(entry['score'])} "
+                f"| {interval_text((found['low'], found['high']))} | {entry['cells']} |"
             )
-            if difference.get("wild_disagrees") is not None:
-                text += f", disagreements {'yes' if difference['wild_disagrees'] else 'no'}"
-        if sampling.get("primary") == "wild":
-            text += (
-                f"\nFewer than {WILD_PRIMARY_BELOW} episodes: the ordinary bootstrap "
-                "understates the interval, so the wild one is read as primary."
-            )
-        print(text + ".")
-    monte_carlo = aggregate["intervals"].get("monte_carlo")
+    monte_carlo = report.get("monte_carlo")
     if monte_carlo is not None:
         print(
-            "\nMonte-Carlo interval of the same aggregate (the draws are resampled, not the "
-            f"episodes): {_interval_text(monte_carlo.get('interval'))}."
+            f"\nMonte-Carlo interval of model/walk at `{report['target_level']}` (the draws are "
+            f"resampled, not the episodes): {interval_text(monte_carlo.get('interval'))}."
         )
-
-
-def _aggregate_text(values: dict) -> str:
-    """One aggregate row: the four comparisons and the two paired differences."""
-    return " | ".join(
-        _number(values.get(name))
-        for name in (
-            "model",
-            "baseline",
-            "base",
-            "naive",
-            "conditional",
-            "diff_vs_baseline",
-            "diff_vs_base",
-            "diff_vs_conditional",
-        )
-    )
 
 
 def _print_utility(report: dict) -> None:
-    """The usefulness of the scenario: paired differences against the base run by source."""
-    utility = report["aggregate"]["utility"]["by_source"]
-    print("\n## Scenario usefulness (paired difference against the base run)\n")
-    print("| source | level | episodes judged | dropped | share negative | mean difference |")
-    print("|---|---|---:|---:|---:|---:|")
-    if not utility:
-        print("| - | - | 0 | 0 | - | - |")
-        print("\nNo episode could be judged: the aggregate has no scored cells.")
+    """What the scenario adds: the forecast against the base run, by source."""
+    utility = report["utility"]
+    print(f"\n## Scenario usefulness (model/base at `{utility['target']}`)\n")
+    print("| source | episodes | judged | share helped | model / base |")
+    print("|---|---:|---:|---:|---:|")
+    if not utility["by_source"]:
+        print("| - | 0 | 0 | - | - |")
         return
-    for source, block in utility.items():
-        for level, entry in block["by_level"].items():
-            print(
-                f"| {source} | {level} | {entry['episodes']} | {entry['dropped']} "
-                f"| {_number(entry['share_negative'])} | {_number(entry['mean_diff'])} |"
-            )
-    if "llm" not in utility:
+    for source, entry in utility["by_source"].items():
         print(
-            "\nAll scenarios are marked manual: the llm column is absent and the split is not "
-            "yet informative. An llm scenario counts only in calculations forward of the date "
-            "it was formalised."
+            f"| {source} | {entry['episodes']} | {entry['judged']} "
+            f"| {number(entry['share_helped'])} | {number(entry['score'])} |"
+        )
+    if "llm" not in utility["by_source"]:
+        print(
+            "\nAll scenarios are marked manual: the llm column is absent. An llm scenario counts "
+            "only in calculations forward of the date it was formalised."
         )
 
 
 def _print_halves(report: dict) -> None:
     """The tuning and validation halves beside the full sample."""
-    halves = report["halves"]
     target = report["target_level"]
+    names = [f"{first}/{second}" for first, second in HALF_PAIRS]
     print(f"\n## Halves (target level `{target}`)\n")
-    print(
-        "| half | episodes | cells | CRPS/sigma | random walk | base run | domain share "
-        "| width share | pi_c gate |"
-    )
-    print("|---|---|---:|---:|---:|---:|---:|---:|---|")
-    for name, block in halves.items():
-        aggregate = block["aggregate"]
-        admission = block["admission"]
-        gate = block["constraint_gate"]
-        values = aggregate["levels"].get(target, {}).get("overall", {}) if aggregate else {}
-        rules = admission["rules"] if admission else {}
+    print(f"| half | episodes | cells | {' | '.join(names)} | admission | pi_c gate |")
+    print(f"|---|---|---:|{'---:|' * len(names)}---|---|")
+    for name, block in report["halves"].items():
+        scores = " | ".join(number(block["scores"][pair]["point"]) for pair in names)
+        admitted = {None: "-", True: "fails", False: "passes"}[block["admission_failed"]]
         print(
-            f"| {name} | {len(block['episodes'])} | {block['cells']} "
-            f"| {_number(values.get('model'))} | {_number(values.get('baseline'))} "
-            f"| {_number(values.get('base'))} "
-            f"| {_number(rules.get(DOMAIN, {}).get('share'))} "
-            f"| {_number(rules.get(WIDTH, {}).get('share'))} "
-            f"| {'failed' if gate['failed'] else 'pass'} |"
+            f"| {name} | {len(block['episodes'])} | {block['cells']} | {scores} | {admitted} "
+            f"| {'failed' if block['constraint_gate']['failed'] else 'pass'} |"
+        )
+
+
+def _print_quantities(report: dict) -> None:
+    """Per quantity: the relative scores, the calibration and the sharpness."""
+    names = [f"{first}/{second}" for first, second in PAIRS]
+    print("\n## Quantities\n")
+    print(
+        f"| quantity | level | scored | constrained | {' | '.join(names)} "
+        "| PIT p5/p50/p95 | coverage | sharpness |"
+    )
+    print(f"|---|---|---:|---:|{'---:|' * len(names)}---|---:|---:|")
+    for quantity, entry in report["quantities"].items():
+        ratios = " | ".join(number(entry["ratios"].get(name)) for name in names)
+        shares = (
+            "-"
+            if entry["calibration"] is None
+            else " / ".join(f"{share:.2f}" for share in entry["calibration"])
+        )
+        tail = ", tail unverified" if entry["unverified_tail"] else ""
+        print(
+            f"| {quantity}{tail} | {entry['level']} | {entry['scored']} | {entry['constrained']} "
+            f"| {ratios} | {shares} | {number(entry['coverage'])} | {number(entry['sharpness'])} |"
         )
 
 
 def _print_decision(report: dict) -> None:
     """The four steps of the two-standard-error rule and the numbers they read."""
     verdict = report["decision"]
+    versus_benchmark, versus_incumbent = verdict["vs_benchmark"], verdict["vs_incumbent"]
     print("\n## Decision (two standard errors)\n")
     print(
-        f"- target level `{verdict.get('target_level')}`, half {verdict.get('half')}: "
-        f"{verdict.get('cells')} paired cells, {verdict.get('cells_not_compared')} not compared"
+        f"- target level `{verdict['target_level']}`, half {verdict['half']}: "
+        f"{verdict['cells']} paired cells"
     )
     print(
-        f"- CRPS/sigma: candidate {_number(verdict.get('candidate_crps'))}, "
-        f"{verdict.get('benchmark', 'benchmark')} {_number(verdict.get('benchmark_crps'))}, "
-        f"incumbent {_number(verdict.get('incumbent_crps'))}"
+        f"- model/{verdict['benchmark']} {number(versus_benchmark['point'])} "
+        f"{interval_text((versus_benchmark['low'], versus_benchmark['high']))}; "
+        f"candidate/incumbent {number(versus_incumbent['point'])} "
+        f"{interval_text((versus_incumbent['low'], versus_incumbent['high']))}"
     )
-    print(
-        f"- SE of the difference: {_number(verdict.get('se_vs_benchmark'))} against the "
-        f"benchmark, {_number(verdict.get('se_vs_incumbent'))} against the incumbent"
-    )
-    print(
-        f"- difference against the benchmark {_number(verdict.get('diff_vs_baseline'))}; "
-        f"pair interval {_interval_text(verdict.get('pair_interval'))}; "
-        f"wild {_interval_text(verdict.get('wild_interval'))}; "
-        f"wild disagrees {verdict.get('wild_disagrees')}"
-    )
-    if verdict.get("primary") == "wild":
-        print(f"- fewer than {WILD_PRIMARY_BELOW} episodes: the wild interval is read as primary")
     shares = ", ".join(
-        f"{rule} {_number(share)}" for rule, share in verdict.get("admission_shares", {}).items()
+        f"{rule} {number(share)}" for rule, share in verdict["admission_shares"].items()
     )
-    print(f"- admission shares: {shares or '-'}")
+    print(f"- worst quantity's admission shares: {shares or '-'}")
     if verdict.get("admission_grown"):
         print(f"- shares that grew against the incumbent: {', '.join(verdict['admission_grown'])}")
-    print(
-        f"- verdict: **{verdict.get('verdict')}** (step {verdict.get('step')}) — "
-        f"{verdict.get('note')}"
-    )
-    for note in verdict.get("notes", []):
-        print(f"- {note}")
+    print(f"- verdict: **{verdict['verdict']}** (step {verdict['step']}) — {verdict['note']}")
 
 
 def _print_tail(report: dict) -> None:
@@ -2007,32 +1702,18 @@ def _print_tail(report: dict) -> None:
     print("\n## Tail (Acerbi-Székely)\n")
     print(f"- horizon: {horizon.get('kind', 'episode window')}, month {horizon.get('month', '-')}")
     print(
-        f"- Z {_number(tail.get('z'))}; episode interval {_interval_text(tail.get('interval'))}; "
-        f"wild {_interval_text(tail.get('wild'))}; wild disagrees {tail.get('wild_disagrees')}"
+        f"- Z {number(tail.get('z'))}; episode interval {interval_text(tail.get('interval'))}; "
+        f"wild {interval_text(tail.get('wild'))}; wild disagrees {tail.get('wild_disagrees')}"
     )
     print(
         f"- trimmed Z with {tail.get('trim')} of the heaviest draws dropped: "
-        f"{_number(tail.get('trimmed_z'))}"
+        f"{number(tail.get('trimmed_z'))}"
     )
     print(
         f"- episodes judged {len(tail.get('episodes', []))}, dropped {len(tail.get('dropped', []))}"
     )
     for dropped in tail.get("dropped", []):
         print(f"- dropped {dropped['id']}: {dropped['reason']}")
-
-
-def _number(value) -> str:
-    """A score as three decimals, or a dash when it is missing or non-finite."""
-    if value is None or not np.isfinite(value):
-        return "-"
-    return f"{value:.3f}"
-
-
-def _interval_text(pair) -> str:
-    if pair is None:
-        return "-"
-    low, high = pair
-    return f"[{low:.3f}, {high:.3f}]"
 
 
 def _jsonable(value):

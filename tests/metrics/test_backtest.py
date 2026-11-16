@@ -17,6 +17,7 @@ from mst.metrics import backtest as runner
 from mst.metrics.baselines import DOMAIN, WIDTH, macro_domain, quantity_domain
 from mst.metrics.cells import Cell
 from mst.metrics.episodes import calculation_date, load_episodes
+from mst.metrics.sanity import check as sanity_check
 
 from . import simulated
 
@@ -215,10 +216,11 @@ def test_a_run_without_a_single_episode_reports_it_instead_of_raising(workspace,
 
     assert code == 1
     assert report["episodes"] == []
-    assert report["aggregate"]["levels"] == {}
-    assert "no scored cells" in report["aggregate"]["note"]
-    assert report["problems"]
-    assert "No episode could be judged" in capsys.readouterr().out
+    assert report["scores"] == {}
+    assert set(report["dropped"]["episodes"]) == {"R1", "R2"}
+    out = capsys.readouterr().out
+    assert "0 of 2 episodes judged." in out
+    assert "- R1: the macro panel knows no variables fake.one" in out
 
 
 def test_the_monte_carlo_option_moves_no_other_field(workspace, tmp_path):
@@ -228,12 +230,13 @@ def test_the_monte_carlo_option_moves_no_other_field(workspace, tmp_path):
     _, monte_carlo = run_episodes(workspace, plan, tmp_path, name="mc.json", mc_bootstrap=True)
 
     # The Monte-Carlo error is reported beside the sampling error, never in place of it.
-    for key in ("episodes", "quantities", "admission", "constraint_gate", "halves"):
+    for key in ("episodes", "quantities", "sanity", "scores", "constraint_gate", "halves"):
         assert plain[key] == monte_carlo[key]
-    assert "monte_carlo" not in plain["aggregate"]["intervals"]
-    interval = monte_carlo["aggregate"]["intervals"]["monte_carlo"]
+    assert "monte_carlo" not in plain
+    interval = monte_carlo["monte_carlo"]
     assert interval["note"].startswith("bootstrap over the draws")
-    assert interval["interval"] is not None
+    low, high = interval["interval"]
+    assert low <= interval["point"] <= high
 
 
 def test_the_details_file_holds_the_full_report(workspace, tmp_path):
@@ -242,32 +245,33 @@ def test_the_details_file_holds_the_full_report(workspace, tmp_path):
     code, report = run_episodes(workspace, plan, tmp_path)
 
     assert code == 0
-    assert report["problems"] == []
+    assert report["dropped"] == {"episodes": {}, "left_out": {}, "non_finite": {}}
     assert len(report["episodes"]) == 2
     row = report["quantities"]["ru.key_rate"]
-    assert row["scored"] > 0 and row["crps"] > 0
-    assert row["baseline_crps"] is not None and row["base_crps"] is not None
-    assert row["calibration"]["shares"] and row["sharpness"] > 0
-    assert row["admission"]["scored"] == row["scored"]
-    assert row["admission"][DOMAIN] == 0 and row["admission"][WIDTH] == 0
-    assert row["intervals"]["crps"] is not None
-    assert row["intervals"]["normalized"] is not None
-    assert row["intervals"]["vs_baseline"] is not None
+    assert row["scored"] > 0
+    assert row["ratios"]["model/walk"] is not None and row["ratios"]["model/base"] is not None
+    assert row["calibration"] and row["sharpness"] > 0
+    # The cells are in the details file, every one with its band and its scores.
+    cells = [cell for cell in report["rows"] if cell["quantity"] == "ru.key_rate"]
+    assert len(cells) == row["scored"]
+    assert all(cell["model"] > 0 and cell["walk"] is not None for cell in cells)
     # The constrained variable keeps its cells, marked as constrained.
     constrained = report["quantities"]["gl.brent"]
     assert constrained["constrained"] > 0
 
 
-def test_save_keeps_the_report_and_its_tables_beside_the_plan(workspace, tmp_path, capsys):
+def test_save_keeps_the_report_without_its_cells_beside_the_plan(workspace, tmp_path, capsys):
     plan = plan_file(tmp_path, [("R1", "gl.brent"), ("R2", "ru.key_rate")])
 
     code, report = run_episodes(workspace, plan, tmp_path, save=True)
 
     assert code == 0
     saved = tmp_path / "results"
-    assert json.loads((saved / "fake.macro.json").read_text(encoding="utf-8")) == report
+    kept = json.loads((saved / "fake.macro.json").read_text(encoding="utf-8"))
+    assert "rows" not in kept
+    assert kept == {key: value for key, value in report.items() if key != "rows"}
     tables = (saved / "fake.macro.md").read_text(encoding="utf-8")
-    assert "## Episodes" in tables and tables in capsys.readouterr().out
+    assert tables.startswith("## What fell out") and tables in capsys.readouterr().out
 
 
 def test_a_part_of_the_plan_is_not_saved_as_its_result(workspace, tmp_path):
@@ -278,34 +282,40 @@ def test_a_part_of_the_plan_is_not_saved_as_its_result(workspace, tmp_path):
     assert not (tmp_path / "results").exists()
 
 
-def test_the_report_holds_the_aggregate_the_usefulness_and_the_halves(workspace, tmp_path, capsys):
+def test_the_report_reads_what_fell_out_and_the_sanity_before_the_scores(
+    workspace, tmp_path, capsys
+):
     plan = plan_file(tmp_path, [("R1", "gl.brent"), ("R2", "ru.key_rate")])
 
     _, report = run_episodes(workspace, plan, tmp_path)
     out = capsys.readouterr().out
 
-    aggregate = report["aggregate"]
     assert report["target_level"] == "macro"
-    macro = aggregate["levels"]["macro"]
-    assert macro["by_horizon"]
-    assert macro["overall"]["model"] is not None
-    assert macro["counters"]["model"]["cells"] >= macro["counters"]["model"]["normalized"]
-    sampling = aggregate["intervals"]["sampling"]["all"]
-    assert sampling["model"]["pair"] is not None
-    assert sampling["model"]["wild"] is not None
-    # Two episodes: the ordinary bootstrap understates the interval, the wild one is primary.
-    assert sampling["primary"] == "wild"
-    assert "the wild one is read as primary" in out
+    macro = report["scores"]["macro"]
+    assert set(macro) == {
+        "model/conditional_walk",
+        "model/walk",
+        "base/walk",
+        "model/base",
+    }
+    assert macro["model/walk"]["score"] > 0 and macro["model/walk"]["by_horizon"]
     assert report["halves"]["all"]["episodes"] == ["R1", "R2"]
     assert report["halves"]["tuning"]["episodes"] == ["R1"]
     assert report["halves"]["validation"]["episodes"] == ["R2"]
-    assert report["halves"]["tuning"]["admission"]["cells"] > 0
-    assert aggregate["utility"]["by_source"]["manual"]["target"]["episodes"] == 2
-    # The tables are printed, not only written to the JSON.
-    assert "## Aggregate (equal weights across quantities; target level `macro`)" in out
-    assert "## Scenario usefulness" in out
-    assert "## Halves" in out
-    assert "| macro | all |" in out
+    assert report["halves"]["tuning"]["admission_failed"] is False
+    assert report["utility"]["by_source"]["manual"]["episodes"] == 2
+    order = [
+        out.index(title)
+        for title in (
+            "## What fell out",
+            "## Sanity of the quantities",
+            "## Relative CRPS",
+            "## Scenario usefulness",
+            "## Halves",
+            "## Quantities",
+        )
+    ]
+    assert order == sorted(order)
 
 
 def test_the_full_table_does_not_depend_on_the_halves(workspace, tmp_path):
@@ -317,9 +327,10 @@ def test_the_full_table_does_not_depend_on_the_halves(workspace, tmp_path):
     _, second = run_episodes(workspace, swapped, tmp_path, name="second.json")
 
     # The final table is built over all episodes: the marks change the halves, nothing else.
-    assert first["aggregate"]["levels"] == second["aggregate"]["levels"]
-    assert first["aggregate"]["rows"] == second["aggregate"]["rows"]
+    assert first["scores"] == second["scores"]
+    assert first["rows"] == second["rows"]
     assert first["quantities"] == second["quantities"]
+    assert first["sanity"] == second["sanity"]
     assert first["halves"]["tuning"]["episodes"] == second["halves"]["validation"]["episodes"]
 
 
@@ -329,32 +340,22 @@ def test_the_decision_section_prints_the_steps(capsys):
             "target_level": "macro",
             "half": "validation",
             "cells": 12,
-            "cells_not_compared": 1,
-            "candidate_crps": 0.9,
-            "benchmark_crps": 1.1,
-            "incumbent_crps": 1.0,
-            "se_vs_benchmark": 0.05,
-            "se_vs_incumbent": 0.04,
-            "diff_vs_baseline": -0.2,
-            "pair_interval": (-0.3, -0.1),
-            "wild_interval": (-0.31, -0.09),
-            "wild_disagrees": False,
+            "benchmark": "conditional_walk",
+            "vs_benchmark": {"point": 0.9, "low": 0.8, "high": 1.0},
+            "vs_incumbent": {"point": 0.95, "low": 0.9, "high": 1.01},
             "admission_shares": {DOMAIN: 0.0, WIDTH: 0.01},
             "admission_grown": [],
-            "primary": "wild",
-            "verdict": "accepted",
-            "step": 2,
-            "note": "better by more than two SE",
-            "notes": ["a single episode reads as zero"],
+            "verdict": "inconclusive",
+            "step": 4,
+            "note": "the difference is undetected; the incumbent stays",
         }
     }
     runner._print_decision(report)
     out = capsys.readouterr().out
     assert "## Decision (two standard errors)" in out
-    assert "**accepted** (step 2)" in out
-    assert "12 paired cells, 1 not compared" in out
-    assert "fewer than 8 episodes: the wild interval is read as primary" in out
-    assert "a single episode reads as zero" in out
+    assert "**inconclusive** (step 4)" in out
+    assert "half validation: 12 paired cells" in out
+    assert "model/conditional_walk 0.900 [0.800, 1.000]" in out
 
 
 def test_the_tail_section_prints_the_horizon_and_the_dropped_episodes(capsys):
@@ -383,14 +384,12 @@ def test_the_random_walk_is_not_the_base_run(workspace, tmp_path):
 
     _, report = run_episodes(workspace, plan, tmp_path)
 
-    row = report["quantities"]["ru.key_rate"]
+    ratios = report["quantities"]["ru.key_rate"]["ratios"]
     # The fake model ignores the scenario, so its base run is its conditional forecast.
-    assert row["base_crps"] == pytest.approx(row["crps"])
+    assert ratios["model/base"] == pytest.approx(1.0)
     # The random walk is a different benchmark, and it is the one labelled as such.
-    assert row["baseline_crps"] != pytest.approx(row["crps"], rel=1e-9)
-    # The conditional-minus-base comparison of the scheme is reported apart from the RW one.
-    assert row["base_normalized_crps"] == pytest.approx(row["normalized_crps"])
-    assert row["baseline_normalized_crps"] != pytest.approx(row["normalized_crps"], rel=1e-9)
+    assert ratios["model/walk"] != pytest.approx(1.0, rel=1e-9)
+    assert ratios["base/walk"] == pytest.approx(ratios["model/walk"])
 
 
 def test_an_episode_scores_the_same_alone_and_with_others(workspace, tmp_path):
@@ -400,15 +399,12 @@ def test_an_episode_scores_the_same_alone_and_with_others(workspace, tmp_path):
     _, together = run_episodes(workspace, plan, tmp_path, name="together.json")
 
     def cells_of(report):
-        return {
-            quantity: [row for row in data["months"] if row["episode"] == "R1"]
-            for quantity, data in report["quantities"].items()
-        }
+        return [row for row in report["rows"] if row["episode"] == "R1"]
 
-    # The normaliser, the history range and the random walk all come from R1's own calculation
-    # date, so loading R2 changes nothing about R1's cells.
+    # The history range and the random walk come from R1's own calculation date, so loading
+    # R2 changes nothing about R1's cells.
     assert cells_of(alone) == cells_of(together)
-    assert cells_of(alone)["ru.key_rate"]
+    assert any(row["quantity"] == "ru.key_rate" for row in cells_of(alone))
 
 
 def test_the_macro_domain_bounds_rates_and_leaves_spreads_and_logs_open():
@@ -423,14 +419,11 @@ def test_the_macro_domain_bounds_rates_and_leaves_spreads_and_logs_open():
         "ru.key_rate",
         0.0,
         np.array([-10.0, -2.0, 0.0, 1.0]),
-        sigma=1.0,
         history_range=100.0,
         domain=macro_domain(registry.variable("ru.key_rate")),
     )
-    admission = runner._admission([cell])
-    assert admission["rules"][DOMAIN]["cells"] == 1
-    assert admission["rules"][DOMAIN]["failed"] is True
-    assert admission["rules"][WIDTH]["cells"] == 0
+    (row,) = runner._cell_rows([cell], {"ru.key_rate": "macro"})
+    assert row[DOMAIN] is True and row[WIDTH] is False
 
 
 def test_the_driver_domain_maps_the_natural_endpoints():
@@ -455,7 +448,7 @@ def test_the_driver_domain_maps_the_natural_endpoints():
     )
 
 
-def test_the_admission_shares_are_pooled_per_rule():
+def test_the_admission_rules_are_read_apart_for_every_quantity():
     def cell(month, draws, quantity="q"):
         return Cell(
             "e",
@@ -463,38 +456,40 @@ def test_the_admission_shares_are_pooled_per_rule():
             quantity,
             0.0,
             np.asarray(draws, dtype=float),
-            sigma=1.0,
             history_range=10.0,
             domain=(0.0, np.inf),
         )
+
+    def admission(cells):
+        levels = {cell.quantity: "macro" for cell in cells}
+        return sanity_check(runner._cell_rows(cells, levels))["admission"]
 
     domain_cells = [cell(month, [-2.0, -1.0, 0.0, 1.0]) for month in range(1, 5)]
     width_cells = [cell(month, [0.0, 0.0, 100.0, 100.0]) for month in range(1, 5)]
     fine = [cell(month, [1.0, 2.0, 3.0, 4.0]) for month in range(1, 93)]
     # Four cells break each rule on its own: the union is 8 %, but neither rule reaches 5 %.
-    admission = runner._admission(domain_cells + width_cells + fine)
-    assert admission["cells"] == 100
-    assert admission["rules"][DOMAIN] == {
-        "cells": 4,
-        "share": pytest.approx(0.04),
-        "failed": False,
-        "episodes": ["e"],
-    }
-    assert admission["rules"][WIDTH]["share"] == pytest.approx(0.04)
-    assert admission["failed"] is False
+    found = admission(domain_cells + width_cells + fine)
+    assert found["cells"] == 100
+    assert found["rules"][DOMAIN]["worst"] == pytest.approx(0.04)
+    assert found["rules"][WIDTH]["worst"] == pytest.approx(0.04)
+    assert found["failed"] is False
     # Six cells breaking the width rule fail that rule and the version.
     extra = [cell(month, [0.0, 0.0, 100.0, 100.0]) for month in range(1, 3)]
-    failed = runner._admission(domain_cells + width_cells + extra + fine)
-    assert failed["rules"][WIDTH]["share"] == pytest.approx(6 / 102)
-    assert failed["rules"][WIDTH]["failed"] is True
-    assert failed["rules"][DOMAIN]["failed"] is False
+    failed = admission(domain_cells + width_cells + extra + fine)
+    assert failed["rules"][WIDTH]["worst"] == pytest.approx(6 / 102)
+    assert failed["rules"][WIDTH]["quantities"] == ["q"]
+    assert failed["rules"][DOMAIN]["quantities"] == []
     assert failed["failed"] is True
     # The threshold is strict: exactly five percent does not pass ("fewer than 5 %").
     exact = [cell(month, [0.0, 0.0, 100.0, 100.0]) for month in range(1, 6)]
     enough = [cell(month, [1.0, 2.0, 3.0, 4.0]) for month in range(1, 96)]
-    threshold = runner._admission(exact + enough)
-    assert threshold["cells"] == 100 and threshold["rules"][WIDTH]["share"] == 0.05
-    assert threshold["rules"][WIDTH]["failed"] is True and threshold["failed"] is True
+    assert admission(exact + enough)["failed"] is True
+    # The same five broken cells inside a quiet second quantity still fail: the pool of two
+    # quantities would hide them.
+    other = [cell(month, [1.0, 2.0, 3.0, 4.0], quantity="r") for month in range(1, 200)]
+    hidden = admission(width_cells[:3] + enough[:40] + other)
+    assert hidden["rules"][WIDTH]["pooled"] < 0.05
+    assert hidden["rules"][WIDTH]["quantities"] == ["q"]
 
 
 def test_the_constraint_gate_needs_more_than_one_percent():
@@ -612,23 +607,6 @@ def test_an_intervened_quantity_is_reported_but_never_scored(workspace, tmp_path
     row = report["quantities"]["ru.key_rate"]
     assert row["constrained"] == episode["horizon"] == row["cells"]
     assert row["scored"] == 0 and row["calibration"] is None
-
-
-def test_the_interval_resamples_the_reported_statistic():
-    rows = [
-        {"episode": "e1", "crps": 8.0},
-        {"episode": "e2", "crps": 1.0},
-        {"episode": "e2", "crps": 1.0},
-        {"episode": "e3", "crps": 1.0},
-        {"episode": "e3", "crps": 1.0},
-    ]
-    plan = SimpleNamespace(seed=3)
-    interval = runner._interval(rows, "crps", plan)
-    assert interval is not None
-    low, high = interval
-    assert low < 12 / 5 < high
-    assert runner._interval(rows, "crps", plan) == interval
-    assert runner._interval([], "crps", plan) is None
 
 
 def test_the_report_meta_records_the_versions_and_the_vintage(workspace, tmp_path):
@@ -757,10 +735,11 @@ def test_the_satellites_score_the_served_drivers(workspace, tmp_path):
     assert row["level"] == "driver/share_price"
     assert row["scored"] > 0
     # The naive forecast of a target is scored alongside the random walk; the base run has no
-    # driver paths, so its cell score is absent rather than copied from the model.
-    assert row["naive_crps"] is not None
-    assert row["baseline_crps"] is not None
-    assert row["base_crps"] is None
+    # driver paths, so there is no ratio against it rather than one copied from the model.
+    assert row["ratios"]["model/naive"] is not None
+    assert row["ratios"]["model/walk"] is not None
+    assert "model/base" not in row["ratios"]
+    assert set(report["scores"]["driver/share_price"]) == {"model/walk", "model/naive"}
     # The fake part records no training range, so no range check runs on its paths.
     assert row["unverified_tail"] is False
 
@@ -832,39 +811,41 @@ def test_the_decision_compares_two_reports_on_the_same_cells(workspace, tmp_path
 
     def decide_on(path):
         return runner._decision_block(
-            report["aggregate"]["rows"],
+            report["rows"],
             path,
-            admission=report["admission"],
+            sanity=report["sanity"],
             halves=halves,
             plan=load_episodes(plan),
             target_level="macro",
         )
 
-    # The candidate against itself: no difference from the incumbent is found, and the verdict
-    # repeats. The random walk here is better than the fake model, so step 3 may reject it.
+    # The candidate against itself: no difference from the incumbent, and the verdict repeats.
     verdict = decide_on(against)
-    assert verdict["candidate_crps"] == pytest.approx(verdict["incumbent_crps"])
-    assert verdict["diff_vs_baseline"] == pytest.approx(
-        verdict["candidate_crps"] - verdict["benchmark_crps"]
-    )
-    assert verdict["verdict"] in {"rejected_worse", "inconclusive"}
-    # The verdict is spoken on the validation half, naming it.
+    assert verdict["vs_incumbent"]["point"] == pytest.approx(1.0)
+    assert verdict["benchmark"] == "conditional_walk"
+    # The verdict is spoken on the validation half, naming it; one episode leaves its error
+    # unknown, so nothing is detected.
     assert verdict["half"] == "validation"
     assert verdict["cells"] > 0
-    assert verdict["cells_not_compared"] == 0
-    assert verdict["primary"] == "wild"
-    assert verdict["wild_interval"] is not None
+    assert verdict["verdict"] == "inconclusive"
     assert decide_on(against) == verdict
 
     # A cell the two reports do not share is an error naming the missing cell, not a silent
     # comparison on the intersection.
     broken = json.loads(against.read_text(encoding="utf-8"))
-    dropped = broken["aggregate"]["rows"].pop()
+    dropped = next(row for row in reversed(broken["rows"]) if row["episode"] == "R2")
+    broken["rows"].remove(dropped)
     file = tmp_path / "broken.json"
     file.write_text(json.dumps(broken), encoding="utf-8")
-    with pytest.raises(ValueError, match="do not share cells") as error:
+    with pytest.raises(ValueError, match="do not share 1 cells") as error:
         decide_on(file)
     assert f"{dropped['episode']}/{dropped['quantity']}" in str(error.value)
+
+    # The saved result keeps no cells: a decision reads the details file instead.
+    saved = tmp_path / "saved.json"
+    saved.write_text(json.dumps(runner._compact(broken)), encoding="utf-8")
+    with pytest.raises(ValueError, match="pass the --details file"):
+        decide_on(saved)
 
 
 def test_the_satellite_bundle_is_cached_by_its_own_inputs(workspace, tmp_path, monkeypatch):
@@ -1003,7 +984,7 @@ def test_an_episode_the_satellite_estimation_cannot_serve_is_skipped_by_name(
     # The first episode is named and skipped; the check goes on with the second.
     assert code == 1
     assert [episode["id"] for episode in report["episodes"]] == ["R2"]
-    assert any(problem.startswith("R1: satellites:") for problem in report["problems"])
+    assert report["dropped"]["episodes"]["R1"].startswith("satellites:")
 
 
 def test_the_calculation_date_is_the_day_before_the_episode():
@@ -1085,16 +1066,6 @@ def test_every_point_pins_its_cell_whatever_its_rounding():
     assert runner._pinned([wide]) == set()
 
 
-def test_wild_interval_takes_episodes_with_unequal_cell_counts():
-    plan = SimpleNamespace(seed=7)
-    rows = [{"episode": "a", "difference": value} for value in (1.0, 2.0, 3.0)]
-    rows += [{"episode": "b", "difference": 10.0}]
-    low, high = runner._wild_interval(rows, "difference", plan)
-    # The cell-weighted mean is 4; the interval moves whole episodes, so it spans their spread.
-    assert low < 4.0 < high
-    assert high - low > 1.0
-
-
 class _ShortRate(simulated.FakeMacro):
     """The fake model with a rate history it finds too short on every date."""
 
@@ -1115,13 +1086,12 @@ def test_a_short_variable_leaves_out_its_cells_not_the_episode(workspace, tmp_pa
     code, report = run_episodes(workspace, plan, tmp_path, rolling=False)
 
     assert [row["id"] for row in report["episodes"]] == ["R1", "R2"]
-    assert all(
-        row["left_out"] == {"ru.key_rate": "2 changes, the model needs 3"}
-        for row in report["episodes"]
-    )
+    reason = {"ru.key_rate": "2 changes, the model needs 3"}
+    assert all(row["left_out"] == reason for row in report["episodes"])
+    assert report["dropped"]["left_out"] == {"R1": reason, "R2": reason}
     assert "ru.key_rate" not in report["quantities"]
     assert "gl.brent" in report["quantities"]
-    assert report["problems"] == []
+    assert report["dropped"]["episodes"] == {}
     assert code == 0
 
 
@@ -1135,9 +1105,10 @@ def test_an_episode_fixing_a_short_variable_is_dropped_with_the_reason(
     code, report = run_episodes(workspace, plan, tmp_path, rolling=False)
 
     assert [row["id"] for row in report["episodes"]] == ["R1"]
-    assert report["problems"] == [
-        "R2: the model left out ru.key_rate, which the episode fixes: 2 changes, the model needs 3"
-    ]
+    assert report["dropped"]["episodes"] == {
+        "R2": "the model left out ru.key_rate, which the episode fixes: "
+        "2 changes, the model needs 3"
+    }
     assert code == 1
 
 
