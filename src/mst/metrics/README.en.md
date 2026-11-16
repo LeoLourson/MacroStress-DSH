@@ -1,117 +1,131 @@
-# mst.metrics
+# Checking a model on history
 
-A check of models on history. Models are rolled back to a past date and, on the data known only by that date, predict what happened. The forecast is compared with the fact for each quantity and each month of the horizon, so you see where exactly a model errs, beyond "fine on average".
+The package `mst.metrics` checks a model of any level on history: the macro model, the satellites and the position models. One procedure serves every plugin. The model is set back to a past date, estimated only on the data published by then, and its forecast is compared with what happened. The report first names what could not be checked, then shows where the forecast looks unreasonable, and only after that gives the scores. The scores describe a version of a plugin on a given set of dates and events; they are no proof of the quality of the product.
 
-What is compared and by what rules is described in the [general scheme of the system](../../../docs/concept/formalization.en.md), section "Quality metrics". This page covers how it works in code and how to read the report.
+The normative rules are in the [general formalization](<../../../docs/concept/formalization.en.md>), section "Quality metrics". This page describes how they work in code and how to read the report.
+
+## The window
+
+The unit of a check is a *window*: a calculation date, the horizon months after the last month of the macro panel, and a scenario. There are two kinds.
+
+- A date of the grid. The command `rolling` opens a window on every date of the grid in the `[rolling]` block of the [episode plan](<../../../bench/model-backtest/episodes.toml>), with the empty scenario. Nobody chose the dates, so quiet months and crises both enter the sample, and the calibration shares keep their ordinary meaning.
+- An episode. The command `backtest` opens a window on the day before a past event starts. The scenario is what happened: the quantities in `observations` follow their realized path, the decisions in `interventions` are set at their realized level. The episodes are chosen with hindsight, so their calibration shares are for reference only.
+
+A window ends `after_months` months after its start month; a series published with a lag adds its missing months to the horizon.
+
+On every window the platform estimates the models of every level again. It caches the macro version in `<models>/backtest/` by the state of the data on the date, the model's configuration and the expert's answers, and the satellite bundle by its own inputs. With `--portfolio` the window also gets the history of the portfolio: the same positions valued by their own models over the past windows known on the calculation date.
+
+## Levels and cells
+
+A *cell* is a quantity at a month of the window's horizon whose fact is known. It holds the fact, the model's forecast and the benchmarks' forecasts on the same cell.
+
+| Level | Quantity | Plain benchmark | Other comparisons |
+|---|---|---|---|
+| `macro` | macro variable | random walk with drift | the walk that knows the path of the fixed quantities; the base run |
+| `driver/<quantity>` | satellite driver | random walk with drift | the value a year earlier with trend; the base run |
+| `position` | return of a position, % of current value | historical simulation | the base run |
+| `portfolio` | return of the portfolio | historical simulation | the base run |
+
+The base run is the forecast of the same models on the same date under the empty scenario: the models are not told of the event, nor is it ruled out. The comparison with it shows what the scenario adds. A date of the grid has the empty scenario, so it has no base run and no conditional walk. The historical simulation is the return of the same positions over the past windows of the same length that ended before the calculation date.
+
+A cell whose value the scenario fixes (an exact observation or an intervention) is shown in the table of quantities and kept out of the scores: the model was told its value.
+
+## What fell out
+
+The first section of the report lists everything that did not enter the scores, with the reason.
+
+- A window refused (`refused`): there was enough data, but the model gave no version or the scenario could not be built. The scores do not cover it, and the grid with a refused date fails: a score over the surviving dates would hide the failures.
+- A window skipped (`skipped`, the grid only): too little history for any model.
+- A series left out (`left_out`): the model said through `ShortHistory` of `mst.model_sdk` that the history of this variable or driver is too short. The platform estimates the model again without it, and only its cells fall out. An episode is lost when its scenario fixes the series left out.
+- A position excluded (`excluded`): the engine could not value it on the paths of the window.
+- Cells without a finite path (`non_finite`).
+
+## Sanity
+
+The second section is a table per quantity, read before the scores.
+
+- The share of cells whose band from the 5th to the 95th percentile leaves the admissible domain, and the share whose band is wider than the whole range of the history known on the date.
+- The median ratio of the band width to that range: 2 means a band twice as wide as the whole history, a number one reads without the unit of the series.
+- The share of cells where the scenario moved the median from the base run towards the fact. A move below a tenth of the base band is noise. Below one half the scenario pushes the forecast away from the fact.
+- The plain benchmark of the level, the quantity's score against it, and the score of the level without the quantity. When the latter differs much, the aggregate rests on that quantity.
+
+*Admission* is passed by every quantity on its own: fewer than 5 % of its cells may break each of the two band rules. One quantity over the threshold keeps the version out whatever the share over all cells, which the report prints for reference. On the episodes the probability of every interval observation under the base run must also be above 1 %. For an exact value that probability would measure the tolerance $\tau$, so point observations stay out of this threshold.
+
+## The relative score
+
+The error of a cell is CRPS, the continuous ranked probability score:
+
+$$
+\operatorname{CRPS}(F,y)=\int_{-\infty}^{\infty}\bigl(F(z)-\mathbf 1\lbrace z\ge y\rbrace\bigr)^2\,dz,
+$$
+
+where $F$ is the distribution function of the forecast and $y$ the fact. It is zero for a distribution concentrated at the fact and penalises both a shifted centre and needless width. CRPS keeps the unit of the quantity, so quantities are compared only through a ratio to a benchmark on the same cells. For quantity $q$ at month $t$ take the ratio $\rho_{q,t}$ of the mean scores of the first forecast and the second over the windows, and average the logarithms with equal weights, first over the quantities of a level, then over the months:
+
+$$
+S=\exp\Bigl(\frac1T\sum_{t}\frac1{Q_t}\sum_{q}\log\rho_{q,t}\Bigr),
+$$
+
+where $Q_t$ is the number of quantities of the level with both scores at month $t$ and $T$ the number of such months. With $S<1$ the first forecast wins. A quantity that barely moves weighs as much as any other, because its small score sits in both parts of its ratio. For every level the report gives every pair the rows carry: `model/conditional_walk`, `model/walk`, `base/walk`, `model/historical`, `base/historical`, `model/base`, `model/naive`.
+
+The 95 % interval is a bootstrap with 1000 repetitions over whole windows, since the cells of one window are dependent: episodes are drawn one by one, dates of the grid in blocks as long as a window, because neighbouring windows overlap. The interval of the episodes is still narrow, as their windows overlap in part too. `--mc-bootstrap` measures the error of the finite number of paths apart.
+
+## Calibration, halves and the use of the scenario
+
+A right forecast puts the facts below its 5th percentile, between the 5th and the median, between the median and the 95th and above the 95th with shares 0.05, 0.45, 0.45 and 0.05. The report gives these shares per level, at months 1, 3, 6 and 12 and per quantity, with the coverage of the band and its median width. On the episodes the shares are for reference, since crises were selected.
+
+The plan splits the windows in advance into tuning and validation: the episodes by their field `half`, the dates of the grid by `validation_from`. The report prints the halves beside the full table, so a reader sees whether a conclusion was fitted to the tuning windows.
+
+The use of the scenario is the ratio `model/base` at the target level: over the level, per episode and as the share of episodes where it is below one. Scenarios of a person and of a language model are reported apart: a language model may remember the outcome of a past event.
+
+## Deciding on a new version
+
+With `--against` the check compares the version with the `--details` file of the incumbent built on the same plan. The comparison reads the validation half of the target level by $\log S$, against the conditional walk where the level has one and the plain benchmark of the level otherwise; the standard error is the spread of $\log S$ over resampled windows. The cells of the two versions must match, otherwise the check stops with the list of differences.
+
+1. A version without admission is rejected whatever its score.
+2. A version is accepted if it beats the benchmark and the incumbent by more than two standard errors and the admission shares of its worst quantity did not grow.
+3. A version is rejected if it is worse by more than two standard errors.
+4. Otherwise the incumbent stays: an undetected difference does not prove equality.
+
+With one window the error of the score is unknown, and no difference is detected.
+
+## The tail of the portfolio
+
+With `--portfolio` the report gives the Acerbi–Székely statistic over the portfolio's cells at the last month of every window. Let $\Delta_e$ be the realized loss of the window, minus the return of the portfolio, $\mathrm{VaR}_e$ the forecast 95th percentile of the loss and $\mathrm{ES}_e$ the mean loss in the worst 5 % of outcomes. Then
+
+$$
+Z=\frac1{0.05\,E}\sum_{e=1}^{E}\frac{\Delta_e\mathbf 1\lbrace\Delta_e>\mathrm{VaR}_e\rbrace}{\mathrm{ES}_e}-1.
+$$
+
+With a right tail the expectation of $Z$ is zero, and a positive value means the extreme losses are understated. Its interval comes from the same bootstrap of windows, and the report prints $Z$ without the heaviest 1 % of paths beside it. Admission does not read $Z$.
+
+## Running
+
+The commands run from the root of the repository; replace the capitals with your own values.
 
 ```powershell
-python -m mst.metrics rolling [MODEL_ID] --as-of DATE --store DIR --models DIR --episodes FILE \
-  [--dates YYYY-MM-DD ...] [--half tuning|validation] [--details FILE] [--against REPORT.json]   [--inputs DIR]
-python -m mst.metrics backtest [MODEL_ID] --as-of DATE --store DIR --models DIR --episodes FILE \
-  [--drivers FILE] [--satellites] [--only ID ...] [--details FILE] \
-  [--against REPORT.json] [--target-level LEVEL] [--portfolio ID] [--mc-bootstrap] [--no-rolling]   [--inputs DIR]
+python -m mst.metrics rolling MODEL_ID --as-of DATE --store STORE --models MODELS --episodes EPISODES `
+  [--drivers CATALOG] [--portfolio ID] [--details FILE] [--against FILE]
+python -m mst.metrics backtest MODEL_ID --as-of DATE --store STORE --models MODELS --episodes EPISODES `
+  [--drivers CATALOG] [--portfolio ID] [--details FILE] [--against FILE] [--save]
 ```
 
-## Two questions and two checks
+`--drivers` adds the level of the drivers, `--portfolio` the levels of the positions and the portfolio and needs `--drivers` too. `backtest` also runs the grid unless told `--no-rolling`. `--details` writes the full report with its cells, `--save` keeps the report without cells and its tables in `results/` beside the plan. A decision with `--against` needs the cells, so it reads a `--details` file. Exit code 1 means a refused window or a failed admission; the section of what fell out and the table of sanity name the cause.
 
-`rolling` judges the forecast itself. On a grid of dates nobody selected (`[rolling]` in [episodes.toml](../../../bench/model-backtest/episodes.toml)), the model is estimated again and gives its unconditional forecast. Its score is the relative CRPS (`quality.py`): the mean CRPS of the model over the mean CRPS of the random walk on the same cells; below one the model wins. The ratios are averaged in logarithms, with equal weights over the quantities at a month and then over the months. There is no division by $\sigma_q(t)$ here: the key rate rarely moves, so its median change is close to zero, and one of its cells weighs as much as dozens of others in the normalized CRPS. The windows of neighbouring dates overlap, so the interval uses moving blocks as long as a window. On this sample the coverage shares 0.05, 0.45, 0.45, 0.05 mean something, since it holds both crises and quiet months. Parameters are chosen on the dates before `validation_from`, and the verdict of `--against` is read on the dates after it.
+## Where things are in the code
 
-The episodes answer another question: what the model does when the shock is known. They are selected with hindsight and their windows overlap, so their coverage shares and intervals understate the error and do not prove quality on their own. The benchmark of the conditional forecast is the conditional walk, which knows the same path of the fixed variables; the plain walk does not know it, so a win over it says little.
-
-Both checks are limited by the data: the series of the store start in 2012-01, the publication date of the macro series is approximate (`approximate`), and their history is already revised. The first dates, where a series has too few values for any model, are named in the report and skipped. A date with enough data where the model gives no version is a refusal: the report counts refusals apart, the exit code is 1, and `--against` rejects such a candidate, because a score over the surviving dates would hide the failures.
-
-## Words the report needs
-
-**Episode**: a past event with a recorded scenario: the start month `start`, which variables are set by the fact, which shocks explained the event, by which sources. The calculation date is the day before the episode starts; models are estimated anew on the data of this date and cannot peek at the future. The list of episodes is [episodes.toml](../../../bench/model-backtest/episodes.toml), its path is given by `--episodes`. The field `card` links to the corpus card of the same event, but the backtest does not read the card. An episode is data, not part of a model, and the set grows as new events are analyzed.
-
-**Cell**: an episode, a month of the horizon and a quantity. A cell has a fact and a forecast distribution. Cells of one episode are dependent, since they share one model, one data set and one scenario, so shares are counted over cells and intervals over episodes. In a cell whose value the scenario sets exactly, the forecast repeats the fact and checks nothing: it is printed but does not enter the scores.
-
-**Halves.** Episodes are split in advance into tuning (`tuning`) and validation (`validation`). The split by halves shows whether a conclusion was fitted to the episodes the models were tuned on; the final table is built over all episodes.
-
-**Target level**: the level the verdict is passed on and the value of the scenario is calculated on: `macro` by default, and with `--satellites` you can name a driver level, for example `driver/share_price`.
-
-## What is calculated
-
-**CRPS**: the distance between the forecast distribution and the fact. It penalizes both bias and excess width; lower is better, and zero is an exact hit.
-
-**Normalization.** To compare quantities in different units, CRPS is divided by the quantity's typical move over the same horizon, the median absolute change over $t$ months in history. If history is too short for the horizon, $\sigma_q(t)$ comes from the nearest smaller horizon, then a larger one, then the median over the quantities of the level; the source and the number of pairs are written in the cell row (`sigma_source`, `sigma_pairs`), so you can see what the normalization rests on. For quantities with quarterly averaging the "month" step stays calendar.
-
-**Benchmarks.** Two are calculated on the same cells: a random walk with drift (for all quantities) and a naive forecast, the value a year earlier with a trend (for target indicators). A model must beat the benchmark, otherwise it adds nothing to a simple "tomorrow like yesterday".
-
-**Base calculation**: the same calculation without observations and interventions, that is, the model's unconditional forecast on the episode. A scenario is useful if the forecast under it is more accurate than the base calculation.
-
-**Admission.** A version is admitted to comparison if fewer than 5 % of the evaluated cells break each of two conditions: the band $[p_5,p_{95}]$ lies within the admissible values of the quantity, and the band's width is no larger than the range of its history. The shares of each rule are counted separately; the union of the rules and the split by quantities are given for reference.
-
-**Probability of a condition.** A scenario must not rest on a rare tail: for each condition the share of base calculation paths where it holds is calculated, and this share must exceed 1 %. In an episode rebuilt from the fact the condition is a point, whose probability measures the tolerance $\tau$ and not the scenario: there the share is marked as not applicable and excluded from the check.
-
-**Coverage and sharpness.** With a correct forecast the fact lands in the bands below $p_5$, from $p_5$ to $p_{50}$, from $p_{50}$ to $p_{95}$ and above $p_{95}$ with the shares 0.05 / 0.45 / 0.45 / 0.05; a deviation says the model is biased. Sharpness is the median width of the band; it has meaning only when coverage passes, so it is reported beside it.
-
-**Aggregate.** A total score in which each quantity of a level weighs the same, however many cells it has: first the mean over episodes within a quantity at month $t$, then the mean over the quantities of the level, then over horizons. Otherwise a quantity with a long history would outweigh the rest. The report holds a "level × horizon" table for the model, the random walk, the base calculation and the naive forecast, with two differences (from the random walk and from the base calculation) and a split by halves.
-
-**Value of a scenario**: the share of episodes where the forecast under the episode's scenario is more accurate than the base calculation, and the mean difference. There is a split by markup (`manual` / `llm`): all episodes in [episodes.toml](../../../bench/model-backtest/episodes.toml) are marked by hand, so the LLM column is empty. A scenario from an LLM is reliable only for events after the date of its writing, because the model remembers the outcome of past episodes.
-
-**Intervals**: three kinds, labeled in the report:
-
-- by episodes: a 95 % bootstrap of the same statistic as in the report, 1000 repetitions, `seed` from `episodes.toml`; the verdict reads the standard error of this bootstrap;
-- wild: the same episode contributions reweighted with Webb weights, with a divergence flag beside it; with fewer than eight episodes it reads as the main one, because an ordinary bootstrap understates the interval there;
-- by draws (`--mc-bootstrap`): the Monte Carlo error separately from the sampling error over episodes.
-
-**Verdict** (`--against REPORT.json`): a comparison of a candidate with the current version by two standard errors:
-
-1. failed admission: rejected whatever its CRPS;
-2. better than the benchmark and the current version by more than 2 SE with admission shares not worse: accepted;
-3. worse than the current version by more than 2 SE: rejected;
-4. otherwise no difference is detected, and the current version stays.
-
-Both reports are matched by cells: an incomplete pair is an error with a list, not a comparison on the intersection; cells without a normalized score are counted and named. The verdict is calculated on the validation half and names it.
-
-**Portfolio tail** (`--portfolio ID`, requires `--satellites`): a check of whether a model understates extreme losses. The Acerbi–Székely statistic $Z$: with a correct tail its mean is zero, and $Z>0$ means the tail is understated. The predictive $\mathrm{VaR}$ and $\mathrm{ES}$ are the P95 and ES95 of portfolio losses on the conditional paths of an episode; the realized loss is the change in portfolio value on the facts at the start and end of the window. The report holds an interval by episodes, a wild interval, $Z$ with the 1 % most extreme draws trimmed, a horizon mark and the dropped episodes by name. Admission does not read $Z$.
-
-**Leaving the training sample.** The share of a satellite's paths outside the range of a node's training sample must be below 1 %. The bounds are written into the version at estimation (`train_low` / `train_high`); a part without them is not read. A quantity with an unverified tail is marked in the report.
-
-**Observations and interventions, and the rolling check.** An episode states the decisions of the event as interventions and the other quantities as observations, and it is calculated once: there is no sensitivity to a choice of causes any more, and the cells under an intervention are excluded from the CRPS the way the cells of exact observations are. The rolling block (uniformity at $s_0$ over all dates and the check of the price on the event family `[[price_events]]`) appears when the plan carries `[rolling]`.
-
-## What the report prints
-
-| Section | What it holds |
+| Module | What it does |
 |---|---|
-| Episodes | Episodes: calculation date, horizon, set variables, shocks, the worst probability of a condition |
-| Admission | Two admission rules: how many cells were broken, what share this is, which episodes are to blame |
-| Aggregate | A "level × horizon" table: the model, the random walk, the base calculation, the naive forecast and two differences, from the random walk and from the base calculation |
-| Scenario usefulness | The value of the scenario by markup source |
-| Halves | The same aggregates by the tuning and validation halves |
-| Quantities | Quantities: normalized CRPS, benchmarks, coverage, sharpness, admission shares |
-| Decision | The verdict by two standard errors, with `--against` |
-| Tail | $Z$, intervals, trimming, dropped episodes, with `--portfolio` |
-| Reproducibility | Versions of models and data, date, seed, commit |
+| [windows.py](<windows.py>) | the window, the cache of versions, `ShortHistory`, the satellites and the portfolio of a window, the facts |
+| [levels.py](<levels.py>) | the cells of every level, the rows, what fell out |
+| [valuation.py](<valuation.py>) | the paths in own units and the valuation of positions |
+| [sanity.py](<sanity.py>) | sanity and admission per quantity |
+| [quality.py](<quality.py>), [block.py](<block.py>) | the relative score and its interval |
+| [scores.py](<scores.py>) | the shared judgement: levels, halves, quantities, tail |
+| [decision.py](<decision.py>) | the two-standard-error rule |
+| [es.py](<es.py>) | the ES of a run and the statistic $Z$ |
+| [rolling.py](<rolling.py>), [backtest.py](<backtest.py>) | the grid with the price of events; the episodes with the gate of their conditions and the use of the scenario |
+| [tables.py](<tables.py>), [cli.py](<cli.py>) | printing and the command line |
 
-The report is printed as Markdown tables to stdout; the full report with all quantities and cells goes to the file `--details`. Exit code 1 means some episode was not checked (an unknown shock, short history, an inadmissible scenario) or an admission condition was broken.
+## Limits
 
-## Cache
-
-Episode versions are written to `<models>/backtest/`. The key of a macro version includes the data on the calculation date, the configuration of the model package (`spec.toml`, `signs.toml` and the code), the macro variable registry and the model SDK version, so an edited configuration does not reuse an old version. The satellite key is `satellites-<digest>`: the macro version name, the bytes of the driver catalog, their series on the calculation date, the configuration and versions of satellite plugins, the plugin SDK version and the assignments of quantities.
-
-## What is not here
-
-- Scenarios from an LLM: the split by `source` exists, but there are no episodes with `source = "llm"`.
-- A check of the tail of the price on rare events: on 20 years of monthly history an event of probability 1 % is expected 2–3 times, the group table by $\pi$ says so itself, and the report builds no verdict on it.
-
-Coverage and sharpness are reference information, not a goal.
-
-## Package layout
-
-| File | What it does |
-|---|---|
-| `cells.py` | A cell $(e,t,q)$: fact, draws, random walk, base calculation and naive forecast; CRPS by the exact rank estimate, the mid-PIT $\hat F(y)$, the band, $\sigma_q(t)$ with a replacement chain and source, the historical range, cell scores, the bootstrap over episodes |
-| `aggregate.py` | The aggregate: the mean within a quantity → equal weight of quantities → the mean over horizons, by levels; the bootstrap of the aggregate over episodes (SE and a percentile interval) and episode contributions for the wild check; the value of a scenario; the Monte Carlo interval by a bootstrap over draws |
-| `wild.py` | The cluster wild bootstrap with Webb weights: a check of each interval with few episodes |
-| `decision.py` | The two standard errors rule: four steps on the aggregates of the target level |
-| `es.py` | Acerbi–Székely $Z$: the conditional paths of an episode in own units, the factual paths of the window, valuation of portfolio positions through the engine, episode contributions, intervals, the sensitivity to trimming the 1 % most extreme paths |
-| `baselines.py` | Benchmarks: a random walk with drift (pairs at the exact distance, so gappy series do not break the drift) and a naive annual forecast; admission rules; the probability of a condition in the base calculation |
-| `episodes.py` | Episodes of the plan `--episodes`: start month and card, variables, shocks, window, exclusions; the half `half` and the scenario source `source` of each; the calculation date is the day before the start; the rolling grid and the event family |
-| `backtest.py` | The calculation: model versions, cells, checks of admission and conditions, intervals (by episodes and wild), the aggregate with splits, value, halves, the verdict `--against`, the tail `--portfolio`, reproducibility metadata |
-| `rolling.py`, `block.py` | The rolling check over the dates of history: the uniformity at $s_0$, the logarithmic score of $P(S)$ against the historical frequency, the block bootstrap |
-| `quality.py` | The relative CRPS: the ratio to a benchmark in logarithms, equal weights, an interval by moving blocks, the paired comparison of two versions |
-| `cli.py`, `__main__.py` | The command `python -m mst.metrics` |
-
-Tests are in [../../../tests/metrics](../../../tests/metrics/README.en.md).
+Publication dates are approximate, and the facts come in today's edition of history: cutting by date does not restore earlier vintages of statistics. The historical simulation of positions reads today's panel on the calculation date and the same satellite bundle as the forecast. An event of probability 1 % is expected 2–3 times in 20 years of monthly history, so the check of the price confirms the tail weakly. Checking positions on every date of the grid estimates the satellite bundle on the whole catalog, which takes long; for a quick check pass a catalog cut down to the drivers of the portfolio.

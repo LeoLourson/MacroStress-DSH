@@ -2,7 +2,9 @@
 
 The contracts of macro and satellite models: what a plugin speaks, and only that. A macro model is level 0 of the scheme (the shock distribution and the transmission $G^0$), satellite models are the levels above ($G^l$, $l \geq 1$). The core knows of a model only its declaration and three steps; a version stores the name of the plugin that estimated it, and only this plugin reads it back.
 
-Version 4.0 of the contracts carries realized interventions in the scenario plan instead of impacts, and lets a model declare its structural form. A plugin declares `model_sdk=">=4.0,<5.0"`.
+Version 4.0 of the contracts carries realized interventions in the scenario plan instead of impacts, and lets a model declare its structural form; version 4.1.0 adds `ShortHistory` and the field `left_out` of the macro estimate context. A plugin declares `model_sdk=">=4.0,<5.0"`.
+
+When the history of some variable or driver is too short on the date, a model raises `ShortHistory` with these series and a reason for each. Only the model knows how much history it needs; the platform decides what to do. The check on history estimates the model again without them, and only their cells fall out. A macro model sees the variables left out in `context.left_out`, so its configuration may still name them. An empty list is an error. The platform gives the same signal itself: `build_panel` for a seasonal series without a change into every calendar month, `mst.drivers.history` for a driver without a value on the date.
 
 | File | What it does |
 |---|---|

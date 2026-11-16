@@ -14,8 +14,6 @@ The *width* is the 95th minus the 5th percentile of the $h$-month change. Quanti
 | Portfolio shares | The satellite's error on the held-out history | The error of an AR(1) without macro variables | For reference: the satellite decides what it serves |
 | Portfolio | Width of the return and the expected loss of the worst 5 % (ES95) over 1, 3 and 12 months | The same portfolio valued by the same position models on the observed paths of every historical window | Ratio 0.75–1.40 |
 | Portfolio | Percentiles and mean | The same | For reference |
-| Out of sample | Share of facts inside the 90 % band at every level and horizon | The nominal 90 % | 80–97 % |
-| Out of sample | Mean of $F(y)$, CRPS against the historical simulation, the Acerbi–Székely statistic and the coverage of the historical simulation itself, for the portfolio | 0.5; the simulation's CRPS; 0; 90 % | For reference |
 | Events | The admission of the run of every scenario of `[events]` | The admission conditions of a run | The run is admitted |
 | Events | The shift of the median return by month, of ES95 at the end of the horizon and over the path, the peak shift, the price of the observations | The base scenario, and the empty scenario on the same random numbers | For reference |
 
@@ -23,7 +21,7 @@ The events are ordinary runs of the workspace on the checked versions, with the 
 
 ## How the portfolio is compared with history
 
-The model gives a distribution of the portfolio's return at the data date, while history gives one fact for each past window. One forecast cannot be judged against one fact: a hit or a miss of the band says nothing about the model, so the forecast is compared with history statistically. The scale check puts the forecast at the data date next to the cloud of all past windows of the same portfolio and asks whether the spread and the tail are the same. The out-of-sample check makes forecasts at past dates, each from what was published by that day, and asks how often the fact fell inside the band and whether it was biased against the forecast.
+The model gives a distribution of the portfolio's return at the data date, while history gives one fact for each past window. One forecast cannot be judged against one fact: a hit or a miss of the band says nothing about the model, so the forecast is compared with history statistically. The scale check puts the forecast at the data date next to the cloud of all past windows of the same portfolio and asks whether the spread and the tail are the same. Forecasts at past dates, each from what was published by that day, are made by another set, the [check of the models on history](<../model-backtest/README.en.md>): with `--drivers` and `--portfolio` it judges the macro series, the shares, the positions and the portfolio with its tail of losses on a grid of dates and on events.
 
 ### Return on drawn and observed paths
 
@@ -63,51 +61,22 @@ $$
 
 The median, the quantiles and the mean are shown for reference and are not gated. The centre of the forecast depends on the state of the economy at the data date, while history averages over every state since `history_start`, so the centres are not expected to agree. The width and the tail measure the scale of risk, and a mismatch there is a model error. The check claims that the scale matches, not that the distributions do.
 
-### Out-of-sample check
-
-The forecast dates $m$ run every `step_months` from `first` to `last` of the plan's `[rolling]` section; the last date leaves 12 observed months. On every date the macro model and the satellites are estimated again on what was published by the 15th of the next month and draw the `[rolling]` number of paths, which gives the distribution $\hat F_{m,h}$. The fact $y_{m,h}=R^{\text{hist}}_{m,h}$ comes from the same history calculation as in the scale check, for the positions the models of that date can value. The facts are read in the vintage of history on which the working version is estimated.
-
-At every date and horizon the set records the hit of the band and the rank of the fact:
-
-$$
-H_{m,h}=\mathbf 1\bigl\lbrace q_{0.05}(\hat F_{m,h})\le y_{m,h}\le q_{0.95}(\hat F_{m,h})\bigr\rbrace,\qquad
-u_{m,h}=\hat F_{m,h}(y_{m,h})=\frac1N\,\#\bigl\lbrace i:\ R^{(i)}_{m,h}\le y_{m,h}\bigr\rbrace .
-$$
-
-For a correct model the coverage $C_h$, the mean of $H_{m,h}$ over the dates, is close to 0.90, and the plan's gate is 0.80 to 0.97. The rank $u$ of a correct model is uniform on $[0,1]$ with mean close to 0.5. A mean above 0.5 means that the facts were systematically better than the forecast, below 0.5 worse. The mean rank catches a bias but not a band that is too narrow, since misses on both sides also give 0.5, so coverage and mean rank are read together. The coverage of the macro series and the shares uses the same formula, with $y$ the value of the series $h$ months after the date and $\hat F$ the forecast distribution of that value.
-
-The reference is the historical simulation. Its distribution $\hat G_{m,h}$ at date $m$ is the returns $R^{\text{hist}}_{s,h}$ of the same positions over every window that ended by that date, $s+h\le m$. The simulation gets the same coverage and the same continuous ranked probability score, CRPS:
-
-$$
-\mathrm{CRPS}(F,y)=\mathbb E\lvert X-y\rvert-\tfrac12\,\mathbb E\lvert X-X'\rvert,
-$$
-
-where $X$ and $X'$ are independent with distribution $F$. CRPS compares the whole distribution with the fact rather than one band; a lower mean over the dates is better.
-
-The yearly tail is tested with the Acerbi–Székely statistic on losses $L_m=-y_{m,12}$. Let $\mathrm{VaR}_m$ be the 95th percentile of the forecast losses at date $m$, $\mathrm{ES}_m$ the mean of the forecast losses at or above $\mathrm{VaR}_m$, and $M$ the number of dates. Then
-
-$$
-Z=\frac{1}{0.05\,M}\sum_{m}\frac{L_m\,\mathbf 1\lbrace L_m>\mathrm{VaR}_m\rbrace}{\mathrm{ES}_m}-1 .
-$$
-
-$Z$ is near zero when the forecast tail is right; a positive value means large losses came more often or deeper than the tail promised.
-
 ## Running
 
 Run from the repository root in the project environment. `MACRO` and `SATELLITES` are version hashes of the workspace or their prefixes; the satellites must be estimated on that macro version.
 
 ```powershell
 python -m mst.bench forecast --macro MACRO --satellites SATELLITES
-python -m mst.bench forecast --macro MACRO --satellites SATELLITES --no-rolling --no-events
+python -m mst.bench forecast --macro MACRO --satellites SATELLITES --no-events
 ```
 
-Without the out-of-sample dates and the events the set takes about 10 seconds. The dates add about two minutes: the macro model and the satellites are estimated on every date. Every event adds about half a minute. Exit code 1 means that a gate failed.
+Without the events the set takes about 10 seconds; every event adds about half a minute. Exit code 1 means that a gate failed.
 
 ## Results
 
 ```text
 bench/forecast/results/
-  <data date>-<macro>-<satellites>.json   rows, gates, versions, commit and the out-of-sample dates
+  <data date>-<macro>-<satellites>.json   rows, gates, versions and commit
   <data date>-<macro>-<satellites>.md     the same tables
   latest.md                               the summary of the last run
 ```
@@ -116,10 +85,8 @@ Every number is a row with its level, check, item, horizon, model value, referen
 
 ## Limitations
 
-The satellites of the out-of-sample dates are estimated on a reduced catalog: the drivers of the portfolio, the objects above them and the drivers of those objects. A full estimate takes about half an hour a date. The reduced one pools fewer siblings, so its coefficients are close to those of the working version but not equal. When on an early date the satellite does not serve a share because its equation is not more accurate than an AR(1), the portfolio of that date is valued without it, and the composition is recorded in `rolling_dates`.
-
 The one-month width of a step series, such as the key rate, compares poorly: in most months the rate does not move, so the historical quantile width is small, while the model draws the change from a continuous law. The yearly width of such series compares correctly. The historical tail of the portfolio rests on a few overlapping windows of 2022, so the ES95 ratio is read with its number of windows.
 
-The forecast and the history of the portfolio use the same position models. An error of a position model itself, such as a wrong sensitivity of the bond to the rate, is seen by neither the scale check nor the out-of-sample check, because it sits on both sides of the comparison. The out-of-sample dates overlap too: the yearly facts of adjacent quarters share 9 of 12 months, so 35 yearly facts carry about nine independent years. The coverage gate of 80–97 % allows for this spread, about 5 points.
+The forecast and the history of the portfolio use the same position models. An error of a position model itself, such as a wrong sensitivity of the bond to the rate, is not seen by the scale check, because it sits on both sides of the comparison. The same holds for the level of the positions in the check on history, whose benchmark is the same historical simulation.
 
 The agent checks — corpus search, scenario building and the interview context — are listed in the [index of the sets](<../README.en.md>).

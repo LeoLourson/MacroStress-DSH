@@ -264,17 +264,27 @@ $$
 \mathrm{CRPS}(\Gamma,y)=\int_{-\infty}^{\infty}\big(\Gamma(z)-\mathbf 1\lbrace z\ge y\rbrace\big)^2dz.
 $$
 
-The value of quantity $k$ at horizon $t$ is divided by $\sigma_k(t)$, the median absolute change of the quantity over $t$ months in history. Then we average within a quantity and with equal weights across quantities, separately by level and horizon. The baselines are computed on the same cells: a random walk with drift, and for target indicators also the value a year earlier with trend. The 95 % interval comes from a bootstrap over episodes with 1000 repetitions, since the cells of one episode are dependent; with few episodes we check it by a cluster wild bootstrap with Webb weights.
+The score keeps the unit of the quantity, so errors in different units are compared through the ratio to a baseline on the same cells. A *window* is a calculation date with the horizon months after it: an episode or a date of a grid fixed in advance. For quantity $k$ at month $t$ take the ratio of the mean scores of the forecast $\Gamma$ and the baseline $\Gamma_0$ over the windows, $\rho_{k,t}=\overline{\mathrm{CRPS}}_{k,t}(\Gamma)/\overline{\mathrm{CRPS}}_{k,t}(\Gamma_0)$, and average the logarithms with equal weights, first over the quantities of a level, then over the months:
+
+$$
+S=\exp\Big(\frac1T\sum_{t}\frac1{K_t}\sum_{k}\log\rho_{k,t}\Big),
+$$
+
+where $K_t$ is the number of quantities of the level with both scores at month $t$ and $T$ the number of such months. With $S<1$ the forecast beats the baseline. A quantity that barely moves weighs as much as any other, because its small score sits in both the numerator and the denominator. Dividing the score by the median change of the quantity lacks this property: a stepwise rate has a median change near zero, and one quantity gets the weight of dozens.
+
+The baselines are computed on the same cells. For a series this is a random walk with drift, under a scenario also the walk that knows the path of the fixed quantities, and for target indicators the value a year earlier with trend. For the return of a position and of the portfolio the baseline is the *historical simulation*: the return of the same positions over the past windows of the same length known on the calculation date.
+
+The 95 % interval comes from a bootstrap with 1000 repetitions over whole windows, since the cells of one window are dependent: episodes are drawn with replacement one by one, the overlapping windows of the grid in blocks as long as a window.
 
 If $y$ has a continuous distribution function $\Gamma$, then $u=\Gamma(y)$ is uniform on $[0,1]$, and the fact falls below $q_{05}$, between $q_{05}$ and the median, between the median and $q_{95}$, and above $q_{95}$ with shares 0.05, 0.45, 0.45 and 0.05. Sharpness is the median width $q_{95}-q_{05}$; we compare it only when the observed shares agree with these.
 
-For a target indicator with loss $\Delta_e$ in episode $e$ and forecast value at risk $\mathrm{VaR}_e$ and expected shortfall $\mathrm{ES}_e$ at 95 % over $E$ episodes we compute the statistic of Acerbi and Székely (2014):
+For a target indicator with loss $\Delta_e$ in window $e$ at the end of its horizon and forecast value at risk $\mathrm{VaR}_e$ and expected shortfall $\mathrm{ES}_e$ at 95 % over $E$ windows we compute the statistic of Acerbi and Székely (2014):
 
 $$
 Z=\frac{1}{0.05\,E}\sum_{e=1}^{E}\frac{\Delta_e\mathbf 1\lbrace\Delta_e>\mathrm{VaR}_e\rbrace}{\mathrm{ES}_e}-1.
 $$
 
-With a correct tail $\mathbb E Z=0$, and $Z>0$ means the tail is understated.
+With a correct tail $\mathbb E Z=0$, and $Z>0$ means the tail is understated. The interval of $Z$ comes from the same bootstrap of windows; with few windows the sign of the statistic is read together with it.
 
 ### When the uniformity check applies
 
@@ -291,7 +301,7 @@ For $s_0$ the forecast has the law $P$, while on episodes selected by the event 
 
 ### Value of a scenario
 
-A scenario is useful if on the episodes the CRPS under $s_e$ is below that under $s_0$. Hand-labelled scenarios and scenarios from an LLM are counted separately. The result for an LLM is reliable only in forward calculations, since an LLM remembers the outcomes of past episodes.
+A scenario is useful if on the episodes the CRPS under $s_e$ is below that under $s_0$, that is, the ratio $S$ of the forecast under $s_e$ to the forecast of the same model under $s_0$ is below one. Hand-labelled scenarios and scenarios from an LLM are counted separately. The result for an LLM is reliable only in forward calculations, since an LLM remembers the outcomes of past episodes.
 
 ### Check of the price
 
@@ -307,11 +317,13 @@ This check concerns $-\log P(S)$. The difference $\mathrm{dist}(s)+\log P(S)$ wi
 
 ### Admission of versions
 
-A version is admitted to comparison if fewer than 5 % of the cells break each condition: the band $[q_{05},q_{95}]$ lies in the admissible domain of the quantity; the width $q_{95}-q_{05}$ is not larger than the range of the quantity over the whole history. The same conditions are checked on the paths under a scenario, since observations and interventions can widen the fan.
+A version is admitted to comparison if, for every quantity, fewer than 5 % of its cells break each condition: the band $[q_{05},q_{95}]$ lies in the admissible domain of the quantity; the width $q_{95}-q_{05}$ is not larger than the range of the quantity over the history known on the calculation date. One quantity over the threshold keeps the version out whatever the share over all cells: the pooled share hides a quantity whose band is wider than its history in a quarter of the cells. The same conditions are checked on the paths under a scenario, since observations and interventions can widen the fan.
 
 The probability of every interval observation under $P'$ must be above 1 %, otherwise the scenario rests on a rare tail. For an observation of an exact value the probability would measure the tolerance $\tau$, not the scenario, and the threshold does not apply. For a satellite model the share of paths whose output lies outside the range of the training sample must be below 1 %; until this holds and the backtest is passed, the tail of the target indicator is marked unverified.
 
-The episodes are split in advance into two halves: the models are tuned on the first and checked on the second, and the final table is built on all episodes. Versions are compared pairwise on the same cells by target indicators:
+The windows are split in advance into two halves: the models are tuned on the first and checked on the second, and the final table is built on all windows.
+
+Versions are compared pairwise on the same cells of the target level by $\log S$: the baseline sits at zero, and the standard error is the spread of $\log S$ over resampled windows. The admission share of a version is that of its worst quantity:
 
 1. A version that fails admission is rejected regardless of CRPS.
 2. A version is accepted if its CRPS is better than that of the baseline and of the current version by more than two standard errors and the admission conditions did not worsen.
