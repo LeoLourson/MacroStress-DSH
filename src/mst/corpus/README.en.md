@@ -14,7 +14,7 @@ python -m mst.corpus search QUERY --as-of DAY --corpus DIR
 python -m mst.corpus eval --corpus DIR --questions FILE
 ```
 
-`--corpus` is the corpus root in the workspace (`workspace/corpus`). Git holds only the manifest, `series.toml` and the templates (`corpus/` in the repository root); the check questions of the search are in `bench/corpus-search/`; downloaded originals, texts and the index are workspace data.
+`--corpus` is the data root of the corpus in the workspace (`workspace/corpus`): downloaded originals, texts, series and the index. `--rules` is its authored part, `corpus/` in the repository root by default (`roots.py`): the manifest, `series.toml`, the templates and the episode cards, kept in git in one copy. The check questions of the search are in `bench/corpus-search/`.
 
 | File | What it does |
 |---|---|
@@ -25,6 +25,7 @@ python -m mst.corpus eval --corpus DIR --questions FILE
 | `episodes.py` | An episode card: window, base, extreme, change, days to the extreme and to recovery; sections written by hand are kept |
 | `index.py` | Cutting Markdown into fragments, `chunks.jsonl`, e5 vectors, BM25 + cosine with an `as_of` filter, recall@5 by the check questions `bench/corpus-search/questions.md` |
 | `embed.py` | multilingual-e5-small vectors on the CPU through ONNX Runtime |
+| `roots.py` | The two roots of a corpus: the authored part in git and the data of the workspace |
 | `tool.py` | Operations of the tool `corpus`: `search`, `get`, `list`, `add` |
 | `cli.py`, `__main__.py` | The command `python -m mst.corpus` |
 

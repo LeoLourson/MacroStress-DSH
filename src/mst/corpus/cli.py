@@ -14,10 +14,12 @@
   python -m mst.corpus eval --corpus DIR --questions FILE [--save]
   python -m mst.corpus all --corpus DIR --store DIR
 
-``--corpus`` is the corpus root (``workspace/corpus``): the manifest, ``series.toml``, the
-Markdown texts, and ``raw/``, ``text/``, ``series/``, ``index/``, ``downloads.json`` that the
-commands write. ``--store`` is the monthly series store (``workspace/series``) the episode cards
-fall back to when a daily series is not downloaded. ``--questions`` is the check set of the search,
+``--corpus`` is the data root of the corpus (``workspace/corpus``): ``raw/``, the Markdown
+texts, ``text/``, ``series/``, ``index/`` and ``downloads.json`` that the commands write.
+``--rules`` is its authored part: the manifest, ``series.toml``, the templates and the episode
+cards, ``corpus/`` of the repository by default (``mst.corpus.roots``). ``--store`` is the
+monthly series store (``workspace/series``) the episode cards fall back to when a daily series
+is not downloaded. ``--questions`` is the check set of the search,
 ``bench/corpus-search/questions.md``: it is not material of the corpus and stays outside it.
 
 Requests go only to the addresses in the manifest and to the series sources (Bank of Russia,
@@ -37,18 +39,23 @@ from .episodes import measure, write_card, written
 from .fetch import add, client, discover, fetch, load_downloads, save_downloads
 from .index import Index, build, questions, recall, write, write_state, write_vectors
 from .manifest import documents
+from .roots import REPOSITORY, Roots
 from .series import Cache, fetch_series, load_catalog
 
 
+def roots(args) -> Roots:
+    return Roots(rules=args.rules, data=args.corpus)
+
+
 def check(args) -> int:
-    root = args.corpus
-    manifest = manifest_module.load(root / "manifest.json")
-    catalog = load_catalog(root / "series.toml")
-    downloads = load_downloads(root / "downloads.json")
+    root = roots(args)
+    manifest = manifest_module.load(root.manifest)
+    catalog = load_catalog(root.catalog)
+    downloads = load_downloads(root.downloads)
     docs = [d for s in manifest.sources for d in documents(s)]
     unspecified = [d.key for d in docs if d.spec is None]
     fetched = [d.key for d in docs if d.key in downloads]
-    converted = [d.key for d in docs if (root / d.path).exists()]
+    converted = [d.key for d in docs if root.text(d).exists()]
     print(f"sources: {len(manifest.sources)}, files: {len(docs)}")
     print(
         f"  with an address: {len(docs) - len(unspecified)}, downloaded: {len(fetched)}, "
@@ -57,8 +64,8 @@ def check(args) -> int:
     print(f"  status: {dict(Counter(s.status for s in manifest.sources))}")
     if unspecified:
         print(f"  no address yet: {', '.join(unspecified)}")
-    cards = [e for e in manifest.episodes if (root / e.path).exists()]
-    chronologies = [e for e in cards if written((root / e.path).read_text(encoding="utf-8"))]
+    cards = [e for e in manifest.episodes if root.card(e).exists()]
+    chronologies = [e for e in cards if written(root.card(e).read_text(encoding="utf-8"))]
     print(
         f"episodes: {len(manifest.episodes)}, cards: {len(cards)}, "
         f"chronologies written: {len(chronologies)}"
@@ -69,15 +76,15 @@ def check(args) -> int:
 
 
 def run_fetch(args) -> int:
-    root = args.corpus
-    manifest = manifest_module.load(root / "manifest.json")
+    root = roots(args)
+    manifest = manifest_module.load(root.manifest)
     with client() as http:
         outcome = fetch(
             manifest,
             http,
             set(args.ids) or None,
-            root=root / "raw",
-            downloads_path=root / "downloads.json",
+            root=root.raw,
+            downloads_path=root.downloads,
             force=args.force,
         )
     print(
@@ -97,8 +104,8 @@ def run_discover(args) -> int:
 
 
 def run_add(args) -> int:
-    root = args.corpus
-    manifest = manifest_module.load(root / "manifest.json")
+    root = roots(args)
+    manifest = manifest_module.load(root.manifest)
     found = [d for s in manifest.sources for d in documents(s) if d.key == args.key]
     if not found:
         print(f"no document {args.key} in the manifest", file=sys.stderr)
@@ -108,17 +115,17 @@ def run_add(args) -> int:
     if url is None:
         print(f"{args.key} has no address in the manifest: give --url", file=sys.stderr)
         return 2
-    records = load_downloads(root / "downloads.json")
-    records[document.key] = add(document, args.file, url, root / "raw")
-    save_downloads(records, root / "downloads.json")
-    print(f"{document.key}: {document.raw_path(root / 'raw')}")
+    records = load_downloads(root.downloads)
+    records[document.key] = add(document, args.file, url, root.raw)
+    save_downloads(records, root.downloads)
+    print(f"{document.key}: {document.raw_path(root.raw)}")
     return 0
 
 
 def run_convert(args) -> int:
-    root = args.corpus
-    manifest = manifest_module.load(root / "manifest.json")
-    downloads = load_downloads(root / "downloads.json")
+    root = roots(args)
+    manifest = manifest_module.load(root.manifest)
+    downloads = load_downloads(root.downloads)
     failed, changed = {}, False
     for i, source in enumerate(manifest.sources):
         if args.ids and source.id not in args.ids:
@@ -126,15 +133,15 @@ def run_convert(args) -> int:
         done = 0
         for document in documents(source):
             record = downloads.get(document.key)
-            if record is None or not document.raw_path(root / "raw").exists():
+            if record is None or not document.raw_path(root.raw).exists():
                 continue
             try:
                 result = convert(
                     document,
                     record,
-                    raw_root=root / "raw",
-                    corpus_root=root,
-                    private_root=root / "text",
+                    raw_root=root.raw,
+                    corpus_root=root.data,
+                    private_root=root.private,
                 )
             except Exception as error:  # noqa: BLE001 - one broken file does not stop the rest
                 failed[document.key] = f"{type(error).__name__}: {error}"
@@ -145,23 +152,23 @@ def run_convert(args) -> int:
                 if (result.empty_pages)
                 else ""
             )
-            print(f"{document.key}: {result.path.relative_to(root)}{empty}")
+            print(f"{document.key}: {result.path.relative_to(root.data)}{empty}")
             if result.pages and result.empty_pages > result.pages / 2:
                 print(f"{document.key}: mostly a scan, needs OCR", file=sys.stderr)
         if done and source.status == "planned" and source.text_policy == "full":
             manifest.sources[i] = source.model_copy(update={"status": "raw"})
             changed = True
     if changed:
-        manifest_module.save(manifest, root / "manifest.json")
+        manifest_module.save(manifest, root.manifest)
     for key, reason in failed.items():
         print(f"{key}: failed, {reason}", file=sys.stderr)
     return 1 if failed else 0
 
 
 def run_series(args) -> int:
-    root = args.corpus
-    manifest = manifest_module.load(root / "manifest.json")
-    catalog = load_catalog(root / "series.toml")
+    root = roots(args)
+    manifest = manifest_module.load(root.manifest)
+    catalog = load_catalog(root.catalog)
     if args.series:
         ids = args.series
     else:
@@ -179,7 +186,7 @@ def run_series(args) -> int:
         print(f"unknown series {', '.join(unknown)}", file=sys.stderr)
         return 2
     with client() as http:
-        failed = fetch_series(catalog, Cache(root / "series", args.store), http, ids)
+        failed = fetch_series(catalog, Cache(root.series, args.store), http, ids)
     print(f"series: {len(ids) - len(failed)} of {len(ids)}")
     for series_id, reason in failed.items():
         print(f"{series_id}: failed, {reason}", file=sys.stderr)
@@ -187,9 +194,9 @@ def run_series(args) -> int:
 
 
 def run_episodes(args) -> int:
-    root = args.corpus
-    manifest = manifest_module.load(root / "manifest.json")
-    catalog, cache = load_catalog(root / "series.toml"), Cache(root / "series", args.store)
+    root = roots(args)
+    manifest = manifest_module.load(root.manifest)
+    catalog, cache = load_catalog(root.catalog), Cache(root.series, args.store)
     changed = False
     for i, episode in enumerate(manifest.episodes):
         if args.ids and episode.id not in args.ids:
@@ -200,24 +207,24 @@ def run_episodes(args) -> int:
                 f"{episode.id}: {len(measured.movements)} measured, {len(measured.unmeasured)} not"
             )
             continue
-        path, measured = write_card(episode, catalog, cache, root)
+        _, measured = write_card(episode, catalog, cache, root.card(episode))
         print(f"{episode.id}: {len(measured.movements)} of {len(episode.factors)} factors measured")
         if episode.status == "planned":
             manifest.episodes[i] = episode.model_copy(update={"status": "draft"})
             changed = True
     if changed:
-        manifest_module.save(manifest, root / "manifest.json")
+        manifest_module.save(manifest, root.manifest)
     return 0
 
 
 def run_index(args) -> int:
-    root = args.corpus
-    built = build(manifest_module.load(root / "manifest.json"), root)
-    path = write(built.chunks, root / "index")
+    root = roots(args)
+    built = build(manifest_module.load(root.manifest), root)
+    path = write(built.chunks, root.index)
     print(f"{len(built.chunks)} chunks in {path}")
-    computed = write_vectors(built.chunks, root / "index")
+    computed = write_vectors(built.chunks, root.index)
     print(f"vectors: {computed} computed, {len(built.chunks) - computed} reused")
-    snapshot = write_state(built.chunks, root / "index", date.today())
+    snapshot = write_state(built.chunks, root.index, date.today())
     print(f"index state: as of {snapshot['as_of']}, {snapshot['chunks']} chunks")
     if built.skipped:
         print(f"not converted yet: {', '.join(built.skipped)}")
@@ -266,6 +273,7 @@ def run_all(args) -> int:
             step(
                 argparse.Namespace(
                     corpus=args.corpus,
+                    rules=args.rules,
                     store=args.store,
                     ids=[],
                     force=False,
@@ -283,7 +291,13 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="python -m mst.corpus")
     commands = parser.add_subparsers(dest="command", required=True)
     corpus = argparse.ArgumentParser(add_help=False)
-    corpus.add_argument("--corpus", type=Path, required=True, help="the corpus root")
+    corpus.add_argument("--corpus", type=Path, required=True, help="the data root of the corpus")
+    corpus.add_argument(
+        "--rules",
+        type=Path,
+        default=REPOSITORY,
+        help="the authored part: manifest, series catalog, templates, cards; corpus/ by default",
+    )
     store = argparse.ArgumentParser(add_help=False)
     store.add_argument("--store", type=Path, required=True, help="the monthly series store")
     commands.add_parser("check", parents=[corpus]).set_defaults(run=check)

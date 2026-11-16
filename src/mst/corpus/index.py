@@ -26,6 +26,7 @@ import yaml
 from .. import store
 from .embed import MODEL, embed
 from .manifest import Manifest, documents
+from .roots import Roots
 
 MAX_TOKENS = 800
 MIN_TOKENS = 300
@@ -217,14 +218,15 @@ class Built:
     skipped: list[str]
 
 
-def build(manifest: Manifest, root: Path) -> Built:
+def build(manifest: Manifest, root: Roots) -> Built:
+    """The chunks of every converted document and every written card the manifest names."""
     built = Built([], [], [])
     for source in manifest.sources:
         if source.status == "planned":
             continue
         region = "ru" if source.jurisdiction == "ru" else None
         for document in documents(source):
-            path = root / document.path
+            path = root.text(document)
             if not path.exists():
                 (built.errors if source.status == "ready" else built.skipped).append(document.key)
                 continue
@@ -247,7 +249,7 @@ def build(manifest: Manifest, root: Path) -> Built:
     for episode in manifest.episodes:
         if episode.status == "planned":
             continue
-        path = root / episode.path
+        path = root.card(episode)
         if not path.exists():
             built.errors.append(episode.id)
             continue

@@ -17,6 +17,7 @@ from pydantic import Field
 
 from . import bench, guides, models, runs, store
 from . import jobs as tasks
+from .corpus import roots as corpus_roots
 from .corpus import tool as corpus_tool
 from .data import sources
 from .data.store import SeriesStore
@@ -384,7 +385,9 @@ def build(ws: store.Workspace) -> FastMCP:
 
     def _corpus_call(action, query, as_of, id, kind, region, factors, k, key, file, url, ids,
                      corpus):
-        root = ws.corpus if corpus == "scenario" else ws.model_corpus
+        root = corpus_roots.scenario(ws.corpus) if corpus == "scenario" else (
+            corpus_roots.model(ws.model_corpus)
+        )
         if action == "search":
             return corpus_tool.search(
                 root,
@@ -1348,7 +1351,7 @@ def _model_fragment(ws: store.Workspace, day: date):
 
     def visible(fragment_id: str) -> bool:
         try:
-            corpus_tool.get(ws.model_corpus, fragment_id, day)
+            corpus_tool.get(corpus_roots.model(ws.model_corpus), fragment_id, day)
         except ValueError:
             return False
         return True
@@ -1357,16 +1360,19 @@ def _model_fragment(ws: store.Workspace, day: date):
 
 
 def _corpus_argv(
-    ws: store.Workspace, command: str, *ids: str, root: Path | None = None
+    ws: store.Workspace, command: str, *ids: str, root: corpus_roots.Roots | None = None
 ) -> list[str]:
     """The command line of ``python -m mst.corpus`` for this workspace."""
+    root = root if root is not None else corpus_roots.scenario(ws.corpus)
     return [
         "-m",
         "mst.corpus",
         command,
         *ids,
         "--corpus",
-        str(root if root is not None else ws.corpus),
+        str(root.data),
+        "--rules",
+        str(root.rules),
     ]
 
 
@@ -1401,7 +1407,6 @@ def _macro_argv(
     command: str,
     as_of: str,
     model_id: str,
-    only: list[str] | None = None,
     form: str | None = None,
 ) -> list[str]:
     """The command line of ``python -m mst.models`` for this workspace."""
@@ -1422,10 +1427,6 @@ def _macro_argv(
         argv += ["--inputs", str(ws.elicitation)]
         if form is not None:
             argv += ["--form", form]
-    if command == "backtest":
-        argv += ["--corpus", str(ws.corpus / "manifest.json")]
-        if only:
-            argv += ["--only", *only]
     return argv
 
 

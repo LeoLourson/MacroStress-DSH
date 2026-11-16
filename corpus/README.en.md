@@ -1,6 +1,6 @@
 # Scenario corpus
 
-A stress-test scenario is built from these materials: regulators' methodologies, their published scenarios, works on the transmission of shocks and descriptions of past crises. The full list is in [`manifest.json`](manifest.json). Git holds the manifest, `series.toml` and the templates; downloaded originals, Markdown texts and the index are data: they live in `workspace/corpus/` and stay out of git.
+A stress-test scenario is built from these materials: regulators' methodologies, their published scenarios, works on the transmission of shocks and descriptions of past crises. The full list is in [`manifest.json`](manifest.json). Git holds, in this folder and in one copy, everything people write and review: the manifest, `series.toml`, the templates and the episode cards. Downloaded originals, Markdown texts and the index are data: they live in `workspace/corpus/` and stay out of git.
 
 ## Contents
 
@@ -9,7 +9,7 @@ A stress-test scenario is built from these materials: regulators' methodologies,
 | `methodology` | the choice of scenario severity, horizon and factors, the consistency of paths, satellite models | M1–M21 | 21 documents, 30 editions |
 | `scenario_set` | regulators' scenarios with numbers | S1–S7 | 7 series, about 90 editions |
 | `transmission` | the transmission of shocks to rates, the exchange rate, credit and spreads | T1–T5 | about 40 documents, selected by episode |
-| `episode` | the course of a past crisis | R1–R32, X1–X35, G1–G43 | 110 cards |
+| `episode` | the course of a past crisis | R1–R35, X1–X35, G1–G43 | 113 cards |
 
 Series D1–D5 (Bank of Russia, MOEX, FRED, IMF IFS, BIS) are not in the index: a script calculates from them the tables of moves for episode cards. [`series.toml`](series.toml) sets which series measures a factor in a country. D4 (IMF IFS) is replaced by BIS series with the same content: exchange rates, central bank rates, inflation, housing prices.
 
@@ -23,18 +23,18 @@ corpus/
   series.toml                   series for the tables of moves and their link to factors and countries
   templates/source.md           document template
   templates/episode.md          episode template
+  episodes/ru/R16.md            the episode cards, also em/ and dm/: the table of moves by
+                                the script, the chronology and the mechanism by hand
 ```
 
-In the workspace (`--corpus workspace/corpus`, outside git) the same layout plus everything the commands write:
+In the workspace (`--corpus workspace/corpus`, outside git) only what the commands download and derive; `--rules` names the folder above, the default:
 
 ```
 workspace/corpus/
-  manifest.json, series.toml, templates/   a copy of the above
   downloads.json                what was downloaded: address, sha256, size, date; written by fetch
   sources/methodology/M1.md     a document with one edition
   sources/scenario-sets/S1/2023.md   a series: a file per edition
   sources/transmission/T2/<slug>.md
-  episodes/ru/R16.md            also em/ and dm/
   raw/<id>/<edition>.pdf        downloaded originals
   text/<id>/<edition>.md        text of books and journals with text_policy: summary
   series/<series>.csv           daily series D1–D5
@@ -139,7 +139,7 @@ python -m mst.corpus eval --corpus workspace/corpus --questions bench/corpus-sea
 ## What the corpus holds now
 
 - Sources: 141 of 150 files are downloaded, 140 are converted to Markdown and have the status `raw`. Not downloaded: M8–M11 and S7 (imf.org gives 403 to script requests: the files are taken in a browser and registered through `add`), S3 for 2018–2019 (no copy), M19 (no Russian text of IFRS 9 was found), T5 (GFSR chapters, imf.org). M16 has its text in `<corpus>/text/`, and the summary is not written.
-- Episodes: 110 cards with tables of moves from daily series, at least one factor is measured in 105. Chronologies are written for R1–R32 and X1–X35 but not G1–G43; all episodes are in `draft`.
+- Episodes: 113 cards with tables of moves from daily series, at least one factor is measured in 105. Chronologies are written for R1–R35 and X1–X35 but not G1–G43; all episodes are in `draft`.
 - Index: 7036 fragments with vectors, recall@5 = 0.271 on 24 marked questions. All questions on episodes are found (Q17–Q24); of 16 questions on documents, Q7, Q8 and Q15. Ten misses fall on English documents: a Russian query reaches the answer neither by BM25 nor by the e5-small vector.
 
 ## Next

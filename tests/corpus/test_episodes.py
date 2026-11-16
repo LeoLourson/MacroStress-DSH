@@ -62,7 +62,7 @@ def test_a_move_and_its_recovery_are_measured_from_the_last_value_before_start()
 
 def test_a_card_keeps_hand_written_sections_and_redraws_the_table(tmp_path):
     cache = Cache(daily(date(2014, 11, 29), [50, 50, 60]))
-    path, measured = e.write_card(EPISODE, CATALOG, cache, tmp_path)
+    path, measured = e.write_card(EPISODE, CATALOG, cache, tmp_path / EPISODE.path)
     text = path.read_text(encoding="utf-8")
     assert "| fx | Курс | 50 (30.11.2014) | 60 (01.12.2014) | +20,00 % | 0 | не в окне |" in text
     assert "bank.liquidity: нет рыночного ряда" in text
@@ -71,7 +71,7 @@ def test_a_card_keeps_hand_written_sections_and_redraws_the_table(tmp_path):
         text.replace(e.PLACEHOLDERS["Хронология"], "1 декабря рубль упал [S1/2014 p. 5]."),
         encoding="utf-8",
     )
-    e.write_card(EPISODE, CATALOG, Cache(daily(date(2014, 11, 29), [50, 50, 70])), tmp_path)
+    e.write_card(EPISODE, CATALOG, Cache(daily(date(2014, 11, 29), [50, 50, 70])), path)
     again = path.read_text(encoding="utf-8")
     assert "1 декабря рубль упал [S1/2014 p. 5]." in again and "+40,00 %" in again
     assert e.written(again)

@@ -1,8 +1,9 @@
 """The operations of the ``corpus`` tool: search, get, list and add.
 
-The tool only parses arguments; the corpus root (``workspace/corpus``) is closed over by the
-server. Search and get read the index that ``python -m mst.corpus index`` wrote and never touch
-the network; add registers a file downloaded by hand, as ``python -m mst.corpus add`` does.
+The tool only parses arguments; the roots of the corpus (``mst.corpus.roots``) are closed over
+by the server. Search and get read the index that ``python -m mst.corpus index`` wrote and
+never touch the network; add registers a file downloaded by hand, as ``python -m mst.corpus add``
+does.
 """
 
 from datetime import date
@@ -13,10 +14,11 @@ from .fetch import add as add_by_hand
 from .fetch import load_downloads, save_downloads
 from .index import Index
 from .manifest import documents
+from .roots import Roots
 
 
 def search(
-    root: Path,
+    root: Roots,
     query: str,
     as_of: date,
     *,
@@ -34,7 +36,7 @@ def search(
     }
 
 
-def get(root: Path, chunk_id: str, as_of: date) -> dict:
+def get(root: Roots, chunk_id: str, as_of: date) -> dict:
     """One chunk by id, if it is visible on ``as_of``."""
     index = _load(root)
     for chunk in index.chunks:
@@ -45,10 +47,10 @@ def get(root: Path, chunk_id: str, as_of: date) -> dict:
     raise ValueError(f"no chunk {chunk_id!r} in the index")
 
 
-def catalogue(root: Path) -> dict:
+def catalogue(root: Roots) -> dict:
     """What the manifest holds: the corpus, its sources and episode cards with their status."""
-    manifest = manifest_module.load(root / "manifest.json")
-    downloads = load_downloads(root / "downloads.json")
+    manifest = manifest_module.load(root.manifest)
+    downloads = load_downloads(root.downloads)
     return {
         "corpus_id": manifest.corpus_id,
         "version": manifest.version,
@@ -67,7 +69,7 @@ def catalogue(root: Path) -> dict:
                         "path": document.path,
                         "has_address": document.spec is not None,
                         "downloaded": document.key in downloads,
-                        "converted": (root / document.path).exists(),
+                        "converted": root.text(document).exists(),
                     }
                     for document in documents(source)
                 ],
@@ -83,7 +85,7 @@ def catalogue(root: Path) -> dict:
                 "country": episode.country,
                 "status": episode.status,
                 "factors": list(episode.factors),
-                "card": (root / episode.path).exists(),
+                "card": root.card(episode).exists(),
             }
             for episode in manifest.episodes
         ],
@@ -91,9 +93,9 @@ def catalogue(root: Path) -> dict:
     }
 
 
-def add(root: Path, key: str, file: Path, url: str | None = None) -> dict:
+def add(root: Roots, key: str, file: Path, url: str | None = None) -> dict:
     """Register a file downloaded by hand under the manifest key ``key``."""
-    manifest = manifest_module.load(root / "manifest.json")
+    manifest = manifest_module.load(root.manifest)
     found = [document for source in manifest.sources for document in documents(source)]
     document = next((item for item in found if item.key == key), None)
     if document is None:
@@ -101,19 +103,19 @@ def add(root: Path, key: str, file: Path, url: str | None = None) -> dict:
     address = url or (document.spec.url or document.spec.page if document.spec else None)
     if address is None:
         raise ValueError(f"{key} has no address in the manifest: give url")
-    records = load_downloads(root / "downloads.json")
-    records[document.key] = add_by_hand(document, Path(file), address, root / "raw")
-    save_downloads(records, root / "downloads.json")
-    return {"key": document.key, "raw": str(document.raw_path(root / "raw"))}
+    records = load_downloads(root.downloads)
+    records[document.key] = add_by_hand(document, Path(file), address, root.raw)
+    save_downloads(records, root.downloads)
+    return {"key": document.key, "raw": str(document.raw_path(root.raw))}
 
 
-def _load(root: Path) -> Index:
+def _load(root: Roots) -> Index:
     """The index of ``root``; a corpus without one is named with what to do instead of Errno."""
     try:
-        return Index.load(root / "index")
+        return Index.load(root.index)
     except FileNotFoundError:
         raise ValueError(
-            f"the corpus {root} is not indexed: build the index with corpus(action=\"index\") "
+            f"the corpus {root.data} is not indexed: build the index with corpus(action=\"index\") "
             'first, or corpus(action="index", corpus="model") for the corpus of the models'
         ) from None
 

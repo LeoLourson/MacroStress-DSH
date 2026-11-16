@@ -8,6 +8,7 @@ from fastmcp import Client
 from mst import store
 from mst.corpus import index as ix
 from mst.corpus import manifest as m
+from mst.corpus import roots as corpus_roots
 from mst.corpus import tool
 from mst.mcp import build
 
@@ -82,9 +83,11 @@ def corpus_root(tmp_path, monkeypatch):
     (root / "sources").mkdir(parents=True)
     m.save(m.Manifest.model_validate(MANIFEST), root / "manifest.json")
     (root / "sources" / "S1.md").write_text(DOC, encoding="utf-8")
-    built = ix.build(m.load(root / "manifest.json"), root)
+    built = ix.build(m.load(root / "manifest.json"), corpus_roots.Roots(root, root))
     ix.write(built.chunks, root / "index")
     monkeypatch.setattr(tool, "Index", Bm25Only)
+    # The authored part of the scenario corpus is the repository's; here it is the test's.
+    monkeypatch.setattr(corpus_roots, "REPOSITORY", root)
     return root
 
 
@@ -136,9 +139,10 @@ def test_search_and_get_need_their_arguments(tmp_path, monkeypatch):
 
 def test_index_and_fetch_start_a_task_on_the_corpus_resource(tmp_path):
     ws = store.Workspace(tmp_path)
+    rules = ["--rules", str(corpus_roots.REPOSITORY)]
     expected = {
-        "index": ["-m", "mst.corpus", "index", "--corpus", str(ws.corpus)],
-        "fetch": ["-m", "mst.corpus", "fetch", "S1/2024", "--corpus", str(ws.corpus)],
+        "index": ["-m", "mst.corpus", "index", "--corpus", str(ws.corpus), *rules],
+        "fetch": ["-m", "mst.corpus", "fetch", "S1/2024", "--corpus", str(ws.corpus), *rules],
     }
     for action, argv in expected.items():
         job = call(ws, "corpus", {"action": action, "ids": ["S1/2024"]}).data
@@ -191,7 +195,7 @@ def test_the_model_corpus_is_searched_apart_from_the_scenario_one(tmp_path, monk
         root / "manifest.json",
     )
     (root / "sources" / "M1.md").write_text(DOC, encoding="utf-8")
-    built = ix.build(m.load(root / "manifest.json"), root)
+    built = ix.build(m.load(root / "manifest.json"), corpus_roots.Roots(root, root))
     ix.write(built.chunks, root / "index")
 
     in_model = call(
@@ -221,7 +225,7 @@ def test_the_model_corpus_hides_fragments_published_after_the_day(tmp_path, monk
     (root / "sources").mkdir(parents=True)
     m.save(m.Manifest.model_validate(MANIFEST), root / "manifest.json")
     (root / "sources" / "S1.md").write_text(DOC, encoding="utf-8")
-    built = ix.build(m.load(root / "manifest.json"), root)
+    built = ix.build(m.load(root / "manifest.json"), corpus_roots.Roots(root, root))
     ix.write(built.chunks, root / "index")
 
     before = call(

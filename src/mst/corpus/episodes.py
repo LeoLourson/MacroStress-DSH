@@ -277,9 +277,9 @@ def written(text: str) -> bool:
 
 
 def write_card(
-    episode: Episode, catalog: Catalog, cache: Cache, root: Path
+    episode: Episode, catalog: Catalog, cache: Cache, path: Path
 ) -> tuple[Path, Measured]:
-    path = root / episode.path
+    """The card of ``episode`` at ``path``: the measured table anew, the hand sections kept."""
     existing = path.read_text(encoding="utf-8") if path.exists() else None
     measured = measure(episode, catalog, cache)
     path.parent.mkdir(parents=True, exist_ok=True)
