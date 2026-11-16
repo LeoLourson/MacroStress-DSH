@@ -36,6 +36,7 @@ from scipy.linalg import cho_solve_banded, cholesky_banded, solve_banded
 from scipy.special import ndtr, ndtri
 
 from mst.drivers.history import History
+from mst.model_sdk import ShortHistory
 from mst.model_sdk.checkpoint import report
 
 from .spec import Spec
@@ -206,6 +207,9 @@ class Fit:
     so the outside-range flag keeps its meaning."""
     sources: dict[int, int] = field(default_factory=dict)
     """The node whose coefficients serve a driver its own equation does not (the check)."""
+    flat: tuple[str, ...] = ()
+    """The columns of ``z`` that did not vary within any object in the window: the data say
+    nothing of their effect, so their coefficients are zero."""
 
 
 def columns(quantity) -> list[str]:
@@ -216,7 +220,12 @@ def columns(quantity) -> list[str]:
 
 
 def _scales(paths: dict[int, Path], names: list[str]):
-    """Pooled centres and within-object spreads of the columns of ``z`` and of ``d``."""
+    """Pooled centres and within-object spreads of the columns of ``z`` and of ``d``; and the
+    columns that do not vary within any object, whose spread is set to one.
+
+    A column constant within every object — a feature of the key rate above 15 % in a window
+    of months below it — cannot be told from the objects' constants, so its coefficient is not
+    estimated: ``fit`` holds it at zero."""
     rows = {i: item.rows() for i, item in paths.items()}
     stacked = np.vstack([z for z, _ in rows.values()])
     centre = stacked.mean(axis=0)
@@ -224,11 +233,10 @@ def _scales(paths: dict[int, Path], names: list[str]):
     within = [z - z.mean(axis=0) for z, _ in rows.values()]
     spread = np.sqrt(np.vstack(within).var(axis=0))
     spread[0] = 1.0
-    flat = [names[j] for j in range(1, len(names)) if not spread[j] > 0]
-    if flat:
-        raise ValueError(f"columns {', '.join(flat)} do not vary within objects")
+    flat = ~(spread > 0)
+    spread[flat] = 1.0
     level = np.concatenate([y - y.mean() for _, y in rows.values()])
-    return centre, spread, float(level.std())
+    return centre, spread, flat, float(level.std())
 
 
 def training_bounds(
@@ -314,8 +322,12 @@ def fit(
         if item is not None and len(item.path) - 1 > k:
             paths[i] = item
     if not paths:
-        raise ValueError(f"no driver of {hist.quantity.id} has more than {k} usable months")
-    centre, spread, level = _scales(paths, columns_)
+        reason = f"no driver of {hist.quantity.id} has more than {k} usable months"
+        raise ShortHistory({driver: reason for driver in hist.driver if driver is not None})
+    centre, spread, flat, level = _scales(paths, columns_)
+    if flat.any() and progress is not None:
+        names = ", ".join(columns_[j] for j in np.flatnonzero(flat))
+        report(f"{progress}: {names} do not vary within objects, their coefficients are zero")
     prior = np.full(k, (spec.spread * level) ** 2)
     constant = spec.constant_spreads.get(hist.quantity.id, spec.constant_spread)
     prior[0] = (constant * level) ** 2
@@ -328,7 +340,9 @@ def fit(
 
     def scaled(i):
         z, y = paths[i].rows()
-        return (z - centre) / spread, y
+        z = (z - centre) / spread
+        z[:, flat] = 0.0
+        return z, y
 
     rng = np.random.default_rng(spec.sampler.seed if seed is None else seed)
     gamma = np.zeros((n, k))
@@ -363,6 +377,9 @@ def fit(
             gamma[i] = _stationary(
                 _normal(precision, shift, rng), precision, shift, spread, spec.rho_max, rng
             )
+            # A flat column is out of the likelihood and its prior is independent of the
+            # others, so holding it at zero leaves the draw of the others exact.
+            gamma[i, flat] = 0.0
         for c in range(len(classes)):
             members = roots[cls[roots] == c]
             if len(members):
@@ -400,6 +417,7 @@ def fit(
         train_low=train_low,
         train_high=train_high,
         differenced=differenced,
+        flat=tuple(columns_[j] for j in np.flatnonzero(flat)),
     )
 
 

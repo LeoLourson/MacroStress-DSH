@@ -10,11 +10,11 @@ from mst.data.store import Observation, SeriesStore
 from mst.drivers import bundle as satellite_bundle
 from mst.drivers.history import correlation, history
 from mst.drivers.registry import Registry
-from mst.model_sdk import Intervention
+from mst.model_sdk import Intervention, ShortHistory
 from mst.model_sdk.contracts import MacroSimulation as Simulation
 from mst.plugins.hier import MODEL
 from mst.plugins.hier.check import check
-from mst.plugins.hier.estimate import fit, path_of
+from mst.plugins.hier.estimate import columns, fit, path_of
 from mst.plugins.hier.simulate import IMPACT, PARAMETERS_FROM_ABOVE, NotServed
 from mst.plugins.hier.simulate import simulate as simulate_hier
 from mst.plugins.hier.spec import Sampler, Spec, load_spec
@@ -301,6 +301,47 @@ def test_a_quarterly_average_driver_is_estimated_with_its_months_drawn(tmp_path)
     assert low - 0.05 <= simulated.COMPANIES["alpha"][1] <= high + 0.05
     beta = result.gamma[:, hist.nodes.index("sector"), 2].mean()
     assert beta == pytest.approx(simulated.SECTOR[2], abs=0.3)
+
+
+def test_a_feature_that_never_moves_in_the_window_gets_no_coefficient(tmp_path):
+    panel = simulated.panel(240, seed=5)
+    raw = simulated.registry(without_history=()).model_dump(by_alias=True)
+    # Brent never rises a million above zero: the feature is zero in every month, as the key
+    # rate above 15 % is in a window that misses the months it was.
+    raw["quantities"][0]["features"] = [
+        {"id": "brent_above", "variable": "gl.brent", "above": 1e6}
+    ]
+    registry = Registry.model_validate(raw)
+    store = simulated.store(tmp_path, panel, seed=2)
+    hist = history(registry, "price", panel, store, AS_OF)
+
+    result = fit(hist, load_spec())
+
+    names = columns(hist.quantity)
+    flat = [names.index("brent_above@0"), names.index("brent_above@1")]
+    assert np.all(result.gamma[..., flat] == 0.0)
+    # The columns that move are estimated as without the feature.
+    beta = result.gamma[:, hist.nodes.index("sector"), 2].mean()
+    assert beta == pytest.approx(simulated.SECTOR[2], abs=0.3)
+
+
+def test_a_quantity_without_a_long_enough_driver_names_its_drivers_short(tmp_path):
+    panel = simulated.panel(240, seed=5)
+    registry = simulated.registry()
+    store = SeriesStore(tmp_path)
+    # Four months each, as a quantity whose source starts just before the date: the equation
+    # has four coefficients, so no driver has a month to spare.
+    for name in ["sector", *simulated.COMPANIES]:
+        store.write(
+            f"drv.price.{name}",
+            [Observation(m, 5.0 + t, m, False) for t, m in enumerate(panel.months[-4:])],
+        )
+    hist = history(registry, "price", panel, store, AS_OF)
+
+    with pytest.raises(ShortHistory) as raised:
+        fit(hist, load_spec())
+
+    assert set(raised.value.variables) == {driver for driver in hist.driver if driver}
 
 
 def test_a_driver_whose_data_imply_an_explosive_root_gets_a_stationary_path(tmp_path):

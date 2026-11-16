@@ -60,7 +60,7 @@ class HierModel(SatelliteModel):
     """
 
     model_id = "hier.gibbs"
-    version = "0.1.0"
+    version = "0.2.0"
     label = "Иерархическая сателлитная модель"
     quantities = QUANTITIES
     description = (
@@ -122,6 +122,7 @@ class HierModel(SatelliteModel):
                 "classes": hist.classes,
                 "driver": hist.driver,
                 "rows": fit_.rows.tolist(),
+                "flat": list(fit_.flat),
                 "train_low": _bounds_list(fit_.train_low),
                 "train_high": _bounds_list(fit_.train_high),
                 "checks": {str(node): _check_dict(item) for node, item in checks.items()},
