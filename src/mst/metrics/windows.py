@@ -108,8 +108,12 @@ class Window:
 
     @property
     def left_out(self) -> dict[str, str]:
-        """The variables the macro model left out as too short, with the reason."""
-        return dict(self.macro.meta.get("left_out", {}))
+        """The macro variables and the drivers the models left out as too short, with the
+        reason."""
+        found = dict(self.macro.meta.get("left_out", {}))
+        if self.bundle is not None:
+            found.update(self.bundle.left_out)
+        return found
 
 
 def open_window(

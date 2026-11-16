@@ -30,6 +30,7 @@ from mst.model_sdk.contracts import (
     SatelliteEstimate,
     SatelliteEstimateContext,
     SatelliteModel,
+    ShortHistory,
 )
 
 
@@ -61,9 +62,7 @@ def selected(model_id: str | None = None) -> MacroModel:
         return next(iter(models.values()))
     if not models:
         raise ValueError("no macro model is installed")
-    raise ValueError(
-        "several macro models are installed, name one: " + ", ".join(sorted(models))
-    )
+    raise ValueError("several macro models are installed, name one: " + ", ".join(sorted(models)))
 
 
 def estimate_macro(
@@ -96,11 +95,7 @@ def estimate_macro(
         inputs=inputs,
         checkpoints=checkpoints,
     )
-    estimate = (
-        model.estimate(context)
-        if form is None
-        else _estimate_in_form(model, context, form)
-    )
+    estimate = model.estimate(context) if form is None else _estimate_in_form(model, context, form)
     name = macro_version.save(model.model_id, estimate.meta, estimate.arrays, models)
     shutil.rmtree(checkpoints, ignore_errors=True)
     return name
@@ -133,8 +128,7 @@ def assignment(
     stray = sorted(set(overrides or {}) - set(quantities))
     if stray:
         raise ValueError(
-            f"no quantity {', '.join(stray)}; the registry holds "
-            f"{', '.join(quantities) or 'none'}"
+            f"no quantity {', '.join(stray)}; the registry holds {', '.join(quantities) or 'none'}"
         )
     unknown = sorted(
         {model_id for model_id in (overrides or {}).values() if model_id not in models}
@@ -189,10 +183,45 @@ def estimate_satellites(
     Every model gets its own checkpoint folder, ``<root>/.checkpoints/<macro>/<model_id>``:
     an interrupted estimate started again resumes from what the models kept there, and the
     folder is removed once the bundle is saved. The progress goes to stderr.
+
+    A driver whose history is too short on the date — a share listed later — is named by
+    ``ShortHistory``; the bundle is estimated again without it and records it in ``left_out``,
+    so a short series leaves out its own driver, not the whole bundle.
     """
     panel, as_of = macro_version.panel_of(models, macro)
     if registry is None:
         registry = load_drivers_registry(catalog=drivers)
+    target = Path(root if root is not None else models)
+    kept = target / ".checkpoints" / macro
+    series = SeriesStore(store)
+    left_out: dict[str, str] = {}
+    while True:
+        given = registry.model_copy(
+            update={"drivers": [d for d in registry.drivers if d.id not in left_out]}
+        )
+        try:
+            estimates, unserved = _estimates(given, panel, as_of, macro, series, kept, overrides)
+        except ShortHistory as short:
+            known = {driver.id for driver in given.drivers}
+            stray = sorted(set(short.variables) - known)
+            if stray:
+                raise ValueError(
+                    f"short drivers that were not given: {', '.join(stray)}"
+                ) from short
+            left_out.update(short.variables)
+            continue
+        break
+    meta, arrays = satellite_bundle.assemble(
+        given, macro, as_of, estimates, unserved=unserved, left_out=left_out
+    )
+    name = satellite_bundle.save(meta, arrays, target)
+    shutil.rmtree(kept, ignore_errors=True)
+    return name, _checks_table(meta)
+
+
+def _estimates(registry, panel, as_of, macro, series, kept, overrides):
+    """Every satellite model's estimate on ``registry``, level by level; and the quantities no
+    installed model serves."""
     quantities = [
         quantity.id
         for quantity in registry.quantities
@@ -214,10 +243,7 @@ def estimate_satellites(
     from mst.drivers.history import history as driver_history
     from mst.model_sdk.contracts import UpperHistory
 
-    series = SeriesStore(store)
     rows: dict[str, UpperHistory] = {}
-    target = Path(root if root is not None else models)
-    kept = target / ".checkpoints" / macro
 
     def upper_history_of(level: int) -> dict[str, UpperHistory]:
         found = {}
@@ -256,12 +282,7 @@ def estimate_satellites(
                 )
             )
             report(f"{model_id}: estimated in {time.monotonic() - started:.0f} s")
-    meta, arrays = satellite_bundle.assemble(
-        registry, macro, as_of, estimates, unserved=unserved
-    )
-    name = satellite_bundle.save(meta, arrays, target)
-    shutil.rmtree(kept, ignore_errors=True)
-    return name, _checks_table(meta)
+    return estimates, unserved
 
 
 def _checks_table(meta: dict) -> dict:

@@ -26,7 +26,7 @@ drivers of different models were drawn independently, so a cross-model correlati
 
 import json
 from collections.abc import Iterable, Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import date
 from pathlib import Path
 
@@ -92,6 +92,8 @@ class SatelliteBundle:
     correlated: list[str]
     correlation: np.ndarray
     arrays: dict[str, np.ndarray]
+    left_out: dict[str, str] = field(default_factory=dict)
+    """The drivers of the catalog left out as too short on the date, with the reason."""
 
     def node(self, driver: str) -> tuple[str, int]:
         """``(quantity, index)`` of a driver among its quantity's nodes."""
@@ -301,6 +303,7 @@ def assemble(
     estimates: Mapping[str, SatelliteEstimate],
     *,
     unserved: Iterable[str] = (),
+    left_out: Mapping[str, str] | None = None,
 ) -> tuple[dict, dict[str, np.ndarray]]:
     """The meta and arrays of a bundle from the estimates of its models.
 
@@ -308,7 +311,7 @@ def assemble(
     quantities and the node order inside each part, so the same estimates give the same
     matrix whatever model estimated what. The platform writes ``meta["model"]`` of every part
     itself: a part that carries a different model id is refused, so provenance cannot be
-    spoofed.
+    spoofed. ``left_out`` names the drivers estimated without, as too short on the date.
     """
     parts: dict[str, dict] = {}
     arrays: dict[str, np.ndarray] = {}
@@ -349,6 +352,7 @@ def assemble(
         "quantities": parts,
         "correlated": correlated,
         "unserved": sorted(unserved),
+        "left_out": dict(left_out or {}),
     }
     arrays["correlation"] = correlation(list(series.values())) if series else np.zeros((0, 0))
     return meta, arrays
@@ -435,6 +439,7 @@ def load(
         correlated=meta["correlated"],
         correlation=arrays["correlation"],
         arrays=arrays,
+        left_out=dict(meta.get("left_out", {})),
     )
 
 

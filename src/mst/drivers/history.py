@@ -15,6 +15,7 @@ import numpy as np
 
 from mst.data.store import SeriesStore
 from mst.macro.panel import Panel
+from mst.model_sdk.contracts import ShortHistory
 
 from .registry import Quantity, Registry, to_model
 
@@ -72,16 +73,22 @@ def history(
     month = {m: t for t, m in enumerate(panel.months)}
     d = np.full((len(panel.months), len(order)), np.nan)
     approximate = np.zeros(d.shape, dtype=bool)
+    short: dict[str, str] = {}
     for object_, driver in drivers.items():
         if driver.series is None:
             continue
         rows = [row for row in store.as_of(driver.series, as_of) if row.month in month]
         if not rows:
-            raise ValueError(f"{driver.id}: series {driver.series} has no value known on {as_of}")
+            # A series that starts after the date is short there, not wrong: it is named, with
+            # every other such driver, so the platform can estimate without them.
+            short[driver.id] = f"series {driver.series} has no value known on {as_of}"
+            continue
         i = position[object_]
         for row in rows:
             d[month[row.month], i] = to_model(q.transform, row.value)
             approximate[month[row.month], i] = row.approximate
+    if short:
+        raise ShortHistory(short)
     return History(
         quantity=q,
         months=list(panel.months),

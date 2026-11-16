@@ -313,3 +313,35 @@ def test_the_plan_hash_does_not_depend_on_where_the_file_lies(tmp_path):
         file.parent.mkdir()
         file.write_text("draws = 40\nseed = 3\n", encoding="utf-8")
     assert windows.file_digest(old) == windows.file_digest(new) is not None
+
+
+def test_a_short_driver_is_left_out_of_the_bundle_not_the_window(store, tmp_path, monkeypatch):
+    from mst.model_sdk import ShortHistory
+
+    class ShortDriver(simulated.FakeSatellite):
+        """The fake satellite, short of the history of a second driver on every date."""
+
+        def estimate(self, context):
+            if any(driver.id == "share_price:late" for driver in context.registry.drivers):
+                raise ShortHistory({"share_price:late": "no value known on the date"})
+            return super().estimate(context)
+
+    simulated.install(monkeypatch, simulated.FakeMacro(), ShortDriver())
+    simulated.share_price(store)
+    catalog = simulated.catalog(tmp_path, late=True)
+    window = windows.open_window(
+        simulated.FakeMacro(),
+        store,
+        load_registry(),
+        plan_of(tmp_path),
+        id_="R1",
+        start=date(2023, 6, 1),
+        half="tuning",
+        root=tmp_path / "backtest",
+        known_on=KNOWN_ON,
+    )
+    windows.attach_satellites(window, store, tmp_path / "backtest", catalog)
+
+    assert window.bundle.left_out == {"share_price:late": "no value known on the date"}
+    assert window.left_out == {"share_price:late": "no value known on the date"}
+    assert window.bundle.served() == ["share_price:sber"]

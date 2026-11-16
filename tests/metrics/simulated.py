@@ -115,10 +115,7 @@ class FakeMacro(MacroModel):
         means = np.zeros((draws, m))
         covs = np.zeros((draws, m, m))
         for c, constraint in enumerate(plan.constraints):
-            level = sum(
-                term.weight * model.last[index[term.variable]]
-                for term in constraint.terms
-            )
+            level = sum(term.weight * model.last[index[term.variable]] for term in constraint.terms)
             means[:, c] = level
             for other, every in enumerate(plan.constraints):
                 spread = 0.0
@@ -232,9 +229,11 @@ class FakeSatellite(SatelliteModel):
         paths[:, 0, :] = history[-1]
         for k in range(len(drivers)):
             noise = rng.normal(0, 0.1, size=(draws, horizon))
-            paths[:, 1:, k] = history[-1] + np.cumsum(noise, axis=1) + (
-                macro.paths[:, 1:, 0] - macro.paths[:, 1, 0:1]
-            ) * 0.1
+            paths[:, 1:, k] = (
+                history[-1]
+                + np.cumsum(noise, axis=1)
+                + (macro.paths[:, 1:, 0] - macro.paths[:, 1, 0:1]) * 0.1
+            )
         return DriverPaths(ids=list(drivers), paths=paths, flags={d: frozenset() for d in drivers})
 
 
@@ -256,29 +255,21 @@ def install(monkeypatch, macro, satellite=None):
     return satellite
 
 
-def catalog(folder):
-    """The driver catalog of the tests, written in ``folder``: one quantity, one driver."""
+def catalog(folder, *, late: bool = False):
+    """The driver catalog of the tests, written in ``folder``: one quantity, one driver, and with
+    ``late`` a second driver whose series the store never holds."""
     import json
 
+    objects = [
+        {"id": "sber", "class": "company", "label": "Сбербанк", "codes": {"secid": ["SBER"]}}
+    ]
+    drivers = ["sber"]
+    if late:
+        objects.append({"id": "late", "class": "company", "label": "Late", "codes": {}})
+        drivers.append("late")
     found = folder / "catalog.json"
     found.write_text(
-        json.dumps(
-            {
-                "quantities": {
-                    "share_price": {
-                        "objects": [
-                            {
-                                "id": "sber",
-                                "class": "company",
-                                "label": "Сбербанк",
-                                "codes": {"secid": ["SBER"]},
-                            }
-                        ],
-                        "drivers": ["sber"],
-                    }
-                }
-            }
-        ),
+        json.dumps({"quantities": {"share_price": {"objects": objects, "drivers": drivers}}}),
         encoding="utf-8",
     )
     return found
