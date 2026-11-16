@@ -35,7 +35,12 @@ switching = "mean_covariance"
 # coefficients toward one — unit roots — and away from explosive roots. The candidate
 # grid of the plan is selected by the backtest on the tuning half of the episodes; 1 and
 # 1 are the values Sims and Zha recommend.
-mu = 1.0
+# `mu` is off: on these 23 series in levels the sum-of-coefficients rows pin the sum of the
+# lag matrices to the identity, a unit root of multiplicity 23, and the draws around it are
+# explosive. On the panel of 2026-09-30 with mu = 1 no draw kept the companion radius under
+# rho_max (median 1.066 with delta, 1.27 without it); without mu the median is 1.011 and a
+# quarter of the draws are identified. The BVAR escapes it by fitting trending series in
+# differences.
 delta = 1.0
 # Dirichlet prior on every row of the transition matrix: `transition_stay` on staying in
 # the regime, `transition_switch` on leaving it for each other regime. The stress episodes
