@@ -236,3 +236,58 @@ class FakeSatellite(SatelliteModel):
                 macro.paths[:, 1:, 0] - macro.paths[:, 1, 0:1]
             ) * 0.1
         return DriverPaths(ids=list(drivers), paths=paths, flags={d: frozenset() for d in drivers})
+
+
+def install(monkeypatch, macro, satellite=None):
+    """Install the fake macro model and the fake satellite as the only models."""
+    from mst import models as models_pkg
+
+    satellite = satellite or FakeSatellite()
+    monkeypatch.setattr(models_pkg, "selected", lambda model_id=None: macro)
+    monkeypatch.setattr(models_pkg, "satellites", lambda: {satellite.model_id: satellite})
+    monkeypatch.setattr(
+        models_pkg,
+        "assignment",
+        lambda quantities, overrides=None: (
+            {quantity: satellite.model_id for quantity in quantities},
+            [],
+        ),
+    )
+    return satellite
+
+
+def catalog(folder):
+    """The driver catalog of the tests, written in ``folder``: one quantity, one driver."""
+    import json
+
+    found = folder / "catalog.json"
+    found.write_text(
+        json.dumps(
+            {
+                "quantities": {
+                    "share_price": {
+                        "objects": [
+                            {
+                                "id": "sber",
+                                "class": "company",
+                                "label": "Сбербанк",
+                                "codes": {"secid": ["SBER"]},
+                            }
+                        ],
+                        "drivers": ["sber"],
+                    }
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+    return found
+
+
+def share_price(store, months: int = 60):
+    """The realized series of the test driver: a slow rise from 5, one value a month."""
+    grid = months_between(START, shift(START, months - 1))
+    store.write(
+        "drv.share_price.sber",
+        [Observation(month, float(5.0 + 0.01 * t), month, False) for t, month in enumerate(grid)],
+    )

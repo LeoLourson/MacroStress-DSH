@@ -1,11 +1,11 @@
 """The observation cells of the backtest and the numbers read from them: CRPS, PIT, bands.
 
-A cell is one thing the forecast is judged on: an episode ``e``, a month ``t`` of its horizon
-and a quantity ``q`` of any level — a macro variable or a driver. The cell holds the fact
-``y``, the ``R`` draws of the forecast and the draws of every comparison on the same cell: the
-random walk with drift (``baseline``), the walk that knows the scenario's path
+A cell is one thing the forecast is judged on: a window ``e`` — an episode or a date of the
+rolling grid — a month ``t`` of its horizon and a quantity ``q`` of any level. The cell holds
+the fact ``y``, the ``R`` draws of the forecast and the draws of every comparison on the same
+cell: the random walk with drift (``baseline``), the walk that knows the scenario's path
 (``conditional``), the naive forecast of a target (``naive``) and the unconstrained run of the
-model (``base``). It also holds the range of the quantity's history known at the episode's
+model (``base``). It also holds the range of the quantity's history known at the window's
 calculation date and the admissible domain, which the admission rules read.
 
 CRPS is the integral of the squared distance between the forecast distribution and the fact;
@@ -37,15 +37,18 @@ BUCKET_SHARES = (0.05, 0.45, 0.45, 0.05)
 
 @dataclass(frozen=True)
 class Cell:
-    """One observation the forecast is judged on: episode, month, quantity, fact and draws."""
+    """One observation the forecast is judged on: window, month, quantity, fact and draws."""
 
-    episode: str
+    unit: str
+    """The window the cell belongs to: the episode id or the grid date."""
     month: int
     """The month of the horizon, 1..H."""
     quantity: str
     fact: float
     draws: np.ndarray
     """(R,) the forecast of the quantity in the model scale."""
+    level: str = "macro"
+    """The level the quantity belongs to: ``macro``, ``driver/<quantity>`` and further."""
     constrained: bool = False
     """The scenario fixes this cell exactly; it is reported, never scored."""
     baseline: np.ndarray | None = None
@@ -60,6 +63,8 @@ class Cell:
     """The range of the quantity's history known at the same date; the width rule reads it."""
     domain: tuple[float, float] | None = None
     """The admissible range in the model scale; None when unbounded."""
+    unverified: bool = False
+    """The forecast left the range of the model's own training history: an unverified tail."""
 
 
 def crps(draws: np.ndarray, fact: float) -> float:

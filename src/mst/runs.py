@@ -803,7 +803,7 @@ def _basis(spec: Spec) -> list[dict]:
 
 def _git_commit() -> str | None:
     """The commit of the checkout, read from ``.git`` without running git; best effort."""
-    from .metrics.backtest import _git_commit as read
+    from .metrics.windows import git_commit as read
 
     return read()
 

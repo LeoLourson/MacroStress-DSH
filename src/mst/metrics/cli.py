@@ -7,6 +7,7 @@
       [--portfolio ID] [--mc-bootstrap] [--no-rolling] [--save]
   python -m mst.metrics rolling [MODEL_ID] --as-of DATE --store DIR --models DIR --episodes FILE
       [--dates YYYY-MM-DD ...] [--half tuning|validation] [--details FILE] [--against REPORT.json]
+      [--drivers FILE] [--target-level LEVEL]
 
 ``rolling`` judges the forecast itself: on a grid of dates nobody selected, the unconditional
 forecast of the model estimated on that date against the random walk, in relative CRPS, with
@@ -109,6 +110,12 @@ def main(argv: list[str] | None = None) -> int:
         type=Path,
         help="the folder of the answers a model with declared inputs reads (workspace/elicitation)",
     )
+    grid.add_argument("--drivers", type=Path, help="the driver catalog: judge the drivers too")
+    grid.add_argument(
+        "--target-level",
+        default="macro",
+        help="the level the decision reads (macro by default)",
+    )
     args = parser.parse_args(argv)
 
     if args.command == "rolling":
@@ -123,6 +130,8 @@ def main(argv: list[str] | None = None) -> int:
             details=args.details,
             against=args.against,
             inputs=args.inputs,
+            drivers=args.drivers,
+            target_level=args.target_level,
         )
     return run(
         store=args.store,

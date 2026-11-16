@@ -19,7 +19,7 @@ from collections.abc import Mapping, Sequence
 import numpy as np
 
 from .quality import interval, paired, relative
-from .sanity import ADMISSION_SHARE
+from .sanity import ADMISSION_SHARE, worst_shares
 
 
 def decide(
@@ -152,3 +152,49 @@ def on_rows(
 
 def _known(se: float | None) -> float:
     return np.inf if se is None else float(se)
+
+
+def verdict(
+    rows: Sequence[Mapping[str, object]],
+    admission: Mapping,
+    incumbent: Mapping,
+    *,
+    unit: str,
+    level: str,
+    block: int,
+    seed: int,
+) -> dict:
+    """The verdict of a check against the incumbent's details, at ``level``.
+
+    The comparison reads the validation half when the check has one, and all windows
+    otherwise. The benchmark is the walk that knows the scenario's path where the level has
+    one, since it knows what the forecast knows, and the plain walk otherwise. ``admission``
+    is the candidate's (``mst.metrics.sanity``); the incumbent's is read from its report.
+    """
+    if "rows" not in incumbent:
+        raise ValueError("the incumbent carries no cells: pass the --details file of its check")
+    half = "validation" if any(row["half"] == "validation" for row in rows) else "all"
+
+    def pick(found):
+        return [
+            row for row in found if row["level"] == level and (half == "all" or row["half"] == half)
+        ]
+
+    mine, theirs = pick(rows), pick(incumbent["rows"])
+    if not mine:
+        raise ValueError(f"level {level!r} has no scored cells to decide on")
+    benchmark = (
+        "conditional_walk" if any(row["conditional_walk"] is not None for row in mine) else "walk"
+    )
+    found = on_rows(
+        mine,
+        theirs,
+        unit=unit,
+        benchmark=benchmark,
+        block=block,
+        seed=seed,
+        admission=worst_shares(admission),
+        incumbent_admission=worst_shares(incumbent["sanity"]["admission"]),
+    )
+    found.update(level=level, half=half)
+    return found
