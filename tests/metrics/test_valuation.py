@@ -290,13 +290,41 @@ def test_a_served_driver_without_a_series_keeps_the_window(tmp_path):
     assert np.isfinite(found.driver("share_price:sber")).all()
 
 
-def test_a_panel_of_another_month_is_refused(tmp_path):
-    with pytest.raises(ValueError, match="calculation month"):
+def test_a_panel_ending_before_the_calculation_month_starts_the_window_there(tmp_path):
+    """On the last day of October the values of October are not out yet: the panel ends in
+    September, t = 0 is September and the horizon starts in October, as the window builds it.
+    A driver value of October published that day belongs to t = 1, not to t = 0."""
+    store = SeriesStore(tmp_path)
+    store.write(
+        "drv.share_price.sber",
+        [
+            Observation(date(2026, 9, 1), 100.0, date(2026, 9, 30), False),
+            Observation(date(2026, 10, 1), 110.0, date(2026, 10, 31), False),
+            Observation(date(2026, 11, 1), 120.0, date(2026, 12, 5), False),
+        ],
+    )
+    found, missing = realized_paths(
+        store,
+        as_of=date(2026, 10, 31),
+        known_on=CHECKED_ON,
+        months=[date(2026, 10, 1), date(2026, 11, 1)],
+        panel=macro_panel(),
+        realized=np.array([[100 * np.log(70.0), 11.0], [100 * np.log(75.0), 12.0]]),
+        bundle=bundle(),
+    )
+    assert missing == []
+    assert found.months[0] == T0
+    assert found.macro("gl.brent")[0] == pytest.approx([82.0, 70.0, 75.0])
+    assert found.driver("share_price:sber")[0] == pytest.approx([100.0, 110.0, 120.0])
+
+
+def test_a_panel_ending_after_the_calculation_month_is_refused(tmp_path):
+    with pytest.raises(ValueError, match="after the calculation"):
         realized_paths(
             fact_store(tmp_path),
-            as_of=date(2026, 10, 31),
+            as_of=date(2026, 8, 31),
             known_on=CHECKED_ON,
-            months=[date(2026, 11, 1)],
+            months=[date(2026, 10, 1)],
             panel=macro_panel(),
             realized=np.array([[100 * np.log(70.0), 11.0]]),
             bundle=bundle(),

@@ -86,10 +86,11 @@ def realized_paths(
 ) -> tuple[FixedPaths | None, list[str]]:
     """The facts of the episode window in the own units the position models read.
 
-    Month ``t = 0`` is the calculation month — the last month of ``panel``, checked against
-    ``as_of`` — and holds what the calculation date knows: the panel's last row for a macro
-    variable and the latest value of the driver's series known on ``as_of``. Months ``t = 1 .. H``
-    are ``months`` exactly and hold the facts known on ``known_on``; the macro values come from
+    Month ``t = 0`` is the last month of ``panel``, the month of ``as_of`` or, when that month's
+    values are not out yet, an earlier one, and holds what the calculation date knows: the
+    panel's last row for a macro variable and the latest value of the driver's series known on
+    ``as_of`` for a month up to ``t = 0``. Months ``t = 1 .. H`` are ``months`` exactly, the
+    months after ``t = 0`` as the window builds them, and hold the facts known on ``known_on``; the macro values come from
     ``realized`` ``(H, n)`` in the model scale, in the order of ``panel.ids``, and are mapped back
     through their registry transforms. Drivers in their own units are read from ``store``.
 
@@ -134,7 +135,7 @@ def realized_paths(
         if series is None:
             missing.append(f"{driver}/no series")
         else:
-            known_today = store.as_of(series, as_of)
+            known_today = [row for row in store.as_of(series, as_of) if row.month <= start]
             if known_today:
                 column[0] = float(known_today[-1].value)
             known_facts = {row.month: float(row.value) for row in store.as_of(series, known_on)}
@@ -190,14 +191,15 @@ def portfolio_exclusions(batch: Batch) -> list[dict]:
 
 
 def _window_start(as_of: date, panel: Panel) -> date:
-    """The calculation month of the window: the last month of the panel, which ``as_of`` names."""
+    """Month ``t = 0`` of the window: the last month of the panel, not after the month of
+    ``as_of``; an earlier month when the values of the calculation month are not out yet."""
     if not panel.months:
-        raise ValueError("the panel has no month: the calculation month of the window is unknown")
+        raise ValueError("the panel has no month: month t = 0 of the window is unknown")
     start = panel.months[-1]
-    if start != as_of.replace(day=1):
+    if start > as_of.replace(day=1):
         raise ValueError(
-            f"the panel ends at {start:%Y-%m}, the calculation date {as_of:%Y-%m-%d} is another "
-            "month: t = 0 of the window must be the calculation month"
+            f"the panel ends at {start:%Y-%m}, after the calculation date {as_of:%Y-%m-%d}: "
+            "the panel holds a month the date cannot know"
         )
     return start
 
