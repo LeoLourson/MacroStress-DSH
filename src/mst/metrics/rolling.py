@@ -34,14 +34,32 @@ from mst.model_sdk import ShortHistory
 from . import levels, scores
 from .decision import verdict
 from .episodes import Episodes, calculation_date, load_episodes
-from .prepare import prepare
+from .prepare import prepare, simulated
 from .tables import print_decision, print_dropped, print_judgement
-from .windows import MACRO_ONLY, Scope, Window, extend, facts, open_window, simulate
+from .windows import MACRO_ONLY, Scope, Window, extend, facts, open_window
 
 UNIT = "date"
 """The key of a grid date in the rows."""
 HISTORY_MONTHS = 24
 """The grid starts this many months into the history, whatever the model asks for itself."""
+
+
+def _grid_window(plugin, store, registry, plan, when, root, known_on, inputs, scope) -> Window:
+    """The window of a grid date with the levels of the scope attached."""
+    window = open_window(
+        plugin,
+        store,
+        registry,
+        plan,
+        id_=when.isoformat(),
+        start=when,
+        half=half_of(when, plan),
+        root=root,
+        known_on=known_on,
+        inputs=inputs,
+    )
+    extend(window, store, root, scope)
+    return window
 
 
 def rolling_report(
@@ -79,28 +97,20 @@ def rolling_report(
         drivers=scope.drivers,
         workers=workers,
     )
+    found = simulated(
+        _grid_window,
+        [(plugin, store, registry, plan, when, root, known_on, inputs, scope) for when in dates],
+        registry,
+        plan,
+        workers=workers,
+    )
     windows, skipped, refused = [], {}, {}
-    for when in dates:
-        try:
-            window = open_window(
-                plugin,
-                store,
-                registry,
-                plan,
-                id_=when.isoformat(),
-                start=when,
-                half=half_of(when, plan),
-                root=root,
-                known_on=known_on,
-                inputs=inputs,
-            )
-            extend(window, store, root, scope)
-        except ValueError as error:
+    for when, window in zip(dates, found, strict=True):
+        if isinstance(window, str):
             short = _short_of_history(store, registry, calculation_date(when))
-            (skipped if short else refused)[when.isoformat()] = str(error)
-            continue
-        simulate(window, registry, plan)
-        windows.append(window)
+            (skipped if short else refused)[when.isoformat()] = window
+        else:
+            windows.append(window)
     found = [cell for window in windows for cell in levels.cells(window, registry, plan)]
     rows = levels.rows(found, UNIT, {window.id: window.half for window in windows})
     block = block_dates(plan)

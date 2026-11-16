@@ -24,7 +24,7 @@ from mst.data.store import SeriesStore
 from mst.macro.registry import Registry
 from mst.model_sdk.checkpoint import report
 
-from .windows import _data_key, cached, macro_name, satellite_name
+from .windows import Window, _data_key, cached, macro_name, satellite_name, simulate
 
 THREADS = ("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS")
 """The variables that set the threads of the linear algebra a worker process starts with."""
@@ -71,6 +71,40 @@ def prepare(
             continue
         tasks.append((name, when, data.root, root, drivers))
     _run("satellite bundles", _satellites, tasks, workers)
+
+
+def simulated(
+    build: Callable[..., Window], items: list[tuple], registry, plan, *, workers: int = 1
+) -> list[Window | str]:
+    """The windows ``build(*item)`` opens, simulated by ``workers`` processes, in the order of
+    ``items``; a window the build refuses gives the reason instead.
+
+    ``build`` is a module-level function, so a worker can run it; the windows read their
+    versions from the cache ``prepare`` filled. The simulation is seeded by the plan, so the
+    paths do not depend on the process that drew them.
+    """
+    tasks = [(build, item, registry, plan) for item in items]
+    count = min(workers, len(tasks))
+    if count <= 1:
+        return [_simulated(*task) for task in tasks]
+    report(f"windows: {len(tasks)} to simulate, {count} process(es)")
+    found: list[Window | str] = []
+    with _single_threaded(), ProcessPoolExecutor(max_workers=count) as pool:
+        futures = [pool.submit(_simulated, *task) for task in tasks]
+        for done, future in enumerate(futures, start=1):
+            found.append(future.result())
+            report(f"windows: {done} of {len(tasks)}")
+    return found
+
+
+def _simulated(build: Callable[..., Window], item: tuple, registry, plan) -> Window | str:
+    """One window opened and simulated; the reason when its build refuses it."""
+    try:
+        window = build(*item)
+    except ValueError as error:
+        return str(error)
+    simulate(window, registry, plan)
+    return window
 
 
 def _known(pointer: Path, folder: Path) -> bool:

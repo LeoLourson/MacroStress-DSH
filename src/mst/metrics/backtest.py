@@ -39,10 +39,10 @@ from . import levels, scores
 from .baselines import CONSTRAINT, CONSTRAINT_THRESHOLD, constraint_probabilities
 from .decision import verdict
 from .episodes import Episodes, calculation_date, load_episodes
-from .prepare import prepare
+from .prepare import prepare, simulated
 from .quality import relative
 from .tables import number, print_decision, print_dropped, print_judgement
-from .windows import Scope, Window, extend, file_digest, open_window, provenance, simulate
+from .windows import Scope, Window, extend, file_digest, open_window, provenance
 
 UNIT = "episode"
 """The key of an episode in the rows."""
@@ -104,19 +104,16 @@ def run(
     prepare(
         plugin, data, registry, dates, root, inputs=inputs, drivers=scope.drivers, workers=workers
     )
-    refused: dict[str, str] = {}
-    windows: list[Window] = []
-    for check in plan.episodes:
-        if only and check.id not in only:
-            continue
-        try:
-            window = _episode(plugin, data, registry, plan, check, root, as_of, inputs)
-            extend(window, data, root, scope)
-        except ValueError as error:
-            refused[check.id] = str(error)
-            continue
-        simulate(window, registry, plan)
-        windows.append(window)
+    found = simulated(
+        _episode_window,
+        [(plugin, data, registry, plan, check, root, as_of, inputs, scope) for check in chosen],
+        registry,
+        plan,
+        workers=workers,
+    )
+    paired = zip(chosen, found, strict=True)
+    refused = {check.id: window for check, window in paired if isinstance(window, str)}
+    windows: list[Window] = [window for window in found if not isinstance(window, str)]
     report = _report(
         windows,
         plan,
@@ -158,6 +155,13 @@ def run(
             bench.results(plan.path.parent), plugin.model_id, plain, tables.getvalue()
         )
     return 1 if refused or report["admission_failed"] else 0
+
+
+def _episode_window(plugin, data, registry, plan, check, root, known_on, inputs, scope) -> Window:
+    """The window of an episode with the levels of the scope attached."""
+    window = _episode(plugin, data, registry, plan, check, root, known_on, inputs)
+    extend(window, data, root, scope)
+    return window
 
 
 def _episode(

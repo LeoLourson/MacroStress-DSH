@@ -494,6 +494,17 @@ def test_a_position_without_a_served_driver_leaves_out_only_itself(workspace, tm
     assert all("share_price" in found["gazp"] for found in excluded.values())
 
 
+def test_windows_simulated_by_a_pool_give_the_report_of_one_process(workspace, tmp_path):
+    plan = plan_file(tmp_path, [("R1", "gl.brent"), ("R2", "ru.key_rate")])
+
+    _, serial = run_episodes(workspace, plan, tmp_path, name="serial.json", workers=1)
+    _, pooled = run_episodes(workspace, plan, tmp_path, name="pooled.json", workers=2)
+
+    # The draws are seeded by the plan, so the process that drew them changes nothing.
+    assert pooled["levels"] == serial["levels"]
+    assert pooled["quantities"] == serial["quantities"]
+
+
 def test_an_unknown_portfolio_is_a_named_error(workspace, tmp_path):
     plan = plan_file(tmp_path, [("R1", "gl.brent"), ("R2", "ru.key_rate")])
 
