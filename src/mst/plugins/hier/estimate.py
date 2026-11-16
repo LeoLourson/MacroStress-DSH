@@ -32,7 +32,7 @@ history column.
 from dataclasses import dataclass, field, replace
 
 import numpy as np
-from scipy.linalg import cho_solve_banded, cholesky_banded, solve_banded
+from scipy.linalg import lapack
 from scipy.special import ndtr, ndtri
 
 from mst.drivers.history import History
@@ -88,6 +88,14 @@ class Path:
     """(n, m (L + 1)) the ``x`` part of ``z_t`` for months ``first .. last``."""
     path: np.ndarray
     """(n,) the driver over months ``first .. last``; observed or drawn."""
+    weights: np.ndarray = field(init=False)
+    """(o, n) the weights of the observations on the path: every observation is the mean of
+    the ``span`` months it covers."""
+
+    def __post_init__(self) -> None:
+        self.weights = np.zeros((len(self.observed), len(self.path)))
+        for k, month in enumerate(self.observed - self.first):
+            self.weights[k, month - self.span + 1 : month + 1] = 1 / self.span
 
     @property
     def complete(self) -> bool:
@@ -98,13 +106,6 @@ class Path:
         n = len(self.path)
         z = np.column_stack([np.ones(n - 1), self.path[:-1], self.xpart[1:]])
         return z, self.path[1:]
-
-    def constraints(self) -> np.ndarray:
-        """(o, n) weights of the observations on the path."""
-        weights = np.zeros((len(self.observed), len(self.path)))
-        for k, month in enumerate(self.observed - self.first):
-            weights[k, month - self.span + 1 : month + 1] = 1 / self.span
-        return weights
 
 
 def path_of(hist: History, node: int, until: int | None = None) -> Path | None:
@@ -173,12 +174,16 @@ def draw_path(item: Path, gamma, centre, spread, sigma2: float, rng) -> np.ndarr
     shift[1:] += a / sigma2
     shift[:-1] -= rho * a / sigma2
     shift[0] += (intercept[0] / (1 - rho)) * (1 - rho**2) / sigma2
-    upper = cholesky_banded(banded)
-    draw = cho_solve_banded((upper, False), shift) + solve_banded(
-        (0, 1), upper, rng.standard_normal(n)
-    )
-    weights = item.constraints()
-    gain = cho_solve_banded((upper, False), weights.T)
+    # The sampler calls this every sweep for every incomplete path, so LAPACK is called
+    # directly: ``P = U'U`` once, then the mean and the gain in one solve with ``P``, and the
+    # noise ``U^-1 z`` whose covariance is ``P^-1``.
+    upper, info = lapack.dpbtrf(banded, lower=0)
+    if info:
+        raise np.linalg.LinAlgError("the precision of a driver's path is not definite")
+    weights = item.weights
+    solved, _ = lapack.dpbtrs(upper, np.column_stack([shift, weights.T]), lower=0)
+    noise, _ = lapack.dtbtrs(upper, rng.standard_normal(n), uplo="U")
+    draw, gain = solved[:, 0] + noise, solved[:, 1:]
     return draw + gain @ np.linalg.solve(weights @ gain, item.values - weights @ draw)
 
 
@@ -422,10 +427,18 @@ def fit(
 
 
 def _normal(precision: np.ndarray, shift: np.ndarray, rng) -> np.ndarray:
-    """A draw of ``N(precision^-1 shift, precision^-1)``."""
-    chol = np.linalg.cholesky(precision)
-    mean = np.linalg.solve(chol.T, np.linalg.solve(chol, shift))
-    return mean + np.linalg.solve(chol.T, rng.standard_normal(len(shift)))
+    """A draw of ``N(precision^-1 shift, precision^-1)``: ``L^-T (L^-1 shift + z)`` with
+    ``precision = L L'``.
+
+    The sampler draws a dozen coefficients a million times per estimate, so LAPACK is called
+    directly: the general solvers of numpy cost six times the arithmetic here.
+    """
+    root, info = lapack.dpotrf(precision, lower=1)
+    if info:
+        raise np.linalg.LinAlgError("the precision of a node's coefficients is not definite")
+    half, _ = lapack.dtrtrs(root, shift, lower=1)
+    draw, _ = lapack.dtrtrs(root, half + rng.standard_normal(len(shift)), lower=1, trans=1)
+    return draw
 
 
 def _stationary(draw: np.ndarray, precision, shift, spread, rho_max: float, rng) -> np.ndarray:
