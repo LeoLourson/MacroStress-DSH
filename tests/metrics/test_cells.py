@@ -121,16 +121,16 @@ def test_constraint_probabilities_are_not_applicable_to_a_point():
 
 def test_random_walk_gappy_history_uses_only_true_distance_pairs():
     # The gap must not join distant observations: only grid pairs at true distance three
-    # count, both ends known — [7, 6, 6, 7, 10], drift 2.4 a month. The compressed series of
-    # the old code read the changes [15, 15, 19] and a drift of 5.44.
+    # count, both ends known — [7, 6, 6, 7, 10], 7.2 a quarter. The compressed series of the
+    # old code read the changes [15, 15, 19] and a drift of 5.44.
     history = np.array([10.0, 12.0, 14.0, 17.0, np.nan, 20.0, 23.0, 25.0, 27.0, 33.0])
     draws = random_walk(history, 6, draws=50_000, seed=0, months=3)
     chg = np.array([7.0, 6.0, 6.0, 7.0, 10.0])
-    drift, noise = chg.mean() / 3, chg.std(ddof=0) / np.sqrt(3)
+    change, noise = chg.mean(), chg.std(ddof=0)
     # A group of three horizon months carries one 3-month change: after j months the mean is
     # last + j monthly shares of the change; month 3 holds one whole change, month 6 two.
-    assert np.allclose(draws.mean(axis=0), 33 + np.arange(1, 7) * drift / 3, atol=0.05)
-    assert draws.mean(axis=0)[2] == pytest.approx(33 + drift, abs=0.05)
+    assert np.allclose(draws.mean(axis=0), 33 + np.arange(1, 7) * change / 3, atol=0.05)
+    assert draws.mean(axis=0)[2] == pytest.approx(33 + change, abs=0.05)
     assert draws.std(axis=0)[2] == pytest.approx(noise, abs=0.05)
     assert draws.std(axis=0)[5] == pytest.approx(noise * np.sqrt(2), abs=0.05)
 

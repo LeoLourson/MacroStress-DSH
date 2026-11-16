@@ -121,32 +121,43 @@ def random_walk(
     *,
     draws: int,
     seed: int,
-    months: int = 1,
+    months: int | None = None,
     lower: float | None = None,
 ) -> np.ndarray:
     """A random walk with drift: the last value plus the trend and the noise of the changes.
 
-    ``history`` is the quantity in the model scale, one value a month; the drift and the noise
-    come from the changes between months exactly ``months`` apart on the calendar grid, so a
+    ``history`` is the quantity in the model scale on the monthly grid, NaN where unknown; the
+    drift and the noise come from the changes between months exactly ``months`` apart, so a
     gap does not join distant observations — a pair counts only when both of its ends are
-    known, and fewer than three pairs leave the walk NaN. ``months`` is the step of the walk.
-    A history that ends in NaN walks through its unknown months, so the first month of the
-    horizon is as many steps ahead as it really is. ``lower`` is the floor of the quantity.
+    known, and fewer than three pairs leave the walk NaN. ``months`` is the step of the walk,
+    by default the series' own (``observation_step``): a quarterly series walks by quarters,
+    each quarter's move spread evenly over its months. A history that ends in NaN walks
+    through its unknown months, so the first month of the horizon is as many steps ahead as it
+    really is. ``lower`` is the floor of the quantity.
     """
     y = np.asarray(history, dtype=float)
+    months = observation_step(y) if months is None else months
     changes = y[months:] - y[:-months]
     changes = changes[np.isfinite(changes)]
     if len(changes) < 3:
         return np.full((draws, horizon), np.nan)
-    drift, noise = float(np.mean(changes)) / months, float(np.std(changes)) / np.sqrt(months)
     seen = np.flatnonzero(np.isfinite(y))
     gap = len(y) - 1 - int(seen[-1])
+    blocks = -(-(horizon + gap) // months)
     rng = np.random.default_rng(seed)
-    steps = rng.normal(drift, noise, size=(draws, horizon + gap))
-    if months > 1:
-        # A year's move spread over its months, so every horizon month has a draw.
-        steps = np.repeat(steps / months, months, axis=1)[:, : horizon + gap]
+    moves = rng.normal(float(np.mean(changes)), float(np.std(changes)), size=(draws, blocks))
+    steps = np.repeat(moves / months, months, axis=1)[:, : horizon + gap]
     return _floored(y[seen[-1]] + np.cumsum(steps, axis=1)[:, gap:], lower)
+
+
+def observation_step(history: np.ndarray) -> int:
+    """The most common number of months between neighbouring known values of a history: 1 for
+    a monthly series, 3 for a quarterly one, 1 when fewer than two values are known."""
+    gaps = np.diff(np.flatnonzero(np.isfinite(np.asarray(history, dtype=float))))
+    if not len(gaps):
+        return 1
+    values, counts = np.unique(gaps, return_counts=True)
+    return int(values[np.argmax(counts)])
 
 
 def conditional_walk(

@@ -182,6 +182,19 @@ def test_the_walks_start_from_the_last_known_value_and_count_its_months():
     assert np.isfinite(knowing).all()
 
 
+def test_the_walk_of_a_quarterly_series_steps_by_quarters():
+    """A series published once a quarter has no two neighbouring months; its walk takes the
+    quarterly changes and spreads them over the months, so a year ahead holds four of them."""
+    quarters = np.cumsum(np.random.default_rng(10).normal(0.5, 1.0, 120))
+    y = np.full(360, np.nan)
+    y[2::3] = quarters
+    walk = random_walk(y, 12, draws=4000, seed=1)
+    assert np.isfinite(walk).all()
+    changes = np.diff(quarters)
+    assert walk[:, 11].std() == pytest.approx(2 * changes.std(), rel=0.05)
+    assert np.median(walk[:, 11]) == pytest.approx(quarters[-1] + 4 * changes.mean(), abs=0.1)
+
+
 def test_the_walks_read_the_floor_as_the_model_does():
     y = np.abs(np.random.default_rng(3).normal(0.0, 0.2, 100))
     assert random_walk(y, 12, draws=500, seed=1).min() < 0.0
