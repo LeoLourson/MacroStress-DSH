@@ -184,8 +184,8 @@ def _print_sanity(found: Mapping) -> None:
         marks = {rule: "**" if rule in entry["failed"] else "" for rule in (DOMAIN, WIDTH)}
         print(
             f"| {entry['level']} | {entry['quantity']} | {entry['cells']} "
-            f"| {marks[DOMAIN]}{entry['shares'][DOMAIN]:.3f}{marks[DOMAIN]} "
-            f"| {marks[WIDTH]}{entry['shares'][WIDTH]:.3f}{marks[WIDTH]} "
+            f"| {marks[DOMAIN]}{number(entry['shares'][DOMAIN])}{marks[DOMAIN]} "
+            f"| {marks[WIDTH]}{number(entry['shares'][WIDTH])}{marks[WIDTH]} "
             f"| {number(entry['width_to_range'])} | {toward} | {entry['benchmark'] or '-'} "
             f"| {number(entry['score'])} | {number(entry['without'])} |"
         )
@@ -201,7 +201,7 @@ def _print_sanity(found: Mapping) -> None:
         + (f" Over it: {'; '.join(failing)}." if failing else "")
     )
     pooled = ", ".join(
-        f"{rule} {rule_found['pooled']:.3f}" for rule, rule_found in admission["rules"].items()
+        f"{rule} {number(rule_found['pooled'])}" for rule, rule_found in admission["rules"].items()
     )
     print(f"Pooled over all {admission['cells']} cells, for reference only: {pooled}.")
 

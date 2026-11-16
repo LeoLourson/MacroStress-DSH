@@ -97,6 +97,27 @@ def test_the_admission_rules_are_read_apart_for_every_quantity():
     assert hidden["rules"][WIDTH]["quantities"] == ["q"]
 
 
+def test_the_width_rule_reads_only_the_cells_with_a_long_history():
+    """A cell without a history range (shorter than five years) is outside the width rule: its
+    row carries no verdict, and the share counts the cells the rule applies to, so the short
+    early windows neither fail a quantity nor dilute its share."""
+
+    def cell(month, draws, spread):
+        return Cell("e", month, "q", 0.0, np.asarray(draws, dtype=float), history_range=spread)
+
+    short = [cell(month, [0.0, 0.0, 100.0, 100.0], float("nan")) for month in range(1, 51)]
+    broken = [cell(month, [0.0, 0.0, 100.0, 100.0], 10.0) for month in range(1, 4)]
+    fine = [cell(month, [1.0, 2.0, 3.0, 4.0], 10.0) for month in range(1, 8)]
+    found = rows_of(short + broken + fine)
+    assert {row[WIDTH] for row in found[:50]} == {None}
+    admission = check(found)["admission"]
+    assert admission["rules"][WIDTH]["worst"] == pytest.approx(0.3)
+    assert admission["rules"][WIDTH]["pooled"] == pytest.approx(0.3)
+    only_short = check(rows_of(short))
+    assert only_short["quantities"][0]["shares"][WIDTH] is None
+    assert only_short["admission"]["failed"] is False
+
+
 def test_a_row_carries_every_comparison_and_the_move_of_the_scenario():
     draws = np.linspace(0.0, 4.0, 101)
     cell = Cell(

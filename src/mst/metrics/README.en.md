@@ -44,7 +44,7 @@ The first section of the report lists everything that did not enter the scores, 
 
 The second section is a table per quantity, read before the scores.
 
-- The share of cells whose band from the 5th to the 95th percentile leaves the admissible domain, and the share whose band is wider than the whole range of the history known on the date.
+- The share of cells whose band from the 5th to the 95th percentile leaves the admissible domain, and the share whose band is wider than the whole range of the history known on the date. The second rule reads only the cells whose history spans at least five years: the range of a short history is no yardstick for a band, and such a cell stays out of the share.
 - The median ratio of the band width to that range: 2 means a band twice as wide as the whole history, a number one reads without the unit of the series.
 - The share of cells where the scenario moved the median from the base run towards the fact. A move below a tenth of the base band is noise. Below one half the scenario pushes the forecast away from the fact.
 - The plain benchmark of the level, the quantity's score against it, and the score of the level without the quantity. When the latter differs much, the aggregate rests on that quantity.

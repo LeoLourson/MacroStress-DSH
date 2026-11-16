@@ -30,6 +30,8 @@ BUCKETS = (5.0, 50.0, 95.0)
 """The quantile edges of the calibration band, in percent."""
 BUCKET_EDGES = (0.05, 0.50, 0.95)
 """The same edges as shares, where the probability integral transform falls."""
+MIN_HISTORY_MONTHS = 60
+"""The shortest history, in months, whose range the width rule reads (``history_range``)."""
 
 
 @dataclass(frozen=True)
@@ -125,7 +127,15 @@ def typical_movement(history: np.ndarray, months: int) -> float:
 
 
 def history_range(history: np.ndarray) -> float:
-    """The range of the finite values of a history; NaN without a finite value."""
+    """The range of the finite values of a monthly history; NaN without a finite value or when
+    the known values span fewer than ``MIN_HISTORY_MONTHS`` months.
+
+    The range is the yardstick of the width rule, and the range of a short history is none: a
+    calibrated twelve-month band of a rate is wider than the two years it has seen. The span
+    runs from the first known month to the last, gaps included."""
     y = np.asarray(history, dtype=float)
-    known = y[np.isfinite(y)]
-    return float(known.max() - known.min()) if len(known) else float("nan")
+    seen = np.flatnonzero(np.isfinite(y))
+    if not len(seen) or seen[-1] - seen[0] + 1 < MIN_HISTORY_MONTHS:
+        return float("nan")
+    known = y[seen]
+    return float(known.max() - known.min())

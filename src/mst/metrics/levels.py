@@ -285,7 +285,7 @@ def rows(found: list[Cell], unit: str, half_of: Mapping[str, str]) -> list[dict]
             "width": float(band[2] - band[0]),
             "history_range": cell.history_range,
             DOMAIN: DOMAIN in broken,
-            WIDTH: WIDTH in broken,
+            WIDTH: WIDTH in broken if np.isfinite(cell.history_range) else None,
             "shift": None,
             "miss": None,
             "base_width": None,

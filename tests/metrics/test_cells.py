@@ -10,6 +10,7 @@ from mst.metrics.baselines import (
     random_walk,
 )
 from mst.metrics.cells import (
+    MIN_HISTORY_MONTHS,
     crps,
     finite_draws,
     history_range,
@@ -65,8 +66,23 @@ def test_typical_movement_is_the_median_absolute_change():
 
 
 def test_history_range_ignores_the_gaps():
-    assert history_range(np.array([1.0, np.nan, 4.0, 2.0])) == pytest.approx(3.0)
+    y = np.full(70, np.nan)
+    y[[0, 30, 69]] = [1.0, 4.0, 2.0]
+    assert history_range(y) == pytest.approx(3.0)
     assert np.isnan(history_range(np.array([np.nan, np.nan])))
+
+
+def test_a_history_shorter_than_five_years_has_no_range():
+    """The range of a short history is no yardstick for a band: a calibrated twelve-month band
+    of a rate is wider than the two years it has seen."""
+    y = np.arange(80, dtype=float)
+    assert np.isnan(history_range(y[:MIN_HISTORY_MONTHS - 1]))
+    assert history_range(y[:MIN_HISTORY_MONTHS]) == pytest.approx(MIN_HISTORY_MONTHS - 1)
+    # The span counts from the first known month to the last, gaps included.
+    sparse = np.full(MIN_HISTORY_MONTHS, np.nan)
+    sparse[[0, -1]] = [0.0, 5.0]
+    assert history_range(sparse) == pytest.approx(5.0)
+    assert MIN_HISTORY_MONTHS == 60
 
 
 def test_finite_draws_drops_the_non_finite_values():

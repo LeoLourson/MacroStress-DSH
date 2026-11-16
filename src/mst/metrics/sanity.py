@@ -68,7 +68,7 @@ def quantities(rows: Rows) -> list[dict]:
     for (level, quantity), own in sorted(groups.items()):
         others = [row for row in rows if row["level"] == level and row["quantity"] != quantity]
         benchmark = benchmark_of([row for row in rows if row["level"] == level])
-        shares = {rule: float(np.mean([bool(row[rule]) for row in own])) for rule in RULES}
+        shares = {rule: _share(own, rule) for rule in RULES}
         scored = benchmark is not None
         table.append(
             {
@@ -76,7 +76,11 @@ def quantities(rows: Rows) -> list[dict]:
                 "quantity": quantity,
                 "cells": len(own),
                 "shares": shares,
-                "failed": [rule for rule in RULES if shares[rule] >= ADMISSION_SHARE],
+                "failed": [
+                    rule
+                    for rule in RULES
+                    if shares[rule] is not None and shares[rule] >= ADMISSION_SHARE
+                ],
                 "width_to_range": _width_to_range(own),
                 "direction": _direction(own),
                 "benchmark": benchmark,
@@ -98,9 +102,10 @@ def admission(rows: Rows, table: Sequence[Mapping[str, object]]) -> dict:
     rules = {}
     for rule in RULES:
         failing = [entry for entry in table if rule in entry["failed"]]
+        known = [entry["shares"][rule] for entry in table if entry["shares"][rule] is not None]
         rules[rule] = {
-            "worst": max((entry["shares"][rule] for entry in table), default=0.0),
-            "pooled": float(np.mean([bool(row[rule]) for row in rows])) if rows else 0.0,
+            "worst": max(known, default=0.0),
+            "pooled": _share(rows, rule),
             "quantities": [entry["quantity"] for entry in failing],
         }
     return {
@@ -114,6 +119,13 @@ def admission(rows: Rows, table: Sequence[Mapping[str, object]]) -> dict:
 def worst_shares(found: Mapping[str, object]) -> dict[str, float]:
     """The share per rule the decision rule reads: the worst quantity's."""
     return {rule: float(entry["worst"]) for rule, entry in found["rules"].items()}
+
+
+def _share(rows: Rows, rule: str) -> float | None:
+    """The share of the cells breaking ``rule`` among the cells it applies to; a row whose
+    verdict is None — the width rule without a long enough history — is outside it."""
+    applied = [bool(row[rule]) for row in rows if row[rule] is not None]
+    return float(np.mean(applied)) if applied else None
 
 
 def _width_to_range(rows: Rows) -> float | None:
