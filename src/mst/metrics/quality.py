@@ -46,9 +46,7 @@ def relative(rows: Rows, model: str, benchmark: str) -> dict:
             for q, quantity in enumerate(cube["quantities"])
             if known[:, q].any()
         },
-        "cells": int(
-            (np.isfinite(cube["values"][model]) & np.isfinite(cube["values"][benchmark])).sum()
-        ),
+        "cells": cube["cells"],
         "left_out": int((~known).sum()),
     }
 
@@ -124,7 +122,8 @@ def _spread(logs_of, cube: dict, block: int, repetitions: int, seed: int) -> dic
 
 
 def _cube(rows: Rows, columns: Sequence[str], unit: str | None) -> dict | None:
-    """The rows as ``(units, months, quantities)`` arrays; ``None`` without a value."""
+    """The rows as ``(units, months, quantities)`` arrays, with the number of rows that hold
+    every column; ``None`` without a value."""
     chosen = [
         row
         for row in rows
@@ -162,7 +161,13 @@ def _cube(rows: Rows, columns: Sequence[str], unit: str | None) -> dict | None:
         for column in columns:
             values[column] = np.full((1, *counts.shape), np.nan)
             np.divide(totals[column], counts, out=values[column][0], where=counts > 0)
-    return {"units": len(units), "months": months, "quantities": quantities, "values": values}
+    return {
+        "units": len(units),
+        "months": months,
+        "quantities": quantities,
+        "values": values,
+        "cells": len(chosen),
+    }
 
 
 def _log_ratios(first: np.ndarray, second: np.ndarray, weights: np.ndarray) -> np.ndarray:

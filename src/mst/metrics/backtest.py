@@ -426,10 +426,11 @@ def print_report(report: dict) -> None:
     print("## Episodes: what fell out\n")
     print_dropped(report["dropped"], judged=len(report["episodes"]), unit="episodes")
     gate = report["constraint_gate"]
+    outcome = "failed" if gate["failed"] else "pass" if gate["applicable"] else "not checked"
     print(
         f"\n`{gate['rule']}`: {gate['applicable']} applicable constraint(s), "
         f"{gate['not_applicable']} not applicable (exact point constraints), "
-        f"threshold {gate['threshold']:.3f} — {'failed' if gate['failed'] else 'pass'}."
+        f"threshold {gate['threshold']:.3f} — {outcome}."
     )
     print_judgement(report, title="Episodes", reference_calibration=True)
     _print_utility(report)

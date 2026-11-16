@@ -29,6 +29,14 @@ def test_the_score_is_the_geometric_mean_of_the_ratios():
     assert found["by_horizon"] == pytest.approx({1: 1.0, 2: 1.0})
 
 
+def test_the_cells_of_a_comparison_count_every_paired_cell():
+    """Two quantities, two months and four dates are 16 cells, not the 4 groups they pool into;
+    a cell without the benchmark is not paired."""
+    rows = rows_of({"a": (1.0, 2.0), "b": (2.0, 1.0)})
+    rows[0]["walk"] = None
+    assert relative(rows, "model", "walk")["cells"] == 15
+
+
 def test_a_quantity_that_barely_moves_weighs_as_any_other():
     plain = relative(rows_of({"a": (1.0, 2.0), "b": (3.0, 3.0)}), "model", "walk")
     sticky = relative(rows_of({"a": (1.0, 2.0), "b": (0.003, 0.003)}), "model", "walk")

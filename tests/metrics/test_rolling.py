@@ -14,6 +14,7 @@ from datetime import date
 import numpy as np
 import pytest
 
+from mst.data.store import Observation, SeriesStore
 from mst.macro.registry import load_registry
 from mst.metrics import rolling, scores
 from mst.metrics.backtest import jsonable
@@ -247,6 +248,29 @@ def test_short_of_history_reads_the_data(tmp_path):
     registry = load_registry()
     assert rolling._short_of_history(store, registry, date(2020, 2, 15))
     assert not rolling._short_of_history(store, registry, date(2029, 1, 1))
+
+
+@pytest.mark.parametrize("short", ["ru.cpi", "ru.usdrub"])
+def test_one_short_series_leaves_out_itself_and_not_the_date(tmp_path, short):
+    """A seasonal series without a change into every calendar month, or a series with two
+    values, is short on its own: the model estimates without it, so a refusal on that date
+    is the model's and must not be read as a date short of history."""
+    store = simulated.series_store(tmp_path / "series", months=120, seed=14)
+    store.write(
+        short,
+        [
+            Observation(month, 100.0 + k, month, False)
+            for k, month in enumerate([date(2028, 11, 1), date(2028, 12, 1)])
+        ],
+    )
+    assert not rolling._short_of_history(store, load_registry(), date(2029, 1, 1))
+
+
+def test_a_date_where_every_series_is_short_is_short_of_history(tmp_path):
+    store = SeriesStore(tmp_path / "series")
+    for id_ in simulated.VARIABLES:
+        store.write(id_, [Observation(date(2020, 1, 1), 100.0, date(2020, 1, 1), False)])
+    assert rolling._short_of_history(store, load_registry(), date(2021, 1, 1))
 
 
 class ShortRate(WalkMacro):

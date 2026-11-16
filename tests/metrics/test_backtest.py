@@ -302,6 +302,9 @@ def test_a_fact_episode_reports_the_constraint_probability_as_not_applicable(
         len(episode["constraint_probabilities"]) for episode in report["episodes"]
     )
     assert gate["failed"] is False
+    # With no constraint applicable the gate checked nothing, and the report says so.
+    gate_line = next(line for line in out.splitlines() if "constraint_probability" in line)
+    assert "not checked" in gate_line and "pass" not in gate_line
     # Not a meaningless 0.00: the episode table says the probability is not applicable.
     episode_line = next(line for line in out.splitlines() if line.startswith("| R1 | 2023"))
     assert "n/a" in episode_line and "0.00 " not in episode_line

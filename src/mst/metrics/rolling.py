@@ -29,6 +29,8 @@ from pathlib import Path
 
 import numpy as np
 
+from mst.model_sdk import ShortHistory
+
 from . import levels, scores
 from .decision import verdict
 from .episodes import Episodes, calculation_date, load_episodes
@@ -126,27 +128,32 @@ def half_of(when: date, plan: Episodes) -> str:
 
 
 def _short_of_history(store, registry, as_of: date) -> bool:
-    """Whether the data known on a date cannot feed any model: a panel that cannot be built, or
-    a variable with fewer than three values. The data decide, not the wording of an error; a
-    variable the store never holds is no shortage of history."""
+    """Whether the data known on a date cannot feed any model: no variable keeps three values.
+
+    A variable short on its own — ``ShortHistory`` from the panel, or fewer than three values —
+    is left out, as the platform leaves it out of the estimate, so one short series never turns
+    a model's refusal into a date short of history. The data decide, not the wording of an
+    error; a variable the store never holds is no shortage of history."""
     from mst.macro.panel import build_panel
 
     held = [v for v in registry.variables if store.as_of(v.id, date.max)]
-    months = [row.month for v in held for row in store.as_of(v.id, as_of)]
-    if not months:
-        return True
-    seasonal = [v.id for v in held if v.seasonal]
-    try:
-        panel = build_panel(
-            store,
-            registry.model_copy(update={"variables": held}),
-            start=min(months),
-            as_of=as_of,
-            seasonal=seasonal,
-        )
-    except ValueError:
-        return True
-    return bool((np.isfinite(panel.y).sum(axis=0) < 3).any())
+    while held:
+        months = [row.month for v in held for row in store.as_of(v.id, as_of)]
+        if not months:
+            return True
+        try:
+            panel = build_panel(
+                store,
+                registry.model_copy(update={"variables": held}),
+                start=min(months),
+                as_of=as_of,
+                seasonal=[v.id for v in held if v.seasonal],
+            )
+        except ShortHistory as short:
+            held = [v for v in held if v.id not in short.variables]
+            continue
+        return not bool((np.isfinite(panel.y).sum(axis=0) >= 3).any())
+    return True
 
 
 def passed(report: dict) -> bool:
