@@ -36,7 +36,7 @@ from .contracts import Contract, Currency, Horizon, Identifier, Seed, Sha256
 from .drivers import bundle as satellite_bundle
 from .engine import run as calculate_run
 from .macro import version as macro_version
-from .metrics.baselines import DOMAIN, WIDTH
+from .metrics.baselines import RULES
 from .metrics.es import paired_difference
 from .plugin_sdk import FixedPaths, Position, RunOptions
 from .portfolio import report as portfolio_report
@@ -595,13 +595,13 @@ def _admission(checks: dict | None, diagnostics: dict | None = None) -> dict:
     """
     quantities = (checks or {}).get("paths") or {}
     shares = {}
-    for condition in (DOMAIN, WIDTH):
+    for condition in RULES:
         values = [float(row.get(condition, 0.0)) for row in quantities.values()]
         shares[condition] = float(np.mean(values)) if values else 0.0
     broken = [
         {"condition": condition, "quantity": quantity, "share": float(row.get(condition, 0.0))}
         for quantity, row in quantities.items()
-        for condition in (DOMAIN, WIDTH)
+        for condition in RULES
         if row.get(condition, 0.0) > 0.0
     ]
     driving = ((diagnostics or {}).get("driving_sd") or {}).get("share_above_limit")
@@ -766,17 +766,18 @@ def _macro_model_scale(registry, paths) -> np.ndarray:
 
 def _fan_problems(draws, history, domain) -> dict[str, float]:
     """The shares of the horizon months whose band breaks each admission rule."""
-    from .metrics.baselines import DOMAIN, WIDTH, band_problems
-    from .metrics.cells import history_range
+    from .metrics.baselines import band_problems
+    from .metrics.cells import history_range, move_ranges
 
     if draws.size == 0:
         return {}
-    spread = history_range(history) if history is not None else float("nan")
     months = draws.shape[1]
-    broken = {rule: 0 for rule in (DOMAIN, WIDTH)}
+    spread = history_range(history) if history is not None else float("nan")
+    moves = move_ranges(history, months) if history is not None else np.full(months, np.nan)
+    broken = {rule: 0 for rule in RULES}
     for t in range(months):
         for rule in band_problems(
-            draws[:, t], float("nan"), domain=domain, history_range=spread
+            draws[:, t], float("nan"), domain=domain, history_range=spread, move_range=moves[t]
         ):
             broken[rule] += 1
     return {rule: count / months for rule, count in broken.items()}

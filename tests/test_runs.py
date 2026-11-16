@@ -373,7 +373,7 @@ def test_a_scenario_without_conditions_and_interventions_has_no_comparison(
 
 
 def test_the_admission_limit_is_strict_and_weighs_every_quantity_equally():
-    from mst.metrics.baselines import DOMAIN, WIDTH
+    from mst.metrics.baselines import DOMAIN, MOVES, WIDTH
     from mst.runs import ADMISSION_LIMIT, _admission
 
     assert ADMISSION_LIMIT == 0.05
@@ -389,7 +389,7 @@ def test_the_admission_limit_is_strict_and_weighs_every_quantity_equally():
         }
     }
     found = _admission(mixed)
-    assert found["shares"] == {DOMAIN: 0.05, WIDTH: 0.1}
+    assert found["shares"] == {DOMAIN: 0.05, WIDTH: 0.1, MOVES: 0.0}
     assert found["admitted"] is False
     assert found["broken"] == [
         {"condition": WIDTH, "quantity": "macro/a", "share": 0.2},

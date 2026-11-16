@@ -4,7 +4,8 @@ The script reads a list of run ids of a workspace and prints, as JSON, what the 
 about the macro part of the plan's gates:
 
 - G2 and G3, on the base run, and G4, on every scenario run: the pooled shares of macro
-  cells whose band leaves the admissible domain or grows wider than the history, from
+  cells whose band breaks each admission rule of ``mst.metrics.baselines.RULES`` (leaves the
+  admissible domain, grows wider than the history or than its moves), from
   ``checks["paths"]`` of the run's ``meta.json``; the thresholds are the plan's, five
   percent, and the base and the scenarios are told apart by their run id, not by the script;
 - G5, on every scenario run: the largest portfolio gain as a multiple of the notional, from
@@ -24,7 +25,7 @@ from pathlib import Path
 
 import numpy as np
 
-from mst.metrics.baselines import DOMAIN, WIDTH
+from mst.metrics.baselines import RULES
 from mst.store import Workspace
 
 #: The plan's thresholds, fixed in advance.
@@ -64,14 +65,11 @@ def _one_run(folder: Path, run_id: str) -> dict:
     found |= _bound_touch(meta, folder)
     found["driving_sd"] = meta.get("diagnostics", {}).get("driving_sd")
     found["gates"] = {
-        "band_outside_domain_below_five_percent": (
-            found["macro_band_outside_domain"] is not None
-            and found["macro_band_outside_domain"] < SHARE_LIMIT
-        ),
-        "band_wider_than_history_below_five_percent": (
-            found["macro_band_wider_than_history"] is not None
-            and found["macro_band_wider_than_history"] < SHARE_LIMIT
-        ),
+        f"{rule}_below_five_percent": (
+            found[f"macro_{rule}"] is not None and found[f"macro_{rule}"] < SHARE_LIMIT
+        )
+        for rule in RULES
+    } | {
         "largest_gain_below_ten_notional": (
             found["largest_gain_of_notional"] is not None
             and found["largest_gain_of_notional"] < GAIN_LIMIT
@@ -87,14 +85,9 @@ def _macro_shares(meta: dict) -> dict:
         for key, values in (meta.get("checks", {}).get("paths") or {}).items()
         if key.startswith("macro/")
     }
-    if not cells:
-        return {"macro_band_outside_domain": None, "macro_band_wider_than_history": None}
     # Every cell's share is over the horizon months, so the pooled share is the mean over
     # the macro cells: the share of broken months of macro variables.
-    return {
-        "macro_band_outside_domain": _pooled(cells, DOMAIN),
-        "macro_band_wider_than_history": _pooled(cells, WIDTH),
-    }
+    return {f"macro_{rule}": _pooled(cells, rule) if cells else None for rule in RULES}
 
 
 def _pooled(cells: dict[str, dict], rule: str) -> float | None:

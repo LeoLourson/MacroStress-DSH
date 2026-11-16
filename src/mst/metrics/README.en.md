@@ -44,12 +44,13 @@ The first section of the report lists everything that did not enter the scores, 
 
 The second section is a table per quantity, read before the scores.
 
-- The share of cells whose band from the 5th to the 95th percentile leaves the admissible domain, and the share whose band is wider than the whole range of the history known on the date. The second rule reads only the cells whose history spans at least five years: the range of a short history is no yardstick for a band, and such a cell stays out of the share.
-- The median ratio of the band width to that range: 2 means a band twice as wide as the whole history, a number one reads without the unit of the series.
+- The share of cells whose band from the 5th to the 95th percentile leaves the admissible domain, and the share whose band is wider than the whole range of the history known on the date. The second rule reads only the cells whose history spans at least ten years: the range of a short history is no yardstick for a band, and such a cell stays out of the share.
+- The share of cells whose band is wider than the range of the quantity's changes over as many months as separate the cell's month from the last known value. The band forecasts such a change, so a year-ahead band is compared with the moves of a year, not with the range of the levels. A mean-reverting series moves less over a year than a walk, and this rule catches its band. The rule reads a history of at least five years: it holds many moves of a year even when the levels have covered a small part of their range.
+- The median ratios of the band width to both ranges: 2 means a band twice as wide as the whole history or as any move of the same length, numbers one reads without the unit of the series.
 - The share of cells where the scenario moved the median from the base run towards the fact. A move below a tenth of the base band is noise. Below one half the scenario pushes the forecast away from the fact.
 - The plain benchmark of the level, the quantity's score against it, and the score of the level without the quantity. When the latter differs much, the aggregate rests on that quantity.
 
-*Admission* is passed by every quantity on its own: fewer than 5 % of its cells may break each of the two band rules. One quantity over the threshold keeps the version out whatever the share over all cells, which the report prints for reference. On the episodes the probability of every interval observation under the base run must also be above 1 %. For an exact value that probability would measure the tolerance $\tau$, so point observations stay out of this threshold.
+*Admission* is passed by every quantity on its own: fewer than 5 % of its cells may break each of the three band rules. One quantity over the threshold keeps the version out whatever the share over all cells, which the report prints for reference. On the episodes the probability of every interval observation under the base run must also be above 1 %. For an exact value that probability would measure the tolerance $\tau$, so point observations stay out of this threshold.
 
 ## The relative score
 

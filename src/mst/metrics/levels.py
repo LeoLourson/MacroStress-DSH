@@ -33,6 +33,7 @@ from mst.model_sdk.bounds import lower_bounds, observed
 
 from .baselines import (
     DOMAIN,
+    MOVES,
     WIDTH,
     band_problems,
     conditional_walk,
@@ -41,7 +42,7 @@ from .baselines import (
     quantity_domain,
     random_walk,
 )
-from .cells import Cell, crps, finite_draws, history_range, pit, quantiles
+from .cells import Cell, crps, finite_draws, history_range, move_ranges, pit, quantiles
 from .episodes import Episodes
 from .valuation import conditional_paths, realized_paths, value
 from .windows import Window
@@ -95,6 +96,7 @@ def macro_cells(window: Window, registry: Registry, plan: Episodes) -> list[Cell
         )
         domain = macro_domain(registry.variable(id_))
         spread = history_range(history)
+        moves = move_ranges(history, window.horizon)
         for k in range(window.horizon):
             fact = window.realized[k, j]
             if np.isnan(fact):
@@ -112,6 +114,7 @@ def macro_cells(window: Window, registry: Registry, plan: Episodes) -> list[Cell
                     conditional=None if knowing is None else knowing[:, k],
                     constrained=(id_, k + 1) in pinned,
                     history_range=spread,
+                    move_range=float(moves[k]),
                     domain=domain,
                 )
             )
@@ -140,6 +143,7 @@ def driver_cells(window: Window, registry: Registry, plan: Episodes) -> list[Cel
         unverified = "outside_training_range" in paths.flags.get(driver, frozenset())
         domain = quantity_domain(declared)
         spread = history_range(own)
+        moves = move_ranges(own, len(window.months))
         for t, month in enumerate(window.months):
             fact = _driver_fact(window, series_of.get(driver), month, declared)
             if fact is None:
@@ -156,6 +160,7 @@ def driver_cells(window: Window, registry: Registry, plan: Episodes) -> list[Cel
                     naive=naive[:, t] if naive is not None else None,
                     base=None if base is None else base.paths[:, t + 1, k],
                     history_range=spread,
+                    move_range=float(moves[t]),
                     domain=domain,
                     unverified=unverified,
                 )
@@ -266,7 +271,11 @@ def rows(found: list[Cell], unit: str, half_of: Mapping[str, str]) -> list[dict]
             continue
         band = quantiles(draws)
         broken = band_problems(
-            draws, cell.fact, domain=cell.domain, history_range=cell.history_range
+            draws,
+            cell.fact,
+            domain=cell.domain,
+            history_range=cell.history_range,
+            move_range=cell.move_range,
         )
         row = {
             unit: cell.unit,
@@ -284,8 +293,10 @@ def rows(found: list[Cell], unit: str, half_of: Mapping[str, str]) -> list[dict]
             "inside": bool(band[0] <= cell.fact <= band[2]),
             "width": float(band[2] - band[0]),
             "history_range": cell.history_range,
+            "move_range": cell.move_range,
             DOMAIN: DOMAIN in broken,
             WIDTH: WIDTH in broken if np.isfinite(cell.history_range) else None,
+            MOVES: MOVES in broken if np.isfinite(cell.move_range) else None,
             "shift": None,
             "miss": None,
             "base_width": None,

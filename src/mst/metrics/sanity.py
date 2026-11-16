@@ -5,12 +5,13 @@ whole history of the series, a forecast pushed away from the fact by the scenari
 aggregate that rests on one quantity. This module reads the scored rows of either check — the
 episodes or the rolling grid, of any level — and answers per quantity:
 
-- **admission**: the share of cells whose ``[p5, p95]`` band leaves the admissible domain, and
-  the share whose band is wider than the whole range of the history known on the date. Each
-  quantity must stay under ``ADMISSION_SHARE`` on each rule; one quantity over it fails the
-  check, whatever the pooled share is;
-- **width**: the median ratio of the band width to that range — a number a reader can judge
-  without knowing the unit of the series;
+- **admission**: the share of cells whose ``[p5, p95]`` band leaves the admissible domain, the
+  share whose band is wider than the whole range of the history known on the date, and the
+  share whose band is wider than the range of the history's changes over as many months.
+  Each quantity must stay under ``ADMISSION_SHARE`` on each rule; one quantity over it fails
+  the check, whatever the pooled share is;
+- **width**: the median ratios of the band width to those two ranges — numbers a reader can
+  judge without knowing the unit of the series;
 - **direction**: where the scenario moved the median from the base run, the share of cells it
   moved towards the fact. Only a move larger than ``MOVED`` of the base band counts; below it
   the move is Monte-Carlo noise. Under one half the scenario pushes the forecast the wrong way;
@@ -21,7 +22,8 @@ The plain benchmark of a level is the first of ``BENCHMARKS`` its rows carry: th
 of a series, the historical simulation of a return (``benchmark_of``).
 
 A row carries ``quantity``, ``level``, ``month``, the CRPS columns (``model`` and the
-benchmarks') and the band columns: ``width`` (``p95 - p5``), ``history_range``, a boolean per
+benchmarks') and the band columns: ``width`` (``p95 - p5``), ``history_range``,
+``move_range``, a boolean per
 admission rule and, in the episodes, ``shift`` (median less the base run's median), ``miss``
 (fact less the base run's median) and ``base_width`` (the base run's band).
 """
@@ -30,12 +32,11 @@ from collections.abc import Mapping, Sequence
 
 import numpy as np
 
-from .baselines import DOMAIN, WIDTH
+from .baselines import RULES
 from .quality import relative
 
 ADMISSION_SHARE = 0.05
 """A quantity is admitted when fewer than this share of its cells break each admission rule."""
-RULES = (DOMAIN, WIDTH)
 MOVED = 0.1
 """The smallest move of the median, as a share of the base band, the direction reads."""
 BENCHMARKS = ("walk", "historical")
@@ -81,7 +82,8 @@ def quantities(rows: Rows) -> list[dict]:
                     for rule in RULES
                     if shares[rule] is not None and shares[rule] >= ADMISSION_SHARE
                 ],
-                "width_to_range": _width_to_range(own),
+                "width_to_range": _width_to(own, "history_range"),
+                "width_to_moves": _width_to(own, "move_range"),
                 "direction": _direction(own),
                 "benchmark": benchmark,
                 "score": relative(own, "model", benchmark)["score"] if scored else None,
@@ -128,12 +130,13 @@ def _share(rows: Rows, rule: str) -> float | None:
     return float(np.mean(applied)) if applied else None
 
 
-def _width_to_range(rows: Rows) -> float | None:
-    """The median band width over the history range, on the cells whose range is positive."""
+def _width_to(rows: Rows, yardstick: str) -> float | None:
+    """The median band width over the range ``yardstick`` names, on the cells whose range is
+    positive."""
     ratios = [
-        float(row["width"]) / float(row["history_range"])
+        float(row["width"]) / float(row[yardstick])
         for row in rows
-        if np.isfinite(row["history_range"]) and row["history_range"] > 0
+        if np.isfinite(row[yardstick]) and row[yardstick] > 0
     ]
     return float(np.median(ratios)) if ratios else None
 

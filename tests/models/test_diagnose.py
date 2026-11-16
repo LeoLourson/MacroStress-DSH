@@ -240,9 +240,21 @@ def write_run(
 def test_macro_gates_read_a_finished_run(tmp_path):
     variables = ["ru.usdrub", "ru.key_rate", "gl.fed_rate", "ru.spread_bbb", "ru.cpi"]
     checks = {
-        "macro/ru.usdrub": {"band_outside_domain": 0.0, "band_wider_than_history": 0.1},
-        "macro/ru.key_rate": {"band_outside_domain": 0.09, "band_wider_than_history": 0.2},
-        "driver/share_price:sibn": {"band_outside_domain": 0.9, "band_wider_than_history": 0.9},
+        "macro/ru.usdrub": {
+            "band_outside_domain": 0.0,
+            "band_wider_than_history": 0.1,
+            "band_wider_than_moves": 0.0,
+        },
+        "macro/ru.key_rate": {
+            "band_outside_domain": 0.09,
+            "band_wider_than_history": 0.2,
+            "band_wider_than_moves": 0.08,
+        },
+        "driver/share_price:sibn": {
+            "band_outside_domain": 0.9,
+            "band_wider_than_history": 0.9,
+            "band_wider_than_moves": 0.9,
+        },
     }
     changes = np.array([[1.0, 2.0], [-3.0, 5.0], [0.0, 0.0], [7.0, -1.0]])  # best path gains 6
     paths = np.zeros((4, 5, len(variables)))
@@ -263,6 +275,7 @@ def test_macro_gates_read_a_finished_run(tmp_path):
     # The driver cells do not count: the shares pool the macro cells only.
     assert row["macro_band_outside_domain"] == pytest.approx(0.045)
     assert row["macro_band_wider_than_history"] == pytest.approx(0.15)
+    assert row["macro_band_wider_than_moves"] == pytest.approx(0.04)
     assert row["largest_gain_of_notional"] == pytest.approx(6.0 / 10000.0)
     assert row["absurd"] == {
         "usdrub_above_300": 1.0,
@@ -277,6 +290,7 @@ def test_macro_gates_read_a_finished_run(tmp_path):
     assert row["gates"] == {
         "band_outside_domain_below_five_percent": True,
         "band_wider_than_history_below_five_percent": False,
+        "band_wider_than_moves_below_five_percent": True,
         "largest_gain_below_ten_notional": True,
     }
 

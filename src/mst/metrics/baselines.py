@@ -1,9 +1,12 @@
 """The admission rules and the baselines the scores are compared with.
 
-A version is admitted when fewer than five percent of its cells break each of two rules
-separately — the shares are pooled over every scored cell, not taken per quantity and not
-unioned: the ``[p5, p95]`` band lies inside the admissible domain of the quantity, and the
-width of the band does not exceed the range of the quantity over its history. A scenario also
+A version is admitted when fewer than five percent of its cells break each of three rules
+separately: the ``[p5, p95]`` band lies inside the admissible domain of the quantity, the width
+of the band does not exceed the range of the quantity over its history, and it does not exceed
+the range of the quantity's changes over as many months as the cell is ahead of the last known
+value. The second rule reads a history of ten years, the third one of five: a year-ahead band
+of a mean-reverting series wider than every move of a year it made is too wide, whatever the
+range of its levels. A scenario also
 has to be reachable: the share of the *base* run's paths that satisfy each constraint must be
 above one percent, or the scenario rests on a rare tail of the distribution. A constraint
 reconstructed as an exact point (``low == high``) cannot be met by a continuous draw, so its
@@ -28,6 +31,9 @@ import numpy as np
 
 DOMAIN = "band_outside_domain"
 WIDTH = "band_wider_than_history"
+MOVES = "band_wider_than_moves"
+RULES = (DOMAIN, WIDTH, MOVES)
+"""The admission rules of a band, in the order the reports print them."""
 
 
 def macro_domain(variable) -> tuple[float, float] | None:
@@ -80,15 +86,23 @@ CONSTRAINT_THRESHOLD = 0.01
 
 
 def band_problems(
-    draws: np.ndarray, fact: float, *, domain: tuple[float, float] | None, history_range: float
+    draws: np.ndarray,
+    fact: float,
+    *,
+    domain: tuple[float, float] | None,
+    history_range: float,
+    move_range: float,
 ) -> list[str]:
-    """The admission rules a cell breaks: its band against the domain and the history range."""
+    """The admission rules a cell breaks: its band against the domain, the history range and
+    the range of the history's changes; a NaN range leaves its rule out."""
     p05, _, p95 = np.percentile(np.asarray(draws, dtype=float), [5, 50, 95])
     problems = []
     if domain is not None and (p05 < domain[0] or p95 > domain[1]):
         problems.append(DOMAIN)
     if np.isfinite(history_range) and (p95 - p05) > history_range:
         problems.append(WIDTH)
+    if np.isfinite(move_range) and (p95 - p05) > move_range:
+        problems.append(MOVES)
     return problems
 
 

@@ -6,7 +6,7 @@ import pytest
 from mst.drivers.registry import Quantity
 from mst.macro.registry import load_registry
 from mst.metrics import levels
-from mst.metrics.baselines import DOMAIN, WIDTH, macro_domain, quantity_domain
+from mst.metrics.baselines import DOMAIN, MOVES, WIDTH, macro_domain, quantity_domain
 from mst.metrics.cells import Cell
 from mst.metrics.sanity import check
 from mst.model_sdk.contracts import Intervention, LinearConstraint, LinearTerm
@@ -116,6 +116,25 @@ def test_the_width_rule_reads_only_the_cells_with_a_long_history():
     only_short = check(rows_of(short))
     assert only_short["quantities"][0]["shares"][WIDTH] is None
     assert only_short["admission"]["failed"] is False
+
+
+def test_the_moves_rule_fails_a_band_wider_than_every_move_of_its_length():
+    """A band wider than every change the history made over as many months fails the moves
+    rule even where the history is too short for the width rule; a cell without moves carries
+    no verdict."""
+
+    def cell(month, moves):
+        return Cell(
+            "e", month, "q", 0.0, np.array([0.0, 0.0, 10.0, 10.0]), move_range=moves
+        )
+
+    found = rows_of([cell(1, 20.0), cell(2, 5.0), cell(3, float("nan"))])
+    assert [row[MOVES] for row in found] == [False, True, None]
+    assert [row[WIDTH] for row in found] == [None, None, None]
+    sanity = check(found)
+    assert sanity["quantities"][0]["shares"][MOVES] == pytest.approx(0.5)
+    assert sanity["quantities"][0]["failed"] == [MOVES]
+    assert sanity["quantities"][0]["width_to_moves"] == pytest.approx(1.25)
 
 
 def test_a_row_carries_every_comparison_and_the_move_of_the_scenario():

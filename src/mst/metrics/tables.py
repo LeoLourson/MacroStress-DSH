@@ -9,7 +9,7 @@ from collections.abc import Mapping
 
 import numpy as np
 
-from .baselines import DOMAIN, WIDTH
+from .baselines import DOMAIN, MOVES, RULES, WIDTH
 from .scores import HORIZONS, PAIRS
 
 PAIR_NAMES = [f"{first}/{second}" for first, second in PAIRS]
@@ -174,19 +174,21 @@ def _print_sanity(found: Mapping) -> None:
     admission = found["admission"]
     print(
         "\n| level | quantity | cells | band outside domain | band wider than history "
-        "| band / history range | toward the fact | benchmark | model / benchmark "
-        "| level without it |"
+        "| band wider than moves | band / history range | band / moves range | toward the fact "
+        "| benchmark | model / benchmark | level without it |"
     )
-    print("|---|---|---:|---:|---:|---:|---:|---|---:|---:|")
+    print("|---|---|---:|---:|---:|---:|---:|---:|---:|---|---:|---:|")
     for entry in found["quantities"]:
         direction = entry["direction"]
         toward = "-" if direction is None else number(direction["toward"])
-        marks = {rule: "**" if rule in entry["failed"] else "" for rule in (DOMAIN, WIDTH)}
+        marks = {rule: "**" if rule in entry["failed"] else "" for rule in RULES}
         print(
             f"| {entry['level']} | {entry['quantity']} | {entry['cells']} "
             f"| {marks[DOMAIN]}{number(entry['shares'][DOMAIN])}{marks[DOMAIN]} "
             f"| {marks[WIDTH]}{number(entry['shares'][WIDTH])}{marks[WIDTH]} "
-            f"| {number(entry['width_to_range'])} | {toward} | {entry['benchmark'] or '-'} "
+            f"| {marks[MOVES]}{number(entry['shares'][MOVES])}{marks[MOVES]} "
+            f"| {number(entry['width_to_range'])} | {number(entry['width_to_moves'])} "
+            f"| {toward} | {entry['benchmark'] or '-'} "
             f"| {number(entry['score'])} | {number(entry['without'])} |"
         )
     failing = [

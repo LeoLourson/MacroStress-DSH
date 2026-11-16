@@ -11,9 +11,11 @@ from mst.metrics.baselines import (
 )
 from mst.metrics.cells import (
     MIN_HISTORY_MONTHS,
+    MIN_MOVES_MONTHS,
     crps,
     finite_draws,
     history_range,
+    move_ranges,
     pit,
     quantiles,
     typical_movement,
@@ -66,23 +68,55 @@ def test_typical_movement_is_the_median_absolute_change():
 
 
 def test_history_range_ignores_the_gaps():
-    y = np.full(70, np.nan)
-    y[[0, 30, 69]] = [1.0, 4.0, 2.0]
+    y = np.full(130, np.nan)
+    y[[0, 60, 129]] = [1.0, 4.0, 2.0]
     assert history_range(y) == pytest.approx(3.0)
     assert np.isnan(history_range(np.array([np.nan, np.nan])))
 
 
-def test_a_history_shorter_than_five_years_has_no_range():
+def test_a_history_shorter_than_ten_years_has_no_range():
     """The range of a short history is no yardstick for a band: a calibrated twelve-month band
-    of a rate is wider than the two years it has seen."""
-    y = np.arange(80, dtype=float)
+    of a rate is wider than the range of the few years it has seen."""
+    y = np.arange(130, dtype=float)
     assert np.isnan(history_range(y[:MIN_HISTORY_MONTHS - 1]))
     assert history_range(y[:MIN_HISTORY_MONTHS]) == pytest.approx(MIN_HISTORY_MONTHS - 1)
     # The span counts from the first known month to the last, gaps included.
     sparse = np.full(MIN_HISTORY_MONTHS, np.nan)
     sparse[[0, -1]] = [0.0, 5.0]
     assert history_range(sparse) == pytest.approx(5.0)
-    assert MIN_HISTORY_MONTHS == 60
+    assert MIN_HISTORY_MONTHS == 120
+
+
+def test_move_ranges_read_the_changes_over_the_months_to_each_horizon_month():
+    """Month t of the horizon is t months from the last known value, so its yardstick is the
+    range of the history's t-month changes: 2, 4 and 6 apart in a line of slope 2 with one
+    jump."""
+    y = 2.0 * np.arange(MIN_MOVES_MONTHS, dtype=float)
+    y[30:] += 10.0
+    found = move_ranges(y, 3)
+    # One-month changes are 2 and once 12; two-month ones 4 and 14; three-month 6 and 16.
+    assert found == pytest.approx([10.0, 10.0, 10.0])
+
+
+def test_move_ranges_count_the_months_since_the_last_known_value():
+    """A series known two months before the end of the history is three months from month 1
+    of the horizon."""
+    y = np.arange(MIN_MOVES_MONTHS + 2, dtype=float) ** 2
+    y[-2:] = np.nan
+    known = y[:-2]
+    three = known[3:] - known[:-3]
+    assert move_ranges(y, 1)[0] == pytest.approx(three.max() - three.min())
+
+
+def test_move_ranges_need_five_years_and_a_pair_of_known_values():
+    y = np.arange(MIN_MOVES_MONTHS, dtype=float)
+    assert np.isnan(move_ranges(y[: MIN_MOVES_MONTHS - 1], 2)).all()
+    # Quarterly values: no pair of known values is one month apart.
+    quarterly = np.full(MIN_MOVES_MONTHS + 1, np.nan)
+    quarterly[::3] = np.arange(0, MIN_MOVES_MONTHS + 1, 3, dtype=float) ** 2
+    quarterly_found = move_ranges(quarterly, 3)
+    assert np.isnan(quarterly_found[:2]).all() and np.isfinite(quarterly_found[2])
+    assert MIN_MOVES_MONTHS == 60
 
 
 def test_finite_draws_drops_the_non_finite_values():
@@ -91,18 +125,22 @@ def test_finite_draws_drops_the_non_finite_values():
 
 def test_band_problems_name_the_rule_they_break():
     draws = np.array([-1.0, 0.0, 2.0, 3.0])
-    assert band_problems(draws, 0.0, domain=(0.0, 1.0), history_range=100.0) == [
-        "band_outside_domain"
-    ]
+    nan = float("nan")
+    assert band_problems(
+        draws, 0.0, domain=(0.0, 1.0), history_range=100.0, move_range=nan
+    ) == ["band_outside_domain"]
     wide = np.array([-50.0, 0.0, 10.0, 60.0])
-    assert band_problems(wide, 0.0, domain=None, history_range=10.0) == [
+    assert band_problems(wide, 0.0, domain=None, history_range=10.0, move_range=nan) == [
         "band_wider_than_history"
     ]
-    assert band_problems(draws, 0.0, domain=None, history_range=100.0) == []
-    # The conservative macro domain: a band below nought breaks it.
-    assert band_problems(draws, 0.0, domain=(0.0, np.inf), history_range=100.0) == [
-        "band_outside_domain"
+    assert band_problems(wide, 0.0, domain=None, history_range=nan, move_range=10.0) == [
+        "band_wider_than_moves"
     ]
+    assert band_problems(draws, 0.0, domain=None, history_range=100.0, move_range=100.0) == []
+    # The conservative macro domain: a band below nought breaks it.
+    assert band_problems(
+        draws, 0.0, domain=(0.0, np.inf), history_range=100.0, move_range=nan
+    ) == ["band_outside_domain"]
 
 
 def test_constraint_probabilities_count_the_paths_inside():

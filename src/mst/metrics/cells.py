@@ -6,7 +6,8 @@ the fact ``y``, the ``R`` draws of the forecast and the draws of every compariso
 cell: the random walk with drift (``baseline``), the walk that knows the scenario's path
 (``conditional``), the naive forecast of a target (``naive``) and the unconstrained run of the
 model (``base``). It also holds the range of the quantity's history known at the window's
-calculation date and the admissible domain, which the admission rules read.
+calculation date, the range of its changes over as many months as the cell is ahead of the last
+known value, and the admissible domain, which the admission rules read.
 
 CRPS is the integral of the squared distance between the forecast distribution and the fact;
 the sample estimator over the draws is ``E|X - y| - E|X - X'| / 2``, which penalises both bias
@@ -30,8 +31,10 @@ BUCKETS = (5.0, 50.0, 95.0)
 """The quantile edges of the calibration band, in percent."""
 BUCKET_EDGES = (0.05, 0.50, 0.95)
 """The same edges as shares, where the probability integral transform falls."""
-MIN_HISTORY_MONTHS = 60
+MIN_HISTORY_MONTHS = 120
 """The shortest history, in months, whose range the width rule reads (``history_range``)."""
+MIN_MOVES_MONTHS = 60
+"""The shortest history, in months, whose changes the moves rule reads (``move_ranges``)."""
 
 
 @dataclass(frozen=True)
@@ -63,6 +66,10 @@ class Cell:
     length the calculation date knows. The benchmark of a position and of the portfolio."""
     history_range: float = float("nan")
     """The range of the quantity's history known at the same date; the width rule reads it."""
+    move_range: float = float("nan")
+    """The range of the history's changes over the months from the last known value to the
+    cell's month (``move_ranges``); the moves rule reads it. NaN for a return, whose
+    ``history_range`` already is the range of the past returns of the same length."""
     domain: tuple[float, float] | None = None
     """The admissible range in the model scale; None when unbounded."""
     unverified: bool = False
@@ -131,11 +138,37 @@ def history_range(history: np.ndarray) -> float:
     the known values span fewer than ``MIN_HISTORY_MONTHS`` months.
 
     The range is the yardstick of the width rule, and the range of a short history is none: a
-    calibrated twelve-month band of a rate is wider than the two years it has seen. The span
-    runs from the first known month to the last, gaps included."""
+    calibrated twelve-month band of a rate is wider than the range of the few years it has
+    seen. The span runs from the first known month to the last, gaps included."""
     y = np.asarray(history, dtype=float)
     seen = np.flatnonzero(np.isfinite(y))
     if not len(seen) or seen[-1] - seen[0] + 1 < MIN_HISTORY_MONTHS:
         return float("nan")
     known = y[seen]
     return float(known.max() - known.min())
+
+
+def move_ranges(history: np.ndarray, horizon: int) -> np.ndarray:
+    """(horizon,) per month ``t`` of the horizon, the range of the history's changes over the
+    months between the last known value and ``t``; NaN where no pair of known values is that
+    far apart, and everywhere when the known values span fewer than ``MIN_MOVES_MONTHS`` months.
+
+    The band of month ``t`` is a forecast of the change from the last known value, so its
+    yardstick is how far the quantity moved over as many months, not the range of its levels:
+    a mean-reverting series moves less over a year than a walk would, and a short history has
+    seen many moves of a year but few of its levels. A series last known two months before the
+    end of the history is three months from month 1.
+    """
+    y = np.asarray(history, dtype=float)
+    found = np.full(horizon, np.nan)
+    seen = np.flatnonzero(np.isfinite(y))
+    if not len(seen) or seen[-1] - seen[0] + 1 < MIN_MOVES_MONTHS:
+        return found
+    gap = len(y) - 1 - seen[-1]
+    for t in range(horizon):
+        steps = t + 1 + gap
+        moves = y[steps:] - y[:-steps]
+        moves = moves[np.isfinite(moves)]
+        if len(moves):
+            found[t] = moves.max() - moves.min()
+    return found

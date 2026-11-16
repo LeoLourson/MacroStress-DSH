@@ -2,7 +2,7 @@
 
 import pytest
 
-from mst.metrics.baselines import DOMAIN, WIDTH
+from mst.metrics.baselines import DOMAIN, MOVES, WIDTH
 from mst.metrics.sanity import check, worst_shares
 
 
@@ -18,6 +18,7 @@ def row(
     outside=False,
     width=1.0,
     history=10.0,
+    moves=10.0,
     shift=None,
     miss=None,
     base_width=1.0,
@@ -31,8 +32,10 @@ def row(
         "walk": walk,
         "width": width,
         "history_range": history,
+        "move_range": moves,
         DOMAIN: outside,
         WIDTH: wide,
+        MOVES: False,
         "shift": shift,
         "miss": miss,
         "base_width": base_width,
@@ -50,7 +53,11 @@ def test_one_quantity_over_the_share_fails_whatever_the_pool():
     assert width["worst"] == pytest.approx(3 / 40)
     assert width["quantities"] == ["c"]
     assert found["admission"]["failed"]
-    assert worst_shares(found["admission"]) == {DOMAIN: 0.0, WIDTH: pytest.approx(3 / 40)}
+    assert worst_shares(found["admission"]) == {
+        DOMAIN: 0.0,
+        WIDTH: pytest.approx(3 / 40),
+        MOVES: 0.0,
+    }
     assert [entry["failed"] for entry in found["quantities"]] == [[], [], [WIDTH]]
 
 
