@@ -28,6 +28,7 @@ from datetime import date
 
 import numpy as np
 
+from mst.macro.panel import build_panel, deseasonalize
 from mst.macro.registry import Registry
 from mst.model_sdk.bounds import lower_bounds, observed
 
@@ -73,6 +74,7 @@ def macro_cells(window: Window, registry: Registry, plan: Episodes) -> list[Cell
     column_of = {id_: i for i, id_ in enumerate(draws.ids)}
     pinned = _pinned(window.scenario.constraints) | _installed(window.scenario.interventions)
     given = [panel.ids.index(id_) for id_ in window.constrained]
+    stored = stored_history(window, registry)
     found = []
     for j, id_ in enumerate(panel.ids):
         i = column_of.get(id_)
@@ -95,8 +97,8 @@ def macro_cells(window: Window, registry: Registry, plan: Episodes) -> list[Cell
             else None
         )
         domain = macro_domain(registry.variable(id_))
-        spread = history_range(history)
-        moves = move_ranges(history, window.horizon)
+        spread = history_range(stored[:, j])
+        moves = move_ranges(stored[:, j], window.horizon)
         for k in range(window.horizon):
             fact = window.realized[k, j]
             if np.isnan(fact):
@@ -119,6 +121,35 @@ def macro_cells(window: Window, registry: Registry, plan: Episodes) -> list[Cell
                 )
             )
     return found
+
+
+def stored_history(window: Window, registry: Registry) -> np.ndarray:
+    """(T, n) the panel's variables in the model scale over every month the store knows on the
+    calculation date, in the order of the panel and ending at its last month.
+
+    The band rules measure a band against the history of its quantity, not against the months a
+    model chose to estimate on: a model starting later must not meet a narrower yardstick, and
+    a window of a few years understates the range even of an exactly calibrated band. A
+    seasonal variable is deseasonalised with the profile of this longer history; a variable
+    with no change into some calendar month stays NaN, and no band rule reads it.
+    """
+    panel = window.panel
+    firsts = [
+        rows[0].month
+        for variable in registry.variables
+        if (rows := window.store.as_of(variable.id, window.as_of))
+    ]
+    full = build_panel(window.store, registry, start=min(firsts), as_of=window.as_of)
+    end = full.months.index(panel.months[-1]) + 1
+    months = full.months[:end]
+    y = full.y[:end, [full.ids.index(id_) for id_ in panel.ids]]
+    for j, id_ in enumerate(panel.ids):
+        if registry.variable(id_).seasonal:
+            try:
+                y[:, j] = deseasonalize(y[:, j], months)
+            except ValueError:
+                y[:, j] = np.nan
+    return y
 
 
 def driver_cells(window: Window, registry: Registry, plan: Episodes) -> list[Cell]:

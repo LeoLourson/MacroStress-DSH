@@ -62,8 +62,11 @@ class FakeMacro(MacroModel):
     label = "Fake macro"
     variables = VARIABLES
 
-    def __init__(self):
+    def __init__(self, window: int | None = None):
         self.calls = []
+        self.window = window
+        """The last months of the store the panel keeps, as a model starting later would;
+        None keeps them all."""
 
     def estimate(self, context: MacroEstimateContext) -> MacroEstimate:
         self.calls.append(context.as_of)
@@ -71,7 +74,7 @@ class FakeMacro(MacroModel):
         ids = [id_ for id_ in VARIABLES if id_ in given]
         months, columns = [], []
         for id_ in ids:
-            rows = context.store.as_of(id_, context.as_of)
+            rows = context.store.as_of(id_, context.as_of)[-(self.window or 0) :]
             months = [row.month for row in rows]
             columns.append([row.value for row in rows])
         y = np.array(columns, dtype=float).T

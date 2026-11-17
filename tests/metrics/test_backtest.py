@@ -153,6 +153,32 @@ def test_the_monte_carlo_option_moves_no_other_field(workspace, tmp_path):
     assert low <= found["point"] <= high
 
 
+def test_the_band_rules_read_the_stored_history_not_the_model_window(
+    workspace, tmp_path, monkeypatch
+):
+    from mst.metrics import cells as rules
+
+    monkeypatch.setattr(rules, "MIN_HISTORY_MONTHS", 12)
+    workspace["macro"].window = 12
+    plan = plan_file(tmp_path, [("R1", "gl.brent"), ("R2", "gl.brent")])
+
+    _, report = run_episodes(workspace, plan, tmp_path)
+
+    as_of = calculation_date(date.fromisoformat(STARTS["R1"] + "-01"))
+    variable = load_registry().variable("ru.key_rate")
+    known = [variable.to_model(row.value) for row in workspace["store"].as_of("ru.key_rate", as_of)]
+    assert len(known) > 12
+    cells = [
+        cell
+        for cell in report["rows"]
+        if cell["quantity"] == "ru.key_rate" and cell["episode"] == "R1"
+    ]
+    assert cells
+    assert [cell["history_range"] for cell in cells] == pytest.approx(
+        [max(known) - min(known)] * len(cells)
+    )
+
+
 def test_the_details_file_holds_the_full_report(workspace, tmp_path):
     plan = plan_file(tmp_path, [("R1", "gl.brent"), ("R2", "ru.key_rate")])
 
@@ -435,9 +461,7 @@ def test_an_episode_the_satellite_estimation_cannot_serve_is_dropped_by_name(
 
     monkeypatch.setattr(models_pkg, "estimate_satellites", failing)
 
-    code, report = run_episodes(
-        workspace, plan, tmp_path, name="late.json", drivers=catalog
-    )
+    code, report = run_episodes(workspace, plan, tmp_path, name="late.json", drivers=catalog)
 
     # The first episode is named and dropped; the check goes on with the second.
     assert code == 1
@@ -513,9 +537,7 @@ def test_an_unknown_portfolio_is_a_named_error(workspace, tmp_path):
         run_episodes(workspace, plan, tmp_path, portfolio="absent")
     catalog = with_drivers(workspace, tmp_path)
     with pytest.raises(ValueError, match="no portfolio 'absent'"):
-        run_episodes(
-            workspace, plan, tmp_path, drivers=catalog, portfolio="absent"
-        )
+        run_episodes(workspace, plan, tmp_path, drivers=catalog, portfolio="absent")
 
 
 def test_the_decision_compares_two_reports_on_the_same_cells(workspace, tmp_path):
