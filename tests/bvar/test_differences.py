@@ -1,5 +1,7 @@
 """Variables whose equation runs on monthly changes: the version stores the levels form."""
 
+from datetime import date
+
 import numpy as np
 import pytest
 from pydantic import ValidationError
@@ -94,6 +96,43 @@ def test_a_differenced_variable_keeps_an_exact_unit_root_and_its_drift(volatilit
         means.append(np.linalg.solve(np.eye(3) - g[0], const)[1])
     low, high = np.quantile(means, [0.005, 0.995])
     assert low <= DRIFT[1] <= high
+
+
+def test_a_variable_the_platform_left_out_may_stay_in_the_differences(monkeypatch):
+    """A window whose history is too short for ru.x has no ru.x in its panel: the spec may
+    still difference it, the version stores the differences it was estimated with, and a
+    name neither in the panel nor left out is a typo."""
+    from types import SimpleNamespace
+
+    from mst.plugins.bvar import model as bvar_model
+    from mst.plugins.bvar.identify import identify as real_identify
+    from mst.plugins.bvar.signs import Shock
+
+    panel = sim.panel(sim.simulate(80, np.random.default_rng(0)))
+    spec = sim.spec(differences=["ru.b", "ru.x"], draws=10, burn=0)
+    shock = Shock(id="ru.t", label="t", rises=["ru.b"])
+    monkeypatch.setattr(bvar_model, "load_spec", lambda: spec)
+    monkeypatch.setattr(bvar_model, "build_panel", lambda *args, **kwargs: panel)
+    monkeypatch.setattr(
+        bvar_model,
+        "identify",
+        lambda posterior, shocks, **kwargs: real_identify(
+            posterior, [shock], sign_lag=0, tries=100, seed=1
+        ),
+    )
+
+    def context(left_out):
+        return SimpleNamespace(
+            store=None,
+            registry=SimpleNamespace(variables=[]),
+            as_of=date(2010, 1, 1),
+            left_out=left_out,
+        )
+
+    version = bvar_model.BvarModel().estimate(context({"ru.x": "too short"}))
+    assert version.meta["spec"]["differences"] == ["ru.b"]
+    with pytest.raises(ValueError, match="unknown variables: ru.x"):
+        bvar_model.BvarModel().estimate(context({}))
 
 
 def _drift_of(posterior, k: int, months: int = 240) -> np.ndarray:

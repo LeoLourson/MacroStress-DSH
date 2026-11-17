@@ -117,9 +117,14 @@ class BvarModel(MacroModel):
             seasonal=seasonal,
         )
         # A model estimated on the data known at a date cannot know a regime change after
-        # the last month of its history: the dummies of later months are left out.
+        # the last month of its history: the dummies of later months are left out. A variable
+        # the platform left out as too short has no equation to difference; any other name
+        # the panel lacks stays and is refused as unknown.
         spec = spec.model_copy(
-            update={"dummies": [d for d in spec.dummies if d.month <= panel.months[-1]]}
+            update={
+                "dummies": [d for d in spec.dummies if d.month <= panel.months[-1]],
+                "differences": [i for i in spec.differences if i not in context.left_out],
+            }
         )
         posterior = estimate(panel, spec)
         model = identify(

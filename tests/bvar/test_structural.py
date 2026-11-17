@@ -283,7 +283,10 @@ def test_a_fresh_estimation_stores_the_recursive_form(monkeypatch):
         ),
     )
     context = SimpleNamespace(
-        store=None, registry=SimpleNamespace(variables=[]), as_of=date(2010, 1, 1)
+        store=None,
+        registry=SimpleNamespace(variables=[]),
+        as_of=date(2010, 1, 1),
+        left_out={},
     )
     default = bvar_model.BvarModel().estimate(context)
     recursive = bvar_model.BvarModel().estimate_with_form(context, form="recursive")
