@@ -9,6 +9,30 @@ import pytest
 
 
 @pytest.fixture
+def collector(tmp_path, monkeypatch):
+    path = Path("bench/model-backtest/collect_evidence.py")
+    spec = importlib.util.spec_from_file_location("experiment_evidence", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    monkeypatch.setattr(module, "SOURCE", tmp_path)
+    return module
+
+
+def test_evidence_rejects_duplicate_cells_before_applying_verdict(collector):
+    folder = collector.SOURCE / "state"
+    folder.mkdir()
+    row = {"episode": "E1", "month": 1, "level": "macro", "quantity": "x"}
+    report = {"rows": [row]}
+    for half in ("tuning", "validation"):
+        (folder / f"{half}-episodes-{collector.PORTFOLIO}.json").write_text(
+            json.dumps(report), encoding="utf-8"
+        )
+    (folder / f"all-rolling-{collector.PORTFOLIO}.json").write_text("{}", encoding="utf-8")
+    with pytest.raises(ValueError, match="Duplicate episode cells"):
+        collector.evidence("state")
+
+
+@pytest.fixture
 def runner(tmp_path, monkeypatch):
     path = Path("bench/model-backtest/run_experiment.py")
     spec = importlib.util.spec_from_file_location("model_experiments", path)

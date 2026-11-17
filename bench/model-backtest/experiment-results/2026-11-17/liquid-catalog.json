@@ -1,0 +1,113 @@
+{
+  "quantities": {
+    "share_price": {
+      "objects": [
+        {
+          "id": "gazp",
+          "class": "company",
+          "label": "ГАЗПРОМ ао",
+          "parent": "oil_gas",
+          "codes": {
+            "emitter": [
+              "711"
+            ],
+            "inn": [
+              "7736050003"
+            ],
+            "isin": [
+              "RU0007661625"
+            ],
+            "secid": [
+              "GAZP"
+            ]
+          }
+        },
+        {
+          "id": "lkoh",
+          "class": "company",
+          "label": "ЛУКОЙЛ",
+          "parent": "oil_gas",
+          "codes": {
+            "emitter": [
+              "770"
+            ],
+            "inn": [
+              "7708004767"
+            ],
+            "isin": [
+              "RU0009024277"
+            ],
+            "secid": [
+              "LKOH"
+            ]
+          }
+        },
+        {
+          "id": "oil_gas",
+          "class": "sector",
+          "label": "Нефть и газ",
+          "parent": "shares",
+          "codes": {
+            "secid": [
+              "MOEXOG"
+            ]
+          }
+        },
+        {
+          "id": "rosn",
+          "class": "company",
+          "label": "Роснефть",
+          "parent": "oil_gas",
+          "codes": {
+            "emitter": [
+              "651"
+            ],
+            "inn": [
+              "7706107510"
+            ],
+            "isin": [
+              "RU000A0J2Q06"
+            ],
+            "secid": [
+              "ROSN"
+            ]
+          }
+        },
+        {
+          "id": "shares",
+          "class": "market",
+          "label": "Акции Московской биржи",
+          "parent": null,
+          "codes": {}
+        },
+        {
+          "id": "sibn",
+          "class": "company",
+          "label": "Газпрнефть",
+          "parent": "shares",
+          "codes": {
+            "emitter": [
+              "1039"
+            ],
+            "inn": [
+              "5504036333"
+            ],
+            "isin": [
+              "RU0009062467"
+            ],
+            "secid": [
+              "SIBN"
+            ]
+          }
+        }
+      ],
+      "drivers": [
+        "oil_gas",
+        "gazp",
+        "lkoh",
+        "rosn",
+        "sibn"
+      ]
+    }
+  }
+}

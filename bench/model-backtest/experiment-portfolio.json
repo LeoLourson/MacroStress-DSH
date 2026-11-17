@@ -1,0 +1,10 @@
+{
+  "name": "Фиксированный исследовательский портфель: LKOH, ROSN, GAZP, SIBN поровну",
+  "base_currency": "RUB",
+  "positions": [
+    {"id": "lkoh", "name": "ЛУКОЙЛ", "type": "common_stock", "currency": "RUB", "notional": 25000.0, "codes": {"secid": "LKOH"}, "terms": {}},
+    {"id": "rosn", "name": "Роснефть", "type": "common_stock", "currency": "RUB", "notional": 25000.0, "codes": {"secid": "ROSN"}, "terms": {}},
+    {"id": "gazp", "name": "Газпром", "type": "common_stock", "currency": "RUB", "notional": 25000.0, "codes": {"secid": "GAZP"}, "terms": {}},
+    {"id": "sibn", "name": "Газпром нефть", "type": "common_stock", "currency": "RUB", "notional": 25000.0, "codes": {"secid": "SIBN"}, "terms": {}}
+  ]
+}

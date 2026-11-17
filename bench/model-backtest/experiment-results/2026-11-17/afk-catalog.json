@@ -1,0 +1,137 @@
+{
+  "quantities": {
+    "share_price": {
+      "objects": [
+        {
+          "id": "etln",
+          "class": "company",
+          "label": "ЭталонГруп",
+          "parent": "real_estate",
+          "codes": {
+            "emitter": [
+              "10755"
+            ],
+            "inn": [
+              "3900042827"
+            ],
+            "isin": [
+              "RU000A10C1L6"
+            ],
+            "secid": [
+              "ETLN"
+            ]
+          }
+        },
+        {
+          "id": "it",
+          "class": "sector",
+          "label": "Информационные технологии",
+          "parent": "shares",
+          "codes": {
+            "secid": [
+              "MOEXIT"
+            ]
+          }
+        },
+        {
+          "id": "mtss",
+          "class": "company",
+          "label": "МТС-ао",
+          "parent": "telecom",
+          "codes": {
+            "emitter": [
+              "1352"
+            ],
+            "inn": [
+              "7740000076"
+            ],
+            "isin": [
+              "RU0007775219"
+            ],
+            "secid": [
+              "MTSS"
+            ]
+          }
+        },
+        {
+          "id": "ozon",
+          "class": "company",
+          "label": "Озон",
+          "parent": "it",
+          "codes": {
+            "emitter": [
+              "11384"
+            ],
+            "inn": [
+              "3900045916"
+            ],
+            "isin": [
+              "RU000A10CW95"
+            ],
+            "secid": [
+              "OZON"
+            ]
+          }
+        },
+        {
+          "id": "real_estate",
+          "class": "sector",
+          "label": "Строительные компании и недвижимость",
+          "parent": "shares",
+          "codes": {
+            "secid": [
+              "MOEXRE"
+            ]
+          }
+        },
+        {
+          "id": "sgzh",
+          "class": "company",
+          "label": "Сегежа",
+          "parent": "shares",
+          "codes": {
+            "emitter": [
+              "10856"
+            ],
+            "inn": [
+              "9703024202"
+            ],
+            "isin": [
+              "RU000A102XG9"
+            ],
+            "secid": [
+              "SGZH"
+            ]
+          }
+        },
+        {
+          "id": "shares",
+          "class": "market",
+          "label": "Акции Московской биржи",
+          "parent": null,
+          "codes": {}
+        },
+        {
+          "id": "telecom",
+          "class": "sector",
+          "label": "Телекоммуникации",
+          "parent": "shares",
+          "codes": {
+            "secid": [
+              "MOEXTL"
+            ]
+          }
+        }
+      ],
+      "drivers": [
+        "telecom",
+        "it",
+        "real_estate",
+        "etln",
+        "mtss",
+        "ozon",
+        "sgzh"
+      ]
+    }
+  }
+}

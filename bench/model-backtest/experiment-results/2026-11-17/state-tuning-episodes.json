@@ -1,0 +1,4441 @@
+{
+  "dropped": {
+    "refused": {},
+    "skipped": {},
+    "left_out": {
+      "R13": {
+        "ru.housing_price": "1 changes or intervals, the model needs 3",
+        "ru.output": "no change into calendar month 1 to estimate seasonality",
+        "share_price:gazp": "no driver of share_price has more than 12 usable months",
+        "share_price:lkoh": "no driver of share_price has more than 12 usable months",
+        "share_price:oil_gas": "no driver of share_price has more than 12 usable months",
+        "share_price:rosn": "no driver of share_price has more than 12 usable months",
+        "share_price:sibn": "no driver of share_price has more than 12 usable months"
+      },
+      "R14": {
+        "ru.housing_price": "1 changes or intervals, the model needs 3",
+        "share_price:gazp": "no driver of share_price has more than 12 usable months",
+        "share_price:lkoh": "no driver of share_price has more than 12 usable months",
+        "share_price:oil_gas": "no driver of share_price has more than 12 usable months",
+        "share_price:rosn": "no driver of share_price has more than 12 usable months",
+        "share_price:sibn": "no driver of share_price has more than 12 usable months"
+      },
+      "R15": {
+        "ru.housing_price": "1 changes or intervals, the model needs 3",
+        "share_price:gazp": "no driver of share_price has more than 12 usable months",
+        "share_price:lkoh": "no driver of share_price has more than 12 usable months",
+        "share_price:oil_gas": "no driver of share_price has more than 12 usable months",
+        "share_price:rosn": "no driver of share_price has more than 12 usable months",
+        "share_price:sibn": "no driver of share_price has more than 12 usable months"
+      },
+      "R16": {
+        "ru.housing_price": "1 changes or intervals, the model needs 3",
+        "share_price:gazp": "no driver of share_price has more than 12 usable months",
+        "share_price:lkoh": "no driver of share_price has more than 12 usable months",
+        "share_price:oil_gas": "no driver of share_price has more than 12 usable months",
+        "share_price:rosn": "no driver of share_price has more than 12 usable months",
+        "share_price:sibn": "no driver of share_price has more than 12 usable months"
+      },
+      "R17": {
+        "ru.housing_price": "2 changes or intervals, the model needs 3"
+      },
+      "G26": {
+        "ru.housing_price": "1 changes or intervals, the model needs 3",
+        "share_price:gazp": "no driver of share_price has more than 12 usable months",
+        "share_price:lkoh": "no driver of share_price has more than 12 usable months",
+        "share_price:oil_gas": "no driver of share_price has more than 12 usable months",
+        "share_price:rosn": "no driver of share_price has more than 12 usable months",
+        "share_price:sibn": "no driver of share_price has more than 12 usable months"
+      },
+      "G27": {
+        "ru.housing_price": "1 changes or intervals, the model needs 3",
+        "share_price:gazp": "no driver of share_price has more than 12 usable months",
+        "share_price:lkoh": "no driver of share_price has more than 12 usable months",
+        "share_price:oil_gas": "no driver of share_price has more than 12 usable months",
+        "share_price:rosn": "no driver of share_price has more than 12 usable months",
+        "share_price:sibn": "no driver of share_price has more than 12 usable months"
+      },
+      "G29": {
+        "ru.housing_price": "2 changes or intervals, the model needs 3"
+      }
+    },
+    "excluded": {
+      "R13": {
+        "lkoh": "the run serves no share_price for secid LKOH",
+        "rosn": "the run serves no share_price for secid ROSN",
+        "gazp": "the run serves no share_price for secid GAZP",
+        "sibn": "the run serves no share_price for secid SIBN"
+      },
+      "R14": {
+        "lkoh": "the run serves no share_price for secid LKOH",
+        "rosn": "the run serves no share_price for secid ROSN",
+        "gazp": "the run serves no share_price for secid GAZP",
+        "sibn": "the run serves no share_price for secid SIBN"
+      },
+      "R15": {
+        "lkoh": "the run serves no share_price for secid LKOH",
+        "rosn": "the run serves no share_price for secid ROSN",
+        "gazp": "the run serves no share_price for secid GAZP",
+        "sibn": "the run serves no share_price for secid SIBN"
+      },
+      "R16": {
+        "lkoh": "the run serves no share_price for secid LKOH",
+        "rosn": "the run serves no share_price for secid ROSN",
+        "gazp": "the run serves no share_price for secid GAZP",
+        "sibn": "the run serves no share_price for secid SIBN"
+      },
+      "R17": {
+        "lkoh": "the run serves no share_price for secid LKOH",
+        "rosn": "the run serves no share_price for secid ROSN",
+        "gazp": "the run serves no share_price for secid GAZP",
+        "sibn": "the run serves no share_price for secid SIBN"
+      },
+      "R18": {
+        "gazp": "the run serves no share_price for secid GAZP"
+      },
+      "R19": {
+        "gazp": "the run serves no share_price for secid GAZP"
+      },
+      "G26": {
+        "lkoh": "the run serves no share_price for secid LKOH",
+        "rosn": "the run serves no share_price for secid ROSN",
+        "gazp": "the run serves no share_price for secid GAZP",
+        "sibn": "the run serves no share_price for secid SIBN"
+      },
+      "G27": {
+        "lkoh": "the run serves no share_price for secid LKOH",
+        "rosn": "the run serves no share_price for secid ROSN",
+        "gazp": "the run serves no share_price for secid GAZP",
+        "sibn": "the run serves no share_price for secid SIBN"
+      },
+      "G29": {
+        "lkoh": "the run serves no share_price for secid LKOH",
+        "rosn": "the run serves no share_price for secid ROSN",
+        "gazp": "the run serves no share_price for secid GAZP",
+        "sibn": "the run serves no share_price for secid SIBN"
+      },
+      "G31": {
+        "gazp": "the run serves no share_price for secid GAZP"
+      }
+    },
+    "non_finite": {}
+  },
+  "sanity": {
+    "quantities": [
+      {
+        "level": "driver/share_price",
+        "quantity": "share_price:gazp",
+        "cells": 98,
+        "shares": {
+          "band_outside_domain": 0.0,
+          "band_wider_than_moves": null
+        },
+        "width_to_moves": null,
+        "direction": {
+          "moved": 26,
+          "cells": 98,
+          "toward": 0.9615384615384616
+        },
+        "benchmark": "walk",
+        "score": 0.8433458796054685,
+        "without": 0.895752478340809
+      },
+      {
+        "level": "driver/share_price",
+        "quantity": "share_price:lkoh",
+        "cells": 140,
+        "shares": {
+          "band_outside_domain": 0.0,
+          "band_wider_than_moves": null
+        },
+        "width_to_moves": null,
+        "direction": {
+          "moved": 17,
+          "cells": 140,
+          "toward": 0.7647058823529411
+        },
+        "benchmark": "walk",
+        "score": 0.9014235398766727,
+        "without": 0.8809621031296864
+      },
+      {
+        "level": "driver/share_price",
+        "quantity": "share_price:oil_gas",
+        "cells": 140,
+        "shares": {
+          "band_outside_domain": 0.0,
+          "band_wider_than_moves": null
+        },
+        "width_to_moves": null,
+        "direction": {
+          "moved": 30,
+          "cells": 140,
+          "toward": 0.7666666666666667
+        },
+        "benchmark": "walk",
+        "score": 0.9067680721801643,
+        "without": 0.8796611163733801
+      },
+      {
+        "level": "driver/share_price",
+        "quantity": "share_price:rosn",
+        "cells": 140,
+        "shares": {
+          "band_outside_domain": 0.0,
+          "band_wider_than_moves": null
+        },
+        "width_to_moves": null,
+        "direction": {
+          "moved": 22,
+          "cells": 140,
+          "toward": 0.8181818181818182
+        },
+        "benchmark": "walk",
+        "score": 0.909025596405683,
+        "without": 0.8791144572937456
+      },
+      {
+        "level": "driver/share_price",
+        "quantity": "share_price:sibn",
+        "cells": 140,
+        "shares": {
+          "band_outside_domain": 0.0,
+          "band_wider_than_moves": null
+        },
+        "width_to_moves": null,
+        "direction": {
+          "moved": 24,
+          "cells": 140,
+          "toward": 0.9166666666666666
+        },
+        "benchmark": "walk",
+        "score": 0.8664646446100942,
+        "without": 0.8897166924813067
+      },
+      {
+        "level": "macro",
+        "quantity": "gl.brent",
+        "cells": 140,
+        "shares": {
+          "band_outside_domain": 0.0,
+          "band_wider_than_moves": null
+        },
+        "width_to_moves": null,
+        "direction": {
+          "moved": 73,
+          "cells": 140,
+          "toward": 0.5068493150684932
+        },
+        "benchmark": "walk",
+        "score": 1.0718886966704289,
+        "without": 1.0250210433619227
+      },
+      {
+        "level": "macro",
+        "quantity": "gl.fed_rate",
+        "cells": 252,
+        "shares": {
+          "band_outside_domain": 0.0,
+          "band_wider_than_moves": null
+        },
+        "width_to_moves": null,
+        "direction": {
+          "moved": 61,
+          "cells": 252,
+          "toward": 0.6721311475409836
+        },
+        "benchmark": "walk",
+        "score": 0.9750670424556723,
+        "without": 1.0295194667634733
+      },
+      {
+        "level": "macro",
+        "quantity": "gl.ust_10y",
+        "cells": 238,
+        "shares": {
+          "band_outside_domain": 0.0,
+          "band_wider_than_moves": null
+        },
+        "width_to_moves": null,
+        "direction": {
+          "moved": 111,
+          "cells": 238,
+          "toward": 0.7837837837837838
+        },
+        "benchmark": "walk",
+        "score": 0.7750794756435763,
+        "without": 1.0405163140047555
+      },
+      {
+        "level": "macro",
+        "quantity": "gl.vix",
+        "cells": 196,
+        "shares": {
+          "band_outside_domain": 0.0,
+          "band_wider_than_moves": null
+        },
+        "width_to_moves": null,
+        "direction": {
+          "moved": 84,
+          "cells": 196,
+          "toward": 0.6428571428571429
+        },
+        "benchmark": "walk",
+        "score": 1.2599556973168715,
+        "without": 1.0174991800098638
+      },
+      {
+        "level": "macro",
+        "quantity": "ru.cnyrub",
+        "cells": 252,
+        "shares": {
+          "band_outside_domain": 0.0,
+          "band_wider_than_moves": null
+        },
+        "width_to_moves": null,
+        "direction": {
+          "moved": 160,
+          "cells": 252,
+          "toward": 0.8375
+        },
+        "benchmark": "walk",
+        "score": 0.6783553725732255,
+        "without": 1.046926816145668
+      },
+      {
+        "level": "macro",
+        "quantity": "ru.cpi",
+        "cells": 238,
+        "shares": {
+          "band_outside_domain": 0.0,
+          "band_wider_than_moves": null
+        },
+        "width_to_moves": null,
+        "direction": {
+          "moved": 91,
+          "cells": 238,
+          "toward": 0.6153846153846154
+        },
+        "benchmark": "walk",
+        "score": 0.9309563789025741,
+        "without": 1.0317051862649618
+      },
+      {
+        "level": "macro",
+        "quantity": "ru.credit",
+        "cells": 252,
+        "shares": {
+          "band_outside_domain": 0.0,
+          "band_wider_than_moves": null
+        },
+        "width_to_moves": null,
+        "direction": {
+          "moved": 125,
+          "cells": 252,
+          "toward": 0.536
+        },
+        "benchmark": "walk",
+        "score": 1.19206354193016,
+        "without": 1.020000122693825
+      },
+      {
+        "level": "macro",
+        "quantity": "ru.housing_price",
+        "cells": 14,
+        "shares": {
+          "band_outside_domain": 0.0,
+          "band_wider_than_moves": null
+        },
+        "width_to_moves": null,
+        "direction": {
+          "moved": 1,
+          "cells": 14,
+          "toward": 0.0
+        },
+        "benchmark": "walk",
+        "score": 1.1720824509451295,
+        "without": 1.0231043501338388
+      },
+      {
+        "level": "macro",
+        "quantity": "ru.imoex",
+        "cells": 252,
+        "shares": {
+          "band_outside_domain": 0.0,
+          "band_wider_than_moves": null
+        },
+        "width_to_moves": null,
+        "direction": {
+          "moved": 98,
+          "cells": 252,
+          "toward": 0.30612244897959184
+        },
+        "benchmark": "walk",
+        "score": 1.8655939333067733,
+        "without": 0.9991470167631353
+      },
+      {
+        "level": "macro",
+        "quantity": "ru.key_rate",
+        "cells": 168,
+        "shares": {
+          "band_outside_domain": 0.0,
+          "band_wider_than_moves": null
+        },
+        "width_to_moves": null,
+        "direction": {
+          "moved": 54,
+          "cells": 168,
+          "toward": 0.4074074074074074
+        },
+        "benchmark": "walk",
+        "score": 1.2995040975322434,
+        "without": 1.0158271032302677
+      },
+      {
+        "level": "macro",
+        "quantity": "ru.mortgage_rate",
+        "cells": 252,
+        "shares": {
+          "band_outside_domain": 0.0,
+          "band_wider_than_moves": null
+        },
+        "width_to_moves": null,
+        "direction": {
+          "moved": 68,
+          "cells": 252,
+          "toward": 0.4117647058823529
+        },
+        "benchmark": "walk",
+        "score": 1.1131134148238793,
+        "without": 1.0231806329879682
+      },
+      {
+        "level": "macro",
+        "quantity": "ru.ofz_10y",
+        "cells": 238,
+        "shares": {
+          "band_outside_domain": 0.0,
+          "band_wider_than_moves": null
+        },
+        "width_to_moves": null,
+        "direction": {
+          "moved": 120,
+          "cells": 238,
+          "toward": 0.7416666666666667
+        },
+        "benchmark": "walk",
+        "score": 0.9424877815676214,
+        "without": 1.0311119355941074
+      },
+      {
+        "level": "macro",
+        "quantity": "ru.ofz_1y",
+        "cells": 252,
+        "shares": {
+          "band_outside_domain": 0.0,
+          "band_wider_than_moves": null
+        },
+        "width_to_moves": null,
+        "direction": {
+          "moved": 143,
+          "cells": 252,
+          "toward": 0.7832167832167832
+        },
+        "benchmark": "walk",
+        "score": 0.7227213697436448,
+        "without": 1.0437972037048378
+      },
+      {
+        "level": "macro",
+        "quantity": "ru.ofz_5y",
+        "cells": 252,
+        "shares": {
+          "band_outside_domain": 0.0,
+          "band_wider_than_moves": null
+        },
+        "width_to_moves": null,
+        "direction": {
+          "moved": 147,
+          "cells": 252,
+          "toward": 0.6870748299319728
+        },
+        "benchmark": "walk",
+        "score": 1.037623074978019,
+        "without": 1.0266080655888106
+      },
+      {
+        "level": "macro",
+        "quantity": "ru.output",
+        "cells": 238,
+        "shares": {
+          "band_outside_domain": 0.0,
+          "band_wider_than_moves": null
+        },
+        "width_to_moves": null,
+        "direction": {
+          "moved": 44,
+          "cells": 238,
+          "toward": 0.7954545454545454
+        },
+        "benchmark": "walk",
+        "score": 0.8411273861763308,
+        "without": 1.0365674866905283
+      },
+      {
+        "level": "macro",
+        "quantity": "ru.real_wage",
+        "cells": 252,
+        "shares": {
+          "band_outside_domain": 0.0,
+          "band_wider_than_moves": null
+        },
+        "width_to_moves": null,
+        "direction": {
+          "moved": 76,
+          "cells": 252,
+          "toward": 0.34210526315789475
+        },
+        "benchmark": "walk",
+        "score": 1.1074097835437748,
+        "without": 1.0235090328903795
+      },
+      {
+        "level": "macro",
+        "quantity": "ru.retail",
+        "cells": 252,
+        "shares": {
+          "band_outside_domain": 0.0,
+          "band_wider_than_moves": null
+        },
+        "width_to_moves": null,
+        "direction": {
+          "moved": 79,
+          "cells": 252,
+          "toward": 0.20253164556962025
+        },
+        "benchmark": "walk",
+        "score": 1.1449615263859,
+        "without": 1.021932079899552
+      },
+      {
+        "level": "macro",
+        "quantity": "ru.ruonia",
+        "cells": 252,
+        "shares": {
+          "band_outside_domain": 0.0,
+          "band_wider_than_moves": null
+        },
+        "width_to_moves": null,
+        "direction": {
+          "moved": 123,
+          "cells": 252,
+          "toward": 0.7967479674796748
+        },
+        "benchmark": "walk",
+        "score": 0.7857456754293711,
+        "without": 1.0398420009265117
+      },
+      {
+        "level": "macro",
+        "quantity": "ru.spread_a",
+        "cells": 241,
+        "shares": {
+          "band_outside_domain": 0.0,
+          "band_wider_than_moves": null
+        },
+        "width_to_moves": null,
+        "direction": {
+          "moved": 109,
+          "cells": 241,
+          "toward": 0.4954128440366973
+        },
+        "benchmark": "walk",
+        "score": 1.1199877628720782,
+        "without": 1.022829913957659
+      },
+      {
+        "level": "macro",
+        "quantity": "ru.spread_aa",
+        "cells": 241,
+        "shares": {
+          "band_outside_domain": 0.0,
+          "band_wider_than_moves": null
+        },
+        "width_to_moves": null,
+        "direction": {
+          "moved": 109,
+          "cells": 241,
+          "toward": 0.5321100917431193
+        },
+        "benchmark": "walk",
+        "score": 0.9623325451540712,
+        "without": 1.0301687926402798
+      },
+      {
+        "level": "macro",
+        "quantity": "ru.spread_bbb",
+        "cells": 227,
+        "shares": {
+          "band_outside_domain": 0.0,
+          "band_wider_than_moves": null
+        },
+        "width_to_moves": null,
+        "direction": {
+          "moved": 63,
+          "cells": 227,
+          "toward": 0.5396825396825397
+        },
+        "benchmark": "walk",
+        "score": 1.2025227762882136,
+        "without": 1.0194824376126081
+      },
+      {
+        "level": "macro",
+        "quantity": "ru.unemployment",
+        "cells": 252,
+        "shares": {
+          "band_outside_domain": 0.0,
+          "band_wider_than_moves": null
+        },
+        "width_to_moves": null,
+        "direction": {
+          "moved": 93,
+          "cells": 252,
+          "toward": 0.3548387096774194
+        },
+        "benchmark": "walk",
+        "score": 1.0428572848830922,
+        "without": 1.0263518564675822
+      },
+      {
+        "level": "macro",
+        "quantity": "ru.usdrub",
+        "cells": 140,
+        "shares": {
+          "band_outside_domain": 0.0,
+          "band_wider_than_moves": null
+        },
+        "width_to_moves": null,
+        "direction": {
+          "moved": 81,
+          "cells": 140,
+          "toward": 0.7407407407407407
+        },
+        "benchmark": "walk",
+        "score": 0.9957417117948903,
+        "without": 1.028513218122785
+      },
+      {
+        "level": "portfolio",
+        "quantity": "model-trust-liquid",
+        "cells": 140,
+        "shares": {
+          "band_outside_domain": 0.0,
+          "band_wider_than_moves": null
+        },
+        "width_to_moves": null,
+        "direction": {
+          "moved": 26,
+          "cells": 140,
+          "toward": 0.9230769230769231
+        },
+        "benchmark": "historical",
+        "score": 0.8859852467488368,
+        "without": null
+      },
+      {
+        "level": "position",
+        "quantity": "gazp",
+        "cells": 98,
+        "shares": {
+          "band_outside_domain": 0.0,
+          "band_wider_than_moves": null
+        },
+        "width_to_moves": null,
+        "direction": {
+          "moved": 25,
+          "cells": 98,
+          "toward": 0.96
+        },
+        "benchmark": "historical",
+        "score": 0.8389587705013848,
+        "without": 0.8976520725467653
+      },
+      {
+        "level": "position",
+        "quantity": "lkoh",
+        "cells": 140,
+        "shares": {
+          "band_outside_domain": 0.0,
+          "band_wider_than_moves": null
+        },
+        "width_to_moves": null,
+        "direction": {
+          "moved": 16,
+          "cells": 140,
+          "toward": 0.75
+        },
+        "benchmark": "historical",
+        "score": 0.8728844054898665,
+        "without": 0.8858686496987938
+      },
+      {
+        "level": "position",
+        "quantity": "rosn",
+        "cells": 140,
+        "shares": {
+          "band_outside_domain": 0.0,
+          "band_wider_than_moves": null
+        },
+        "width_to_moves": null,
+        "direction": {
+          "moved": 20,
+          "cells": 140,
+          "toward": 0.85
+        },
+        "benchmark": "historical",
+        "score": 0.9613980432162205,
+        "without": 0.8578022206130949
+      },
+      {
+        "level": "position",
+        "quantity": "sibn",
+        "cells": 140,
+        "shares": {
+          "band_outside_domain": 0.0,
+          "band_wider_than_moves": null
+        },
+        "width_to_moves": null,
+        "direction": {
+          "moved": 23,
+          "cells": 140,
+          "toward": 0.9130434782608695
+        },
+        "benchmark": "historical",
+        "score": 0.8619144174208436,
+        "without": 0.889611105257605
+      }
+    ]
+  },
+  "admission": {
+    "criteria": {
+      "domain": {
+        "rule": "no band outside the domain",
+        "failed": []
+      },
+      "moves": {
+        "alpha": 0.0125,
+        "tests": [],
+        "untested": 0,
+        "failed": []
+      }
+    },
+    "failed": false
+  },
+  "levels": {
+    "driver/share_price": {
+      "units": 10,
+      "cells": 658,
+      "pairs": {
+        "model/walk": {
+          "score": 0.8850168924641977,
+          "by_horizon": {
+            "1": 0.8635053005335671,
+            "2": 0.7469257550819318,
+            "3": 0.7361356409243871,
+            "4": 0.8034863547579436,
+            "5": 0.8527361496398275,
+            "6": 0.8895561866643907,
+            "7": 0.9143122652573002,
+            "8": 0.9161831600909328,
+            "9": 0.929809027782873,
+            "10": 0.9455497929956618,
+            "11": 0.9507362890791866,
+            "12": 0.9747368203794188,
+            "13": 0.9595430660032978,
+            "14": 0.954306899581203
+          },
+          "by_quantity": {
+            "share_price:gazp": 0.8433458796054685,
+            "share_price:lkoh": 0.9014235398766727,
+            "share_price:oil_gas": 0.9067680721801643,
+            "share_price:rosn": 0.909025596405683,
+            "share_price:sibn": 0.8664646446100942
+          },
+          "cells": 658,
+          "left_out": 0,
+          "interval": {
+            "point": 0.8850168924641977,
+            "log_se": 0.06722432477240498,
+            "low": 0.7788182331342894,
+            "high": 0.9983745717980188
+          }
+        },
+        "base/walk": {
+          "score": 0.9791232632757518,
+          "by_horizon": {
+            "1": 0.9963407589064924,
+            "2": 0.9887311276324537,
+            "3": 0.983617629710358,
+            "4": 0.9818436626569618,
+            "5": 0.9812263274657683,
+            "6": 0.9881371471424288,
+            "7": 0.9880724786790501,
+            "8": 0.9856105735843957,
+            "9": 0.9889688466368896,
+            "10": 0.9751055035412135,
+            "11": 0.9726642845450442,
+            "12": 0.9736234431782265,
+            "13": 0.9532696523383073,
+            "14": 0.9516644946251009
+          },
+          "by_quantity": {
+            "share_price:gazp": 0.9239442464370294,
+            "share_price:lkoh": 0.9835313289076452,
+            "share_price:oil_gas": 1.0018388264445397,
+            "share_price:rosn": 1.0185834924102917,
+            "share_price:sibn": 0.9704169867364303
+          },
+          "cells": 658,
+          "left_out": 0,
+          "interval": {
+            "point": 0.9791232632757518,
+            "log_se": 0.01258806743320517,
+            "low": 0.9528852909821898,
+            "high": 1.0020075313474293
+          }
+        },
+        "model/base": {
+          "score": 0.9038871055961716,
+          "by_horizon": {
+            "1": 0.8666766794538092,
+            "2": 0.7554386973438046,
+            "3": 0.7483961436733846,
+            "4": 0.8183444934437256,
+            "5": 0.8690514367283694,
+            "6": 0.900235548513562,
+            "7": 0.9253493898338717,
+            "8": 0.9295589806418427,
+            "9": 0.9401803008707537,
+            "10": 0.9696897305591892,
+            "11": 0.9774557410873637,
+            "12": 1.001143539844889,
+            "13": 1.0065809434398778,
+            "14": 1.002776613996872
+          },
+          "by_quantity": {
+            "share_price:gazp": 0.9127670666900418,
+            "share_price:lkoh": 0.9165173628763151,
+            "share_price:oil_gas": 0.9051037434815985,
+            "share_price:rosn": 0.8924409272082744,
+            "share_price:sibn": 0.8928786866397157
+          },
+          "cells": 658,
+          "left_out": 0,
+          "interval": {
+            "point": 0.9038871055961716,
+            "log_se": 0.06381414097312196,
+            "low": 0.8020085393343681,
+            "high": 1.0223274652691974
+          }
+        },
+        "model/naive": {
+          "score": 0.7183589928053076,
+          "by_horizon": {
+            "1": 0.4085240749385847,
+            "2": 0.4818745778628348,
+            "3": 0.5034843452443519,
+            "4": 0.550747135120181,
+            "5": 0.6295232296835156,
+            "6": 0.6898948463144526,
+            "7": 0.833331476816476,
+            "8": 0.8538713803536934,
+            "9": 0.8415892059120412,
+            "10": 0.8675440555372911,
+            "11": 0.9357568500100854,
+            "12": 0.9514329179191889,
+            "13": 0.9447220403082383,
+            "14": 0.9406969503479704
+          },
+          "by_quantity": {
+            "share_price:gazp": 0.704775331862687,
+            "share_price:lkoh": 0.6842986638544365,
+            "share_price:oil_gas": 0.6814829209857719,
+            "share_price:rosn": 0.8378505579287387,
+            "share_price:sibn": 0.6946879059454993
+          },
+          "cells": 658,
+          "left_out": 0,
+          "interval": {
+            "point": 0.7183589928053076,
+            "log_se": 0.15635135736869404,
+            "low": 0.5073906398681888,
+            "high": 0.9439243915352482
+          }
+        }
+      },
+      "calibration": [
+        0.19148936170212766,
+        0.29027355623100304,
+        0.37537993920972645,
+        0.14285714285714285
+      ],
+      "calibration_by_horizon": {
+        "1": [
+          0.23404255319148937,
+          0.2765957446808511,
+          0.44680851063829785,
+          0.0425531914893617
+        ],
+        "3": [
+          0.19148936170212766,
+          0.2553191489361702,
+          0.44680851063829785,
+          0.10638297872340426
+        ],
+        "6": [
+          0.23404255319148937,
+          0.2553191489361702,
+          0.425531914893617,
+          0.0851063829787234
+        ],
+        "12": [
+          0.14893617021276595,
+          0.3404255319148936,
+          0.2978723404255319,
+          0.2127659574468085
+        ]
+      },
+      "coverage": 0.6641337386018237
+    },
+    "macro": {
+      "units": 18,
+      "cells": 5091,
+      "pairs": {
+        "model/conditional_walk": {
+          "score": 0.8532882741486377,
+          "by_horizon": {
+            "1": 0.8994225060951623,
+            "2": 0.8438696160351181,
+            "3": 0.8669636648259009,
+            "4": 0.863765023008665,
+            "5": 0.8753987515771544,
+            "6": 0.8779554491530012,
+            "7": 0.8922869409238454,
+            "8": 0.8894616536571675,
+            "9": 0.8718048061679462,
+            "10": 0.84488333681,
+            "11": 0.8249284784471518,
+            "12": 0.8002729461261181,
+            "13": 0.8022146794854103,
+            "14": 0.8021102514984206
+          },
+          "by_quantity": {
+            "gl.brent": 0.7563486558100078,
+            "gl.fed_rate": 0.9273311657562053,
+            "gl.ust_10y": 0.8518114009662582,
+            "gl.vix": 0.7388586071665838,
+            "ru.cnyrub": 1.136224413986038,
+            "ru.cpi": 1.0075110833607592,
+            "ru.credit": 0.9639547417157684,
+            "ru.imoex": 0.7287151454449926,
+            "ru.key_rate": 0.9997603008766077,
+            "ru.mortgage_rate": 0.961050195667075,
+            "ru.ofz_10y": 0.7976318008554224,
+            "ru.ofz_1y": 0.7576103557695628,
+            "ru.ofz_5y": 0.8595984471036516,
+            "ru.output": 0.8276974701866618,
+            "ru.real_wage": 0.892030951674609,
+            "ru.retail": 0.9205260344770313,
+            "ru.ruonia": 0.8321696416680422,
+            "ru.spread_a": 0.7086502162008396,
+            "ru.spread_aa": 0.7202395867252324,
+            "ru.spread_bbb": 0.7063838814594037,
+            "ru.unemployment": 0.7967550243146344,
+            "ru.usdrub": 1.0591490831451227
+          },
+          "cells": 5077,
+          "left_out": 0,
+          "interval": {
+            "point": 0.8532882741486377,
+            "log_se": 0.05058534981853926,
+            "low": 0.7803484117579319,
+            "high": 0.9419421371111153
+          }
+        },
+        "model/walk": {
+          "score": 1.0270438695626247,
+          "by_horizon": {
+            "1": 1.0087187971543297,
+            "2": 1.0980412116860514,
+            "3": 1.0713223612163922,
+            "4": 1.0781867995501049,
+            "5": 1.0492778531773341,
+            "6": 1.021024840245977,
+            "7": 1.0088044486566794,
+            "8": 1.040106348279936,
+            "9": 0.9671697181782454,
+            "10": 1.0010289420917218,
+            "11": 1.0134789658337222,
+            "12": 1.0188827674552479,
+            "13": 1.0071176158868267,
+            "14": 1.0033742847108307
+          },
+          "by_quantity": {
+            "gl.brent": 1.0718886966704289,
+            "gl.fed_rate": 0.9750670424556723,
+            "gl.ust_10y": 0.7750794756435763,
+            "gl.vix": 1.2599556973168715,
+            "ru.cnyrub": 0.6783553725732255,
+            "ru.cpi": 0.9309563789025741,
+            "ru.credit": 1.19206354193016,
+            "ru.housing_price": 1.1720824509451295,
+            "ru.imoex": 1.8655939333067733,
+            "ru.key_rate": 1.2995040975322434,
+            "ru.mortgage_rate": 1.1131134148238793,
+            "ru.ofz_10y": 0.9424877815676214,
+            "ru.ofz_1y": 0.7227213697436448,
+            "ru.ofz_5y": 1.037623074978019,
+            "ru.output": 0.8411273861763308,
+            "ru.real_wage": 1.1074097835437748,
+            "ru.retail": 1.1449615263859,
+            "ru.ruonia": 0.7857456754293711,
+            "ru.spread_a": 1.1199877628720782,
+            "ru.spread_aa": 0.9623325451540712,
+            "ru.spread_bbb": 1.2025227762882136,
+            "ru.unemployment": 1.0428572848830922,
+            "ru.usdrub": 0.9957417117948903
+          },
+          "cells": 5091,
+          "left_out": 5,
+          "interval": {
+            "point": 1.0270438695626247,
+            "log_se": 0.031250053011887775,
+            "low": 0.9639975496739684,
+            "high": 1.0865645563412443
+          }
+        },
+        "base/walk": {
+          "score": 0.9675998609893233,
+          "by_horizon": {
+            "1": 0.9888139862821896,
+            "2": 0.9927543604131069,
+            "3": 0.985712932717073,
+            "4": 0.9824029045103955,
+            "5": 0.9809302086029169,
+            "6": 0.977009381928263,
+            "7": 0.9708863438430875,
+            "8": 0.9650610782498156,
+            "9": 0.9546587120644024,
+            "10": 0.9573114145108238,
+            "11": 0.9568898484424105,
+            "12": 0.9507292139530085,
+            "13": 0.9452565094742879,
+            "14": 0.9399717227555009
+          },
+          "by_quantity": {
+            "gl.brent": 1.0054369635987976,
+            "gl.fed_rate": 0.9519865642209415,
+            "gl.ust_10y": 0.8655678245315184,
+            "gl.vix": 0.9393438987329759,
+            "ru.cnyrub": 1.0027363537726692,
+            "ru.cpi": 0.9507594163997954,
+            "ru.credit": 1.0467668424161123,
+            "ru.housing_price": 0.9989850639374018,
+            "ru.imoex": 1.0153295208669963,
+            "ru.key_rate": 1.0425889171636458,
+            "ru.mortgage_rate": 1.0570332386553338,
+            "ru.ofz_10y": 1.026207248633269,
+            "ru.ofz_1y": 1.0615487058590203,
+            "ru.ofz_5y": 1.0325704137246894,
+            "ru.output": 0.9196962428747888,
+            "ru.real_wage": 0.9984054257552843,
+            "ru.retail": 1.0029086264736373,
+            "ru.ruonia": 1.065375330534843,
+            "ru.spread_a": 0.8007173631832102,
+            "ru.spread_aa": 0.8355856605659128,
+            "ru.spread_bbb": 0.8176455235189013,
+            "ru.unemployment": 0.9048957838790135,
+            "ru.usdrub": 0.996592262981291
+          },
+          "cells": 5091,
+          "left_out": 5,
+          "interval": {
+            "point": 0.9675998609893233,
+            "log_se": 0.009965893620735074,
+            "low": 0.946879397960311,
+            "high": 0.984416814880074
+          }
+        },
+        "model/base": {
+          "score": 1.061434494743026,
+          "by_horizon": {
+            "1": 1.020129985162305,
+            "2": 1.1060552896782365,
+            "3": 1.0868502640655637,
+            "4": 1.0974996048972856,
+            "5": 1.0696763581904167,
+            "6": 1.0450512135623953,
+            "7": 1.039055142812597,
+            "8": 1.0777621973587606,
+            "9": 1.0131052133665532,
+            "10": 1.045666986644296,
+            "11": 1.0591385910127746,
+            "12": 1.0716855572564832,
+            "13": 1.065443724314518,
+            "14": 1.0674515630847563
+          },
+          "by_quantity": {
+            "gl.brent": 1.0660923911468085,
+            "gl.fed_rate": 1.0242445419947903,
+            "gl.ust_10y": 0.8954578181820493,
+            "gl.vix": 1.3413146122696378,
+            "ru.cnyrub": 0.6765042177048821,
+            "ru.cpi": 0.979171347497973,
+            "ru.credit": 1.1388052177681502,
+            "ru.housing_price": 1.1732732482760866,
+            "ru.imoex": 1.837427056896494,
+            "ru.key_rate": 1.2464204022689338,
+            "ru.mortgage_rate": 1.053054316664522,
+            "ru.ofz_10y": 0.9184185580669524,
+            "ru.ofz_1y": 0.6808179085469359,
+            "ru.ofz_5y": 1.004893284938413,
+            "ru.output": 0.9145708626003872,
+            "ru.real_wage": 1.1091784509344285,
+            "ru.retail": 1.141640919384391,
+            "ru.ruonia": 0.7375294442334314,
+            "ru.spread_a": 1.3987304564242558,
+            "ru.spread_aa": 1.1516862849253746,
+            "ru.spread_bbb": 1.4707140707050117,
+            "ru.unemployment": 1.152461204330823,
+            "ru.usdrub": 0.9991465404478896
+          },
+          "cells": 5091,
+          "left_out": 5,
+          "interval": {
+            "point": 1.061434494743026,
+            "log_se": 0.03086153186858495,
+            "low": 0.9999757901982369,
+            "high": 1.12826698995807
+          }
+        }
+      },
+      "calibration": [
+        0.11648006285602043,
+        0.4036535061873895,
+        0.3421724612060499,
+        0.13769396975054016
+      ],
+      "calibration_by_horizon": {
+        "1": [
+          0.07123287671232877,
+          0.4575342465753425,
+          0.36164383561643837,
+          0.1095890410958904
+        ],
+        "3": [
+          0.1232876712328767,
+          0.4465753424657534,
+          0.3013698630136986,
+          0.12876712328767123
+        ],
+        "6": [
+          0.10899182561307902,
+          0.4250681198910082,
+          0.33242506811989103,
+          0.1335149863760218
+        ],
+        "12": [
+          0.13165266106442577,
+          0.36694677871148457,
+          0.35294117647058826,
+          0.1484593837535014
+        ]
+      },
+      "coverage": 0.7450402671380868
+    },
+    "portfolio": {
+      "units": 10,
+      "cells": 140,
+      "pairs": {
+        "model/historical": {
+          "score": 0.8859852467488368,
+          "by_horizon": {
+            "1": 0.8687628672311292,
+            "2": 0.7671491625254866,
+            "3": 0.7777716420401654,
+            "4": 0.8496220106760992,
+            "5": 0.8974006681474996,
+            "6": 0.9228027209319691,
+            "7": 0.9271018071796155,
+            "8": 0.9163445660358649,
+            "9": 0.9150938334636937,
+            "10": 0.9290914752070466,
+            "11": 0.9223991118914497,
+            "12": 0.9309010815692133,
+            "13": 0.9104974070412558,
+            "14": 0.8916721818011939
+          },
+          "by_quantity": {
+            "model-trust-liquid": 0.8859852467488368
+          },
+          "cells": 140,
+          "left_out": 0,
+          "interval": {
+            "point": 0.8859852467488368,
+            "log_se": 0.06717975219323875,
+            "low": 0.7800642576421357,
+            "high": 0.9969011971658425
+          }
+        },
+        "base/historical": {
+          "score": 0.9722251578530999,
+          "by_horizon": {
+            "1": 1.018870228852489,
+            "2": 1.015114247993622,
+            "3": 1.0317345791879606,
+            "4": 1.0464152183251119,
+            "5": 1.0270096968906508,
+            "6": 1.0240293757273002,
+            "7": 0.9963472659125239,
+            "8": 0.9775585135118287,
+            "9": 0.9626556089833788,
+            "10": 0.9432375901959192,
+            "11": 0.9340767691695989,
+            "12": 0.9105079398064461,
+            "13": 0.8776641829698941,
+            "14": 0.8695668100563404
+          },
+          "by_quantity": {
+            "model-trust-liquid": 0.9722251578530999
+          },
+          "cells": 140,
+          "left_out": 0,
+          "interval": {
+            "point": 0.9722251578530998,
+            "log_se": 0.04189077959030479,
+            "low": 0.8868685946475735,
+            "high": 1.041987761357558
+          }
+        },
+        "model/base": {
+          "score": 0.9112963592767945,
+          "by_horizon": {
+            "1": 0.852672737537518,
+            "2": 0.7557269184643606,
+            "3": 0.75384857474906,
+            "4": 0.8119358317781358,
+            "5": 0.8737996056555725,
+            "6": 0.9011486806973321,
+            "7": 0.9305006787272221,
+            "8": 0.9373807842396504,
+            "9": 0.9505931559782702,
+            "10": 0.985002596232478,
+            "11": 0.9874981825224808,
+            "12": 1.0223975441302602,
+            "13": 1.0374097800826947,
+            "14": 1.0254211309461332
+          },
+          "by_quantity": {
+            "model-trust-liquid": 0.9112963592767945
+          },
+          "cells": 140,
+          "left_out": 0,
+          "interval": {
+            "point": 0.9112963592767946,
+            "log_se": 0.06850570991164762,
+            "low": 0.8026959805792941,
+            "high": 1.0433667544368155
+          }
+        }
+      },
+      "calibration": [
+        0.22142857142857142,
+        0.16428571428571428,
+        0.4142857142857143,
+        0.2
+      ],
+      "calibration_by_horizon": {
+        "1": [
+          0.2,
+          0.3,
+          0.5,
+          0.0
+        ],
+        "3": [
+          0.2,
+          0.2,
+          0.3,
+          0.3
+        ],
+        "6": [
+          0.3,
+          0.1,
+          0.5,
+          0.1
+        ],
+        "12": [
+          0.1,
+          0.3,
+          0.4,
+          0.2
+        ]
+      },
+      "coverage": 0.5785714285714286
+    },
+    "position": {
+      "units": 10,
+      "cells": 518,
+      "pairs": {
+        "model/historical": {
+          "score": 0.8826045928853493,
+          "by_horizon": {
+            "1": 0.8720021646762866,
+            "2": 0.7636876509154646,
+            "3": 0.7569689755958531,
+            "4": 0.822258497959793,
+            "5": 0.867627014641435,
+            "6": 0.8898031426180196,
+            "7": 0.9039018971038485,
+            "8": 0.9023949198219166,
+            "9": 0.9167627301677858,
+            "10": 0.9335208272366948,
+            "11": 0.9354988922314611,
+            "12": 0.9551037058755538,
+            "13": 0.9384489968878225,
+            "14": 0.929343782112687
+          },
+          "by_quantity": {
+            "gazp": 0.8389587705013848,
+            "lkoh": 0.8728844054898665,
+            "rosn": 0.9613980432162205,
+            "sibn": 0.8619144174208436
+          },
+          "cells": 518,
+          "left_out": 0,
+          "interval": {
+            "point": 0.8826045928853493,
+            "log_se": 0.058745310098477756,
+            "low": 0.7806103071675126,
+            "high": 0.9740112863789467
+          }
+        },
+        "base/historical": {
+          "score": 0.9705956385716223,
+          "by_horizon": {
+            "1": 1.0056377479191645,
+            "2": 1.0004361201333387,
+            "3": 0.984000182788909,
+            "4": 0.9877526778208183,
+            "5": 0.9894967110031344,
+            "6": 0.9828871598684958,
+            "7": 0.9750766285623514,
+            "8": 0.969377280183133,
+            "9": 0.9731835156244223,
+            "10": 0.9597645024594496,
+            "11": 0.953803018836092,
+            "12": 0.9536487782136742,
+            "13": 0.9322497514410404,
+            "14": 0.9248555739156336
+          },
+          "by_quantity": {
+            "gazp": 0.9040382616116577,
+            "lkoh": 0.951051381118696,
+            "rosn": 1.0729837484256697,
+            "sibn": 0.96198744842606
+          },
+          "cells": 518,
+          "left_out": 0,
+          "interval": {
+            "point": 0.9705956385716223,
+            "log_se": 0.024806608995817405,
+            "low": 0.9210518946629085,
+            "high": 1.0143292598736657
+          }
+        },
+        "model/base": {
+          "score": 0.909343250485068,
+          "by_horizon": {
+            "1": 0.8671135968002468,
+            "2": 0.7633547365459774,
+            "3": 0.7692772713216462,
+            "4": 0.8324538281929654,
+            "5": 0.8768366837337437,
+            "6": 0.9052953166435399,
+            "7": 0.9270060122726532,
+            "8": 0.9309016605499953,
+            "9": 0.9420245158792735,
+            "10": 0.972656130586718,
+            "11": 0.9808093220055363,
+            "12": 1.0015256430827761,
+            "13": 1.006649768945714,
+            "14": 1.0048528746797203
+          },
+          "by_quantity": {
+            "gazp": 0.9280124593462962,
+            "lkoh": 0.9178099341626696,
+            "rosn": 0.8960042914227052,
+            "sibn": 0.895972622959947
+          },
+          "cells": 518,
+          "left_out": 0,
+          "interval": {
+            "point": 0.909343250485068,
+            "log_se": 0.06259847133833442,
+            "low": 0.801840574636007,
+            "high": 1.0155674238292884
+          }
+        }
+      },
+      "calibration": [
+        0.1833976833976834,
+        0.3185328185328185,
+        0.361003861003861,
+        0.13706563706563707
+      ],
+      "calibration_by_horizon": {
+        "1": [
+          0.24324324324324326,
+          0.2702702702702703,
+          0.43243243243243246,
+          0.05405405405405406
+        ],
+        "3": [
+          0.1891891891891892,
+          0.2702702702702703,
+          0.4594594594594595,
+          0.08108108108108109
+        ],
+        "6": [
+          0.21621621621621623,
+          0.2972972972972973,
+          0.3783783783783784,
+          0.10810810810810811
+        ],
+        "12": [
+          0.16216216216216217,
+          0.35135135135135137,
+          0.2702702702702703,
+          0.21621621621621623
+        ]
+      },
+      "coverage": 0.6795366795366795
+    }
+  },
+  "halves": {
+    "all": {
+      "units": [
+        "G26",
+        "G27",
+        "G29",
+        "G31",
+        "G33",
+        "G36",
+        "R13",
+        "R14",
+        "R15",
+        "R16",
+        "R17",
+        "R18",
+        "R19",
+        "R20",
+        "R21",
+        "R22",
+        "R23",
+        "R24"
+      ],
+      "cells": 6407,
+      "admitted": true,
+      "levels": {
+        "driver/share_price": {
+          "units": 10,
+          "cells": 658,
+          "pairs": {
+            "model/walk": {
+              "score": 0.8850168924641977,
+              "by_horizon": {
+                "1": 0.8635053005335671,
+                "2": 0.7469257550819318,
+                "3": 0.7361356409243871,
+                "4": 0.8034863547579436,
+                "5": 0.8527361496398275,
+                "6": 0.8895561866643907,
+                "7": 0.9143122652573002,
+                "8": 0.9161831600909328,
+                "9": 0.929809027782873,
+                "10": 0.9455497929956618,
+                "11": 0.9507362890791866,
+                "12": 0.9747368203794188,
+                "13": 0.9595430660032978,
+                "14": 0.954306899581203
+              },
+              "by_quantity": {
+                "share_price:gazp": 0.8433458796054685,
+                "share_price:lkoh": 0.9014235398766727,
+                "share_price:oil_gas": 0.9067680721801643,
+                "share_price:rosn": 0.909025596405683,
+                "share_price:sibn": 0.8664646446100942
+              },
+              "cells": 658,
+              "left_out": 0,
+              "interval": {
+                "point": 0.8850168924641977,
+                "log_se": 0.06722432477240498,
+                "low": 0.7788182331342894,
+                "high": 0.9983745717980188
+              }
+            },
+            "base/walk": {
+              "score": 0.9791232632757518,
+              "by_horizon": {
+                "1": 0.9963407589064924,
+                "2": 0.9887311276324537,
+                "3": 0.983617629710358,
+                "4": 0.9818436626569618,
+                "5": 0.9812263274657683,
+                "6": 0.9881371471424288,
+                "7": 0.9880724786790501,
+                "8": 0.9856105735843957,
+                "9": 0.9889688466368896,
+                "10": 0.9751055035412135,
+                "11": 0.9726642845450442,
+                "12": 0.9736234431782265,
+                "13": 0.9532696523383073,
+                "14": 0.9516644946251009
+              },
+              "by_quantity": {
+                "share_price:gazp": 0.9239442464370294,
+                "share_price:lkoh": 0.9835313289076452,
+                "share_price:oil_gas": 1.0018388264445397,
+                "share_price:rosn": 1.0185834924102917,
+                "share_price:sibn": 0.9704169867364303
+              },
+              "cells": 658,
+              "left_out": 0,
+              "interval": {
+                "point": 0.9791232632757518,
+                "log_se": 0.01258806743320517,
+                "low": 0.9528852909821898,
+                "high": 1.0020075313474293
+              }
+            },
+            "model/base": {
+              "score": 0.9038871055961716,
+              "by_horizon": {
+                "1": 0.8666766794538092,
+                "2": 0.7554386973438046,
+                "3": 0.7483961436733846,
+                "4": 0.8183444934437256,
+                "5": 0.8690514367283694,
+                "6": 0.900235548513562,
+                "7": 0.9253493898338717,
+                "8": 0.9295589806418427,
+                "9": 0.9401803008707537,
+                "10": 0.9696897305591892,
+                "11": 0.9774557410873637,
+                "12": 1.001143539844889,
+                "13": 1.0065809434398778,
+                "14": 1.002776613996872
+              },
+              "by_quantity": {
+                "share_price:gazp": 0.9127670666900418,
+                "share_price:lkoh": 0.9165173628763151,
+                "share_price:oil_gas": 0.9051037434815985,
+                "share_price:rosn": 0.8924409272082744,
+                "share_price:sibn": 0.8928786866397157
+              },
+              "cells": 658,
+              "left_out": 0,
+              "interval": {
+                "point": 0.9038871055961716,
+                "log_se": 0.06381414097312196,
+                "low": 0.8020085393343681,
+                "high": 1.0223274652691974
+              }
+            },
+            "model/naive": {
+              "score": 0.7183589928053076,
+              "by_horizon": {
+                "1": 0.4085240749385847,
+                "2": 0.4818745778628348,
+                "3": 0.5034843452443519,
+                "4": 0.550747135120181,
+                "5": 0.6295232296835156,
+                "6": 0.6898948463144526,
+                "7": 0.833331476816476,
+                "8": 0.8538713803536934,
+                "9": 0.8415892059120412,
+                "10": 0.8675440555372911,
+                "11": 0.9357568500100854,
+                "12": 0.9514329179191889,
+                "13": 0.9447220403082383,
+                "14": 0.9406969503479704
+              },
+              "by_quantity": {
+                "share_price:gazp": 0.704775331862687,
+                "share_price:lkoh": 0.6842986638544365,
+                "share_price:oil_gas": 0.6814829209857719,
+                "share_price:rosn": 0.8378505579287387,
+                "share_price:sibn": 0.6946879059454993
+              },
+              "cells": 658,
+              "left_out": 0,
+              "interval": {
+                "point": 0.7183589928053076,
+                "log_se": 0.15635135736869404,
+                "low": 0.5073906398681888,
+                "high": 0.9439243915352482
+              }
+            }
+          },
+          "calibration": [
+            0.19148936170212766,
+            0.29027355623100304,
+            0.37537993920972645,
+            0.14285714285714285
+          ],
+          "calibration_by_horizon": {
+            "1": [
+              0.23404255319148937,
+              0.2765957446808511,
+              0.44680851063829785,
+              0.0425531914893617
+            ],
+            "3": [
+              0.19148936170212766,
+              0.2553191489361702,
+              0.44680851063829785,
+              0.10638297872340426
+            ],
+            "6": [
+              0.23404255319148937,
+              0.2553191489361702,
+              0.425531914893617,
+              0.0851063829787234
+            ],
+            "12": [
+              0.14893617021276595,
+              0.3404255319148936,
+              0.2978723404255319,
+              0.2127659574468085
+            ]
+          },
+          "coverage": 0.6641337386018237
+        },
+        "macro": {
+          "units": 18,
+          "cells": 5091,
+          "pairs": {
+            "model/conditional_walk": {
+              "score": 0.8532882741486377,
+              "by_horizon": {
+                "1": 0.8994225060951623,
+                "2": 0.8438696160351181,
+                "3": 0.8669636648259009,
+                "4": 0.863765023008665,
+                "5": 0.8753987515771544,
+                "6": 0.8779554491530012,
+                "7": 0.8922869409238454,
+                "8": 0.8894616536571675,
+                "9": 0.8718048061679462,
+                "10": 0.84488333681,
+                "11": 0.8249284784471518,
+                "12": 0.8002729461261181,
+                "13": 0.8022146794854103,
+                "14": 0.8021102514984206
+              },
+              "by_quantity": {
+                "gl.brent": 0.7563486558100078,
+                "gl.fed_rate": 0.9273311657562053,
+                "gl.ust_10y": 0.8518114009662582,
+                "gl.vix": 0.7388586071665838,
+                "ru.cnyrub": 1.136224413986038,
+                "ru.cpi": 1.0075110833607592,
+                "ru.credit": 0.9639547417157684,
+                "ru.imoex": 0.7287151454449926,
+                "ru.key_rate": 0.9997603008766077,
+                "ru.mortgage_rate": 0.961050195667075,
+                "ru.ofz_10y": 0.7976318008554224,
+                "ru.ofz_1y": 0.7576103557695628,
+                "ru.ofz_5y": 0.8595984471036516,
+                "ru.output": 0.8276974701866618,
+                "ru.real_wage": 0.892030951674609,
+                "ru.retail": 0.9205260344770313,
+                "ru.ruonia": 0.8321696416680422,
+                "ru.spread_a": 0.7086502162008396,
+                "ru.spread_aa": 0.7202395867252324,
+                "ru.spread_bbb": 0.7063838814594037,
+                "ru.unemployment": 0.7967550243146344,
+                "ru.usdrub": 1.0591490831451227
+              },
+              "cells": 5077,
+              "left_out": 0,
+              "interval": {
+                "point": 0.8532882741486377,
+                "log_se": 0.05058534981853926,
+                "low": 0.7803484117579319,
+                "high": 0.9419421371111153
+              }
+            },
+            "model/walk": {
+              "score": 1.0270438695626247,
+              "by_horizon": {
+                "1": 1.0087187971543297,
+                "2": 1.0980412116860514,
+                "3": 1.0713223612163922,
+                "4": 1.0781867995501049,
+                "5": 1.0492778531773341,
+                "6": 1.021024840245977,
+                "7": 1.0088044486566794,
+                "8": 1.040106348279936,
+                "9": 0.9671697181782454,
+                "10": 1.0010289420917218,
+                "11": 1.0134789658337222,
+                "12": 1.0188827674552479,
+                "13": 1.0071176158868267,
+                "14": 1.0033742847108307
+              },
+              "by_quantity": {
+                "gl.brent": 1.0718886966704289,
+                "gl.fed_rate": 0.9750670424556723,
+                "gl.ust_10y": 0.7750794756435763,
+                "gl.vix": 1.2599556973168715,
+                "ru.cnyrub": 0.6783553725732255,
+                "ru.cpi": 0.9309563789025741,
+                "ru.credit": 1.19206354193016,
+                "ru.housing_price": 1.1720824509451295,
+                "ru.imoex": 1.8655939333067733,
+                "ru.key_rate": 1.2995040975322434,
+                "ru.mortgage_rate": 1.1131134148238793,
+                "ru.ofz_10y": 0.9424877815676214,
+                "ru.ofz_1y": 0.7227213697436448,
+                "ru.ofz_5y": 1.037623074978019,
+                "ru.output": 0.8411273861763308,
+                "ru.real_wage": 1.1074097835437748,
+                "ru.retail": 1.1449615263859,
+                "ru.ruonia": 0.7857456754293711,
+                "ru.spread_a": 1.1199877628720782,
+                "ru.spread_aa": 0.9623325451540712,
+                "ru.spread_bbb": 1.2025227762882136,
+                "ru.unemployment": 1.0428572848830922,
+                "ru.usdrub": 0.9957417117948903
+              },
+              "cells": 5091,
+              "left_out": 5,
+              "interval": {
+                "point": 1.0270438695626247,
+                "log_se": 0.031250053011887775,
+                "low": 0.9639975496739684,
+                "high": 1.0865645563412443
+              }
+            },
+            "base/walk": {
+              "score": 0.9675998609893233,
+              "by_horizon": {
+                "1": 0.9888139862821896,
+                "2": 0.9927543604131069,
+                "3": 0.985712932717073,
+                "4": 0.9824029045103955,
+                "5": 0.9809302086029169,
+                "6": 0.977009381928263,
+                "7": 0.9708863438430875,
+                "8": 0.9650610782498156,
+                "9": 0.9546587120644024,
+                "10": 0.9573114145108238,
+                "11": 0.9568898484424105,
+                "12": 0.9507292139530085,
+                "13": 0.9452565094742879,
+                "14": 0.9399717227555009
+              },
+              "by_quantity": {
+                "gl.brent": 1.0054369635987976,
+                "gl.fed_rate": 0.9519865642209415,
+                "gl.ust_10y": 0.8655678245315184,
+                "gl.vix": 0.9393438987329759,
+                "ru.cnyrub": 1.0027363537726692,
+                "ru.cpi": 0.9507594163997954,
+                "ru.credit": 1.0467668424161123,
+                "ru.housing_price": 0.9989850639374018,
+                "ru.imoex": 1.0153295208669963,
+                "ru.key_rate": 1.0425889171636458,
+                "ru.mortgage_rate": 1.0570332386553338,
+                "ru.ofz_10y": 1.026207248633269,
+                "ru.ofz_1y": 1.0615487058590203,
+                "ru.ofz_5y": 1.0325704137246894,
+                "ru.output": 0.9196962428747888,
+                "ru.real_wage": 0.9984054257552843,
+                "ru.retail": 1.0029086264736373,
+                "ru.ruonia": 1.065375330534843,
+                "ru.spread_a": 0.8007173631832102,
+                "ru.spread_aa": 0.8355856605659128,
+                "ru.spread_bbb": 0.8176455235189013,
+                "ru.unemployment": 0.9048957838790135,
+                "ru.usdrub": 0.996592262981291
+              },
+              "cells": 5091,
+              "left_out": 5,
+              "interval": {
+                "point": 0.9675998609893233,
+                "log_se": 0.009965893620735074,
+                "low": 0.946879397960311,
+                "high": 0.984416814880074
+              }
+            },
+            "model/base": {
+              "score": 1.061434494743026,
+              "by_horizon": {
+                "1": 1.020129985162305,
+                "2": 1.1060552896782365,
+                "3": 1.0868502640655637,
+                "4": 1.0974996048972856,
+                "5": 1.0696763581904167,
+                "6": 1.0450512135623953,
+                "7": 1.039055142812597,
+                "8": 1.0777621973587606,
+                "9": 1.0131052133665532,
+                "10": 1.045666986644296,
+                "11": 1.0591385910127746,
+                "12": 1.0716855572564832,
+                "13": 1.065443724314518,
+                "14": 1.0674515630847563
+              },
+              "by_quantity": {
+                "gl.brent": 1.0660923911468085,
+                "gl.fed_rate": 1.0242445419947903,
+                "gl.ust_10y": 0.8954578181820493,
+                "gl.vix": 1.3413146122696378,
+                "ru.cnyrub": 0.6765042177048821,
+                "ru.cpi": 0.979171347497973,
+                "ru.credit": 1.1388052177681502,
+                "ru.housing_price": 1.1732732482760866,
+                "ru.imoex": 1.837427056896494,
+                "ru.key_rate": 1.2464204022689338,
+                "ru.mortgage_rate": 1.053054316664522,
+                "ru.ofz_10y": 0.9184185580669524,
+                "ru.ofz_1y": 0.6808179085469359,
+                "ru.ofz_5y": 1.004893284938413,
+                "ru.output": 0.9145708626003872,
+                "ru.real_wage": 1.1091784509344285,
+                "ru.retail": 1.141640919384391,
+                "ru.ruonia": 0.7375294442334314,
+                "ru.spread_a": 1.3987304564242558,
+                "ru.spread_aa": 1.1516862849253746,
+                "ru.spread_bbb": 1.4707140707050117,
+                "ru.unemployment": 1.152461204330823,
+                "ru.usdrub": 0.9991465404478896
+              },
+              "cells": 5091,
+              "left_out": 5,
+              "interval": {
+                "point": 1.061434494743026,
+                "log_se": 0.03086153186858495,
+                "low": 0.9999757901982369,
+                "high": 1.12826698995807
+              }
+            }
+          },
+          "calibration": [
+            0.11648006285602043,
+            0.4036535061873895,
+            0.3421724612060499,
+            0.13769396975054016
+          ],
+          "calibration_by_horizon": {
+            "1": [
+              0.07123287671232877,
+              0.4575342465753425,
+              0.36164383561643837,
+              0.1095890410958904
+            ],
+            "3": [
+              0.1232876712328767,
+              0.4465753424657534,
+              0.3013698630136986,
+              0.12876712328767123
+            ],
+            "6": [
+              0.10899182561307902,
+              0.4250681198910082,
+              0.33242506811989103,
+              0.1335149863760218
+            ],
+            "12": [
+              0.13165266106442577,
+              0.36694677871148457,
+              0.35294117647058826,
+              0.1484593837535014
+            ]
+          },
+          "coverage": 0.7450402671380868
+        },
+        "portfolio": {
+          "units": 10,
+          "cells": 140,
+          "pairs": {
+            "model/historical": {
+              "score": 0.8859852467488368,
+              "by_horizon": {
+                "1": 0.8687628672311292,
+                "2": 0.7671491625254866,
+                "3": 0.7777716420401654,
+                "4": 0.8496220106760992,
+                "5": 0.8974006681474996,
+                "6": 0.9228027209319691,
+                "7": 0.9271018071796155,
+                "8": 0.9163445660358649,
+                "9": 0.9150938334636937,
+                "10": 0.9290914752070466,
+                "11": 0.9223991118914497,
+                "12": 0.9309010815692133,
+                "13": 0.9104974070412558,
+                "14": 0.8916721818011939
+              },
+              "by_quantity": {
+                "model-trust-liquid": 0.8859852467488368
+              },
+              "cells": 140,
+              "left_out": 0,
+              "interval": {
+                "point": 0.8859852467488368,
+                "log_se": 0.06717975219323875,
+                "low": 0.7800642576421357,
+                "high": 0.9969011971658425
+              }
+            },
+            "base/historical": {
+              "score": 0.9722251578530999,
+              "by_horizon": {
+                "1": 1.018870228852489,
+                "2": 1.015114247993622,
+                "3": 1.0317345791879606,
+                "4": 1.0464152183251119,
+                "5": 1.0270096968906508,
+                "6": 1.0240293757273002,
+                "7": 0.9963472659125239,
+                "8": 0.9775585135118287,
+                "9": 0.9626556089833788,
+                "10": 0.9432375901959192,
+                "11": 0.9340767691695989,
+                "12": 0.9105079398064461,
+                "13": 0.8776641829698941,
+                "14": 0.8695668100563404
+              },
+              "by_quantity": {
+                "model-trust-liquid": 0.9722251578530999
+              },
+              "cells": 140,
+              "left_out": 0,
+              "interval": {
+                "point": 0.9722251578530998,
+                "log_se": 0.04189077959030479,
+                "low": 0.8868685946475735,
+                "high": 1.041987761357558
+              }
+            },
+            "model/base": {
+              "score": 0.9112963592767945,
+              "by_horizon": {
+                "1": 0.852672737537518,
+                "2": 0.7557269184643606,
+                "3": 0.75384857474906,
+                "4": 0.8119358317781358,
+                "5": 0.8737996056555725,
+                "6": 0.9011486806973321,
+                "7": 0.9305006787272221,
+                "8": 0.9373807842396504,
+                "9": 0.9505931559782702,
+                "10": 0.985002596232478,
+                "11": 0.9874981825224808,
+                "12": 1.0223975441302602,
+                "13": 1.0374097800826947,
+                "14": 1.0254211309461332
+              },
+              "by_quantity": {
+                "model-trust-liquid": 0.9112963592767945
+              },
+              "cells": 140,
+              "left_out": 0,
+              "interval": {
+                "point": 0.9112963592767946,
+                "log_se": 0.06850570991164762,
+                "low": 0.8026959805792941,
+                "high": 1.0433667544368155
+              }
+            }
+          },
+          "calibration": [
+            0.22142857142857142,
+            0.16428571428571428,
+            0.4142857142857143,
+            0.2
+          ],
+          "calibration_by_horizon": {
+            "1": [
+              0.2,
+              0.3,
+              0.5,
+              0.0
+            ],
+            "3": [
+              0.2,
+              0.2,
+              0.3,
+              0.3
+            ],
+            "6": [
+              0.3,
+              0.1,
+              0.5,
+              0.1
+            ],
+            "12": [
+              0.1,
+              0.3,
+              0.4,
+              0.2
+            ]
+          },
+          "coverage": 0.5785714285714286
+        },
+        "position": {
+          "units": 10,
+          "cells": 518,
+          "pairs": {
+            "model/historical": {
+              "score": 0.8826045928853493,
+              "by_horizon": {
+                "1": 0.8720021646762866,
+                "2": 0.7636876509154646,
+                "3": 0.7569689755958531,
+                "4": 0.822258497959793,
+                "5": 0.867627014641435,
+                "6": 0.8898031426180196,
+                "7": 0.9039018971038485,
+                "8": 0.9023949198219166,
+                "9": 0.9167627301677858,
+                "10": 0.9335208272366948,
+                "11": 0.9354988922314611,
+                "12": 0.9551037058755538,
+                "13": 0.9384489968878225,
+                "14": 0.929343782112687
+              },
+              "by_quantity": {
+                "gazp": 0.8389587705013848,
+                "lkoh": 0.8728844054898665,
+                "rosn": 0.9613980432162205,
+                "sibn": 0.8619144174208436
+              },
+              "cells": 518,
+              "left_out": 0,
+              "interval": {
+                "point": 0.8826045928853493,
+                "log_se": 0.058745310098477756,
+                "low": 0.7806103071675126,
+                "high": 0.9740112863789467
+              }
+            },
+            "base/historical": {
+              "score": 0.9705956385716223,
+              "by_horizon": {
+                "1": 1.0056377479191645,
+                "2": 1.0004361201333387,
+                "3": 0.984000182788909,
+                "4": 0.9877526778208183,
+                "5": 0.9894967110031344,
+                "6": 0.9828871598684958,
+                "7": 0.9750766285623514,
+                "8": 0.969377280183133,
+                "9": 0.9731835156244223,
+                "10": 0.9597645024594496,
+                "11": 0.953803018836092,
+                "12": 0.9536487782136742,
+                "13": 0.9322497514410404,
+                "14": 0.9248555739156336
+              },
+              "by_quantity": {
+                "gazp": 0.9040382616116577,
+                "lkoh": 0.951051381118696,
+                "rosn": 1.0729837484256697,
+                "sibn": 0.96198744842606
+              },
+              "cells": 518,
+              "left_out": 0,
+              "interval": {
+                "point": 0.9705956385716223,
+                "log_se": 0.024806608995817405,
+                "low": 0.9210518946629085,
+                "high": 1.0143292598736657
+              }
+            },
+            "model/base": {
+              "score": 0.909343250485068,
+              "by_horizon": {
+                "1": 0.8671135968002468,
+                "2": 0.7633547365459774,
+                "3": 0.7692772713216462,
+                "4": 0.8324538281929654,
+                "5": 0.8768366837337437,
+                "6": 0.9052953166435399,
+                "7": 0.9270060122726532,
+                "8": 0.9309016605499953,
+                "9": 0.9420245158792735,
+                "10": 0.972656130586718,
+                "11": 0.9808093220055363,
+                "12": 1.0015256430827761,
+                "13": 1.006649768945714,
+                "14": 1.0048528746797203
+              },
+              "by_quantity": {
+                "gazp": 0.9280124593462962,
+                "lkoh": 0.9178099341626696,
+                "rosn": 0.8960042914227052,
+                "sibn": 0.895972622959947
+              },
+              "cells": 518,
+              "left_out": 0,
+              "interval": {
+                "point": 0.909343250485068,
+                "log_se": 0.06259847133833442,
+                "low": 0.801840574636007,
+                "high": 1.0155674238292884
+              }
+            }
+          },
+          "calibration": [
+            0.1833976833976834,
+            0.3185328185328185,
+            0.361003861003861,
+            0.13706563706563707
+          ],
+          "calibration_by_horizon": {
+            "1": [
+              0.24324324324324326,
+              0.2702702702702703,
+              0.43243243243243246,
+              0.05405405405405406
+            ],
+            "3": [
+              0.1891891891891892,
+              0.2702702702702703,
+              0.4594594594594595,
+              0.08108108108108109
+            ],
+            "6": [
+              0.21621621621621623,
+              0.2972972972972973,
+              0.3783783783783784,
+              0.10810810810810811
+            ],
+            "12": [
+              0.16216216216216217,
+              0.35135135135135137,
+              0.2702702702702703,
+              0.21621621621621623
+            ]
+          },
+          "coverage": 0.6795366795366795
+        }
+      }
+    },
+    "tuning": {
+      "units": [
+        "G26",
+        "G27",
+        "G29",
+        "G31",
+        "G33",
+        "G36",
+        "R13",
+        "R14",
+        "R15",
+        "R16",
+        "R17",
+        "R18",
+        "R19",
+        "R20",
+        "R21",
+        "R22",
+        "R23",
+        "R24"
+      ],
+      "cells": 6407,
+      "admitted": true,
+      "levels": {
+        "driver/share_price": {
+          "units": 10,
+          "cells": 658,
+          "pairs": {
+            "model/walk": {
+              "score": 0.8850168924641977,
+              "by_horizon": {
+                "1": 0.8635053005335671,
+                "2": 0.7469257550819318,
+                "3": 0.7361356409243871,
+                "4": 0.8034863547579436,
+                "5": 0.8527361496398275,
+                "6": 0.8895561866643907,
+                "7": 0.9143122652573002,
+                "8": 0.9161831600909328,
+                "9": 0.929809027782873,
+                "10": 0.9455497929956618,
+                "11": 0.9507362890791866,
+                "12": 0.9747368203794188,
+                "13": 0.9595430660032978,
+                "14": 0.954306899581203
+              },
+              "by_quantity": {
+                "share_price:gazp": 0.8433458796054685,
+                "share_price:lkoh": 0.9014235398766727,
+                "share_price:oil_gas": 0.9067680721801643,
+                "share_price:rosn": 0.909025596405683,
+                "share_price:sibn": 0.8664646446100942
+              },
+              "cells": 658,
+              "left_out": 0,
+              "interval": {
+                "point": 0.8850168924641977,
+                "log_se": 0.06722432477240498,
+                "low": 0.7788182331342894,
+                "high": 0.9983745717980188
+              }
+            },
+            "base/walk": {
+              "score": 0.9791232632757518,
+              "by_horizon": {
+                "1": 0.9963407589064924,
+                "2": 0.9887311276324537,
+                "3": 0.983617629710358,
+                "4": 0.9818436626569618,
+                "5": 0.9812263274657683,
+                "6": 0.9881371471424288,
+                "7": 0.9880724786790501,
+                "8": 0.9856105735843957,
+                "9": 0.9889688466368896,
+                "10": 0.9751055035412135,
+                "11": 0.9726642845450442,
+                "12": 0.9736234431782265,
+                "13": 0.9532696523383073,
+                "14": 0.9516644946251009
+              },
+              "by_quantity": {
+                "share_price:gazp": 0.9239442464370294,
+                "share_price:lkoh": 0.9835313289076452,
+                "share_price:oil_gas": 1.0018388264445397,
+                "share_price:rosn": 1.0185834924102917,
+                "share_price:sibn": 0.9704169867364303
+              },
+              "cells": 658,
+              "left_out": 0,
+              "interval": {
+                "point": 0.9791232632757518,
+                "log_se": 0.01258806743320517,
+                "low": 0.9528852909821898,
+                "high": 1.0020075313474293
+              }
+            },
+            "model/base": {
+              "score": 0.9038871055961716,
+              "by_horizon": {
+                "1": 0.8666766794538092,
+                "2": 0.7554386973438046,
+                "3": 0.7483961436733846,
+                "4": 0.8183444934437256,
+                "5": 0.8690514367283694,
+                "6": 0.900235548513562,
+                "7": 0.9253493898338717,
+                "8": 0.9295589806418427,
+                "9": 0.9401803008707537,
+                "10": 0.9696897305591892,
+                "11": 0.9774557410873637,
+                "12": 1.001143539844889,
+                "13": 1.0065809434398778,
+                "14": 1.002776613996872
+              },
+              "by_quantity": {
+                "share_price:gazp": 0.9127670666900418,
+                "share_price:lkoh": 0.9165173628763151,
+                "share_price:oil_gas": 0.9051037434815985,
+                "share_price:rosn": 0.8924409272082744,
+                "share_price:sibn": 0.8928786866397157
+              },
+              "cells": 658,
+              "left_out": 0,
+              "interval": {
+                "point": 0.9038871055961716,
+                "log_se": 0.06381414097312196,
+                "low": 0.8020085393343681,
+                "high": 1.0223274652691974
+              }
+            },
+            "model/naive": {
+              "score": 0.7183589928053076,
+              "by_horizon": {
+                "1": 0.4085240749385847,
+                "2": 0.4818745778628348,
+                "3": 0.5034843452443519,
+                "4": 0.550747135120181,
+                "5": 0.6295232296835156,
+                "6": 0.6898948463144526,
+                "7": 0.833331476816476,
+                "8": 0.8538713803536934,
+                "9": 0.8415892059120412,
+                "10": 0.8675440555372911,
+                "11": 0.9357568500100854,
+                "12": 0.9514329179191889,
+                "13": 0.9447220403082383,
+                "14": 0.9406969503479704
+              },
+              "by_quantity": {
+                "share_price:gazp": 0.704775331862687,
+                "share_price:lkoh": 0.6842986638544365,
+                "share_price:oil_gas": 0.6814829209857719,
+                "share_price:rosn": 0.8378505579287387,
+                "share_price:sibn": 0.6946879059454993
+              },
+              "cells": 658,
+              "left_out": 0,
+              "interval": {
+                "point": 0.7183589928053076,
+                "log_se": 0.15635135736869404,
+                "low": 0.5073906398681888,
+                "high": 0.9439243915352482
+              }
+            }
+          },
+          "calibration": [
+            0.19148936170212766,
+            0.29027355623100304,
+            0.37537993920972645,
+            0.14285714285714285
+          ],
+          "calibration_by_horizon": {
+            "1": [
+              0.23404255319148937,
+              0.2765957446808511,
+              0.44680851063829785,
+              0.0425531914893617
+            ],
+            "3": [
+              0.19148936170212766,
+              0.2553191489361702,
+              0.44680851063829785,
+              0.10638297872340426
+            ],
+            "6": [
+              0.23404255319148937,
+              0.2553191489361702,
+              0.425531914893617,
+              0.0851063829787234
+            ],
+            "12": [
+              0.14893617021276595,
+              0.3404255319148936,
+              0.2978723404255319,
+              0.2127659574468085
+            ]
+          },
+          "coverage": 0.6641337386018237
+        },
+        "macro": {
+          "units": 18,
+          "cells": 5091,
+          "pairs": {
+            "model/conditional_walk": {
+              "score": 0.8532882741486377,
+              "by_horizon": {
+                "1": 0.8994225060951623,
+                "2": 0.8438696160351181,
+                "3": 0.8669636648259009,
+                "4": 0.863765023008665,
+                "5": 0.8753987515771544,
+                "6": 0.8779554491530012,
+                "7": 0.8922869409238454,
+                "8": 0.8894616536571675,
+                "9": 0.8718048061679462,
+                "10": 0.84488333681,
+                "11": 0.8249284784471518,
+                "12": 0.8002729461261181,
+                "13": 0.8022146794854103,
+                "14": 0.8021102514984206
+              },
+              "by_quantity": {
+                "gl.brent": 0.7563486558100078,
+                "gl.fed_rate": 0.9273311657562053,
+                "gl.ust_10y": 0.8518114009662582,
+                "gl.vix": 0.7388586071665838,
+                "ru.cnyrub": 1.136224413986038,
+                "ru.cpi": 1.0075110833607592,
+                "ru.credit": 0.9639547417157684,
+                "ru.imoex": 0.7287151454449926,
+                "ru.key_rate": 0.9997603008766077,
+                "ru.mortgage_rate": 0.961050195667075,
+                "ru.ofz_10y": 0.7976318008554224,
+                "ru.ofz_1y": 0.7576103557695628,
+                "ru.ofz_5y": 0.8595984471036516,
+                "ru.output": 0.8276974701866618,
+                "ru.real_wage": 0.892030951674609,
+                "ru.retail": 0.9205260344770313,
+                "ru.ruonia": 0.8321696416680422,
+                "ru.spread_a": 0.7086502162008396,
+                "ru.spread_aa": 0.7202395867252324,
+                "ru.spread_bbb": 0.7063838814594037,
+                "ru.unemployment": 0.7967550243146344,
+                "ru.usdrub": 1.0591490831451227
+              },
+              "cells": 5077,
+              "left_out": 0,
+              "interval": {
+                "point": 0.8532882741486377,
+                "log_se": 0.05058534981853926,
+                "low": 0.7803484117579319,
+                "high": 0.9419421371111153
+              }
+            },
+            "model/walk": {
+              "score": 1.0270438695626247,
+              "by_horizon": {
+                "1": 1.0087187971543297,
+                "2": 1.0980412116860514,
+                "3": 1.0713223612163922,
+                "4": 1.0781867995501049,
+                "5": 1.0492778531773341,
+                "6": 1.021024840245977,
+                "7": 1.0088044486566794,
+                "8": 1.040106348279936,
+                "9": 0.9671697181782454,
+                "10": 1.0010289420917218,
+                "11": 1.0134789658337222,
+                "12": 1.0188827674552479,
+                "13": 1.0071176158868267,
+                "14": 1.0033742847108307
+              },
+              "by_quantity": {
+                "gl.brent": 1.0718886966704289,
+                "gl.fed_rate": 0.9750670424556723,
+                "gl.ust_10y": 0.7750794756435763,
+                "gl.vix": 1.2599556973168715,
+                "ru.cnyrub": 0.6783553725732255,
+                "ru.cpi": 0.9309563789025741,
+                "ru.credit": 1.19206354193016,
+                "ru.housing_price": 1.1720824509451295,
+                "ru.imoex": 1.8655939333067733,
+                "ru.key_rate": 1.2995040975322434,
+                "ru.mortgage_rate": 1.1131134148238793,
+                "ru.ofz_10y": 0.9424877815676214,
+                "ru.ofz_1y": 0.7227213697436448,
+                "ru.ofz_5y": 1.037623074978019,
+                "ru.output": 0.8411273861763308,
+                "ru.real_wage": 1.1074097835437748,
+                "ru.retail": 1.1449615263859,
+                "ru.ruonia": 0.7857456754293711,
+                "ru.spread_a": 1.1199877628720782,
+                "ru.spread_aa": 0.9623325451540712,
+                "ru.spread_bbb": 1.2025227762882136,
+                "ru.unemployment": 1.0428572848830922,
+                "ru.usdrub": 0.9957417117948903
+              },
+              "cells": 5091,
+              "left_out": 5,
+              "interval": {
+                "point": 1.0270438695626247,
+                "log_se": 0.031250053011887775,
+                "low": 0.9639975496739684,
+                "high": 1.0865645563412443
+              }
+            },
+            "base/walk": {
+              "score": 0.9675998609893233,
+              "by_horizon": {
+                "1": 0.9888139862821896,
+                "2": 0.9927543604131069,
+                "3": 0.985712932717073,
+                "4": 0.9824029045103955,
+                "5": 0.9809302086029169,
+                "6": 0.977009381928263,
+                "7": 0.9708863438430875,
+                "8": 0.9650610782498156,
+                "9": 0.9546587120644024,
+                "10": 0.9573114145108238,
+                "11": 0.9568898484424105,
+                "12": 0.9507292139530085,
+                "13": 0.9452565094742879,
+                "14": 0.9399717227555009
+              },
+              "by_quantity": {
+                "gl.brent": 1.0054369635987976,
+                "gl.fed_rate": 0.9519865642209415,
+                "gl.ust_10y": 0.8655678245315184,
+                "gl.vix": 0.9393438987329759,
+                "ru.cnyrub": 1.0027363537726692,
+                "ru.cpi": 0.9507594163997954,
+                "ru.credit": 1.0467668424161123,
+                "ru.housing_price": 0.9989850639374018,
+                "ru.imoex": 1.0153295208669963,
+                "ru.key_rate": 1.0425889171636458,
+                "ru.mortgage_rate": 1.0570332386553338,
+                "ru.ofz_10y": 1.026207248633269,
+                "ru.ofz_1y": 1.0615487058590203,
+                "ru.ofz_5y": 1.0325704137246894,
+                "ru.output": 0.9196962428747888,
+                "ru.real_wage": 0.9984054257552843,
+                "ru.retail": 1.0029086264736373,
+                "ru.ruonia": 1.065375330534843,
+                "ru.spread_a": 0.8007173631832102,
+                "ru.spread_aa": 0.8355856605659128,
+                "ru.spread_bbb": 0.8176455235189013,
+                "ru.unemployment": 0.9048957838790135,
+                "ru.usdrub": 0.996592262981291
+              },
+              "cells": 5091,
+              "left_out": 5,
+              "interval": {
+                "point": 0.9675998609893233,
+                "log_se": 0.009965893620735074,
+                "low": 0.946879397960311,
+                "high": 0.984416814880074
+              }
+            },
+            "model/base": {
+              "score": 1.061434494743026,
+              "by_horizon": {
+                "1": 1.020129985162305,
+                "2": 1.1060552896782365,
+                "3": 1.0868502640655637,
+                "4": 1.0974996048972856,
+                "5": 1.0696763581904167,
+                "6": 1.0450512135623953,
+                "7": 1.039055142812597,
+                "8": 1.0777621973587606,
+                "9": 1.0131052133665532,
+                "10": 1.045666986644296,
+                "11": 1.0591385910127746,
+                "12": 1.0716855572564832,
+                "13": 1.065443724314518,
+                "14": 1.0674515630847563
+              },
+              "by_quantity": {
+                "gl.brent": 1.0660923911468085,
+                "gl.fed_rate": 1.0242445419947903,
+                "gl.ust_10y": 0.8954578181820493,
+                "gl.vix": 1.3413146122696378,
+                "ru.cnyrub": 0.6765042177048821,
+                "ru.cpi": 0.979171347497973,
+                "ru.credit": 1.1388052177681502,
+                "ru.housing_price": 1.1732732482760866,
+                "ru.imoex": 1.837427056896494,
+                "ru.key_rate": 1.2464204022689338,
+                "ru.mortgage_rate": 1.053054316664522,
+                "ru.ofz_10y": 0.9184185580669524,
+                "ru.ofz_1y": 0.6808179085469359,
+                "ru.ofz_5y": 1.004893284938413,
+                "ru.output": 0.9145708626003872,
+                "ru.real_wage": 1.1091784509344285,
+                "ru.retail": 1.141640919384391,
+                "ru.ruonia": 0.7375294442334314,
+                "ru.spread_a": 1.3987304564242558,
+                "ru.spread_aa": 1.1516862849253746,
+                "ru.spread_bbb": 1.4707140707050117,
+                "ru.unemployment": 1.152461204330823,
+                "ru.usdrub": 0.9991465404478896
+              },
+              "cells": 5091,
+              "left_out": 5,
+              "interval": {
+                "point": 1.061434494743026,
+                "log_se": 0.03086153186858495,
+                "low": 0.9999757901982369,
+                "high": 1.12826698995807
+              }
+            }
+          },
+          "calibration": [
+            0.11648006285602043,
+            0.4036535061873895,
+            0.3421724612060499,
+            0.13769396975054016
+          ],
+          "calibration_by_horizon": {
+            "1": [
+              0.07123287671232877,
+              0.4575342465753425,
+              0.36164383561643837,
+              0.1095890410958904
+            ],
+            "3": [
+              0.1232876712328767,
+              0.4465753424657534,
+              0.3013698630136986,
+              0.12876712328767123
+            ],
+            "6": [
+              0.10899182561307902,
+              0.4250681198910082,
+              0.33242506811989103,
+              0.1335149863760218
+            ],
+            "12": [
+              0.13165266106442577,
+              0.36694677871148457,
+              0.35294117647058826,
+              0.1484593837535014
+            ]
+          },
+          "coverage": 0.7450402671380868
+        },
+        "portfolio": {
+          "units": 10,
+          "cells": 140,
+          "pairs": {
+            "model/historical": {
+              "score": 0.8859852467488368,
+              "by_horizon": {
+                "1": 0.8687628672311292,
+                "2": 0.7671491625254866,
+                "3": 0.7777716420401654,
+                "4": 0.8496220106760992,
+                "5": 0.8974006681474996,
+                "6": 0.9228027209319691,
+                "7": 0.9271018071796155,
+                "8": 0.9163445660358649,
+                "9": 0.9150938334636937,
+                "10": 0.9290914752070466,
+                "11": 0.9223991118914497,
+                "12": 0.9309010815692133,
+                "13": 0.9104974070412558,
+                "14": 0.8916721818011939
+              },
+              "by_quantity": {
+                "model-trust-liquid": 0.8859852467488368
+              },
+              "cells": 140,
+              "left_out": 0,
+              "interval": {
+                "point": 0.8859852467488368,
+                "log_se": 0.06717975219323875,
+                "low": 0.7800642576421357,
+                "high": 0.9969011971658425
+              }
+            },
+            "base/historical": {
+              "score": 0.9722251578530999,
+              "by_horizon": {
+                "1": 1.018870228852489,
+                "2": 1.015114247993622,
+                "3": 1.0317345791879606,
+                "4": 1.0464152183251119,
+                "5": 1.0270096968906508,
+                "6": 1.0240293757273002,
+                "7": 0.9963472659125239,
+                "8": 0.9775585135118287,
+                "9": 0.9626556089833788,
+                "10": 0.9432375901959192,
+                "11": 0.9340767691695989,
+                "12": 0.9105079398064461,
+                "13": 0.8776641829698941,
+                "14": 0.8695668100563404
+              },
+              "by_quantity": {
+                "model-trust-liquid": 0.9722251578530999
+              },
+              "cells": 140,
+              "left_out": 0,
+              "interval": {
+                "point": 0.9722251578530998,
+                "log_se": 0.04189077959030479,
+                "low": 0.8868685946475735,
+                "high": 1.041987761357558
+              }
+            },
+            "model/base": {
+              "score": 0.9112963592767945,
+              "by_horizon": {
+                "1": 0.852672737537518,
+                "2": 0.7557269184643606,
+                "3": 0.75384857474906,
+                "4": 0.8119358317781358,
+                "5": 0.8737996056555725,
+                "6": 0.9011486806973321,
+                "7": 0.9305006787272221,
+                "8": 0.9373807842396504,
+                "9": 0.9505931559782702,
+                "10": 0.985002596232478,
+                "11": 0.9874981825224808,
+                "12": 1.0223975441302602,
+                "13": 1.0374097800826947,
+                "14": 1.0254211309461332
+              },
+              "by_quantity": {
+                "model-trust-liquid": 0.9112963592767945
+              },
+              "cells": 140,
+              "left_out": 0,
+              "interval": {
+                "point": 0.9112963592767946,
+                "log_se": 0.06850570991164762,
+                "low": 0.8026959805792941,
+                "high": 1.0433667544368155
+              }
+            }
+          },
+          "calibration": [
+            0.22142857142857142,
+            0.16428571428571428,
+            0.4142857142857143,
+            0.2
+          ],
+          "calibration_by_horizon": {
+            "1": [
+              0.2,
+              0.3,
+              0.5,
+              0.0
+            ],
+            "3": [
+              0.2,
+              0.2,
+              0.3,
+              0.3
+            ],
+            "6": [
+              0.3,
+              0.1,
+              0.5,
+              0.1
+            ],
+            "12": [
+              0.1,
+              0.3,
+              0.4,
+              0.2
+            ]
+          },
+          "coverage": 0.5785714285714286
+        },
+        "position": {
+          "units": 10,
+          "cells": 518,
+          "pairs": {
+            "model/historical": {
+              "score": 0.8826045928853493,
+              "by_horizon": {
+                "1": 0.8720021646762866,
+                "2": 0.7636876509154646,
+                "3": 0.7569689755958531,
+                "4": 0.822258497959793,
+                "5": 0.867627014641435,
+                "6": 0.8898031426180196,
+                "7": 0.9039018971038485,
+                "8": 0.9023949198219166,
+                "9": 0.9167627301677858,
+                "10": 0.9335208272366948,
+                "11": 0.9354988922314611,
+                "12": 0.9551037058755538,
+                "13": 0.9384489968878225,
+                "14": 0.929343782112687
+              },
+              "by_quantity": {
+                "gazp": 0.8389587705013848,
+                "lkoh": 0.8728844054898665,
+                "rosn": 0.9613980432162205,
+                "sibn": 0.8619144174208436
+              },
+              "cells": 518,
+              "left_out": 0,
+              "interval": {
+                "point": 0.8826045928853493,
+                "log_se": 0.058745310098477756,
+                "low": 0.7806103071675126,
+                "high": 0.9740112863789467
+              }
+            },
+            "base/historical": {
+              "score": 0.9705956385716223,
+              "by_horizon": {
+                "1": 1.0056377479191645,
+                "2": 1.0004361201333387,
+                "3": 0.984000182788909,
+                "4": 0.9877526778208183,
+                "5": 0.9894967110031344,
+                "6": 0.9828871598684958,
+                "7": 0.9750766285623514,
+                "8": 0.969377280183133,
+                "9": 0.9731835156244223,
+                "10": 0.9597645024594496,
+                "11": 0.953803018836092,
+                "12": 0.9536487782136742,
+                "13": 0.9322497514410404,
+                "14": 0.9248555739156336
+              },
+              "by_quantity": {
+                "gazp": 0.9040382616116577,
+                "lkoh": 0.951051381118696,
+                "rosn": 1.0729837484256697,
+                "sibn": 0.96198744842606
+              },
+              "cells": 518,
+              "left_out": 0,
+              "interval": {
+                "point": 0.9705956385716223,
+                "log_se": 0.024806608995817405,
+                "low": 0.9210518946629085,
+                "high": 1.0143292598736657
+              }
+            },
+            "model/base": {
+              "score": 0.909343250485068,
+              "by_horizon": {
+                "1": 0.8671135968002468,
+                "2": 0.7633547365459774,
+                "3": 0.7692772713216462,
+                "4": 0.8324538281929654,
+                "5": 0.8768366837337437,
+                "6": 0.9052953166435399,
+                "7": 0.9270060122726532,
+                "8": 0.9309016605499953,
+                "9": 0.9420245158792735,
+                "10": 0.972656130586718,
+                "11": 0.9808093220055363,
+                "12": 1.0015256430827761,
+                "13": 1.006649768945714,
+                "14": 1.0048528746797203
+              },
+              "by_quantity": {
+                "gazp": 0.9280124593462962,
+                "lkoh": 0.9178099341626696,
+                "rosn": 0.8960042914227052,
+                "sibn": 0.895972622959947
+              },
+              "cells": 518,
+              "left_out": 0,
+              "interval": {
+                "point": 0.909343250485068,
+                "log_se": 0.06259847133833442,
+                "low": 0.801840574636007,
+                "high": 1.0155674238292884
+              }
+            }
+          },
+          "calibration": [
+            0.1833976833976834,
+            0.3185328185328185,
+            0.361003861003861,
+            0.13706563706563707
+          ],
+          "calibration_by_horizon": {
+            "1": [
+              0.24324324324324326,
+              0.2702702702702703,
+              0.43243243243243246,
+              0.05405405405405406
+            ],
+            "3": [
+              0.1891891891891892,
+              0.2702702702702703,
+              0.4594594594594595,
+              0.08108108108108109
+            ],
+            "6": [
+              0.21621621621621623,
+              0.2972972972972973,
+              0.3783783783783784,
+              0.10810810810810811
+            ],
+            "12": [
+              0.16216216216216217,
+              0.35135135135135137,
+              0.2702702702702703,
+              0.21621621621621623
+            ]
+          },
+          "coverage": 0.6795366795366795
+        }
+      }
+    }
+  },
+  "quantities": {
+    "gazp": {
+      "level": "position",
+      "cells": 98,
+      "constrained": 0,
+      "scored": 98,
+      "unverified_tail": false,
+      "ratios": {
+        "model/historical": 0.8389587705013848,
+        "base/historical": 0.9040382616116577,
+        "model/base": 0.9280124593462962
+      },
+      "calibration": [
+        0.12244897959183673,
+        0.35714285714285715,
+        0.23469387755102042,
+        0.2857142857142857
+      ],
+      "coverage": 0.5918367346938775,
+      "sharpness": 45.0268772587426
+    },
+    "gl.brent": {
+      "level": "macro",
+      "cells": 252,
+      "constrained": 112,
+      "scored": 140,
+      "unverified_tail": false,
+      "ratios": {
+        "model/conditional_walk": 0.7563486558100078,
+        "model/walk": 1.0718886966704289,
+        "base/walk": 1.0054369635987976,
+        "model/base": 1.0660923911468085
+      },
+      "calibration": [
+        0.25,
+        0.2857142857142857,
+        0.32142857142857145,
+        0.14285714285714285
+      ],
+      "coverage": 0.6071428571428571,
+      "sharpness": 57.52315015090497
+    },
+    "gl.fed_rate": {
+      "level": "macro",
+      "cells": 252,
+      "constrained": 0,
+      "scored": 252,
+      "unverified_tail": false,
+      "ratios": {
+        "model/conditional_walk": 0.9273311657562053,
+        "model/walk": 0.9750670424556723,
+        "base/walk": 0.9519865642209415,
+        "model/base": 1.0242445419947903
+      },
+      "calibration": [
+        0.2777777777777778,
+        0.09523809523809523,
+        0.30952380952380953,
+        0.31746031746031744
+      ],
+      "coverage": 0.40476190476190477,
+      "sharpness": 0.2277385412540272
+    },
+    "gl.ust_10y": {
+      "level": "macro",
+      "cells": 252,
+      "constrained": 14,
+      "scored": 238,
+      "unverified_tail": false,
+      "ratios": {
+        "model/conditional_walk": 0.8518114009662582,
+        "model/walk": 0.7750794756435763,
+        "base/walk": 0.8655678245315184,
+        "model/base": 0.8954578181820493
+      },
+      "calibration": [
+        0.13865546218487396,
+        0.42857142857142855,
+        0.41596638655462187,
+        0.01680672268907563
+      ],
+      "coverage": 0.8403361344537815,
+      "sharpness": 1.5003770815011057
+    },
+    "gl.vix": {
+      "level": "macro",
+      "cells": 252,
+      "constrained": 56,
+      "scored": 196,
+      "unverified_tail": false,
+      "ratios": {
+        "model/conditional_walk": 0.7388586071665838,
+        "model/walk": 1.2599556973168715,
+        "base/walk": 0.9393438987329759,
+        "model/base": 1.3413146122696378
+      },
+      "calibration": [
+        0.10204081632653061,
+        0.4744897959183674,
+        0.3010204081632653,
+        0.12244897959183673
+      ],
+      "coverage": 0.7755102040816326,
+      "sharpness": 85.60264944939786
+    },
+    "lkoh": {
+      "level": "position",
+      "cells": 140,
+      "constrained": 0,
+      "scored": 140,
+      "unverified_tail": false,
+      "ratios": {
+        "model/historical": 0.8728844054898665,
+        "base/historical": 0.951051381118696,
+        "model/base": 0.9178099341626696
+      },
+      "calibration": [
+        0.25,
+        0.15,
+        0.4785714285714286,
+        0.12142857142857143
+      ],
+      "coverage": 0.6285714285714286,
+      "sharpness": 43.93900091169343
+    },
+    "model-trust-liquid": {
+      "level": "portfolio",
+      "cells": 140,
+      "constrained": 0,
+      "scored": 140,
+      "unverified_tail": false,
+      "ratios": {
+        "model/historical": 0.8859852467488368,
+        "base/historical": 0.9722251578530999,
+        "model/base": 0.9112963592767945
+      },
+      "calibration": [
+        0.22142857142857142,
+        0.16428571428571428,
+        0.4142857142857143,
+        0.2
+      ],
+      "coverage": 0.5785714285714286,
+      "sharpness": 34.938799431666055
+    },
+    "rosn": {
+      "level": "position",
+      "cells": 140,
+      "constrained": 0,
+      "scored": 140,
+      "unverified_tail": false,
+      "ratios": {
+        "model/historical": 0.9613980432162205,
+        "base/historical": 1.0729837484256697,
+        "model/base": 0.8960042914227052
+      },
+      "calibration": [
+        0.09285714285714286,
+        0.5357142857142857,
+        0.2785714285714286,
+        0.09285714285714286
+      ],
+      "coverage": 0.8071428571428572,
+      "sharpness": 55.0978562252437
+    },
+    "ru.cnyrub": {
+      "level": "macro",
+      "cells": 252,
+      "constrained": 0,
+      "scored": 252,
+      "unverified_tail": false,
+      "ratios": {
+        "model/conditional_walk": 1.136224413986038,
+        "model/walk": 0.6783553725732255,
+        "base/walk": 1.0027363537726692,
+        "model/base": 0.6765042177048821
+      },
+      "calibration": [
+        0.003968253968253968,
+        0.5,
+        0.2896825396825397,
+        0.20634920634920634
+      ],
+      "coverage": 0.7896825396825397,
+      "sharpness": 31.62840229679678
+    },
+    "ru.cpi": {
+      "level": "macro",
+      "cells": 252,
+      "constrained": 14,
+      "scored": 238,
+      "unverified_tail": false,
+      "ratios": {
+        "model/conditional_walk": 1.0075110833607592,
+        "model/walk": 0.9309563789025741,
+        "base/walk": 0.9507594163997954,
+        "model/base": 0.979171347497973
+      },
+      "calibration": [
+        0.09243697478991597,
+        0.5084033613445378,
+        0.1092436974789916,
+        0.28991596638655465
+      ],
+      "coverage": 0.6176470588235294,
+      "sharpness": 4.125101013310058
+    },
+    "ru.credit": {
+      "level": "macro",
+      "cells": 252,
+      "constrained": 0,
+      "scored": 252,
+      "unverified_tail": false,
+      "ratios": {
+        "model/conditional_walk": 0.9639547417157684,
+        "model/walk": 1.19206354193016,
+        "base/walk": 1.0467668424161123,
+        "model/base": 1.1388052177681502
+      },
+      "calibration": [
+        0.2857142857142857,
+        0.42063492063492064,
+        0.25793650793650796,
+        0.03571428571428571
+      ],
+      "coverage": 0.6706349206349206,
+      "sharpness": 10.86355161721599
+    },
+    "ru.housing_price": {
+      "level": "macro",
+      "cells": 14,
+      "constrained": 0,
+      "scored": 14,
+      "unverified_tail": false,
+      "ratios": {
+        "model/conditional_walk": null,
+        "model/walk": 1.1720824509451295,
+        "base/walk": 0.9989850639374018,
+        "model/base": 1.1732732482760866
+      },
+      "calibration": [
+        0.07142857142857142,
+        0.0,
+        0.0,
+        0.9285714285714286
+      ],
+      "coverage": 0.0,
+      "sharpness": 8.902812612403181
+    },
+    "ru.imoex": {
+      "level": "macro",
+      "cells": 252,
+      "constrained": 0,
+      "scored": 252,
+      "unverified_tail": false,
+      "ratios": {
+        "model/conditional_walk": 0.7287151454449926,
+        "model/walk": 1.8655939333067733,
+        "base/walk": 1.0153295208669963,
+        "model/base": 1.837427056896494
+      },
+      "calibration": [
+        0.04365079365079365,
+        0.13095238095238096,
+        0.5198412698412699,
+        0.3055555555555556
+      ],
+      "coverage": 0.6507936507936508,
+      "sharpness": 27.602791860644516
+    },
+    "ru.key_rate": {
+      "level": "macro",
+      "cells": 252,
+      "constrained": 84,
+      "scored": 168,
+      "unverified_tail": false,
+      "ratios": {
+        "model/conditional_walk": 0.9997603008766077,
+        "model/walk": 1.2995040975322434,
+        "base/walk": 1.0425889171636458,
+        "model/base": 1.2464204022689338
+      },
+      "calibration": [
+        0.011904761904761904,
+        0.6130952380952381,
+        0.18452380952380953,
+        0.19047619047619047
+      ],
+      "coverage": 0.7976190476190477,
+      "sharpness": 6.723297710073564
+    },
+    "ru.mortgage_rate": {
+      "level": "macro",
+      "cells": 252,
+      "constrained": 0,
+      "scored": 252,
+      "unverified_tail": false,
+      "ratios": {
+        "model/conditional_walk": 0.961050195667075,
+        "model/walk": 1.1131134148238793,
+        "base/walk": 1.0570332386553338,
+        "model/base": 1.053054316664522
+      },
+      "calibration": [
+        0.09523809523809523,
+        0.44841269841269843,
+        0.2777777777777778,
+        0.17857142857142858
+      ],
+      "coverage": 0.7261904761904762,
+      "sharpness": 2.166663705208107
+    },
+    "ru.ofz_10y": {
+      "level": "macro",
+      "cells": 252,
+      "constrained": 14,
+      "scored": 238,
+      "unverified_tail": false,
+      "ratios": {
+        "model/conditional_walk": 0.7976318008554224,
+        "model/walk": 0.9424877815676214,
+        "base/walk": 1.026207248633269,
+        "model/base": 0.9184185580669524
+      },
+      "calibration": [
+        0.10504201680672269,
+        0.5,
+        0.3235294117647059,
+        0.07142857142857142
+      ],
+      "coverage": 0.8235294117647058,
+      "sharpness": 3.8584839002385065
+    },
+    "ru.ofz_1y": {
+      "level": "macro",
+      "cells": 252,
+      "constrained": 0,
+      "scored": 252,
+      "unverified_tail": false,
+      "ratios": {
+        "model/conditional_walk": 0.7576103557695628,
+        "model/walk": 0.7227213697436448,
+        "base/walk": 1.0615487058590203,
+        "model/base": 0.6808179085469359
+      },
+      "calibration": [
+        0.023809523809523808,
+        0.5634920634920635,
+        0.2857142857142857,
+        0.12698412698412698
+      ],
+      "coverage": 0.8492063492063492,
+      "sharpness": 3.927151773657636
+    },
+    "ru.ofz_5y": {
+      "level": "macro",
+      "cells": 252,
+      "constrained": 0,
+      "scored": 252,
+      "unverified_tail": false,
+      "ratios": {
+        "model/conditional_walk": 0.8595984471036516,
+        "model/walk": 1.037623074978019,
+        "base/walk": 1.0325704137246894,
+        "model/base": 1.004893284938413
+      },
+      "calibration": [
+        0.11507936507936507,
+        0.44841269841269843,
+        0.3412698412698413,
+        0.09523809523809523
+      ],
+      "coverage": 0.7857142857142857,
+      "sharpness": 4.3877167401417365
+    },
+    "ru.output": {
+      "level": "macro",
+      "cells": 238,
+      "constrained": 0,
+      "scored": 238,
+      "unverified_tail": false,
+      "ratios": {
+        "model/conditional_walk": 0.8276974701866618,
+        "model/walk": 0.8411273861763308,
+        "base/walk": 0.9196962428747888,
+        "model/base": 0.9145708626003872
+      },
+      "calibration": [
+        0.09663865546218488,
+        0.40756302521008403,
+        0.4411764705882353,
+        0.0546218487394958
+      ],
+      "coverage": 0.8487394957983193,
+      "sharpness": 8.371808611460636
+    },
+    "ru.real_wage": {
+      "level": "macro",
+      "cells": 252,
+      "constrained": 0,
+      "scored": 252,
+      "unverified_tail": false,
+      "ratios": {
+        "model/conditional_walk": 0.892030951674609,
+        "model/walk": 1.1074097835437748,
+        "base/walk": 0.9984054257552843,
+        "model/base": 1.1091784509344285
+      },
+      "calibration": [
+        0.27380952380952384,
+        0.38492063492063494,
+        0.3055555555555556,
+        0.03571428571428571
+      ],
+      "coverage": 0.6904761904761905,
+      "sharpness": 13.56768937044231
+    },
+    "ru.retail": {
+      "level": "macro",
+      "cells": 252,
+      "constrained": 0,
+      "scored": 252,
+      "unverified_tail": false,
+      "ratios": {
+        "model/conditional_walk": 0.9205260344770313,
+        "model/walk": 1.1449615263859,
+        "base/walk": 1.0029086264736373,
+        "model/base": 1.141640919384391
+      },
+      "calibration": [
+        0.3134920634920635,
+        0.26587301587301587,
+        0.4007936507936508,
+        0.01984126984126984
+      ],
+      "coverage": 0.6666666666666666,
+      "sharpness": 10.781352932626561
+    },
+    "ru.ruonia": {
+      "level": "macro",
+      "cells": 252,
+      "constrained": 0,
+      "scored": 252,
+      "unverified_tail": false,
+      "ratios": {
+        "model/conditional_walk": 0.8321696416680422,
+        "model/walk": 0.7857456754293711,
+        "base/walk": 1.065375330534843,
+        "model/base": 0.7375294442334314
+      },
+      "calibration": [
+        0.04365079365079365,
+        0.5833333333333334,
+        0.25,
+        0.12301587301587301
+      ],
+      "coverage": 0.8333333333333334,
+      "sharpness": 5.641802908832932
+    },
+    "ru.spread_a": {
+      "level": "macro",
+      "cells": 241,
+      "constrained": 0,
+      "scored": 241,
+      "unverified_tail": false,
+      "ratios": {
+        "model/conditional_walk": 0.7086502162008396,
+        "model/walk": 1.1199877628720782,
+        "base/walk": 0.8007173631832102,
+        "model/base": 1.3987304564242558
+      },
+      "calibration": [
+        0.03734439834024896,
+        0.27800829875518673,
+        0.5394190871369294,
+        0.14522821576763487
+      ],
+      "coverage": 0.8174273858921162,
+      "sharpness": 3.3284392149155333
+    },
+    "ru.spread_aa": {
+      "level": "macro",
+      "cells": 241,
+      "constrained": 0,
+      "scored": 241,
+      "unverified_tail": false,
+      "ratios": {
+        "model/conditional_walk": 0.7202395867252324,
+        "model/walk": 0.9623325451540712,
+        "base/walk": 0.8355856605659128,
+        "model/base": 1.1516862849253746
+      },
+      "calibration": [
+        0.04979253112033195,
+        0.2697095435684647,
+        0.5975103734439834,
+        0.08298755186721991
+      ],
+      "coverage": 0.8672199170124482,
+      "sharpness": 1.9126995099449515
+    },
+    "ru.spread_bbb": {
+      "level": "macro",
+      "cells": 241,
+      "constrained": 14,
+      "scored": 227,
+      "unverified_tail": false,
+      "ratios": {
+        "model/conditional_walk": 0.7063838814594037,
+        "model/walk": 1.2025227762882136,
+        "base/walk": 0.8176455235189013,
+        "model/base": 1.4707140707050117
+      },
+      "calibration": [
+        0.1277533039647577,
+        0.4977973568281938,
+        0.3303964757709251,
+        0.04405286343612335
+      ],
+      "coverage": 0.8281938325991189,
+      "sharpness": 6.70622721370859
+    },
+    "ru.unemployment": {
+      "level": "macro",
+      "cells": 252,
+      "constrained": 0,
+      "scored": 252,
+      "unverified_tail": false,
+      "ratios": {
+        "model/conditional_walk": 0.7967550243146344,
+        "model/walk": 1.0428572848830922,
+        "base/walk": 0.9048957838790135,
+        "model/base": 1.152461204330823
+      },
+      "calibration": [
+        0.027777777777777776,
+        0.38095238095238093,
+        0.36904761904761907,
+        0.2222222222222222
+      ],
+      "coverage": 0.75,
+      "sharpness": 1.1428006604897427
+    },
+    "ru.usdrub": {
+      "level": "macro",
+      "cells": 252,
+      "constrained": 112,
+      "scored": 140,
+      "unverified_tail": false,
+      "ratios": {
+        "model/conditional_walk": 1.0591490831451227,
+        "model/walk": 0.9957417117948903,
+        "base/walk": 0.996592262981291,
+        "model/base": 0.9991465404478896
+      },
+      "calibration": [
+        0.02142857142857143,
+        0.5071428571428571,
+        0.3,
+        0.17142857142857143
+      ],
+      "coverage": 0.8071428571428572,
+      "sharpness": 42.796516890564305
+    },
+    "share_price:gazp": {
+      "level": "driver/share_price",
+      "cells": 98,
+      "constrained": 0,
+      "scored": 98,
+      "unverified_tail": true,
+      "ratios": {
+        "model/walk": 0.8433458796054685,
+        "base/walk": 0.9239442464370294,
+        "model/base": 0.9127670666900418,
+        "model/naive": 0.704775331862687
+      },
+      "calibration": [
+        0.12244897959183673,
+        0.35714285714285715,
+        0.23469387755102042,
+        0.2857142857142857
+      ],
+      "coverage": 0.5918367346938775,
+      "sharpness": 44.78115990555398
+    },
+    "share_price:lkoh": {
+      "level": "driver/share_price",
+      "cells": 140,
+      "constrained": 0,
+      "scored": 140,
+      "unverified_tail": true,
+      "ratios": {
+        "model/walk": 0.9014235398766727,
+        "base/walk": 0.9835313289076452,
+        "model/base": 0.9165173628763151,
+        "model/naive": 0.6842986638544365
+      },
+      "calibration": [
+        0.25,
+        0.15,
+        0.4785714285714286,
+        0.12142857142857143
+      ],
+      "coverage": 0.6285714285714286,
+      "sharpness": 40.61344566895252
+    },
+    "share_price:oil_gas": {
+      "level": "driver/share_price",
+      "cells": 140,
+      "constrained": 0,
+      "scored": 140,
+      "unverified_tail": true,
+      "ratios": {
+        "model/walk": 0.9067680721801643,
+        "base/walk": 1.0018388264445397,
+        "model/base": 0.9051037434815985,
+        "model/naive": 0.6814829209857719
+      },
+      "calibration": [
+        0.22142857142857142,
+        0.18571428571428572,
+        0.42857142857142855,
+        0.16428571428571428
+      ],
+      "coverage": 0.6071428571428571,
+      "sharpness": 28.953052881382916
+    },
+    "share_price:rosn": {
+      "level": "driver/share_price",
+      "cells": 140,
+      "constrained": 0,
+      "scored": 140,
+      "unverified_tail": true,
+      "ratios": {
+        "model/walk": 0.909025596405683,
+        "base/walk": 1.0185834924102917,
+        "model/base": 0.8924409272082744,
+        "model/naive": 0.8378505579287387
+      },
+      "calibration": [
+        0.09285714285714286,
+        0.5357142857142857,
+        0.2785714285714286,
+        0.09285714285714286
+      ],
+      "coverage": 0.8071428571428572,
+      "sharpness": 51.61485248347452
+    },
+    "share_price:sibn": {
+      "level": "driver/share_price",
+      "cells": 140,
+      "constrained": 0,
+      "scored": 140,
+      "unverified_tail": true,
+      "ratios": {
+        "model/walk": 0.8664646446100942,
+        "base/walk": 0.9704169867364303,
+        "model/base": 0.8928786866397157,
+        "model/naive": 0.6946879059454993
+      },
+      "calibration": [
+        0.25,
+        0.24285714285714285,
+        0.4142857142857143,
+        0.09285714285714286
+      ],
+      "coverage": 0.6642857142857143,
+      "sharpness": 53.50046519158741
+    },
+    "sibn": {
+      "level": "position",
+      "cells": 140,
+      "constrained": 0,
+      "scored": 140,
+      "unverified_tail": false,
+      "ratios": {
+        "model/historical": 0.8619144174208436,
+        "base/historical": 0.96198744842606,
+        "model/base": 0.895972622959947
+      },
+      "calibration": [
+        0.25,
+        0.24285714285714285,
+        0.4142857142857143,
+        0.09285714285714286
+      ],
+      "coverage": 0.6642857142857143,
+      "sharpness": 58.121425537122356
+    }
+  },
+  "tail": {
+    "z": -1.0,
+    "interval": [
+      -1.0,
+      -1.0
+    ],
+    "trimmed_z": -1.0,
+    "trim": 0.01,
+    "windows": [
+      {
+        "id": "G31",
+        "loss": -44.90845910126169,
+        "var": 17.487389948236114,
+        "es": 22.808001079269914
+      },
+      {
+        "id": "G33",
+        "loss": -21.851805632131384,
+        "var": 9.232736526366924,
+        "es": 15.126196850064039
+      },
+      {
+        "id": "G36",
+        "loss": 1.5756637872427004,
+        "var": 8.633876592956968,
+        "es": 13.643036800401017
+      },
+      {
+        "id": "R18",
+        "loss": -58.326799412786144,
+        "var": 8.038955049392717,
+        "es": 13.959305876309328
+      },
+      {
+        "id": "R19",
+        "loss": -34.85071521995026,
+        "var": 6.523663558287023,
+        "es": 11.828571353114924
+      },
+      {
+        "id": "R20",
+        "loss": -31.04157086025693,
+        "var": 7.946907703381387,
+        "es": 11.738865268907665
+      },
+      {
+        "id": "R21",
+        "loss": -29.288590559261657,
+        "var": 7.595018812617994,
+        "es": 12.333107960275694
+      },
+      {
+        "id": "R22",
+        "loss": -1.8487248781588612,
+        "var": 9.667468559379792,
+        "es": 14.575407527384225
+      },
+      {
+        "id": "R23",
+        "loss": 3.6198638194663397,
+        "var": 5.906256527134467,
+        "es": 11.602502355857558
+      },
+      {
+        "id": "R24",
+        "loss": 1.5756637872427004,
+        "var": 8.039609691681893,
+        "es": 14.496040183172193
+      }
+    ],
+    "dropped": []
+  },
+  "constraint_gate": {
+    "rule": "constraint_probability_below_one_percent",
+    "threshold": 0.01,
+    "applicable": 0,
+    "not_applicable": 336,
+    "failed_constraints": [],
+    "failed": false
+  },
+  "admission_failed": false,
+  "target_level": "macro",
+  "episodes": [
+    {
+      "id": "R13",
+      "as_of": "2014-02-28",
+      "horizon": 14,
+      "half": "tuning",
+      "source": "manual",
+      "observations": [
+        "ru.usdrub"
+      ],
+      "interventions": [
+        "ru.key_rate"
+      ],
+      "macro_version": "85f2887bed7390741b75086b0c72bef7089596bde7212d99fd60050754ccb1a1",
+      "satellite_version": "77a85a2bbff95bf54be4a9e7081913f4292b141604de9bc84899c476f5a3001a",
+      "left_out": {
+        "ru.housing_price": "1 changes or intervals, the model needs 3",
+        "ru.output": "no change into calendar month 1 to estimate seasonality",
+        "share_price:gazp": "no driver of share_price has more than 12 usable months",
+        "share_price:lkoh": "no driver of share_price has more than 12 usable months",
+        "share_price:oil_gas": "no driver of share_price has more than 12 usable months",
+        "share_price:rosn": "no driver of share_price has more than 12 usable months",
+        "share_price:sibn": "no driver of share_price has more than 12 usable months"
+      },
+      "constraint_probabilities": {
+        "0": null,
+        "1": null,
+        "2": null,
+        "3": null,
+        "4": null,
+        "5": null,
+        "6": null,
+        "7": null,
+        "8": null,
+        "9": null,
+        "10": null,
+        "11": null,
+        "12": null,
+        "13": null
+      }
+    },
+    {
+      "id": "R14",
+      "as_of": "2014-06-30",
+      "horizon": 14,
+      "half": "tuning",
+      "source": "manual",
+      "observations": [
+        "gl.brent",
+        "ru.usdrub"
+      ],
+      "interventions": [],
+      "macro_version": "e4b4ea7033cc2167f058d7d66ea713f12cb4a112c8aa5a4b2907d16b899ce73a",
+      "satellite_version": "5d59c8beba0225bfc4ebc35f21b38ecb3bfb62f074fbae8c3ceaf28429d1a0d6",
+      "left_out": {
+        "ru.housing_price": "1 changes or intervals, the model needs 3",
+        "share_price:gazp": "no driver of share_price has more than 12 usable months",
+        "share_price:lkoh": "no driver of share_price has more than 12 usable months",
+        "share_price:oil_gas": "no driver of share_price has more than 12 usable months",
+        "share_price:rosn": "no driver of share_price has more than 12 usable months",
+        "share_price:sibn": "no driver of share_price has more than 12 usable months"
+      },
+      "constraint_probabilities": {
+        "0": null,
+        "1": null,
+        "2": null,
+        "3": null,
+        "4": null,
+        "5": null,
+        "6": null,
+        "7": null,
+        "8": null,
+        "9": null,
+        "10": null,
+        "11": null,
+        "12": null,
+        "13": null,
+        "14": null,
+        "15": null,
+        "16": null,
+        "17": null,
+        "18": null,
+        "19": null,
+        "20": null,
+        "21": null,
+        "22": null,
+        "23": null,
+        "24": null,
+        "25": null,
+        "26": null,
+        "27": null
+      }
+    },
+    {
+      "id": "R15",
+      "as_of": "2014-10-31",
+      "horizon": 14,
+      "half": "tuning",
+      "source": "manual",
+      "observations": [
+        "gl.brent",
+        "ru.usdrub"
+      ],
+      "interventions": [
+        "ru.key_rate"
+      ],
+      "macro_version": "88a0f8d048441e39eb396eba48eb205df09c609b282a908dbec809ad3b2b2503",
+      "satellite_version": "d567e71c314c563e2945b2c9042af5d2dc24a7da9e68e6bcd5b828fac0066ccb",
+      "left_out": {
+        "ru.housing_price": "1 changes or intervals, the model needs 3",
+        "share_price:gazp": "no driver of share_price has more than 12 usable months",
+        "share_price:lkoh": "no driver of share_price has more than 12 usable months",
+        "share_price:oil_gas": "no driver of share_price has more than 12 usable months",
+        "share_price:rosn": "no driver of share_price has more than 12 usable months",
+        "share_price:sibn": "no driver of share_price has more than 12 usable months"
+      },
+      "constraint_probabilities": {
+        "0": null,
+        "1": null,
+        "2": null,
+        "3": null,
+        "4": null,
+        "5": null,
+        "6": null,
+        "7": null,
+        "8": null,
+        "9": null,
+        "10": null,
+        "11": null,
+        "12": null,
+        "13": null,
+        "14": null,
+        "15": null,
+        "16": null,
+        "17": null,
+        "18": null,
+        "19": null,
+        "20": null,
+        "21": null,
+        "22": null,
+        "23": null,
+        "24": null,
+        "25": null,
+        "26": null,
+        "27": null
+      }
+    },
+    {
+      "id": "R16",
+      "as_of": "2014-11-30",
+      "horizon": 14,
+      "half": "tuning",
+      "source": "manual",
+      "observations": [
+        "ru.usdrub"
+      ],
+      "interventions": [
+        "ru.key_rate"
+      ],
+      "macro_version": "55d181e4525586b53cf6855f0e35ecc8eff40aa2c183018b31d569dc61a201ab",
+      "satellite_version": "6df72c90730621f7be8e02e4158012e58da2067a3f40c159247192fc18f1be74",
+      "left_out": {
+        "ru.housing_price": "1 changes or intervals, the model needs 3",
+        "share_price:gazp": "no driver of share_price has more than 12 usable months",
+        "share_price:lkoh": "no driver of share_price has more than 12 usable months",
+        "share_price:oil_gas": "no driver of share_price has more than 12 usable months",
+        "share_price:rosn": "no driver of share_price has more than 12 usable months",
+        "share_price:sibn": "no driver of share_price has more than 12 usable months"
+      },
+      "constraint_probabilities": {
+        "0": null,
+        "1": null,
+        "2": null,
+        "3": null,
+        "4": null,
+        "5": null,
+        "6": null,
+        "7": null,
+        "8": null,
+        "9": null,
+        "10": null,
+        "11": null,
+        "12": null,
+        "13": null
+      }
+    },
+    {
+      "id": "R17",
+      "as_of": "2015-11-30",
+      "horizon": 14,
+      "half": "tuning",
+      "source": "manual",
+      "observations": [
+        "gl.brent",
+        "ru.usdrub"
+      ],
+      "interventions": [],
+      "macro_version": "d07f79475fe60fc7e5e830830eae4900e40421dce76038cb113f225edbc9fad9",
+      "satellite_version": "abae19372534cafa25c90408b862cbe80215a019d20abbc6bd7589754cbcb118",
+      "left_out": {
+        "ru.housing_price": "2 changes or intervals, the model needs 3"
+      },
+      "constraint_probabilities": {
+        "0": null,
+        "1": null,
+        "2": null,
+        "3": null,
+        "4": null,
+        "5": null,
+        "6": null,
+        "7": null,
+        "8": null,
+        "9": null,
+        "10": null,
+        "11": null,
+        "12": null,
+        "13": null,
+        "14": null,
+        "15": null,
+        "16": null,
+        "17": null,
+        "18": null,
+        "19": null,
+        "20": null,
+        "21": null,
+        "22": null,
+        "23": null,
+        "24": null,
+        "25": null,
+        "26": null,
+        "27": null
+      }
+    },
+    {
+      "id": "R18",
+      "as_of": "2017-07-31",
+      "horizon": 14,
+      "half": "tuning",
+      "source": "manual",
+      "observations": [
+        "ru.spread_bbb"
+      ],
+      "interventions": [],
+      "macro_version": "50a7419a0643e816cf9618f075cc1f9c78f93da8fd68823ac921874dc72f4810",
+      "satellite_version": "40a5b74b7af056d45be8dc8f5c6db5be4c0b5f880ba1a57f9433154073995764",
+      "left_out": {},
+      "constraint_probabilities": {
+        "0": null,
+        "1": null,
+        "2": null,
+        "3": null,
+        "4": null,
+        "5": null,
+        "6": null,
+        "7": null,
+        "8": null,
+        "9": null,
+        "10": null,
+        "11": null,
+        "12": null,
+        "13": null
+      }
+    },
+    {
+      "id": "R19",
+      "as_of": "2018-03-31",
+      "horizon": 14,
+      "half": "tuning",
+      "source": "manual",
+      "observations": [
+        "ru.usdrub"
+      ],
+      "interventions": [],
+      "macro_version": "51e70530c70ff42837130f66b89355ff5dc7bb9a0767080985ac200e1bdde438",
+      "satellite_version": "b5785545f273bbb7881506eeece98f379c2cd3f2fdbc4795f1369d8a37a9937c",
+      "left_out": {},
+      "constraint_probabilities": {
+        "0": null,
+        "1": null,
+        "2": null,
+        "3": null,
+        "4": null,
+        "5": null,
+        "6": null,
+        "7": null,
+        "8": null,
+        "9": null,
+        "10": null,
+        "11": null,
+        "12": null,
+        "13": null
+      }
+    },
+    {
+      "id": "R20",
+      "as_of": "2018-07-31",
+      "horizon": 14,
+      "half": "tuning",
+      "source": "manual",
+      "observations": [
+        "ru.ofz_10y"
+      ],
+      "interventions": [],
+      "macro_version": "2df0efd9f0fd70e30844bd824ad40c6052ff515ec154faf5a0164629b8ecea1c",
+      "satellite_version": "014072d842b3106be3a1e5d775e3572d2b300c89465287933c10c5c4af1c5b0b",
+      "left_out": {},
+      "constraint_probabilities": {
+        "0": null,
+        "1": null,
+        "2": null,
+        "3": null,
+        "4": null,
+        "5": null,
+        "6": null,
+        "7": null,
+        "8": null,
+        "9": null,
+        "10": null,
+        "11": null,
+        "12": null,
+        "13": null
+      }
+    },
+    {
+      "id": "R21",
+      "as_of": "2018-08-31",
+      "horizon": 14,
+      "half": "tuning",
+      "source": "manual",
+      "observations": [
+        "ru.usdrub"
+      ],
+      "interventions": [
+        "ru.key_rate"
+      ],
+      "macro_version": "c78a4e8dc0ac79831c8833bb95c3f5229c870249d522db93060c82a6b0c6c96c",
+      "satellite_version": "d71f79bf0962570555851ecfa123248304d06f342ef091cd82c88f91e3670916",
+      "left_out": {},
+      "constraint_probabilities": {
+        "0": null,
+        "1": null,
+        "2": null,
+        "3": null,
+        "4": null,
+        "5": null,
+        "6": null,
+        "7": null,
+        "8": null,
+        "9": null,
+        "10": null,
+        "11": null,
+        "12": null,
+        "13": null
+      }
+    },
+    {
+      "id": "R22",
+      "as_of": "2019-05-31",
+      "horizon": 14,
+      "half": "tuning",
+      "source": "manual",
+      "observations": [
+        "ru.cpi"
+      ],
+      "interventions": [
+        "ru.key_rate"
+      ],
+      "macro_version": "23e19acf4db507c3164223ffaaa7a6fcb08ded1865a505fa677db6f097e5aff8",
+      "satellite_version": "f2e19144a1f272372a7f3a813a6130e5a024499294eb435f8a63daddb0cc6825",
+      "left_out": {},
+      "constraint_probabilities": {
+        "0": null,
+        "1": null,
+        "2": null,
+        "3": null,
+        "4": null,
+        "5": null,
+        "6": null,
+        "7": null,
+        "8": null,
+        "9": null,
+        "10": null,
+        "11": null,
+        "12": null,
+        "13": null
+      }
+    },
+    {
+      "id": "R23",
+      "as_of": "2020-02-29",
+      "horizon": 14,
+      "half": "tuning",
+      "source": "manual",
+      "observations": [
+        "gl.brent",
+        "gl.vix",
+        "ru.usdrub"
+      ],
+      "interventions": [],
+      "macro_version": "9cd86f4b8725eab3227dbe7064afdc620fc5d5372efb4d6a3976548f5933807c",
+      "satellite_version": "640e274022917f0656c0ac71a535f676736b23aa93642d60bfd6007ce55116f8",
+      "left_out": {},
+      "constraint_probabilities": {
+        "0": null,
+        "1": null,
+        "2": null,
+        "3": null,
+        "4": null,
+        "5": null,
+        "6": null,
+        "7": null,
+        "8": null,
+        "9": null,
+        "10": null,
+        "11": null,
+        "12": null,
+        "13": null,
+        "14": null,
+        "15": null,
+        "16": null,
+        "17": null,
+        "18": null,
+        "19": null,
+        "20": null,
+        "21": null,
+        "22": null,
+        "23": null,
+        "24": null,
+        "25": null,
+        "26": null,
+        "27": null,
+        "28": null,
+        "29": null,
+        "30": null,
+        "31": null,
+        "32": null,
+        "33": null,
+        "34": null,
+        "35": null,
+        "36": null,
+        "37": null,
+        "38": null,
+        "39": null,
+        "40": null,
+        "41": null
+      }
+    },
+    {
+      "id": "R24",
+      "as_of": "2020-03-31",
+      "horizon": 14,
+      "half": "tuning",
+      "source": "manual",
+      "observations": [],
+      "interventions": [
+        "ru.key_rate"
+      ],
+      "macro_version": "72f1a660980d04022dde319c154144341d28a9d44013464386264ad21200f1d3",
+      "satellite_version": "286ca2ec83044d67178edd74017da05e75ec0dbee01e228dc5447cc1a4c9aef1",
+      "left_out": {},
+      "constraint_probabilities": {}
+    },
+    {
+      "id": "G26",
+      "as_of": "2014-05-31",
+      "horizon": 14,
+      "half": "tuning",
+      "source": "llm",
+      "observations": [
+        "gl.brent"
+      ],
+      "interventions": [],
+      "macro_version": "d08c9c651c84238ad90bb1da3021a640e6cb026c5b0cb7cf7ff308586ac6db7a",
+      "satellite_version": "df9f82eab33ee3ee9953db74f6083a28f3c8bc93c8ed9894fa50193eae550368",
+      "left_out": {
+        "ru.housing_price": "1 changes or intervals, the model needs 3",
+        "share_price:gazp": "no driver of share_price has more than 12 usable months",
+        "share_price:lkoh": "no driver of share_price has more than 12 usable months",
+        "share_price:oil_gas": "no driver of share_price has more than 12 usable months",
+        "share_price:rosn": "no driver of share_price has more than 12 usable months",
+        "share_price:sibn": "no driver of share_price has more than 12 usable months"
+      },
+      "constraint_probabilities": {
+        "0": null,
+        "1": null,
+        "2": null,
+        "3": null,
+        "4": null,
+        "5": null,
+        "6": null,
+        "7": null,
+        "8": null,
+        "9": null,
+        "10": null,
+        "11": null,
+        "12": null,
+        "13": null
+      }
+    },
+    {
+      "id": "G27",
+      "as_of": "2014-09-30",
+      "horizon": 14,
+      "half": "tuning",
+      "source": "llm",
+      "observations": [
+        "gl.ust_10y",
+        "gl.vix"
+      ],
+      "interventions": [],
+      "macro_version": "df97993b7e1982207c25e7b7206afd5832a76cd052272ed229bae86cb29bd05d",
+      "satellite_version": "e0b0bd3b4a497d6d73d91728c754f1de73952445727b298119ff1edd193d9ee8",
+      "left_out": {
+        "ru.housing_price": "1 changes or intervals, the model needs 3",
+        "share_price:gazp": "no driver of share_price has more than 12 usable months",
+        "share_price:lkoh": "no driver of share_price has more than 12 usable months",
+        "share_price:oil_gas": "no driver of share_price has more than 12 usable months",
+        "share_price:rosn": "no driver of share_price has more than 12 usable months",
+        "share_price:sibn": "no driver of share_price has more than 12 usable months"
+      },
+      "constraint_probabilities": {
+        "0": null,
+        "1": null,
+        "2": null,
+        "3": null,
+        "4": null,
+        "5": null,
+        "6": null,
+        "7": null,
+        "8": null,
+        "9": null,
+        "10": null,
+        "11": null,
+        "12": null,
+        "13": null,
+        "14": null,
+        "15": null,
+        "16": null,
+        "17": null,
+        "18": null,
+        "19": null,
+        "20": null,
+        "21": null,
+        "22": null,
+        "23": null,
+        "24": null,
+        "25": null,
+        "26": null,
+        "27": null
+      }
+    },
+    {
+      "id": "G29",
+      "as_of": "2016-01-31",
+      "horizon": 14,
+      "half": "tuning",
+      "source": "llm",
+      "observations": [
+        "gl.brent"
+      ],
+      "interventions": [],
+      "macro_version": "0ffb5fd207d0a5596eb232f276e92ee6fd7bb85cec12ab86a1ece11e01768015",
+      "satellite_version": "6a8758e0553ed658fef424993c9022284a7b7ddba4ce5f808b8d0a95f3fd187d",
+      "left_out": {
+        "ru.housing_price": "2 changes or intervals, the model needs 3"
+      },
+      "constraint_probabilities": {
+        "0": null,
+        "1": null,
+        "2": null,
+        "3": null,
+        "4": null,
+        "5": null,
+        "6": null,
+        "7": null,
+        "8": null,
+        "9": null,
+        "10": null,
+        "11": null,
+        "12": null,
+        "13": null
+      }
+    },
+    {
+      "id": "G31",
+      "as_of": "2018-01-31",
+      "horizon": 14,
+      "half": "tuning",
+      "source": "llm",
+      "observations": [
+        "gl.vix"
+      ],
+      "interventions": [],
+      "macro_version": "5cd1106b449d104c9226ba2cfcfd093248557619739049fd3ed2076f7ebb91ac",
+      "satellite_version": "29e6453e48b5668936e0dff63d9a6103635f84c64f925528dc1c0311384f8a4e",
+      "left_out": {},
+      "constraint_probabilities": {
+        "0": null,
+        "1": null,
+        "2": null,
+        "3": null,
+        "4": null,
+        "5": null,
+        "6": null,
+        "7": null,
+        "8": null,
+        "9": null,
+        "10": null,
+        "11": null,
+        "12": null,
+        "13": null
+      }
+    },
+    {
+      "id": "G33",
+      "as_of": "2018-11-30",
+      "horizon": 14,
+      "half": "tuning",
+      "source": "llm",
+      "observations": [
+        "gl.vix",
+        "gl.brent"
+      ],
+      "interventions": [],
+      "macro_version": "a1b637c647debefabe09195e4d86ff6384ace0fc1067928645c73a1dd4151cef",
+      "satellite_version": "235c5da629bf5643099e3a1f16bfee6a64ef4a538f8af50d368eb55b18eb113e",
+      "left_out": {},
+      "constraint_probabilities": {
+        "0": null,
+        "1": null,
+        "2": null,
+        "3": null,
+        "4": null,
+        "5": null,
+        "6": null,
+        "7": null,
+        "8": null,
+        "9": null,
+        "10": null,
+        "11": null,
+        "12": null,
+        "13": null,
+        "14": null,
+        "15": null,
+        "16": null,
+        "17": null,
+        "18": null,
+        "19": null,
+        "20": null,
+        "21": null,
+        "22": null,
+        "23": null,
+        "24": null,
+        "25": null,
+        "26": null,
+        "27": null
+      }
+    },
+    {
+      "id": "G36",
+      "as_of": "2020-03-31",
+      "horizon": 14,
+      "half": "tuning",
+      "source": "llm",
+      "observations": [
+        "gl.brent"
+      ],
+      "interventions": [],
+      "macro_version": "72f1a660980d04022dde319c154144341d28a9d44013464386264ad21200f1d3",
+      "satellite_version": "286ca2ec83044d67178edd74017da05e75ec0dbee01e228dc5447cc1a4c9aef1",
+      "left_out": {},
+      "constraint_probabilities": {
+        "0": null,
+        "1": null,
+        "2": null,
+        "3": null,
+        "4": null,
+        "5": null,
+        "6": null,
+        "7": null,
+        "8": null,
+        "9": null,
+        "10": null,
+        "11": null,
+        "12": null,
+        "13": null
+      }
+    }
+  ],
+  "utility": {
+    "target": "macro",
+    "by_episode": {
+      "R13": 1.3572581883804764,
+      "R14": 0.9670648710525102,
+      "R15": 1.1247147175737624,
+      "R16": 1.0014595348999658,
+      "R17": 1.051053125128902,
+      "R18": 0.9680259190130497,
+      "R19": 0.8574723818949509,
+      "R20": 0.9090435820414943,
+      "R21": 0.8630707261644742,
+      "R22": 0.9550296220057608,
+      "R23": 1.2640301345488838,
+      "R24": 0.9849209763965131,
+      "G26": 0.9528841258174761,
+      "G27": 0.9869110586390263,
+      "G29": 0.8856519407582585,
+      "G31": 1.3415382048408957,
+      "G33": 1.3480380823727054,
+      "G36": 1.177275969547002
+    },
+    "by_source": {
+      "llm": {
+        "episodes": 6,
+        "judged": 6,
+        "share_helped": 0.5,
+        "score": 1.0490154546292276
+      },
+      "manual": {
+        "episodes": 12,
+        "judged": 12,
+        "share_helped": 0.5833333333333334,
+        "score": 1.0477399576805202
+      }
+    }
+  },
+  "meta": {
+    "generated": "2026-11-17",
+    "known_on": "2026-10-29",
+    "draws": 1000,
+    "seed": 20261029,
+    "after_months": 12,
+    "episodes_toml": "9f8d94c714a648cff1636b104d4c9ec72ca1be45c8b16ea731382749b8f36184",
+    "macro_registry": "010d2b5c0c43787ebda7eb4e46917c450fd55292b30f65103396fb6e006b2356",
+    "store": "C:\\Users\\LeoLeon\\Documents\\MacroStress\\macrostress-dsh\\workspace\\series",
+    "models": "experiments\\mt\\sl",
+    "backtest_root": "experiments\\mt\\sl\\backtest",
+    "git_commit": "15fcdb216d82487d160dc2dee5867187e301a809",
+    "plugin_sdk": "1.1.0",
+    "model_sdk": "4.1.0",
+    "macro_model": {
+      "model_id": "rw.joint",
+      "version": "0.5.0+spec.b66f682d0f2b8c60"
+    },
+    "satellite_models": [
+      {
+        "model_id": "hier.gibbs",
+        "version": "0.2.0"
+      }
+    ],
+    "macro_versions": [
+      "0ffb5fd207d0a5596eb232f276e92ee6fd7bb85cec12ab86a1ece11e01768015",
+      "23e19acf4db507c3164223ffaaa7a6fcb08ded1865a505fa677db6f097e5aff8",
+      "2df0efd9f0fd70e30844bd824ad40c6052ff515ec154faf5a0164629b8ecea1c",
+      "50a7419a0643e816cf9618f075cc1f9c78f93da8fd68823ac921874dc72f4810",
+      "51e70530c70ff42837130f66b89355ff5dc7bb9a0767080985ac200e1bdde438",
+      "55d181e4525586b53cf6855f0e35ecc8eff40aa2c183018b31d569dc61a201ab",
+      "5cd1106b449d104c9226ba2cfcfd093248557619739049fd3ed2076f7ebb91ac",
+      "72f1a660980d04022dde319c154144341d28a9d44013464386264ad21200f1d3",
+      "85f2887bed7390741b75086b0c72bef7089596bde7212d99fd60050754ccb1a1",
+      "88a0f8d048441e39eb396eba48eb205df09c609b282a908dbec809ad3b2b2503",
+      "9cd86f4b8725eab3227dbe7064afdc620fc5d5372efb4d6a3976548f5933807c",
+      "a1b637c647debefabe09195e4d86ff6384ace0fc1067928645c73a1dd4151cef",
+      "c78a4e8dc0ac79831c8833bb95c3f5229c870249d522db93060c82a6b0c6c96c",
+      "d07f79475fe60fc7e5e830830eae4900e40421dce76038cb113f225edbc9fad9",
+      "d08c9c651c84238ad90bb1da3021a640e6cb026c5b0cb7cf7ff308586ac6db7a",
+      "df97993b7e1982207c25e7b7206afd5832a76cd052272ed229bae86cb29bd05d",
+      "e4b4ea7033cc2167f058d7d66ea713f12cb4a112c8aa5a4b2907d16b899ce73a"
+    ],
+    "satellite_versions": [
+      "014072d842b3106be3a1e5d775e3572d2b300c89465287933c10c5c4af1c5b0b",
+      "235c5da629bf5643099e3a1f16bfee6a64ef4a538f8af50d368eb55b18eb113e",
+      "286ca2ec83044d67178edd74017da05e75ec0dbee01e228dc5447cc1a4c9aef1",
+      "29e6453e48b5668936e0dff63d9a6103635f84c64f925528dc1c0311384f8a4e",
+      "40a5b74b7af056d45be8dc8f5c6db5be4c0b5f880ba1a57f9433154073995764",
+      "5d59c8beba0225bfc4ebc35f21b38ecb3bfb62f074fbae8c3ceaf28429d1a0d6",
+      "640e274022917f0656c0ac71a535f676736b23aa93642d60bfd6007ce55116f8",
+      "6a8758e0553ed658fef424993c9022284a7b7ddba4ce5f808b8d0a95f3fd187d",
+      "6df72c90730621f7be8e02e4158012e58da2067a3f40c159247192fc18f1be74",
+      "77a85a2bbff95bf54be4a9e7081913f4292b141604de9bc84899c476f5a3001a",
+      "abae19372534cafa25c90408b862cbe80215a019d20abbc6bd7589754cbcb118",
+      "b5785545f273bbb7881506eeece98f379c2cd3f2fdbc4795f1369d8a37a9937c",
+      "d567e71c314c563e2945b2c9042af5d2dc24a7da9e68e6bcd5b828fac0066ccb",
+      "d71f79bf0962570555851ecfa123248304d06f342ef091cd82c88f91e3670916",
+      "df9f82eab33ee3ee9953db74f6083a28f3c8bc93c8ed9894fa50193eae550368",
+      "e0b0bd3b4a497d6d73d91728c754f1de73952445727b298119ff1edd193d9ee8",
+      "f2e19144a1f272372a7f3a813a6130e5a024499294eb435f8a63daddb0cc6825"
+    ],
+    "missing": []
+  },
+  "trust": {
+    "decision": {
+      "target": "macro",
+      "accuracy": null,
+      "harm": {
+        "statistic": 1.061434494743026,
+        "batches": 18,
+        "p": 0.061073280282900995,
+        "passed": true
+      },
+      "usefulness": {
+        "statistic": 0.8532882741486377,
+        "batches": 18,
+        "p": 0.00017446427865978304,
+        "proven": true
+      }
+    },
+    "trusted": false,
+    "reasons": [
+      "portfolio_tail: not checked",
+      "accuracy: not checked"
+    ]
+  }
+}

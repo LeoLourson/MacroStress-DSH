@@ -1,0 +1,4194 @@
+{
+  "dropped": {
+    "refused": {},
+    "skipped": {},
+    "left_out": {},
+    "excluded": {
+      "R28": {
+        "sibn": "the run serves no share_price for secid SIBN"
+      },
+      "R29": {
+        "sibn": "the run serves no share_price for secid SIBN"
+      },
+      "R30": {
+        "sibn": "the run serves no share_price for secid SIBN"
+      },
+      "R31": {
+        "sibn": "the run serves no share_price for secid SIBN"
+      },
+      "R33": {
+        "gazp": "the run serves no share_price for secid GAZP"
+      },
+      "R34": {
+        "gazp": "the run serves no share_price for secid GAZP"
+      },
+      "R35": {
+        "gazp": "the run serves no share_price for secid GAZP"
+      },
+      "G41": {
+        "sibn": "the run serves no share_price for secid SIBN"
+      },
+      "G42": {
+        "gazp": "the run serves no share_price for secid GAZP"
+      },
+      "G43": {
+        "gazp": "the run serves no share_price for secid GAZP"
+      }
+    },
+    "non_finite": {}
+  },
+  "sanity": {
+    "quantities": [
+      {
+        "level": "driver/share_price",
+        "quantity": "share_price:gazp",
+        "cells": 126,
+        "shares": {
+          "band_outside_domain": 0.0,
+          "band_wider_than_moves": null
+        },
+        "width_to_moves": null,
+        "direction": {
+          "moved": 63,
+          "cells": 126,
+          "toward": 0.5079365079365079
+        },
+        "benchmark": "walk",
+        "score": 0.9902153800914825,
+        "without": 0.8496216846890099
+      },
+      {
+        "level": "driver/share_price",
+        "quantity": "share_price:lkoh",
+        "cells": 196,
+        "shares": {
+          "band_outside_domain": 0.0,
+          "band_wider_than_moves": null
+        },
+        "width_to_moves": null,
+        "direction": {
+          "moved": 91,
+          "cells": 196,
+          "toward": 0.6703296703296703
+        },
+        "benchmark": "walk",
+        "score": 0.851827368327015,
+        "without": 0.8822062044801456
+      },
+      {
+        "level": "driver/share_price",
+        "quantity": "share_price:oil_gas",
+        "cells": 196,
+        "shares": {
+          "band_outside_domain": 0.0,
+          "band_wider_than_moves": null
+        },
+        "width_to_moves": null,
+        "direction": {
+          "moved": 91,
+          "cells": 196,
+          "toward": 0.6813186813186813
+        },
+        "benchmark": "walk",
+        "score": 0.817778075632064,
+        "without": 0.8912491720018147
+      },
+      {
+        "level": "driver/share_price",
+        "quantity": "share_price:rosn",
+        "cells": 196,
+        "shares": {
+          "band_outside_domain": 0.0,
+          "band_wider_than_moves": null
+        },
+        "width_to_moves": null,
+        "direction": {
+          "moved": 88,
+          "cells": 196,
+          "toward": 0.6590909090909091
+        },
+        "benchmark": "walk",
+        "score": 0.8141198831029052,
+        "without": 0.8922486813052948
+      },
+      {
+        "level": "driver/share_price",
+        "quantity": "share_price:sibn",
+        "cells": 126,
+        "shares": {
+          "band_outside_domain": 0.0,
+          "band_wider_than_moves": null
+        },
+        "width_to_moves": null,
+        "direction": {
+          "moved": 51,
+          "cells": 126,
+          "toward": 0.803921568627451
+        },
+        "benchmark": "walk",
+        "score": 0.9188125933422199,
+        "without": 0.8656678137643261
+      },
+      {
+        "level": "macro",
+        "quantity": "gl.brent",
+        "cells": 196,
+        "shares": {
+          "band_outside_domain": 0.0,
+          "band_wider_than_moves": null
+        },
+        "width_to_moves": null,
+        "direction": {
+          "moved": 74,
+          "cells": 196,
+          "toward": 0.4594594594594595
+        },
+        "benchmark": "walk",
+        "score": 1.2452671602711103,
+        "without": 0.9963739097843127
+      },
+      {
+        "level": "macro",
+        "quantity": "gl.fed_rate",
+        "cells": 196,
+        "shares": {
+          "band_outside_domain": 0.0,
+          "band_wider_than_moves": null
+        },
+        "width_to_moves": null,
+        "direction": {
+          "moved": 64,
+          "cells": 196,
+          "toward": 0.65625
+        },
+        "benchmark": "walk",
+        "score": 0.7782476252033742,
+        "without": 1.0178918870425808
+      },
+      {
+        "level": "macro",
+        "quantity": "gl.ust_10y",
+        "cells": 168,
+        "shares": {
+          "band_outside_domain": 0.0,
+          "band_wider_than_moves": null
+        },
+        "width_to_moves": null,
+        "direction": {
+          "moved": 43,
+          "cells": 168,
+          "toward": 0.5813953488372093
+        },
+        "benchmark": "walk",
+        "score": 1.0544104904473053,
+        "without": 1.0039372438579501
+      },
+      {
+        "level": "macro",
+        "quantity": "gl.vix",
+        "cells": 154,
+        "shares": {
+          "band_outside_domain": 0.0,
+          "band_wider_than_moves": null
+        },
+        "width_to_moves": null,
+        "direction": {
+          "moved": 44,
+          "cells": 154,
+          "toward": 0.6818181818181818
+        },
+        "benchmark": "walk",
+        "score": 0.9791172979454216,
+        "without": 1.0073237316547698
+      },
+      {
+        "level": "macro",
+        "quantity": "ru.cnyrub",
+        "cells": 168,
+        "shares": {
+          "band_outside_domain": 0.0,
+          "band_wider_than_moves": null
+        },
+        "width_to_moves": null,
+        "direction": {
+          "moved": 84,
+          "cells": 168,
+          "toward": 0.7261904761904762
+        },
+        "benchmark": "walk",
+        "score": 0.9000553292499733,
+        "without": 1.0111862012526986
+      },
+      {
+        "level": "macro",
+        "quantity": "ru.cpi",
+        "cells": 182,
+        "shares": {
+          "band_outside_domain": 0.0,
+          "band_wider_than_moves": null
+        },
+        "width_to_moves": null,
+        "direction": {
+          "moved": 88,
+          "cells": 182,
+          "toward": 0.5795454545454546
+        },
+        "benchmark": "walk",
+        "score": 0.9545045246073737,
+        "without": 1.0084901119242298
+      },
+      {
+        "level": "macro",
+        "quantity": "ru.credit",
+        "cells": 196,
+        "shares": {
+          "band_outside_domain": 0.0,
+          "band_wider_than_moves": null
+        },
+        "width_to_moves": null,
+        "direction": {
+          "moved": 71,
+          "cells": 196,
+          "toward": 0.49295774647887325
+        },
+        "benchmark": "walk",
+        "score": 1.1839705921310384,
+        "without": 0.9986625962981865
+      },
+      {
+        "level": "macro",
+        "quantity": "ru.housing_price",
+        "cells": 66,
+        "shares": {
+          "band_outside_domain": 0.0,
+          "band_wider_than_moves": null
+        },
+        "width_to_moves": null,
+        "direction": {
+          "moved": 23,
+          "cells": 66,
+          "toward": 0.5217391304347826
+        },
+        "benchmark": "walk",
+        "score": 0.9566768408834257,
+        "without": 1.0083859094904961
+      },
+      {
+        "level": "macro",
+        "quantity": "ru.imoex",
+        "cells": 140,
+        "shares": {
+          "band_outside_domain": 0.0,
+          "band_wider_than_moves": null
+        },
+        "width_to_moves": null,
+        "direction": {
+          "moved": 59,
+          "cells": 140,
+          "toward": 0.23728813559322035
+        },
+        "benchmark": "walk",
+        "score": 1.0645175156340518,
+        "without": 1.0035020024931616
+      },
+      {
+        "level": "macro",
+        "quantity": "ru.key_rate",
+        "cells": 126,
+        "shares": {
+          "band_outside_domain": 0.0,
+          "band_wider_than_moves": null
+        },
+        "width_to_moves": null,
+        "direction": {
+          "moved": 41,
+          "cells": 126,
+          "toward": 0.7317073170731707
+        },
+        "benchmark": "walk",
+        "score": 1.021860393510865,
+        "without": 1.005369191955145
+      },
+      {
+        "level": "macro",
+        "quantity": "ru.mortgage_rate",
+        "cells": 196,
+        "shares": {
+          "band_outside_domain": 0.0,
+          "band_wider_than_moves": null
+        },
+        "width_to_moves": null,
+        "direction": {
+          "moved": 49,
+          "cells": 196,
+          "toward": 0.5306122448979592
+        },
+        "benchmark": "walk",
+        "score": 1.0359238438612106,
+        "without": 1.0047447432213217
+      },
+      {
+        "level": "macro",
+        "quantity": "ru.ofz_10y",
+        "cells": 196,
+        "shares": {
+          "band_outside_domain": 0.0,
+          "band_wider_than_moves": null
+        },
+        "width_to_moves": null,
+        "direction": {
+          "moved": 95,
+          "cells": 196,
+          "toward": 0.7052631578947368
+        },
+        "benchmark": "walk",
+        "score": 0.8759629559063078,
+        "without": 1.0124340589907173
+      },
+      {
+        "level": "macro",
+        "quantity": "ru.ofz_1y",
+        "cells": 196,
+        "shares": {
+          "band_outside_domain": 0.0,
+          "band_wider_than_moves": null
+        },
+        "width_to_moves": null,
+        "direction": {
+          "moved": 108,
+          "cells": 196,
+          "toward": 0.8148148148148148
+        },
+        "benchmark": "walk",
+        "score": 0.7705044810572017,
+        "without": 1.0183546373548158
+      },
+      {
+        "level": "macro",
+        "quantity": "ru.ofz_5y",
+        "cells": 196,
+        "shares": {
+          "band_outside_domain": 0.0,
+          "band_wider_than_moves": null
+        },
+        "width_to_moves": null,
+        "direction": {
+          "moved": 106,
+          "cells": 196,
+          "toward": 0.7452830188679245
+        },
+        "benchmark": "walk",
+        "score": 0.8299391432974269,
+        "without": 1.014920858536068
+      },
+      {
+        "level": "macro",
+        "quantity": "ru.output",
+        "cells": 196,
+        "shares": {
+          "band_outside_domain": 0.0,
+          "band_wider_than_moves": null
+        },
+        "width_to_moves": null,
+        "direction": {
+          "moved": 43,
+          "cells": 196,
+          "toward": 0.3023255813953488
+        },
+        "benchmark": "walk",
+        "score": 0.9855853821440882,
+        "without": 1.0070222979654957
+      },
+      {
+        "level": "macro",
+        "quantity": "ru.real_wage",
+        "cells": 196,
+        "shares": {
+          "band_outside_domain": 0.0,
+          "band_wider_than_moves": null
+        },
+        "width_to_moves": null,
+        "direction": {
+          "moved": 22,
+          "cells": 196,
+          "toward": 0.3181818181818182
+        },
+        "benchmark": "walk",
+        "score": 1.1158251486010897,
+        "without": 1.001357145065711
+      },
+      {
+        "level": "macro",
+        "quantity": "ru.retail",
+        "cells": 196,
+        "shares": {
+          "band_outside_domain": 0.0,
+          "band_wider_than_moves": null
+        },
+        "width_to_moves": null,
+        "direction": {
+          "moved": 46,
+          "cells": 196,
+          "toward": 0.2391304347826087
+        },
+        "benchmark": "walk",
+        "score": 1.1727311747237184,
+        "without": 0.999095670899683
+      },
+      {
+        "level": "macro",
+        "quantity": "ru.ruonia",
+        "cells": 196,
+        "shares": {
+          "band_outside_domain": 0.0,
+          "band_wider_than_moves": null
+        },
+        "width_to_moves": null,
+        "direction": {
+          "moved": 102,
+          "cells": 196,
+          "toward": 0.7549019607843137
+        },
+        "benchmark": "walk",
+        "score": 0.7307342207291432,
+        "without": 1.0208107023731696
+      },
+      {
+        "level": "macro",
+        "quantity": "ru.spread_a",
+        "cells": 196,
+        "shares": {
+          "band_outside_domain": 0.0,
+          "band_wider_than_moves": null
+        },
+        "width_to_moves": null,
+        "direction": {
+          "moved": 95,
+          "cells": 196,
+          "toward": 0.5368421052631579
+        },
+        "benchmark": "walk",
+        "score": 1.127049259153706,
+        "without": 1.0009016872747494
+      },
+      {
+        "level": "macro",
+        "quantity": "ru.spread_aa",
+        "cells": 196,
+        "shares": {
+          "band_outside_domain": 0.0,
+          "band_wider_than_moves": null
+        },
+        "width_to_moves": null,
+        "direction": {
+          "moved": 69,
+          "cells": 196,
+          "toward": 0.4927536231884058
+        },
+        "benchmark": "walk",
+        "score": 1.1061551231954447,
+        "without": 1.0017533979063145
+      },
+      {
+        "level": "macro",
+        "quantity": "ru.spread_bbb",
+        "cells": 196,
+        "shares": {
+          "band_outside_domain": 0.0,
+          "band_wider_than_moves": null
+        },
+        "width_to_moves": null,
+        "direction": {
+          "moved": 102,
+          "cells": 196,
+          "toward": 0.4411764705882353
+        },
+        "benchmark": "walk",
+        "score": 1.1327530386405373,
+        "without": 1.0006720501425415
+      },
+      {
+        "level": "macro",
+        "quantity": "ru.unemployment",
+        "cells": 196,
+        "shares": {
+          "band_outside_domain": 0.0,
+          "band_wider_than_moves": null
+        },
+        "width_to_moves": null,
+        "direction": {
+          "moved": 19,
+          "cells": 196,
+          "toward": 0.8947368421052632
+        },
+        "benchmark": "walk",
+        "score": 1.2076930004194442,
+        "without": 0.9977624704551804
+      },
+      {
+        "level": "macro",
+        "quantity": "ru.usdrub",
+        "cells": 84,
+        "shares": {
+          "band_outside_domain": 0.0,
+          "band_wider_than_moves": null
+        },
+        "width_to_moves": null,
+        "direction": {
+          "moved": 11,
+          "cells": 84,
+          "toward": 0.09090909090909091
+        },
+        "benchmark": "walk",
+        "score": 1.1638516152415337,
+        "without": 0.999440895512771
+      },
+      {
+        "level": "portfolio",
+        "quantity": "model-trust-liquid",
+        "cells": 196,
+        "shares": {
+          "band_outside_domain": 0.0,
+          "band_wider_than_moves": null
+        },
+        "width_to_moves": null,
+        "direction": {
+          "moved": 96,
+          "cells": 196,
+          "toward": 0.6770833333333334
+        },
+        "benchmark": "historical",
+        "score": 0.875988749869542,
+        "without": null
+      },
+      {
+        "level": "position",
+        "quantity": "gazp",
+        "cells": 126,
+        "shares": {
+          "band_outside_domain": 0.0,
+          "band_wider_than_moves": null
+        },
+        "width_to_moves": null,
+        "direction": {
+          "moved": 63,
+          "cells": 126,
+          "toward": 0.5079365079365079
+        },
+        "benchmark": "historical",
+        "score": 1.0827255430716711,
+        "without": 0.8653537466638618
+      },
+      {
+        "level": "position",
+        "quantity": "lkoh",
+        "cells": 196,
+        "shares": {
+          "band_outside_domain": 0.0,
+          "band_wider_than_moves": null
+        },
+        "width_to_moves": null,
+        "direction": {
+          "moved": 91,
+          "cells": 196,
+          "toward": 0.6703296703296703
+        },
+        "benchmark": "historical",
+        "score": 0.8775269506348168,
+        "without": 0.928138920517372
+      },
+      {
+        "level": "position",
+        "quantity": "rosn",
+        "cells": 196,
+        "shares": {
+          "band_outside_domain": 0.0,
+          "band_wider_than_moves": null
+        },
+        "width_to_moves": null,
+        "direction": {
+          "moved": 88,
+          "cells": 196,
+          "toward": 0.6590909090909091
+        },
+        "benchmark": "historical",
+        "score": 0.8241995893500004,
+        "without": 0.9477395575069214
+      },
+      {
+        "level": "position",
+        "quantity": "sibn",
+        "cells": 126,
+        "shares": {
+          "band_outside_domain": 0.0,
+          "band_wider_than_moves": null
+        },
+        "width_to_moves": null,
+        "direction": {
+          "moved": 50,
+          "cells": 126,
+          "toward": 0.8
+        },
+        "benchmark": "historical",
+        "score": 0.895959085594,
+        "without": 0.9217300502320401
+      }
+    ]
+  },
+  "admission": {
+    "criteria": {
+      "domain": {
+        "rule": "no band outside the domain",
+        "failed": []
+      },
+      "moves": {
+        "alpha": 0.0125,
+        "tests": [],
+        "untested": 0,
+        "failed": []
+      }
+    },
+    "failed": false
+  },
+  "levels": {
+    "driver/share_price": {
+      "units": 14,
+      "cells": 840,
+      "pairs": {
+        "model/walk": {
+          "score": 0.8760449775735886,
+          "by_horizon": {
+            "1": 0.5850605326736423,
+            "2": 1.0277241131481902,
+            "3": 0.8267519877220301,
+            "4": 1.0788533753504395,
+            "5": 0.937718378356908,
+            "6": 0.9518740720003706,
+            "7": 0.9323012362821553,
+            "8": 0.9480779021779303,
+            "9": 0.8908981919633925,
+            "10": 0.8830632476599208,
+            "11": 0.8814203891378621,
+            "12": 0.8028321795300295,
+            "13": 0.8271438970568508,
+            "14": 0.804810447947564
+          },
+          "by_quantity": {
+            "share_price:gazp": 0.9902153800914825,
+            "share_price:lkoh": 0.851827368327015,
+            "share_price:oil_gas": 0.817778075632064,
+            "share_price:rosn": 0.8141198831029052,
+            "share_price:sibn": 0.9188125933422199
+          },
+          "cells": 840,
+          "left_out": 0,
+          "interval": {
+            "point": 0.8760449775735886,
+            "log_se": 0.13730778581891814,
+            "low": 0.6353691568696633,
+            "high": 1.07145198908125
+          }
+        },
+        "base/walk": {
+          "score": 1.0243413339518272,
+          "by_horizon": {
+            "1": 1.1103576505537565,
+            "2": 1.0502403668309168,
+            "3": 1.0506517148523251,
+            "4": 1.0468412677404297,
+            "5": 1.0211088940456314,
+            "6": 1.0206059537221106,
+            "7": 1.0266063994875854,
+            "8": 1.0173543384396442,
+            "9": 1.015205817170879,
+            "10": 1.0017513863942629,
+            "11": 1.0046925726693927,
+            "12": 0.9937783532387215,
+            "13": 0.9946645957572037,
+            "14": 0.9931498082441019
+          },
+          "by_quantity": {
+            "share_price:gazp": 1.088676436623733,
+            "share_price:lkoh": 1.0091610297570024,
+            "share_price:oil_gas": 1.0500922671852526,
+            "share_price:rosn": 1.0171953262729625,
+            "share_price:sibn": 0.9610198921922791
+          },
+          "cells": 840,
+          "left_out": 0,
+          "interval": {
+            "point": 1.0243413339518272,
+            "log_se": 0.029806178323974617,
+            "low": 0.9582334903606534,
+            "high": 1.0781982981981972
+          }
+        },
+        "model/base": {
+          "score": 0.8552275970294754,
+          "by_horizon": {
+            "1": 0.5269117859293908,
+            "2": 0.9785608567392347,
+            "3": 0.7868944351727771,
+            "4": 1.0305797149926148,
+            "5": 0.9183333764155844,
+            "6": 0.9326558095501231,
+            "7": 0.9081389291431448,
+            "8": 0.9319053021703669,
+            "9": 0.8775542622934329,
+            "10": 0.8815193666349173,
+            "11": 0.8773035783433678,
+            "12": 0.8078583890598956,
+            "13": 0.8315807163390336,
+            "14": 0.8103615801632951
+          },
+          "by_quantity": {
+            "share_price:gazp": 0.9095589348497303,
+            "share_price:lkoh": 0.8440945926460596,
+            "share_price:oil_gas": 0.7787678294442626,
+            "share_price:rosn": 0.8003574751821438,
+            "share_price:sibn": 0.9560807229975481
+          },
+          "cells": 840,
+          "left_out": 0,
+          "interval": {
+            "point": 0.8552275970294754,
+            "log_se": 0.1238476121883407,
+            "low": 0.6416807507889197,
+            "high": 1.02879789831232
+          }
+        },
+        "model/naive": {
+          "score": 0.6253576220242812,
+          "by_horizon": {
+            "1": 0.09940757370386732,
+            "2": 0.3904871550386995,
+            "3": 0.4547136945444549,
+            "4": 0.7189047748126635,
+            "5": 0.7832527728835555,
+            "6": 0.7770300142000384,
+            "7": 0.7891263219031874,
+            "8": 0.8153102099066163,
+            "9": 0.802774283459078,
+            "10": 0.8066717836025858,
+            "11": 0.8242518795348542,
+            "12": 0.8000019204430652,
+            "13": 0.8236586075822311,
+            "14": 0.8005066713701796
+          },
+          "by_quantity": {
+            "share_price:gazp": 0.6620017622563671,
+            "share_price:lkoh": 0.6618585265435004,
+            "share_price:oil_gas": 0.6046404982274222,
+            "share_price:rosn": 0.5594831049248468,
+            "share_price:sibn": 0.6452584715318143
+          },
+          "cells": 840,
+          "left_out": 0,
+          "interval": {
+            "point": 0.6253576220242812,
+            "log_se": 0.1660117863921341,
+            "low": 0.4375419932046371,
+            "high": 0.8232105317665348
+          }
+        }
+      },
+      "calibration": [
+        0.15119047619047618,
+        0.48095238095238096,
+        0.2642857142857143,
+        0.10357142857142858
+      ],
+      "calibration_by_horizon": {
+        "1": [
+          0.0,
+          0.6666666666666666,
+          0.3333333333333333,
+          0.0
+        ],
+        "3": [
+          0.1,
+          0.43333333333333335,
+          0.36666666666666664,
+          0.1
+        ],
+        "6": [
+          0.18333333333333332,
+          0.4,
+          0.31666666666666665,
+          0.1
+        ],
+        "12": [
+          0.16666666666666666,
+          0.5333333333333333,
+          0.23333333333333334,
+          0.06666666666666667
+        ]
+      },
+      "coverage": 0.7452380952380953
+    },
+    "macro": {
+      "units": 14,
+      "cells": 4028,
+      "pairs": {
+        "model/conditional_walk": {
+          "score": 0.9810651291185583,
+          "by_horizon": {
+            "1": 0.9736159950979117,
+            "2": 0.9921708982342105,
+            "3": 1.0016646184900106,
+            "4": 0.9948007518276132,
+            "5": 0.9836367816268929,
+            "6": 0.9957228799847777,
+            "7": 0.9821284880267306,
+            "8": 0.9939801734995263,
+            "9": 0.9804346889661129,
+            "10": 0.9818812248746275,
+            "11": 0.9785348352334121,
+            "12": 0.9600469787924146,
+            "13": 0.9680845918896172,
+            "14": 0.9496381297693494
+          },
+          "by_quantity": {
+            "gl.brent": 0.9079912486899878,
+            "gl.fed_rate": 0.8029905937618291,
+            "gl.ust_10y": 1.005292381782124,
+            "gl.vix": 0.7367993933400383,
+            "ru.cnyrub": 1.2380740195013673,
+            "ru.cpi": 0.9071355036659656,
+            "ru.credit": 1.153459499258299,
+            "ru.imoex": 0.970405321571101,
+            "ru.key_rate": 0.955706288351285,
+            "ru.mortgage_rate": 0.9857503041166528,
+            "ru.ofz_10y": 0.8915945930746184,
+            "ru.ofz_1y": 0.9562263762755097,
+            "ru.ofz_5y": 0.8950298029917629,
+            "ru.output": 0.9454487764140972,
+            "ru.real_wage": 0.9890987915220357,
+            "ru.retail": 1.0054896634814965,
+            "ru.ruonia": 1.2863041397935555,
+            "ru.spread_a": 0.9452316899272744,
+            "ru.spread_aa": 0.9722456681017271,
+            "ru.spread_bbb": 1.109083776138308,
+            "ru.unemployment": 1.2628359108933247,
+            "ru.usdrub": 0.8642967457430413
+          },
+          "cells": 3962,
+          "left_out": 0,
+          "interval": {
+            "point": 0.9810651291185583,
+            "log_se": 0.015993464412155805,
+            "low": 0.9578152247630962,
+            "high": 1.0196751115408234
+          }
+        },
+        "model/walk": {
+          "score": 1.0060806352558795,
+          "by_horizon": {
+            "1": 0.9164729063968999,
+            "2": 0.971565905792601,
+            "3": 0.9239954727615219,
+            "4": 0.955101351841379,
+            "5": 0.9570985632059337,
+            "6": 0.9808705169317103,
+            "7": 1.0240861206064908,
+            "8": 1.036376351285931,
+            "9": 1.068110326217558,
+            "10": 1.0823932722864127,
+            "11": 1.05292330773431,
+            "12": 1.018978077518679,
+            "13": 1.043554198690244,
+            "14": 1.0741075064317185
+          },
+          "by_quantity": {
+            "gl.brent": 1.2452671602711103,
+            "gl.fed_rate": 0.7782476252033742,
+            "gl.ust_10y": 1.0544104904473053,
+            "gl.vix": 0.9791172979454216,
+            "ru.cnyrub": 0.9000553292499733,
+            "ru.cpi": 0.9545045246073737,
+            "ru.credit": 1.1839705921310384,
+            "ru.housing_price": 0.9566768408834257,
+            "ru.imoex": 1.0645175156340518,
+            "ru.key_rate": 1.021860393510865,
+            "ru.mortgage_rate": 1.0359238438612106,
+            "ru.ofz_10y": 0.8759629559063078,
+            "ru.ofz_1y": 0.7705044810572017,
+            "ru.ofz_5y": 0.8299391432974269,
+            "ru.output": 0.9855853821440882,
+            "ru.real_wage": 1.1158251486010897,
+            "ru.retail": 1.1727311747237184,
+            "ru.ruonia": 0.7307342207291432,
+            "ru.spread_a": 1.127049259153706,
+            "ru.spread_aa": 1.1061551231954447,
+            "ru.spread_bbb": 1.1327530386405373,
+            "ru.unemployment": 1.2076930004194442,
+            "ru.usdrub": 1.1638516152415337
+          },
+          "cells": 4028,
+          "left_out": 0,
+          "interval": {
+            "point": 1.0060806352558795,
+            "log_se": 0.02775969593803846,
+            "low": 0.9514062368442692,
+            "high": 1.0601311983785766
+          }
+        },
+        "base/walk": {
+          "score": 0.991173040834096,
+          "by_horizon": {
+            "1": 1.0204329076604577,
+            "2": 0.9855761781645908,
+            "3": 0.9800616549501298,
+            "4": 1.0159834228906248,
+            "5": 0.9820878404793485,
+            "6": 0.9866912453640438,
+            "7": 1.0117567089433626,
+            "8": 0.980393190613387,
+            "9": 1.0049360073807403,
+            "10": 1.0037524983838706,
+            "11": 0.9816980771575533,
+            "12": 0.9810335701604309,
+            "13": 0.9734037196806843,
+            "14": 0.9703987228262935
+          },
+          "by_quantity": {
+            "gl.brent": 0.9774114537939192,
+            "gl.fed_rate": 0.7988058801463064,
+            "gl.ust_10y": 0.9850684554784357,
+            "gl.vix": 0.8540924597468033,
+            "ru.cnyrub": 0.9893951791275523,
+            "ru.cpi": 0.9419948416807444,
+            "ru.credit": 0.9772202282049156,
+            "ru.housing_price": 1.0288943049220693,
+            "ru.imoex": 1.03791709387913,
+            "ru.key_rate": 1.011121195301669,
+            "ru.mortgage_rate": 0.946830753239371,
+            "ru.ofz_10y": 0.9736522550113219,
+            "ru.ofz_1y": 0.9474066300755135,
+            "ru.ofz_5y": 0.9666274011693597,
+            "ru.output": 0.937898701285869,
+            "ru.real_wage": 0.9998807799375765,
+            "ru.retail": 1.0107321467572163,
+            "ru.ruonia": 1.0036352562058326,
+            "ru.spread_a": 1.0990161193064427,
+            "ru.spread_aa": 1.0720838829232906,
+            "ru.spread_bbb": 1.0805333501316925,
+            "ru.unemployment": 1.1837690150085955,
+            "ru.usdrub": 1.0429772010849447
+          },
+          "cells": 4028,
+          "left_out": 0,
+          "interval": {
+            "point": 0.9911730408340961,
+            "log_se": 0.010279836781773561,
+            "low": 0.971117075839348,
+            "high": 1.0100178212141047
+          }
+        },
+        "model/base": {
+          "score": 1.015040355021398,
+          "by_horizon": {
+            "1": 0.8981216692610332,
+            "2": 0.9857846885077107,
+            "3": 0.9427932090747283,
+            "4": 0.9400757239955481,
+            "5": 0.974554946876017,
+            "6": 0.9941007600303721,
+            "7": 1.0121861427299104,
+            "8": 1.0571027636753758,
+            "9": 1.0628640215624028,
+            "10": 1.0783467777456701,
+            "11": 1.0725530916623418,
+            "12": 1.0386780926895733,
+            "13": 1.0720671984205812,
+            "14": 1.1068723414055743
+          },
+          "by_quantity": {
+            "gl.brent": 1.274046007377428,
+            "gl.fed_rate": 0.9742637661365653,
+            "gl.ust_10y": 1.0703931128676645,
+            "gl.vix": 1.1463832595310373,
+            "ru.cnyrub": 0.9097025619668384,
+            "ru.cpi": 1.0132799909013397,
+            "ru.credit": 1.211569877453221,
+            "ru.housing_price": 0.9298106096095909,
+            "ru.imoex": 1.025628657540946,
+            "ru.key_rate": 1.0106210791140542,
+            "ru.mortgage_rate": 1.0940961099087954,
+            "ru.ofz_10y": 0.8996671567264247,
+            "ru.ofz_1y": 0.8132774846591354,
+            "ru.ofz_5y": 0.8585926100309419,
+            "ru.output": 1.0508441698371478,
+            "ru.real_wage": 1.1159581932065459,
+            "ru.retail": 1.1602788913821054,
+            "ru.ruonia": 0.728087436357735,
+            "ru.spread_a": 1.025507487428805,
+            "ru.spread_aa": 1.0317803866048716,
+            "ru.spread_bbb": 1.0483276971529667,
+            "ru.unemployment": 1.0202100115035322,
+            "ru.usdrub": 1.1158936303026097
+          },
+          "cells": 4028,
+          "left_out": 0,
+          "interval": {
+            "point": 1.0150403550213982,
+            "log_se": 0.026202110081301445,
+            "low": 0.9643263465366365,
+            "high": 1.0699657713330524
+          }
+        }
+      },
+      "calibration": [
+        0.06852035749751738,
+        0.41112214498510424,
+        0.37363455809334656,
+        0.14672293942403178
+      ],
+      "calibration_by_horizon": {
+        "1": [
+          0.04895104895104895,
+          0.4160839160839161,
+          0.44755244755244755,
+          0.08741258741258741
+        ],
+        "3": [
+          0.07665505226480836,
+          0.4250871080139373,
+          0.34843205574912894,
+          0.14982578397212543
+        ],
+        "6": [
+          0.08362369337979095,
+          0.3867595818815331,
+          0.37630662020905925,
+          0.15331010452961671
+        ],
+        "12": [
+          0.041811846689895474,
+          0.44947735191637633,
+          0.3519163763066202,
+          0.156794425087108
+        ]
+      },
+      "coverage": 0.7837636544190665
+    },
+    "portfolio": {
+      "units": 14,
+      "cells": 196,
+      "pairs": {
+        "model/historical": {
+          "score": 0.875988749869542,
+          "by_horizon": {
+            "1": 0.5161719346498589,
+            "2": 1.0448041141077047,
+            "3": 0.888427285458621,
+            "4": 1.1336772306563951,
+            "5": 0.9819924304406042,
+            "6": 0.9858862840978118,
+            "7": 0.9321724923293482,
+            "8": 0.9491287105763591,
+            "9": 0.9227777154388093,
+            "10": 0.8999613450473634,
+            "11": 0.8834604760381108,
+            "12": 0.8011409020185926,
+            "13": 0.7815351035951941,
+            "14": 0.7330219761515335
+          },
+          "by_quantity": {
+            "model-trust-liquid": 0.875988749869542
+          },
+          "cells": 196,
+          "left_out": 0,
+          "interval": {
+            "point": 0.8759887498695421,
+            "log_se": 0.15430121878532357,
+            "low": 0.6136294619858184,
+            "high": 1.1062940439370352
+          }
+        },
+        "base/historical": {
+          "score": 1.0388036495400896,
+          "by_horizon": {
+            "1": 1.1339249154996311,
+            "2": 1.0271697302585374,
+            "3": 1.047878544136907,
+            "4": 1.0651530306010775,
+            "5": 1.0414690419159582,
+            "6": 1.0292564362525491,
+            "7": 1.0241302436946154,
+            "8": 1.029800758103065,
+            "9": 1.0291938723545797,
+            "10": 1.0275366664353511,
+            "11": 1.0327062997849368,
+            "12": 1.022308282144965,
+            "13": 1.020296635169956,
+            "14": 1.0177966875443463
+          },
+          "by_quantity": {
+            "model-trust-liquid": 1.0388036495400896
+          },
+          "cells": 196,
+          "left_out": 0,
+          "interval": {
+            "point": 1.0388036495400896,
+            "log_se": 0.041272121361419306,
+            "low": 0.9433774847756109,
+            "high": 1.1101634015081079
+          }
+        },
+        "model/base": {
+          "score": 0.8432669159926125,
+          "by_horizon": {
+            "1": 0.45520821316676224,
+            "2": 1.0171679356679726,
+            "3": 0.8478342174573112,
+            "4": 1.0643327278678902,
+            "5": 0.9428916183951692,
+            "6": 0.9578626369220045,
+            "7": 0.9102089290581599,
+            "8": 0.9216624702478301,
+            "9": 0.896602418869525,
+            "10": 0.8758435338073511,
+            "11": 0.8554808624892608,
+            "12": 0.7836588199575885,
+            "13": 0.7659881221356863,
+            "14": 0.7202047178205176
+          },
+          "by_quantity": {
+            "model-trust-liquid": 0.8432669159926125
+          },
+          "cells": 196,
+          "left_out": 0,
+          "interval": {
+            "point": 0.8432669159926125,
+            "log_se": 0.13937026082535173,
+            "low": 0.6110858852508355,
+            "high": 1.0485561142076354
+          }
+        }
+      },
+      "calibration": [
+        0.14795918367346939,
+        0.4336734693877551,
+        0.33163265306122447,
+        0.08673469387755102
+      ],
+      "calibration_by_horizon": {
+        "1": [
+          0.0,
+          0.7142857142857143,
+          0.2857142857142857,
+          0.0
+        ],
+        "3": [
+          0.07142857142857142,
+          0.42857142857142855,
+          0.42857142857142855,
+          0.07142857142857142
+        ],
+        "6": [
+          0.14285714285714285,
+          0.42857142857142855,
+          0.2857142857142857,
+          0.14285714285714285
+        ],
+        "12": [
+          0.21428571428571427,
+          0.42857142857142855,
+          0.35714285714285715,
+          0.0
+        ]
+      },
+      "coverage": 0.7653061224489796
+    },
+    "position": {
+      "units": 14,
+      "cells": 644,
+      "pairs": {
+        "model/historical": {
+          "score": 0.9152186351690262,
+          "by_horizon": {
+            "1": 0.6460475322588699,
+            "2": 1.0639584127712614,
+            "3": 0.8558408244881363,
+            "4": 1.1453743242816845,
+            "5": 0.9911810841041035,
+            "6": 1.0013487396158147,
+            "7": 0.9629240122526396,
+            "8": 0.9785041676704566,
+            "9": 0.9247039459560593,
+            "10": 0.9114730714311198,
+            "11": 0.9104159350417843,
+            "12": 0.8321507978533241,
+            "13": 0.8565376921850664,
+            "14": 0.839441470081904
+          },
+          "by_quantity": {
+            "gazp": 1.0827255430716711,
+            "lkoh": 0.8775269506348168,
+            "rosn": 0.8241995893500004,
+            "sibn": 0.895959085594
+          },
+          "cells": 644,
+          "left_out": 0,
+          "interval": {
+            "point": 0.9152186351690261,
+            "log_se": 0.1260088572501498,
+            "low": 0.6806963843297231,
+            "high": 1.1044448362508987
+          }
+        },
+        "base/historical": {
+          "score": 1.0320422403766887,
+          "by_horizon": {
+            "1": 1.128277093081197,
+            "2": 1.0572078955443622,
+            "3": 1.0616892172752452,
+            "4": 1.0679216590945897,
+            "5": 1.0438965832351654,
+            "6": 1.0294237728212003,
+            "7": 1.028306877768448,
+            "8": 1.0226168755822536,
+            "9": 1.0184762779164502,
+            "10": 1.0097056659480725,
+            "11": 1.0085904113934514,
+            "12": 0.9970316467545794,
+            "13": 0.9946026807855011,
+            "14": 0.9893390907467075
+          },
+          "by_quantity": {
+            "gazp": 1.1412432569563906,
+            "lkoh": 1.0132133243275134,
+            "rosn": 1.0018777851216116,
+            "sibn": 0.9792555182772998
+          },
+          "cells": 644,
+          "left_out": 0,
+          "interval": {
+            "point": 1.0320422403766887,
+            "log_se": 0.03599966842065651,
+            "low": 0.954159702468432,
+            "high": 1.0981656219736067
+          }
+        },
+        "model/base": {
+          "score": 0.8868034653649228,
+          "by_horizon": {
+            "1": 0.5725965157145815,
+            "2": 1.0063852315664206,
+            "3": 0.8061123825714223,
+            "4": 1.0725265421180437,
+            "5": 0.9495012245679644,
+            "6": 0.9727274287357439,
+            "7": 0.9364169715000863,
+            "8": 0.9568629181024612,
+            "9": 0.907928801098612,
+            "10": 0.9027116536731363,
+            "11": 0.9026616996923152,
+            "12": 0.8346282693854743,
+            "13": 0.8611857867793037,
+            "14": 0.848487114209075
+          },
+          "by_quantity": {
+            "gazp": 0.9487245917747791,
+            "lkoh": 0.8660831135607558,
+            "rosn": 0.8226548203680912,
+            "sibn": 0.9149390214008347
+          },
+          "cells": 644,
+          "left_out": 0,
+          "interval": {
+            "point": 0.8868034653649228,
+            "log_se": 0.11466219207408349,
+            "low": 0.6768506199691691,
+            "high": 1.0495546339451503
+          }
+        }
+      },
+      "calibration": [
+        0.14751552795031056,
+        0.4891304347826087,
+        0.2577639751552795,
+        0.10559006211180125
+      ],
+      "calibration_by_horizon": {
+        "1": [
+          0.0,
+          0.6739130434782609,
+          0.32608695652173914,
+          0.0
+        ],
+        "3": [
+          0.10869565217391304,
+          0.391304347826087,
+          0.41304347826086957,
+          0.08695652173913043
+        ],
+        "6": [
+          0.15217391304347827,
+          0.43478260869565216,
+          0.30434782608695654,
+          0.10869565217391304
+        ],
+        "12": [
+          0.15217391304347827,
+          0.5652173913043478,
+          0.21739130434782608,
+          0.06521739130434782
+        ]
+      },
+      "coverage": 0.7468944099378882
+    }
+  },
+  "halves": {
+    "all": {
+      "units": [
+        "G41",
+        "G42",
+        "G43",
+        "R25",
+        "R26",
+        "R27",
+        "R28",
+        "R29",
+        "R30",
+        "R31",
+        "R32",
+        "R33",
+        "R34",
+        "R35"
+      ],
+      "cells": 5708,
+      "admitted": true,
+      "levels": {
+        "driver/share_price": {
+          "units": 14,
+          "cells": 840,
+          "pairs": {
+            "model/walk": {
+              "score": 0.8760449775735886,
+              "by_horizon": {
+                "1": 0.5850605326736423,
+                "2": 1.0277241131481902,
+                "3": 0.8267519877220301,
+                "4": 1.0788533753504395,
+                "5": 0.937718378356908,
+                "6": 0.9518740720003706,
+                "7": 0.9323012362821553,
+                "8": 0.9480779021779303,
+                "9": 0.8908981919633925,
+                "10": 0.8830632476599208,
+                "11": 0.8814203891378621,
+                "12": 0.8028321795300295,
+                "13": 0.8271438970568508,
+                "14": 0.804810447947564
+              },
+              "by_quantity": {
+                "share_price:gazp": 0.9902153800914825,
+                "share_price:lkoh": 0.851827368327015,
+                "share_price:oil_gas": 0.817778075632064,
+                "share_price:rosn": 0.8141198831029052,
+                "share_price:sibn": 0.9188125933422199
+              },
+              "cells": 840,
+              "left_out": 0,
+              "interval": {
+                "point": 0.8760449775735886,
+                "log_se": 0.13730778581891814,
+                "low": 0.6353691568696633,
+                "high": 1.07145198908125
+              }
+            },
+            "base/walk": {
+              "score": 1.0243413339518272,
+              "by_horizon": {
+                "1": 1.1103576505537565,
+                "2": 1.0502403668309168,
+                "3": 1.0506517148523251,
+                "4": 1.0468412677404297,
+                "5": 1.0211088940456314,
+                "6": 1.0206059537221106,
+                "7": 1.0266063994875854,
+                "8": 1.0173543384396442,
+                "9": 1.015205817170879,
+                "10": 1.0017513863942629,
+                "11": 1.0046925726693927,
+                "12": 0.9937783532387215,
+                "13": 0.9946645957572037,
+                "14": 0.9931498082441019
+              },
+              "by_quantity": {
+                "share_price:gazp": 1.088676436623733,
+                "share_price:lkoh": 1.0091610297570024,
+                "share_price:oil_gas": 1.0500922671852526,
+                "share_price:rosn": 1.0171953262729625,
+                "share_price:sibn": 0.9610198921922791
+              },
+              "cells": 840,
+              "left_out": 0,
+              "interval": {
+                "point": 1.0243413339518272,
+                "log_se": 0.029806178323974617,
+                "low": 0.9582334903606534,
+                "high": 1.0781982981981972
+              }
+            },
+            "model/base": {
+              "score": 0.8552275970294754,
+              "by_horizon": {
+                "1": 0.5269117859293908,
+                "2": 0.9785608567392347,
+                "3": 0.7868944351727771,
+                "4": 1.0305797149926148,
+                "5": 0.9183333764155844,
+                "6": 0.9326558095501231,
+                "7": 0.9081389291431448,
+                "8": 0.9319053021703669,
+                "9": 0.8775542622934329,
+                "10": 0.8815193666349173,
+                "11": 0.8773035783433678,
+                "12": 0.8078583890598956,
+                "13": 0.8315807163390336,
+                "14": 0.8103615801632951
+              },
+              "by_quantity": {
+                "share_price:gazp": 0.9095589348497303,
+                "share_price:lkoh": 0.8440945926460596,
+                "share_price:oil_gas": 0.7787678294442626,
+                "share_price:rosn": 0.8003574751821438,
+                "share_price:sibn": 0.9560807229975481
+              },
+              "cells": 840,
+              "left_out": 0,
+              "interval": {
+                "point": 0.8552275970294754,
+                "log_se": 0.1238476121883407,
+                "low": 0.6416807507889197,
+                "high": 1.02879789831232
+              }
+            },
+            "model/naive": {
+              "score": 0.6253576220242812,
+              "by_horizon": {
+                "1": 0.09940757370386732,
+                "2": 0.3904871550386995,
+                "3": 0.4547136945444549,
+                "4": 0.7189047748126635,
+                "5": 0.7832527728835555,
+                "6": 0.7770300142000384,
+                "7": 0.7891263219031874,
+                "8": 0.8153102099066163,
+                "9": 0.802774283459078,
+                "10": 0.8066717836025858,
+                "11": 0.8242518795348542,
+                "12": 0.8000019204430652,
+                "13": 0.8236586075822311,
+                "14": 0.8005066713701796
+              },
+              "by_quantity": {
+                "share_price:gazp": 0.6620017622563671,
+                "share_price:lkoh": 0.6618585265435004,
+                "share_price:oil_gas": 0.6046404982274222,
+                "share_price:rosn": 0.5594831049248468,
+                "share_price:sibn": 0.6452584715318143
+              },
+              "cells": 840,
+              "left_out": 0,
+              "interval": {
+                "point": 0.6253576220242812,
+                "log_se": 0.1660117863921341,
+                "low": 0.4375419932046371,
+                "high": 0.8232105317665348
+              }
+            }
+          },
+          "calibration": [
+            0.15119047619047618,
+            0.48095238095238096,
+            0.2642857142857143,
+            0.10357142857142858
+          ],
+          "calibration_by_horizon": {
+            "1": [
+              0.0,
+              0.6666666666666666,
+              0.3333333333333333,
+              0.0
+            ],
+            "3": [
+              0.1,
+              0.43333333333333335,
+              0.36666666666666664,
+              0.1
+            ],
+            "6": [
+              0.18333333333333332,
+              0.4,
+              0.31666666666666665,
+              0.1
+            ],
+            "12": [
+              0.16666666666666666,
+              0.5333333333333333,
+              0.23333333333333334,
+              0.06666666666666667
+            ]
+          },
+          "coverage": 0.7452380952380953
+        },
+        "macro": {
+          "units": 14,
+          "cells": 4028,
+          "pairs": {
+            "model/conditional_walk": {
+              "score": 0.9810651291185583,
+              "by_horizon": {
+                "1": 0.9736159950979117,
+                "2": 0.9921708982342105,
+                "3": 1.0016646184900106,
+                "4": 0.9948007518276132,
+                "5": 0.9836367816268929,
+                "6": 0.9957228799847777,
+                "7": 0.9821284880267306,
+                "8": 0.9939801734995263,
+                "9": 0.9804346889661129,
+                "10": 0.9818812248746275,
+                "11": 0.9785348352334121,
+                "12": 0.9600469787924146,
+                "13": 0.9680845918896172,
+                "14": 0.9496381297693494
+              },
+              "by_quantity": {
+                "gl.brent": 0.9079912486899878,
+                "gl.fed_rate": 0.8029905937618291,
+                "gl.ust_10y": 1.005292381782124,
+                "gl.vix": 0.7367993933400383,
+                "ru.cnyrub": 1.2380740195013673,
+                "ru.cpi": 0.9071355036659656,
+                "ru.credit": 1.153459499258299,
+                "ru.imoex": 0.970405321571101,
+                "ru.key_rate": 0.955706288351285,
+                "ru.mortgage_rate": 0.9857503041166528,
+                "ru.ofz_10y": 0.8915945930746184,
+                "ru.ofz_1y": 0.9562263762755097,
+                "ru.ofz_5y": 0.8950298029917629,
+                "ru.output": 0.9454487764140972,
+                "ru.real_wage": 0.9890987915220357,
+                "ru.retail": 1.0054896634814965,
+                "ru.ruonia": 1.2863041397935555,
+                "ru.spread_a": 0.9452316899272744,
+                "ru.spread_aa": 0.9722456681017271,
+                "ru.spread_bbb": 1.109083776138308,
+                "ru.unemployment": 1.2628359108933247,
+                "ru.usdrub": 0.8642967457430413
+              },
+              "cells": 3962,
+              "left_out": 0,
+              "interval": {
+                "point": 0.9810651291185583,
+                "log_se": 0.015993464412155805,
+                "low": 0.9578152247630962,
+                "high": 1.0196751115408234
+              }
+            },
+            "model/walk": {
+              "score": 1.0060806352558795,
+              "by_horizon": {
+                "1": 0.9164729063968999,
+                "2": 0.971565905792601,
+                "3": 0.9239954727615219,
+                "4": 0.955101351841379,
+                "5": 0.9570985632059337,
+                "6": 0.9808705169317103,
+                "7": 1.0240861206064908,
+                "8": 1.036376351285931,
+                "9": 1.068110326217558,
+                "10": 1.0823932722864127,
+                "11": 1.05292330773431,
+                "12": 1.018978077518679,
+                "13": 1.043554198690244,
+                "14": 1.0741075064317185
+              },
+              "by_quantity": {
+                "gl.brent": 1.2452671602711103,
+                "gl.fed_rate": 0.7782476252033742,
+                "gl.ust_10y": 1.0544104904473053,
+                "gl.vix": 0.9791172979454216,
+                "ru.cnyrub": 0.9000553292499733,
+                "ru.cpi": 0.9545045246073737,
+                "ru.credit": 1.1839705921310384,
+                "ru.housing_price": 0.9566768408834257,
+                "ru.imoex": 1.0645175156340518,
+                "ru.key_rate": 1.021860393510865,
+                "ru.mortgage_rate": 1.0359238438612106,
+                "ru.ofz_10y": 0.8759629559063078,
+                "ru.ofz_1y": 0.7705044810572017,
+                "ru.ofz_5y": 0.8299391432974269,
+                "ru.output": 0.9855853821440882,
+                "ru.real_wage": 1.1158251486010897,
+                "ru.retail": 1.1727311747237184,
+                "ru.ruonia": 0.7307342207291432,
+                "ru.spread_a": 1.127049259153706,
+                "ru.spread_aa": 1.1061551231954447,
+                "ru.spread_bbb": 1.1327530386405373,
+                "ru.unemployment": 1.2076930004194442,
+                "ru.usdrub": 1.1638516152415337
+              },
+              "cells": 4028,
+              "left_out": 0,
+              "interval": {
+                "point": 1.0060806352558795,
+                "log_se": 0.02775969593803846,
+                "low": 0.9514062368442692,
+                "high": 1.0601311983785766
+              }
+            },
+            "base/walk": {
+              "score": 0.991173040834096,
+              "by_horizon": {
+                "1": 1.0204329076604577,
+                "2": 0.9855761781645908,
+                "3": 0.9800616549501298,
+                "4": 1.0159834228906248,
+                "5": 0.9820878404793485,
+                "6": 0.9866912453640438,
+                "7": 1.0117567089433626,
+                "8": 0.980393190613387,
+                "9": 1.0049360073807403,
+                "10": 1.0037524983838706,
+                "11": 0.9816980771575533,
+                "12": 0.9810335701604309,
+                "13": 0.9734037196806843,
+                "14": 0.9703987228262935
+              },
+              "by_quantity": {
+                "gl.brent": 0.9774114537939192,
+                "gl.fed_rate": 0.7988058801463064,
+                "gl.ust_10y": 0.9850684554784357,
+                "gl.vix": 0.8540924597468033,
+                "ru.cnyrub": 0.9893951791275523,
+                "ru.cpi": 0.9419948416807444,
+                "ru.credit": 0.9772202282049156,
+                "ru.housing_price": 1.0288943049220693,
+                "ru.imoex": 1.03791709387913,
+                "ru.key_rate": 1.011121195301669,
+                "ru.mortgage_rate": 0.946830753239371,
+                "ru.ofz_10y": 0.9736522550113219,
+                "ru.ofz_1y": 0.9474066300755135,
+                "ru.ofz_5y": 0.9666274011693597,
+                "ru.output": 0.937898701285869,
+                "ru.real_wage": 0.9998807799375765,
+                "ru.retail": 1.0107321467572163,
+                "ru.ruonia": 1.0036352562058326,
+                "ru.spread_a": 1.0990161193064427,
+                "ru.spread_aa": 1.0720838829232906,
+                "ru.spread_bbb": 1.0805333501316925,
+                "ru.unemployment": 1.1837690150085955,
+                "ru.usdrub": 1.0429772010849447
+              },
+              "cells": 4028,
+              "left_out": 0,
+              "interval": {
+                "point": 0.9911730408340961,
+                "log_se": 0.010279836781773561,
+                "low": 0.971117075839348,
+                "high": 1.0100178212141047
+              }
+            },
+            "model/base": {
+              "score": 1.015040355021398,
+              "by_horizon": {
+                "1": 0.8981216692610332,
+                "2": 0.9857846885077107,
+                "3": 0.9427932090747283,
+                "4": 0.9400757239955481,
+                "5": 0.974554946876017,
+                "6": 0.9941007600303721,
+                "7": 1.0121861427299104,
+                "8": 1.0571027636753758,
+                "9": 1.0628640215624028,
+                "10": 1.0783467777456701,
+                "11": 1.0725530916623418,
+                "12": 1.0386780926895733,
+                "13": 1.0720671984205812,
+                "14": 1.1068723414055743
+              },
+              "by_quantity": {
+                "gl.brent": 1.274046007377428,
+                "gl.fed_rate": 0.9742637661365653,
+                "gl.ust_10y": 1.0703931128676645,
+                "gl.vix": 1.1463832595310373,
+                "ru.cnyrub": 0.9097025619668384,
+                "ru.cpi": 1.0132799909013397,
+                "ru.credit": 1.211569877453221,
+                "ru.housing_price": 0.9298106096095909,
+                "ru.imoex": 1.025628657540946,
+                "ru.key_rate": 1.0106210791140542,
+                "ru.mortgage_rate": 1.0940961099087954,
+                "ru.ofz_10y": 0.8996671567264247,
+                "ru.ofz_1y": 0.8132774846591354,
+                "ru.ofz_5y": 0.8585926100309419,
+                "ru.output": 1.0508441698371478,
+                "ru.real_wage": 1.1159581932065459,
+                "ru.retail": 1.1602788913821054,
+                "ru.ruonia": 0.728087436357735,
+                "ru.spread_a": 1.025507487428805,
+                "ru.spread_aa": 1.0317803866048716,
+                "ru.spread_bbb": 1.0483276971529667,
+                "ru.unemployment": 1.0202100115035322,
+                "ru.usdrub": 1.1158936303026097
+              },
+              "cells": 4028,
+              "left_out": 0,
+              "interval": {
+                "point": 1.0150403550213982,
+                "log_se": 0.026202110081301445,
+                "low": 0.9643263465366365,
+                "high": 1.0699657713330524
+              }
+            }
+          },
+          "calibration": [
+            0.06852035749751738,
+            0.41112214498510424,
+            0.37363455809334656,
+            0.14672293942403178
+          ],
+          "calibration_by_horizon": {
+            "1": [
+              0.04895104895104895,
+              0.4160839160839161,
+              0.44755244755244755,
+              0.08741258741258741
+            ],
+            "3": [
+              0.07665505226480836,
+              0.4250871080139373,
+              0.34843205574912894,
+              0.14982578397212543
+            ],
+            "6": [
+              0.08362369337979095,
+              0.3867595818815331,
+              0.37630662020905925,
+              0.15331010452961671
+            ],
+            "12": [
+              0.041811846689895474,
+              0.44947735191637633,
+              0.3519163763066202,
+              0.156794425087108
+            ]
+          },
+          "coverage": 0.7837636544190665
+        },
+        "portfolio": {
+          "units": 14,
+          "cells": 196,
+          "pairs": {
+            "model/historical": {
+              "score": 0.875988749869542,
+              "by_horizon": {
+                "1": 0.5161719346498589,
+                "2": 1.0448041141077047,
+                "3": 0.888427285458621,
+                "4": 1.1336772306563951,
+                "5": 0.9819924304406042,
+                "6": 0.9858862840978118,
+                "7": 0.9321724923293482,
+                "8": 0.9491287105763591,
+                "9": 0.9227777154388093,
+                "10": 0.8999613450473634,
+                "11": 0.8834604760381108,
+                "12": 0.8011409020185926,
+                "13": 0.7815351035951941,
+                "14": 0.7330219761515335
+              },
+              "by_quantity": {
+                "model-trust-liquid": 0.875988749869542
+              },
+              "cells": 196,
+              "left_out": 0,
+              "interval": {
+                "point": 0.8759887498695421,
+                "log_se": 0.15430121878532357,
+                "low": 0.6136294619858184,
+                "high": 1.1062940439370352
+              }
+            },
+            "base/historical": {
+              "score": 1.0388036495400896,
+              "by_horizon": {
+                "1": 1.1339249154996311,
+                "2": 1.0271697302585374,
+                "3": 1.047878544136907,
+                "4": 1.0651530306010775,
+                "5": 1.0414690419159582,
+                "6": 1.0292564362525491,
+                "7": 1.0241302436946154,
+                "8": 1.029800758103065,
+                "9": 1.0291938723545797,
+                "10": 1.0275366664353511,
+                "11": 1.0327062997849368,
+                "12": 1.022308282144965,
+                "13": 1.020296635169956,
+                "14": 1.0177966875443463
+              },
+              "by_quantity": {
+                "model-trust-liquid": 1.0388036495400896
+              },
+              "cells": 196,
+              "left_out": 0,
+              "interval": {
+                "point": 1.0388036495400896,
+                "log_se": 0.041272121361419306,
+                "low": 0.9433774847756109,
+                "high": 1.1101634015081079
+              }
+            },
+            "model/base": {
+              "score": 0.8432669159926125,
+              "by_horizon": {
+                "1": 0.45520821316676224,
+                "2": 1.0171679356679726,
+                "3": 0.8478342174573112,
+                "4": 1.0643327278678902,
+                "5": 0.9428916183951692,
+                "6": 0.9578626369220045,
+                "7": 0.9102089290581599,
+                "8": 0.9216624702478301,
+                "9": 0.896602418869525,
+                "10": 0.8758435338073511,
+                "11": 0.8554808624892608,
+                "12": 0.7836588199575885,
+                "13": 0.7659881221356863,
+                "14": 0.7202047178205176
+              },
+              "by_quantity": {
+                "model-trust-liquid": 0.8432669159926125
+              },
+              "cells": 196,
+              "left_out": 0,
+              "interval": {
+                "point": 0.8432669159926125,
+                "log_se": 0.13937026082535173,
+                "low": 0.6110858852508355,
+                "high": 1.0485561142076354
+              }
+            }
+          },
+          "calibration": [
+            0.14795918367346939,
+            0.4336734693877551,
+            0.33163265306122447,
+            0.08673469387755102
+          ],
+          "calibration_by_horizon": {
+            "1": [
+              0.0,
+              0.7142857142857143,
+              0.2857142857142857,
+              0.0
+            ],
+            "3": [
+              0.07142857142857142,
+              0.42857142857142855,
+              0.42857142857142855,
+              0.07142857142857142
+            ],
+            "6": [
+              0.14285714285714285,
+              0.42857142857142855,
+              0.2857142857142857,
+              0.14285714285714285
+            ],
+            "12": [
+              0.21428571428571427,
+              0.42857142857142855,
+              0.35714285714285715,
+              0.0
+            ]
+          },
+          "coverage": 0.7653061224489796
+        },
+        "position": {
+          "units": 14,
+          "cells": 644,
+          "pairs": {
+            "model/historical": {
+              "score": 0.9152186351690262,
+              "by_horizon": {
+                "1": 0.6460475322588699,
+                "2": 1.0639584127712614,
+                "3": 0.8558408244881363,
+                "4": 1.1453743242816845,
+                "5": 0.9911810841041035,
+                "6": 1.0013487396158147,
+                "7": 0.9629240122526396,
+                "8": 0.9785041676704566,
+                "9": 0.9247039459560593,
+                "10": 0.9114730714311198,
+                "11": 0.9104159350417843,
+                "12": 0.8321507978533241,
+                "13": 0.8565376921850664,
+                "14": 0.839441470081904
+              },
+              "by_quantity": {
+                "gazp": 1.0827255430716711,
+                "lkoh": 0.8775269506348168,
+                "rosn": 0.8241995893500004,
+                "sibn": 0.895959085594
+              },
+              "cells": 644,
+              "left_out": 0,
+              "interval": {
+                "point": 0.9152186351690261,
+                "log_se": 0.1260088572501498,
+                "low": 0.6806963843297231,
+                "high": 1.1044448362508987
+              }
+            },
+            "base/historical": {
+              "score": 1.0320422403766887,
+              "by_horizon": {
+                "1": 1.128277093081197,
+                "2": 1.0572078955443622,
+                "3": 1.0616892172752452,
+                "4": 1.0679216590945897,
+                "5": 1.0438965832351654,
+                "6": 1.0294237728212003,
+                "7": 1.028306877768448,
+                "8": 1.0226168755822536,
+                "9": 1.0184762779164502,
+                "10": 1.0097056659480725,
+                "11": 1.0085904113934514,
+                "12": 0.9970316467545794,
+                "13": 0.9946026807855011,
+                "14": 0.9893390907467075
+              },
+              "by_quantity": {
+                "gazp": 1.1412432569563906,
+                "lkoh": 1.0132133243275134,
+                "rosn": 1.0018777851216116,
+                "sibn": 0.9792555182772998
+              },
+              "cells": 644,
+              "left_out": 0,
+              "interval": {
+                "point": 1.0320422403766887,
+                "log_se": 0.03599966842065651,
+                "low": 0.954159702468432,
+                "high": 1.0981656219736067
+              }
+            },
+            "model/base": {
+              "score": 0.8868034653649228,
+              "by_horizon": {
+                "1": 0.5725965157145815,
+                "2": 1.0063852315664206,
+                "3": 0.8061123825714223,
+                "4": 1.0725265421180437,
+                "5": 0.9495012245679644,
+                "6": 0.9727274287357439,
+                "7": 0.9364169715000863,
+                "8": 0.9568629181024612,
+                "9": 0.907928801098612,
+                "10": 0.9027116536731363,
+                "11": 0.9026616996923152,
+                "12": 0.8346282693854743,
+                "13": 0.8611857867793037,
+                "14": 0.848487114209075
+              },
+              "by_quantity": {
+                "gazp": 0.9487245917747791,
+                "lkoh": 0.8660831135607558,
+                "rosn": 0.8226548203680912,
+                "sibn": 0.9149390214008347
+              },
+              "cells": 644,
+              "left_out": 0,
+              "interval": {
+                "point": 0.8868034653649228,
+                "log_se": 0.11466219207408349,
+                "low": 0.6768506199691691,
+                "high": 1.0495546339451503
+              }
+            }
+          },
+          "calibration": [
+            0.14751552795031056,
+            0.4891304347826087,
+            0.2577639751552795,
+            0.10559006211180125
+          ],
+          "calibration_by_horizon": {
+            "1": [
+              0.0,
+              0.6739130434782609,
+              0.32608695652173914,
+              0.0
+            ],
+            "3": [
+              0.10869565217391304,
+              0.391304347826087,
+              0.41304347826086957,
+              0.08695652173913043
+            ],
+            "6": [
+              0.15217391304347827,
+              0.43478260869565216,
+              0.30434782608695654,
+              0.10869565217391304
+            ],
+            "12": [
+              0.15217391304347827,
+              0.5652173913043478,
+              0.21739130434782608,
+              0.06521739130434782
+            ]
+          },
+          "coverage": 0.7468944099378882
+        }
+      }
+    },
+    "validation": {
+      "units": [
+        "G41",
+        "G42",
+        "G43",
+        "R25",
+        "R26",
+        "R27",
+        "R28",
+        "R29",
+        "R30",
+        "R31",
+        "R32",
+        "R33",
+        "R34",
+        "R35"
+      ],
+      "cells": 5708,
+      "admitted": true,
+      "levels": {
+        "driver/share_price": {
+          "units": 14,
+          "cells": 840,
+          "pairs": {
+            "model/walk": {
+              "score": 0.8760449775735886,
+              "by_horizon": {
+                "1": 0.5850605326736423,
+                "2": 1.0277241131481902,
+                "3": 0.8267519877220301,
+                "4": 1.0788533753504395,
+                "5": 0.937718378356908,
+                "6": 0.9518740720003706,
+                "7": 0.9323012362821553,
+                "8": 0.9480779021779303,
+                "9": 0.8908981919633925,
+                "10": 0.8830632476599208,
+                "11": 0.8814203891378621,
+                "12": 0.8028321795300295,
+                "13": 0.8271438970568508,
+                "14": 0.804810447947564
+              },
+              "by_quantity": {
+                "share_price:gazp": 0.9902153800914825,
+                "share_price:lkoh": 0.851827368327015,
+                "share_price:oil_gas": 0.817778075632064,
+                "share_price:rosn": 0.8141198831029052,
+                "share_price:sibn": 0.9188125933422199
+              },
+              "cells": 840,
+              "left_out": 0,
+              "interval": {
+                "point": 0.8760449775735886,
+                "log_se": 0.13730778581891814,
+                "low": 0.6353691568696633,
+                "high": 1.07145198908125
+              }
+            },
+            "base/walk": {
+              "score": 1.0243413339518272,
+              "by_horizon": {
+                "1": 1.1103576505537565,
+                "2": 1.0502403668309168,
+                "3": 1.0506517148523251,
+                "4": 1.0468412677404297,
+                "5": 1.0211088940456314,
+                "6": 1.0206059537221106,
+                "7": 1.0266063994875854,
+                "8": 1.0173543384396442,
+                "9": 1.015205817170879,
+                "10": 1.0017513863942629,
+                "11": 1.0046925726693927,
+                "12": 0.9937783532387215,
+                "13": 0.9946645957572037,
+                "14": 0.9931498082441019
+              },
+              "by_quantity": {
+                "share_price:gazp": 1.088676436623733,
+                "share_price:lkoh": 1.0091610297570024,
+                "share_price:oil_gas": 1.0500922671852526,
+                "share_price:rosn": 1.0171953262729625,
+                "share_price:sibn": 0.9610198921922791
+              },
+              "cells": 840,
+              "left_out": 0,
+              "interval": {
+                "point": 1.0243413339518272,
+                "log_se": 0.029806178323974617,
+                "low": 0.9582334903606534,
+                "high": 1.0781982981981972
+              }
+            },
+            "model/base": {
+              "score": 0.8552275970294754,
+              "by_horizon": {
+                "1": 0.5269117859293908,
+                "2": 0.9785608567392347,
+                "3": 0.7868944351727771,
+                "4": 1.0305797149926148,
+                "5": 0.9183333764155844,
+                "6": 0.9326558095501231,
+                "7": 0.9081389291431448,
+                "8": 0.9319053021703669,
+                "9": 0.8775542622934329,
+                "10": 0.8815193666349173,
+                "11": 0.8773035783433678,
+                "12": 0.8078583890598956,
+                "13": 0.8315807163390336,
+                "14": 0.8103615801632951
+              },
+              "by_quantity": {
+                "share_price:gazp": 0.9095589348497303,
+                "share_price:lkoh": 0.8440945926460596,
+                "share_price:oil_gas": 0.7787678294442626,
+                "share_price:rosn": 0.8003574751821438,
+                "share_price:sibn": 0.9560807229975481
+              },
+              "cells": 840,
+              "left_out": 0,
+              "interval": {
+                "point": 0.8552275970294754,
+                "log_se": 0.1238476121883407,
+                "low": 0.6416807507889197,
+                "high": 1.02879789831232
+              }
+            },
+            "model/naive": {
+              "score": 0.6253576220242812,
+              "by_horizon": {
+                "1": 0.09940757370386732,
+                "2": 0.3904871550386995,
+                "3": 0.4547136945444549,
+                "4": 0.7189047748126635,
+                "5": 0.7832527728835555,
+                "6": 0.7770300142000384,
+                "7": 0.7891263219031874,
+                "8": 0.8153102099066163,
+                "9": 0.802774283459078,
+                "10": 0.8066717836025858,
+                "11": 0.8242518795348542,
+                "12": 0.8000019204430652,
+                "13": 0.8236586075822311,
+                "14": 0.8005066713701796
+              },
+              "by_quantity": {
+                "share_price:gazp": 0.6620017622563671,
+                "share_price:lkoh": 0.6618585265435004,
+                "share_price:oil_gas": 0.6046404982274222,
+                "share_price:rosn": 0.5594831049248468,
+                "share_price:sibn": 0.6452584715318143
+              },
+              "cells": 840,
+              "left_out": 0,
+              "interval": {
+                "point": 0.6253576220242812,
+                "log_se": 0.1660117863921341,
+                "low": 0.4375419932046371,
+                "high": 0.8232105317665348
+              }
+            }
+          },
+          "calibration": [
+            0.15119047619047618,
+            0.48095238095238096,
+            0.2642857142857143,
+            0.10357142857142858
+          ],
+          "calibration_by_horizon": {
+            "1": [
+              0.0,
+              0.6666666666666666,
+              0.3333333333333333,
+              0.0
+            ],
+            "3": [
+              0.1,
+              0.43333333333333335,
+              0.36666666666666664,
+              0.1
+            ],
+            "6": [
+              0.18333333333333332,
+              0.4,
+              0.31666666666666665,
+              0.1
+            ],
+            "12": [
+              0.16666666666666666,
+              0.5333333333333333,
+              0.23333333333333334,
+              0.06666666666666667
+            ]
+          },
+          "coverage": 0.7452380952380953
+        },
+        "macro": {
+          "units": 14,
+          "cells": 4028,
+          "pairs": {
+            "model/conditional_walk": {
+              "score": 0.9810651291185583,
+              "by_horizon": {
+                "1": 0.9736159950979117,
+                "2": 0.9921708982342105,
+                "3": 1.0016646184900106,
+                "4": 0.9948007518276132,
+                "5": 0.9836367816268929,
+                "6": 0.9957228799847777,
+                "7": 0.9821284880267306,
+                "8": 0.9939801734995263,
+                "9": 0.9804346889661129,
+                "10": 0.9818812248746275,
+                "11": 0.9785348352334121,
+                "12": 0.9600469787924146,
+                "13": 0.9680845918896172,
+                "14": 0.9496381297693494
+              },
+              "by_quantity": {
+                "gl.brent": 0.9079912486899878,
+                "gl.fed_rate": 0.8029905937618291,
+                "gl.ust_10y": 1.005292381782124,
+                "gl.vix": 0.7367993933400383,
+                "ru.cnyrub": 1.2380740195013673,
+                "ru.cpi": 0.9071355036659656,
+                "ru.credit": 1.153459499258299,
+                "ru.imoex": 0.970405321571101,
+                "ru.key_rate": 0.955706288351285,
+                "ru.mortgage_rate": 0.9857503041166528,
+                "ru.ofz_10y": 0.8915945930746184,
+                "ru.ofz_1y": 0.9562263762755097,
+                "ru.ofz_5y": 0.8950298029917629,
+                "ru.output": 0.9454487764140972,
+                "ru.real_wage": 0.9890987915220357,
+                "ru.retail": 1.0054896634814965,
+                "ru.ruonia": 1.2863041397935555,
+                "ru.spread_a": 0.9452316899272744,
+                "ru.spread_aa": 0.9722456681017271,
+                "ru.spread_bbb": 1.109083776138308,
+                "ru.unemployment": 1.2628359108933247,
+                "ru.usdrub": 0.8642967457430413
+              },
+              "cells": 3962,
+              "left_out": 0,
+              "interval": {
+                "point": 0.9810651291185583,
+                "log_se": 0.015993464412155805,
+                "low": 0.9578152247630962,
+                "high": 1.0196751115408234
+              }
+            },
+            "model/walk": {
+              "score": 1.0060806352558795,
+              "by_horizon": {
+                "1": 0.9164729063968999,
+                "2": 0.971565905792601,
+                "3": 0.9239954727615219,
+                "4": 0.955101351841379,
+                "5": 0.9570985632059337,
+                "6": 0.9808705169317103,
+                "7": 1.0240861206064908,
+                "8": 1.036376351285931,
+                "9": 1.068110326217558,
+                "10": 1.0823932722864127,
+                "11": 1.05292330773431,
+                "12": 1.018978077518679,
+                "13": 1.043554198690244,
+                "14": 1.0741075064317185
+              },
+              "by_quantity": {
+                "gl.brent": 1.2452671602711103,
+                "gl.fed_rate": 0.7782476252033742,
+                "gl.ust_10y": 1.0544104904473053,
+                "gl.vix": 0.9791172979454216,
+                "ru.cnyrub": 0.9000553292499733,
+                "ru.cpi": 0.9545045246073737,
+                "ru.credit": 1.1839705921310384,
+                "ru.housing_price": 0.9566768408834257,
+                "ru.imoex": 1.0645175156340518,
+                "ru.key_rate": 1.021860393510865,
+                "ru.mortgage_rate": 1.0359238438612106,
+                "ru.ofz_10y": 0.8759629559063078,
+                "ru.ofz_1y": 0.7705044810572017,
+                "ru.ofz_5y": 0.8299391432974269,
+                "ru.output": 0.9855853821440882,
+                "ru.real_wage": 1.1158251486010897,
+                "ru.retail": 1.1727311747237184,
+                "ru.ruonia": 0.7307342207291432,
+                "ru.spread_a": 1.127049259153706,
+                "ru.spread_aa": 1.1061551231954447,
+                "ru.spread_bbb": 1.1327530386405373,
+                "ru.unemployment": 1.2076930004194442,
+                "ru.usdrub": 1.1638516152415337
+              },
+              "cells": 4028,
+              "left_out": 0,
+              "interval": {
+                "point": 1.0060806352558795,
+                "log_se": 0.02775969593803846,
+                "low": 0.9514062368442692,
+                "high": 1.0601311983785766
+              }
+            },
+            "base/walk": {
+              "score": 0.991173040834096,
+              "by_horizon": {
+                "1": 1.0204329076604577,
+                "2": 0.9855761781645908,
+                "3": 0.9800616549501298,
+                "4": 1.0159834228906248,
+                "5": 0.9820878404793485,
+                "6": 0.9866912453640438,
+                "7": 1.0117567089433626,
+                "8": 0.980393190613387,
+                "9": 1.0049360073807403,
+                "10": 1.0037524983838706,
+                "11": 0.9816980771575533,
+                "12": 0.9810335701604309,
+                "13": 0.9734037196806843,
+                "14": 0.9703987228262935
+              },
+              "by_quantity": {
+                "gl.brent": 0.9774114537939192,
+                "gl.fed_rate": 0.7988058801463064,
+                "gl.ust_10y": 0.9850684554784357,
+                "gl.vix": 0.8540924597468033,
+                "ru.cnyrub": 0.9893951791275523,
+                "ru.cpi": 0.9419948416807444,
+                "ru.credit": 0.9772202282049156,
+                "ru.housing_price": 1.0288943049220693,
+                "ru.imoex": 1.03791709387913,
+                "ru.key_rate": 1.011121195301669,
+                "ru.mortgage_rate": 0.946830753239371,
+                "ru.ofz_10y": 0.9736522550113219,
+                "ru.ofz_1y": 0.9474066300755135,
+                "ru.ofz_5y": 0.9666274011693597,
+                "ru.output": 0.937898701285869,
+                "ru.real_wage": 0.9998807799375765,
+                "ru.retail": 1.0107321467572163,
+                "ru.ruonia": 1.0036352562058326,
+                "ru.spread_a": 1.0990161193064427,
+                "ru.spread_aa": 1.0720838829232906,
+                "ru.spread_bbb": 1.0805333501316925,
+                "ru.unemployment": 1.1837690150085955,
+                "ru.usdrub": 1.0429772010849447
+              },
+              "cells": 4028,
+              "left_out": 0,
+              "interval": {
+                "point": 0.9911730408340961,
+                "log_se": 0.010279836781773561,
+                "low": 0.971117075839348,
+                "high": 1.0100178212141047
+              }
+            },
+            "model/base": {
+              "score": 1.015040355021398,
+              "by_horizon": {
+                "1": 0.8981216692610332,
+                "2": 0.9857846885077107,
+                "3": 0.9427932090747283,
+                "4": 0.9400757239955481,
+                "5": 0.974554946876017,
+                "6": 0.9941007600303721,
+                "7": 1.0121861427299104,
+                "8": 1.0571027636753758,
+                "9": 1.0628640215624028,
+                "10": 1.0783467777456701,
+                "11": 1.0725530916623418,
+                "12": 1.0386780926895733,
+                "13": 1.0720671984205812,
+                "14": 1.1068723414055743
+              },
+              "by_quantity": {
+                "gl.brent": 1.274046007377428,
+                "gl.fed_rate": 0.9742637661365653,
+                "gl.ust_10y": 1.0703931128676645,
+                "gl.vix": 1.1463832595310373,
+                "ru.cnyrub": 0.9097025619668384,
+                "ru.cpi": 1.0132799909013397,
+                "ru.credit": 1.211569877453221,
+                "ru.housing_price": 0.9298106096095909,
+                "ru.imoex": 1.025628657540946,
+                "ru.key_rate": 1.0106210791140542,
+                "ru.mortgage_rate": 1.0940961099087954,
+                "ru.ofz_10y": 0.8996671567264247,
+                "ru.ofz_1y": 0.8132774846591354,
+                "ru.ofz_5y": 0.8585926100309419,
+                "ru.output": 1.0508441698371478,
+                "ru.real_wage": 1.1159581932065459,
+                "ru.retail": 1.1602788913821054,
+                "ru.ruonia": 0.728087436357735,
+                "ru.spread_a": 1.025507487428805,
+                "ru.spread_aa": 1.0317803866048716,
+                "ru.spread_bbb": 1.0483276971529667,
+                "ru.unemployment": 1.0202100115035322,
+                "ru.usdrub": 1.1158936303026097
+              },
+              "cells": 4028,
+              "left_out": 0,
+              "interval": {
+                "point": 1.0150403550213982,
+                "log_se": 0.026202110081301445,
+                "low": 0.9643263465366365,
+                "high": 1.0699657713330524
+              }
+            }
+          },
+          "calibration": [
+            0.06852035749751738,
+            0.41112214498510424,
+            0.37363455809334656,
+            0.14672293942403178
+          ],
+          "calibration_by_horizon": {
+            "1": [
+              0.04895104895104895,
+              0.4160839160839161,
+              0.44755244755244755,
+              0.08741258741258741
+            ],
+            "3": [
+              0.07665505226480836,
+              0.4250871080139373,
+              0.34843205574912894,
+              0.14982578397212543
+            ],
+            "6": [
+              0.08362369337979095,
+              0.3867595818815331,
+              0.37630662020905925,
+              0.15331010452961671
+            ],
+            "12": [
+              0.041811846689895474,
+              0.44947735191637633,
+              0.3519163763066202,
+              0.156794425087108
+            ]
+          },
+          "coverage": 0.7837636544190665
+        },
+        "portfolio": {
+          "units": 14,
+          "cells": 196,
+          "pairs": {
+            "model/historical": {
+              "score": 0.875988749869542,
+              "by_horizon": {
+                "1": 0.5161719346498589,
+                "2": 1.0448041141077047,
+                "3": 0.888427285458621,
+                "4": 1.1336772306563951,
+                "5": 0.9819924304406042,
+                "6": 0.9858862840978118,
+                "7": 0.9321724923293482,
+                "8": 0.9491287105763591,
+                "9": 0.9227777154388093,
+                "10": 0.8999613450473634,
+                "11": 0.8834604760381108,
+                "12": 0.8011409020185926,
+                "13": 0.7815351035951941,
+                "14": 0.7330219761515335
+              },
+              "by_quantity": {
+                "model-trust-liquid": 0.875988749869542
+              },
+              "cells": 196,
+              "left_out": 0,
+              "interval": {
+                "point": 0.8759887498695421,
+                "log_se": 0.15430121878532357,
+                "low": 0.6136294619858184,
+                "high": 1.1062940439370352
+              }
+            },
+            "base/historical": {
+              "score": 1.0388036495400896,
+              "by_horizon": {
+                "1": 1.1339249154996311,
+                "2": 1.0271697302585374,
+                "3": 1.047878544136907,
+                "4": 1.0651530306010775,
+                "5": 1.0414690419159582,
+                "6": 1.0292564362525491,
+                "7": 1.0241302436946154,
+                "8": 1.029800758103065,
+                "9": 1.0291938723545797,
+                "10": 1.0275366664353511,
+                "11": 1.0327062997849368,
+                "12": 1.022308282144965,
+                "13": 1.020296635169956,
+                "14": 1.0177966875443463
+              },
+              "by_quantity": {
+                "model-trust-liquid": 1.0388036495400896
+              },
+              "cells": 196,
+              "left_out": 0,
+              "interval": {
+                "point": 1.0388036495400896,
+                "log_se": 0.041272121361419306,
+                "low": 0.9433774847756109,
+                "high": 1.1101634015081079
+              }
+            },
+            "model/base": {
+              "score": 0.8432669159926125,
+              "by_horizon": {
+                "1": 0.45520821316676224,
+                "2": 1.0171679356679726,
+                "3": 0.8478342174573112,
+                "4": 1.0643327278678902,
+                "5": 0.9428916183951692,
+                "6": 0.9578626369220045,
+                "7": 0.9102089290581599,
+                "8": 0.9216624702478301,
+                "9": 0.896602418869525,
+                "10": 0.8758435338073511,
+                "11": 0.8554808624892608,
+                "12": 0.7836588199575885,
+                "13": 0.7659881221356863,
+                "14": 0.7202047178205176
+              },
+              "by_quantity": {
+                "model-trust-liquid": 0.8432669159926125
+              },
+              "cells": 196,
+              "left_out": 0,
+              "interval": {
+                "point": 0.8432669159926125,
+                "log_se": 0.13937026082535173,
+                "low": 0.6110858852508355,
+                "high": 1.0485561142076354
+              }
+            }
+          },
+          "calibration": [
+            0.14795918367346939,
+            0.4336734693877551,
+            0.33163265306122447,
+            0.08673469387755102
+          ],
+          "calibration_by_horizon": {
+            "1": [
+              0.0,
+              0.7142857142857143,
+              0.2857142857142857,
+              0.0
+            ],
+            "3": [
+              0.07142857142857142,
+              0.42857142857142855,
+              0.42857142857142855,
+              0.07142857142857142
+            ],
+            "6": [
+              0.14285714285714285,
+              0.42857142857142855,
+              0.2857142857142857,
+              0.14285714285714285
+            ],
+            "12": [
+              0.21428571428571427,
+              0.42857142857142855,
+              0.35714285714285715,
+              0.0
+            ]
+          },
+          "coverage": 0.7653061224489796
+        },
+        "position": {
+          "units": 14,
+          "cells": 644,
+          "pairs": {
+            "model/historical": {
+              "score": 0.9152186351690262,
+              "by_horizon": {
+                "1": 0.6460475322588699,
+                "2": 1.0639584127712614,
+                "3": 0.8558408244881363,
+                "4": 1.1453743242816845,
+                "5": 0.9911810841041035,
+                "6": 1.0013487396158147,
+                "7": 0.9629240122526396,
+                "8": 0.9785041676704566,
+                "9": 0.9247039459560593,
+                "10": 0.9114730714311198,
+                "11": 0.9104159350417843,
+                "12": 0.8321507978533241,
+                "13": 0.8565376921850664,
+                "14": 0.839441470081904
+              },
+              "by_quantity": {
+                "gazp": 1.0827255430716711,
+                "lkoh": 0.8775269506348168,
+                "rosn": 0.8241995893500004,
+                "sibn": 0.895959085594
+              },
+              "cells": 644,
+              "left_out": 0,
+              "interval": {
+                "point": 0.9152186351690261,
+                "log_se": 0.1260088572501498,
+                "low": 0.6806963843297231,
+                "high": 1.1044448362508987
+              }
+            },
+            "base/historical": {
+              "score": 1.0320422403766887,
+              "by_horizon": {
+                "1": 1.128277093081197,
+                "2": 1.0572078955443622,
+                "3": 1.0616892172752452,
+                "4": 1.0679216590945897,
+                "5": 1.0438965832351654,
+                "6": 1.0294237728212003,
+                "7": 1.028306877768448,
+                "8": 1.0226168755822536,
+                "9": 1.0184762779164502,
+                "10": 1.0097056659480725,
+                "11": 1.0085904113934514,
+                "12": 0.9970316467545794,
+                "13": 0.9946026807855011,
+                "14": 0.9893390907467075
+              },
+              "by_quantity": {
+                "gazp": 1.1412432569563906,
+                "lkoh": 1.0132133243275134,
+                "rosn": 1.0018777851216116,
+                "sibn": 0.9792555182772998
+              },
+              "cells": 644,
+              "left_out": 0,
+              "interval": {
+                "point": 1.0320422403766887,
+                "log_se": 0.03599966842065651,
+                "low": 0.954159702468432,
+                "high": 1.0981656219736067
+              }
+            },
+            "model/base": {
+              "score": 0.8868034653649228,
+              "by_horizon": {
+                "1": 0.5725965157145815,
+                "2": 1.0063852315664206,
+                "3": 0.8061123825714223,
+                "4": 1.0725265421180437,
+                "5": 0.9495012245679644,
+                "6": 0.9727274287357439,
+                "7": 0.9364169715000863,
+                "8": 0.9568629181024612,
+                "9": 0.907928801098612,
+                "10": 0.9027116536731363,
+                "11": 0.9026616996923152,
+                "12": 0.8346282693854743,
+                "13": 0.8611857867793037,
+                "14": 0.848487114209075
+              },
+              "by_quantity": {
+                "gazp": 0.9487245917747791,
+                "lkoh": 0.8660831135607558,
+                "rosn": 0.8226548203680912,
+                "sibn": 0.9149390214008347
+              },
+              "cells": 644,
+              "left_out": 0,
+              "interval": {
+                "point": 0.8868034653649228,
+                "log_se": 0.11466219207408349,
+                "low": 0.6768506199691691,
+                "high": 1.0495546339451503
+              }
+            }
+          },
+          "calibration": [
+            0.14751552795031056,
+            0.4891304347826087,
+            0.2577639751552795,
+            0.10559006211180125
+          ],
+          "calibration_by_horizon": {
+            "1": [
+              0.0,
+              0.6739130434782609,
+              0.32608695652173914,
+              0.0
+            ],
+            "3": [
+              0.10869565217391304,
+              0.391304347826087,
+              0.41304347826086957,
+              0.08695652173913043
+            ],
+            "6": [
+              0.15217391304347827,
+              0.43478260869565216,
+              0.30434782608695654,
+              0.10869565217391304
+            ],
+            "12": [
+              0.15217391304347827,
+              0.5652173913043478,
+              0.21739130434782608,
+              0.06521739130434782
+            ]
+          },
+          "coverage": 0.7468944099378882
+        }
+      }
+    }
+  },
+  "quantities": {
+    "gazp": {
+      "level": "position",
+      "cells": 126,
+      "constrained": 0,
+      "scored": 126,
+      "unverified_tail": false,
+      "ratios": {
+        "model/historical": 1.0827255430716711,
+        "base/historical": 1.1412432569563906,
+        "model/base": 0.9487245917747791
+      },
+      "calibration": [
+        0.21428571428571427,
+        0.4523809523809524,
+        0.2619047619047619,
+        0.07142857142857142
+      ],
+      "coverage": 0.7142857142857143,
+      "sharpness": 67.64088981711218
+    },
+    "gl.brent": {
+      "level": "macro",
+      "cells": 196,
+      "constrained": 0,
+      "scored": 196,
+      "unverified_tail": false,
+      "ratios": {
+        "model/conditional_walk": 0.9079912486899878,
+        "model/walk": 1.2452671602711103,
+        "base/walk": 0.9774114537939192,
+        "model/base": 1.274046007377428
+      },
+      "calibration": [
+        0.0,
+        0.6224489795918368,
+        0.29591836734693877,
+        0.08163265306122448
+      ],
+      "coverage": 0.9183673469387755,
+      "sharpness": 103.55713900592806
+    },
+    "gl.fed_rate": {
+      "level": "macro",
+      "cells": 196,
+      "constrained": 0,
+      "scored": 196,
+      "unverified_tail": false,
+      "ratios": {
+        "model/conditional_walk": 0.8029905937618291,
+        "model/walk": 0.7782476252033742,
+        "base/walk": 0.7988058801463064,
+        "model/base": 0.9742637661365653
+      },
+      "calibration": [
+        0.00510204081632653,
+        0.44387755102040816,
+        0.336734693877551,
+        0.21428571428571427
+      ],
+      "coverage": 0.7806122448979592,
+      "sharpness": 1.7940862716322181
+    },
+    "gl.ust_10y": {
+      "level": "macro",
+      "cells": 196,
+      "constrained": 28,
+      "scored": 168,
+      "unverified_tail": false,
+      "ratios": {
+        "model/conditional_walk": 1.005292381782124,
+        "model/walk": 1.0544104904473053,
+        "base/walk": 0.9850684554784357,
+        "model/base": 1.0703931128676645
+      },
+      "calibration": [
+        0.017857142857142856,
+        0.27380952380952384,
+        0.47023809523809523,
+        0.23809523809523808
+      ],
+      "coverage": 0.7321428571428571,
+      "sharpness": 2.123111757539532
+    },
+    "gl.vix": {
+      "level": "macro",
+      "cells": 196,
+      "constrained": 42,
+      "scored": 154,
+      "unverified_tail": false,
+      "ratios": {
+        "model/conditional_walk": 0.7367993933400383,
+        "model/walk": 0.9791172979454216,
+        "base/walk": 0.8540924597468033,
+        "model/base": 1.1463832595310373
+      },
+      "calibration": [
+        0.06493506493506493,
+        0.564935064935065,
+        0.34415584415584416,
+        0.025974025974025976
+      ],
+      "coverage": 0.9090909090909091,
+      "sharpness": 105.83473067759044
+    },
+    "lkoh": {
+      "level": "position",
+      "cells": 196,
+      "constrained": 0,
+      "scored": 196,
+      "unverified_tail": false,
+      "ratios": {
+        "model/historical": 0.8775269506348168,
+        "base/historical": 1.0132133243275134,
+        "model/base": 0.8660831135607558
+      },
+      "calibration": [
+        0.15306122448979592,
+        0.413265306122449,
+        0.29591836734693877,
+        0.1377551020408163
+      ],
+      "coverage": 0.7091836734693877,
+      "sharpness": 54.63818855240892
+    },
+    "model-trust-liquid": {
+      "level": "portfolio",
+      "cells": 196,
+      "constrained": 0,
+      "scored": 196,
+      "unverified_tail": false,
+      "ratios": {
+        "model/historical": 0.875988749869542,
+        "base/historical": 1.0388036495400896,
+        "model/base": 0.8432669159926125
+      },
+      "calibration": [
+        0.14795918367346939,
+        0.4336734693877551,
+        0.33163265306122447,
+        0.08673469387755102
+      ],
+      "coverage": 0.7653061224489796,
+      "sharpness": 45.15864330328294
+    },
+    "rosn": {
+      "level": "position",
+      "cells": 196,
+      "constrained": 0,
+      "scored": 196,
+      "unverified_tail": false,
+      "ratios": {
+        "model/historical": 0.8241995893500004,
+        "base/historical": 1.0018777851216116,
+        "model/base": 0.8226548203680912
+      },
+      "calibration": [
+        0.12755102040816327,
+        0.49489795918367346,
+        0.30612244897959184,
+        0.07142857142857142
+      ],
+      "coverage": 0.8010204081632653,
+      "sharpness": 57.53250558505933
+    },
+    "ru.cnyrub": {
+      "level": "macro",
+      "cells": 196,
+      "constrained": 28,
+      "scored": 168,
+      "unverified_tail": false,
+      "ratios": {
+        "model/conditional_walk": 1.2380740195013673,
+        "model/walk": 0.9000553292499733,
+        "base/walk": 0.9893951791275523,
+        "model/base": 0.9097025619668384
+      },
+      "calibration": [
+        0.05357142857142857,
+        0.6428571428571429,
+        0.25595238095238093,
+        0.047619047619047616
+      ],
+      "coverage": 0.8988095238095238,
+      "sharpness": 46.624328735406976
+    },
+    "ru.cpi": {
+      "level": "macro",
+      "cells": 196,
+      "constrained": 14,
+      "scored": 182,
+      "unverified_tail": false,
+      "ratios": {
+        "model/conditional_walk": 0.9071355036659656,
+        "model/walk": 0.9545045246073737,
+        "base/walk": 0.9419948416807444,
+        "model/base": 1.0132799909013397
+      },
+      "calibration": [
+        0.03296703296703297,
+        0.34615384615384615,
+        0.46703296703296704,
+        0.15384615384615385
+      ],
+      "coverage": 0.8131868131868132,
+      "sharpness": 8.519663238440899
+    },
+    "ru.credit": {
+      "level": "macro",
+      "cells": 196,
+      "constrained": 0,
+      "scored": 196,
+      "unverified_tail": false,
+      "ratios": {
+        "model/conditional_walk": 1.153459499258299,
+        "model/walk": 1.1839705921310384,
+        "base/walk": 0.9772202282049156,
+        "model/base": 1.211569877453221
+      },
+      "calibration": [
+        0.0663265306122449,
+        0.3673469387755102,
+        0.32142857142857145,
+        0.24489795918367346
+      ],
+      "coverage": 0.6887755102040817,
+      "sharpness": 15.963083622619706
+    },
+    "ru.housing_price": {
+      "level": "macro",
+      "cells": 66,
+      "constrained": 0,
+      "scored": 66,
+      "unverified_tail": false,
+      "ratios": {
+        "model/conditional_walk": null,
+        "model/walk": 0.9566768408834257,
+        "base/walk": 1.0288943049220693,
+        "model/base": 0.9298106096095909
+      },
+      "calibration": [
+        0.0,
+        0.22727272727272727,
+        0.5303030303030303,
+        0.24242424242424243
+      ],
+      "coverage": 0.7575757575757576,
+      "sharpness": 23.203458484251087
+    },
+    "ru.imoex": {
+      "level": "macro",
+      "cells": 196,
+      "constrained": 56,
+      "scored": 140,
+      "unverified_tail": false,
+      "ratios": {
+        "model/conditional_walk": 0.970405321571101,
+        "model/walk": 1.0645175156340518,
+        "base/walk": 1.03791709387913,
+        "model/base": 1.025628657540946
+      },
+      "calibration": [
+        0.2,
+        0.36428571428571427,
+        0.32857142857142857,
+        0.10714285714285714
+      ],
+      "coverage": 0.6928571428571428,
+      "sharpness": 40.89998770694609
+    },
+    "ru.key_rate": {
+      "level": "macro",
+      "cells": 196,
+      "constrained": 70,
+      "scored": 126,
+      "unverified_tail": false,
+      "ratios": {
+        "model/conditional_walk": 0.955706288351285,
+        "model/walk": 1.021860393510865,
+        "base/walk": 1.011121195301669,
+        "model/base": 1.0106210791140542
+      },
+      "calibration": [
+        0.023809523809523808,
+        0.38095238095238093,
+        0.373015873015873,
+        0.2222222222222222
+      ],
+      "coverage": 0.753968253968254,
+      "sharpness": 9.117429827134668
+    },
+    "ru.mortgage_rate": {
+      "level": "macro",
+      "cells": 196,
+      "constrained": 0,
+      "scored": 196,
+      "unverified_tail": false,
+      "ratios": {
+        "model/conditional_walk": 0.9857503041166528,
+        "model/walk": 1.0359238438612106,
+        "base/walk": 0.946830753239371,
+        "model/base": 1.0940961099087954
+      },
+      "calibration": [
+        0.05102040816326531,
+        0.5357142857142857,
+        0.29591836734693877,
+        0.11734693877551021
+      ],
+      "coverage": 0.8316326530612245,
+      "sharpness": 3.2089201309526243
+    },
+    "ru.ofz_10y": {
+      "level": "macro",
+      "cells": 196,
+      "constrained": 0,
+      "scored": 196,
+      "unverified_tail": false,
+      "ratios": {
+        "model/conditional_walk": 0.8915945930746184,
+        "model/walk": 0.8759629559063078,
+        "base/walk": 0.9736522550113219,
+        "model/base": 0.8996671567264247
+      },
+      "calibration": [
+        0.01020408163265306,
+        0.32142857142857145,
+        0.5459183673469388,
+        0.12244897959183673
+      ],
+      "coverage": 0.8673469387755102,
+      "sharpness": 4.445296119265638
+    },
+    "ru.ofz_1y": {
+      "level": "macro",
+      "cells": 196,
+      "constrained": 0,
+      "scored": 196,
+      "unverified_tail": false,
+      "ratios": {
+        "model/conditional_walk": 0.9562263762755097,
+        "model/walk": 0.7705044810572017,
+        "base/walk": 0.9474066300755135,
+        "model/base": 0.8132774846591354
+      },
+      "calibration": [
+        0.08163265306122448,
+        0.3469387755102041,
+        0.3163265306122449,
+        0.25510204081632654
+      ],
+      "coverage": 0.6581632653061225,
+      "sharpness": 6.831051639251975
+    },
+    "ru.ofz_5y": {
+      "level": "macro",
+      "cells": 196,
+      "constrained": 0,
+      "scored": 196,
+      "unverified_tail": false,
+      "ratios": {
+        "model/conditional_walk": 0.8950298029917629,
+        "model/walk": 0.8299391432974269,
+        "base/walk": 0.9666274011693597,
+        "model/base": 0.8585926100309419
+      },
+      "calibration": [
+        0.030612244897959183,
+        0.32142857142857145,
+        0.5357142857142857,
+        0.11224489795918367
+      ],
+      "coverage": 0.8571428571428571,
+      "sharpness": 5.661437512659328
+    },
+    "ru.output": {
+      "level": "macro",
+      "cells": 196,
+      "constrained": 0,
+      "scored": 196,
+      "unverified_tail": false,
+      "ratios": {
+        "model/conditional_walk": 0.9454487764140972,
+        "model/walk": 0.9855853821440882,
+        "base/walk": 0.937898701285869,
+        "model/base": 1.0508441698371478
+      },
+      "calibration": [
+        0.04591836734693878,
+        0.4030612244897959,
+        0.5,
+        0.05102040816326531
+      ],
+      "coverage": 0.9030612244897959,
+      "sharpness": 11.498208120960271
+    },
+    "ru.real_wage": {
+      "level": "macro",
+      "cells": 196,
+      "constrained": 0,
+      "scored": 196,
+      "unverified_tail": false,
+      "ratios": {
+        "model/conditional_walk": 0.9890987915220357,
+        "model/walk": 1.1158251486010897,
+        "base/walk": 0.9998807799375765,
+        "model/base": 1.1159581932065459
+      },
+      "calibration": [
+        0.09693877551020408,
+        0.2755102040816326,
+        0.5612244897959183,
+        0.0663265306122449
+      ],
+      "coverage": 0.8367346938775511,
+      "sharpness": 16.174881466333517
+    },
+    "ru.retail": {
+      "level": "macro",
+      "cells": 196,
+      "constrained": 0,
+      "scored": 196,
+      "unverified_tail": false,
+      "ratios": {
+        "model/conditional_walk": 1.0054896634814965,
+        "model/walk": 1.1727311747237184,
+        "base/walk": 1.0107321467572163,
+        "model/base": 1.1602788913821054
+      },
+      "calibration": [
+        0.0663265306122449,
+        0.29591836734693877,
+        0.49489795918367346,
+        0.14285714285714285
+      ],
+      "coverage": 0.7908163265306123,
+      "sharpness": 22.189741602729043
+    },
+    "ru.ruonia": {
+      "level": "macro",
+      "cells": 196,
+      "constrained": 0,
+      "scored": 196,
+      "unverified_tail": false,
+      "ratios": {
+        "model/conditional_walk": 1.2863041397935555,
+        "model/walk": 0.7307342207291432,
+        "base/walk": 1.0036352562058326,
+        "model/base": 0.728087436357735
+      },
+      "calibration": [
+        0.03571428571428571,
+        0.34183673469387754,
+        0.39285714285714285,
+        0.22959183673469388
+      ],
+      "coverage": 0.7346938775510204,
+      "sharpness": 8.255853584832064
+    },
+    "ru.spread_a": {
+      "level": "macro",
+      "cells": 196,
+      "constrained": 0,
+      "scored": 196,
+      "unverified_tail": false,
+      "ratios": {
+        "model/conditional_walk": 0.9452316899272744,
+        "model/walk": 1.127049259153706,
+        "base/walk": 1.0990161193064427,
+        "model/base": 1.025507487428805
+      },
+      "calibration": [
+        0.14285714285714285,
+        0.35714285714285715,
+        0.27040816326530615,
+        0.22959183673469388
+      ],
+      "coverage": 0.6275510204081632,
+      "sharpness": 3.938941965887687
+    },
+    "ru.spread_aa": {
+      "level": "macro",
+      "cells": 196,
+      "constrained": 0,
+      "scored": 196,
+      "unverified_tail": false,
+      "ratios": {
+        "model/conditional_walk": 0.9722456681017271,
+        "model/walk": 1.1061551231954447,
+        "base/walk": 1.0720838829232906,
+        "model/base": 1.0317803866048716
+      },
+      "calibration": [
+        0.21428571428571427,
+        0.29591836734693877,
+        0.3010204081632653,
+        0.18877551020408162
+      ],
+      "coverage": 0.5969387755102041,
+      "sharpness": 2.326016369058675
+    },
+    "ru.spread_bbb": {
+      "level": "macro",
+      "cells": 196,
+      "constrained": 0,
+      "scored": 196,
+      "unverified_tail": false,
+      "ratios": {
+        "model/conditional_walk": 1.109083776138308,
+        "model/walk": 1.1327530386405373,
+        "base/walk": 1.0805333501316925,
+        "model/base": 1.0483276971529667
+      },
+      "calibration": [
+        0.17346938775510204,
+        0.3469387755102041,
+        0.2857142857142857,
+        0.19387755102040816
+      ],
+      "coverage": 0.6326530612244898,
+      "sharpness": 6.570335126907712
+    },
+    "ru.unemployment": {
+      "level": "macro",
+      "cells": 196,
+      "constrained": 0,
+      "scored": 196,
+      "unverified_tail": false,
+      "ratios": {
+        "model/conditional_walk": 1.2628359108933247,
+        "model/walk": 1.2076930004194442,
+        "base/walk": 1.1837690150085955,
+        "model/base": 1.0202100115035322
+      },
+      "calibration": [
+        0.07142857142857142,
+        0.8061224489795918,
+        0.12244897959183673,
+        0.0
+      ],
+      "coverage": 0.9285714285714286,
+      "sharpness": 2.1727160731263657
+    },
+    "ru.usdrub": {
+      "level": "macro",
+      "cells": 196,
+      "constrained": 112,
+      "scored": 84,
+      "unverified_tail": false,
+      "ratios": {
+        "model/conditional_walk": 0.8642967457430413,
+        "model/walk": 1.1638516152415337,
+        "base/walk": 1.0429772010849447,
+        "model/base": 1.1158936303026097
+      },
+      "calibration": [
+        0.03571428571428571,
+        0.5476190476190477,
+        0.2857142857142857,
+        0.13095238095238096
+      ],
+      "coverage": 0.8214285714285714,
+      "sharpness": 52.950004096166936
+    },
+    "share_price:gazp": {
+      "level": "driver/share_price",
+      "cells": 126,
+      "constrained": 0,
+      "scored": 126,
+      "unverified_tail": true,
+      "ratios": {
+        "model/walk": 0.9902153800914825,
+        "base/walk": 1.088676436623733,
+        "model/base": 0.9095589348497303,
+        "model/naive": 0.6620017622563671
+      },
+      "calibration": [
+        0.21428571428571427,
+        0.4523809523809524,
+        0.2619047619047619,
+        0.07142857142857142
+      ],
+      "coverage": 0.7142857142857143,
+      "sharpness": 62.58740155855355
+    },
+    "share_price:lkoh": {
+      "level": "driver/share_price",
+      "cells": 196,
+      "constrained": 0,
+      "scored": 196,
+      "unverified_tail": true,
+      "ratios": {
+        "model/walk": 0.851827368327015,
+        "base/walk": 1.0091610297570024,
+        "model/base": 0.8440945926460596,
+        "model/naive": 0.6618585265435004
+      },
+      "calibration": [
+        0.15306122448979592,
+        0.413265306122449,
+        0.29591836734693877,
+        0.1377551020408163
+      ],
+      "coverage": 0.7091836734693877,
+      "sharpness": 51.705066414019996
+    },
+    "share_price:oil_gas": {
+      "level": "driver/share_price",
+      "cells": 196,
+      "constrained": 0,
+      "scored": 196,
+      "unverified_tail": true,
+      "ratios": {
+        "model/walk": 0.817778075632064,
+        "base/walk": 1.0500922671852526,
+        "model/base": 0.7787678294442626,
+        "model/naive": 0.6046404982274222
+      },
+      "calibration": [
+        0.16326530612244897,
+        0.45408163265306123,
+        0.2857142857142857,
+        0.09693877551020408
+      ],
+      "coverage": 0.7397959183673469,
+      "sharpness": 36.62797268216468
+    },
+    "share_price:rosn": {
+      "level": "driver/share_price",
+      "cells": 196,
+      "constrained": 0,
+      "scored": 196,
+      "unverified_tail": true,
+      "ratios": {
+        "model/walk": 0.8141198831029052,
+        "base/walk": 1.0171953262729625,
+        "model/base": 0.8003574751821438,
+        "model/naive": 0.5594831049248468
+      },
+      "calibration": [
+        0.12755102040816327,
+        0.49489795918367346,
+        0.30612244897959184,
+        0.07142857142857142
+      ],
+      "coverage": 0.8010204081632653,
+      "sharpness": 57.7713648848424
+    },
+    "share_price:sibn": {
+      "level": "driver/share_price",
+      "cells": 126,
+      "constrained": 0,
+      "scored": 126,
+      "unverified_tail": true,
+      "ratios": {
+        "model/walk": 0.9188125933422199,
+        "base/walk": 0.9610198921922791,
+        "model/base": 0.9560807229975481,
+        "model/naive": 0.6452584715318143
+      },
+      "calibration": [
+        0.10317460317460317,
+        0.6349206349206349,
+        0.11904761904761904,
+        0.14285714285714285
+      ],
+      "coverage": 0.753968253968254,
+      "sharpness": 64.16648330039578
+    },
+    "sibn": {
+      "level": "position",
+      "cells": 126,
+      "constrained": 0,
+      "scored": 126,
+      "unverified_tail": false,
+      "ratios": {
+        "model/historical": 0.895959085594,
+        "base/historical": 0.9792555182772998,
+        "model/base": 0.9149390214008347
+      },
+      "calibration": [
+        0.10317460317460317,
+        0.6349206349206349,
+        0.11904761904761904,
+        0.14285714285714285
+      ],
+      "coverage": 0.753968253968254,
+      "sharpness": 62.08110795145218
+    }
+  },
+  "tail": {
+    "z": 9.60130728764541,
+    "interval": [
+      0.34021174954056854,
+      22.473174945664635
+    ],
+    "trimmed_z": 12.458546485530125,
+    "trim": 0.01,
+    "windows": [
+      {
+        "id": "G41",
+        "loss": -49.621771384645065,
+        "var": 25.278287845619044,
+        "es": 33.72455805315461
+      },
+      {
+        "id": "G42",
+        "loss": 18.65098170850175,
+        "var": 33.691460630098206,
+        "es": 40.69575473767198
+      },
+      {
+        "id": "G43",
+        "loss": 21.22522932433623,
+        "var": 31.77697994689865,
+        "es": 40.40465371142339
+      },
+      {
+        "id": "R25",
+        "loss": -0.030105583993755316,
+        "var": 25.664783343283922,
+        "es": 31.325074665010728
+      },
+      {
+        "id": "R26",
+        "loss": 37.31206260717827,
+        "var": 57.19197380825637,
+        "es": 59.42276862855756
+      },
+      {
+        "id": "R27",
+        "loss": 38.07760374659688,
+        "var": 5.7196970648501955,
+        "es": 11.837385047930594
+      },
+      {
+        "id": "R28",
+        "loss": 31.852869658269107,
+        "var": 10.864925725162829,
+        "es": 15.910182173300162
+      },
+      {
+        "id": "R30",
+        "loss": -21.668790873597413,
+        "var": 24.43244172634312,
+        "es": 30.478912339000047
+      },
+      {
+        "id": "R31",
+        "loss": -1.1563845591697695,
+        "var": 35.3394155916819,
+        "es": 41.894427867183914
+      },
+      {
+        "id": "R32",
+        "loss": 22.694674323653388,
+        "var": 20.267344565582793,
+        "es": 26.051766511389236
+      },
+      {
+        "id": "R33",
+        "loss": 24.406990017976273,
+        "var": 33.685281548226925,
+        "es": 38.29627042587746
+      },
+      {
+        "id": "R34",
+        "loss": 23.508605385440116,
+        "var": 23.05641912153927,
+        "es": 29.351093770304814
+      },
+      {
+        "id": "R35",
+        "loss": 21.22522932433623,
+        "var": 27.668854982629,
+        "es": 32.30679327334049
+      }
+    ],
+    "dropped": [
+      {
+        "id": "R29",
+        "reason": "the predictive ES is -10.8886, not a positive loss"
+      }
+    ]
+  },
+  "constraint_gate": {
+    "rule": "constraint_probability_below_one_percent",
+    "threshold": 0.01,
+    "applicable": 0,
+    "not_applicable": 280,
+    "failed_constraints": [],
+    "failed": false
+  },
+  "admission_failed": false,
+  "target_level": "macro",
+  "episodes": [
+    {
+      "id": "R25",
+      "as_of": "2021-02-28",
+      "horizon": 14,
+      "half": "validation",
+      "source": "manual",
+      "observations": [
+        "ru.cpi"
+      ],
+      "interventions": [
+        "ru.key_rate"
+      ],
+      "macro_version": "967917d7739b3bfa2499e43df2e6ae38ddbf9a5183db80859cf7de8aec4247de",
+      "satellite_version": "02a864a09cdcc5d4c633a82d411437778af84bca04cf6c0ac61747a780f1d675",
+      "left_out": {},
+      "constraint_probabilities": {
+        "0": null,
+        "1": null,
+        "2": null,
+        "3": null,
+        "4": null,
+        "5": null,
+        "6": null,
+        "7": null,
+        "8": null,
+        "9": null,
+        "10": null,
+        "11": null,
+        "12": null,
+        "13": null
+      }
+    },
+    {
+      "id": "R26",
+      "as_of": "2021-11-30",
+      "horizon": 14,
+      "half": "validation",
+      "source": "manual",
+      "observations": [
+        "ru.imoex",
+        "ru.usdrub"
+      ],
+      "interventions": [],
+      "macro_version": "a80497c1c9bb084b3d65be6bf77466d50a10d5a2313494b8b77f00543a9a4906",
+      "satellite_version": "8921836c544539d4840256f1c2ab9cb7c1cac8404a56bf1442fece5c479fafa5",
+      "left_out": {},
+      "constraint_probabilities": {
+        "0": null,
+        "1": null,
+        "2": null,
+        "3": null,
+        "4": null,
+        "5": null,
+        "6": null,
+        "7": null,
+        "8": null,
+        "9": null,
+        "10": null,
+        "11": null,
+        "12": null,
+        "13": null,
+        "14": null,
+        "15": null,
+        "16": null,
+        "17": null,
+        "18": null,
+        "19": null,
+        "20": null,
+        "21": null,
+        "22": null,
+        "23": null,
+        "24": null,
+        "25": null,
+        "26": null,
+        "27": null
+      }
+    },
+    {
+      "id": "R27",
+      "as_of": "2022-01-31",
+      "horizon": 14,
+      "half": "validation",
+      "source": "manual",
+      "observations": [
+        "ru.usdrub"
+      ],
+      "interventions": [
+        "ru.key_rate"
+      ],
+      "macro_version": "ca8f8ca3e0a1f7bc87bd4b27a7b16e5cac1a791185a344a26d144553656fcbfa",
+      "satellite_version": "fd87e3789c88ca315e41d347726de5adcc5656ec2cd571cfc77dbb7e8797f97c",
+      "left_out": {},
+      "constraint_probabilities": {
+        "0": null,
+        "1": null,
+        "2": null,
+        "3": null,
+        "4": null,
+        "5": null,
+        "6": null,
+        "7": null,
+        "8": null,
+        "9": null,
+        "10": null,
+        "11": null,
+        "12": null,
+        "13": null
+      }
+    },
+    {
+      "id": "R28",
+      "as_of": "2022-03-31",
+      "horizon": 14,
+      "half": "validation",
+      "source": "manual",
+      "observations": [
+        "ru.usdrub"
+      ],
+      "interventions": [
+        "ru.key_rate"
+      ],
+      "macro_version": "750896c21481da14d73d45f7886044fef580e84cbbd4fbbddd09f7e6e44cb6e2",
+      "satellite_version": "7ce021d1377ba33e4c1586a08f9f835d0f10cd96e1829da36a9a17a07a94bb58",
+      "left_out": {},
+      "constraint_probabilities": {
+        "0": null,
+        "1": null,
+        "2": null,
+        "3": null,
+        "4": null,
+        "5": null,
+        "6": null,
+        "7": null,
+        "8": null,
+        "9": null,
+        "10": null,
+        "11": null,
+        "12": null,
+        "13": null
+      }
+    },
+    {
+      "id": "R29",
+      "as_of": "2022-08-31",
+      "horizon": 14,
+      "half": "validation",
+      "source": "manual",
+      "observations": [
+        "ru.imoex"
+      ],
+      "interventions": [],
+      "macro_version": "adeaab4a3161a9138d6143384f04fa823740a2fad137cec69c1dc95591411ad9",
+      "satellite_version": "459897bbac5239f8383e8272cd98ba722aaeccc3ac7db73bff7d4c4aa3fd6450",
+      "left_out": {},
+      "constraint_probabilities": {
+        "0": null,
+        "1": null,
+        "2": null,
+        "3": null,
+        "4": null,
+        "5": null,
+        "6": null,
+        "7": null,
+        "8": null,
+        "9": null,
+        "10": null,
+        "11": null,
+        "12": null,
+        "13": null
+      }
+    },
+    {
+      "id": "R30",
+      "as_of": "2023-05-31",
+      "horizon": 14,
+      "half": "validation",
+      "source": "manual",
+      "observations": [
+        "ru.usdrub"
+      ],
+      "interventions": [],
+      "macro_version": "42e521e5a6b9e9f0467a6fcf0c1d1f0d2b933cfa8a1380feedf44ea618a3c4ad",
+      "satellite_version": "33769894a88b08179d34a36228135299f79d789a6e0a1bdebee02b6ae2e4c1ca",
+      "left_out": {},
+      "constraint_probabilities": {
+        "0": null,
+        "1": null,
+        "2": null,
+        "3": null,
+        "4": null,
+        "5": null,
+        "6": null,
+        "7": null,
+        "8": null,
+        "9": null,
+        "10": null,
+        "11": null,
+        "12": null,
+        "13": null
+      }
+    },
+    {
+      "id": "R31",
+      "as_of": "2023-07-31",
+      "horizon": 14,
+      "half": "validation",
+      "source": "manual",
+      "observations": [
+        "ru.usdrub"
+      ],
+      "interventions": [
+        "ru.key_rate"
+      ],
+      "macro_version": "4862c4798c0ded5c2a1b691c70d8ad84a6ee3580c5472137bbc534eb9eaf4e50",
+      "satellite_version": "6e2d2258780afcdb9d3ead646212b9b944b2cf53c8864289c84cd15e990b8254",
+      "left_out": {},
+      "constraint_probabilities": {
+        "0": null,
+        "1": null,
+        "2": null,
+        "3": null,
+        "4": null,
+        "5": null,
+        "6": null,
+        "7": null,
+        "8": null,
+        "9": null,
+        "10": null,
+        "11": null,
+        "12": null,
+        "13": null
+      }
+    },
+    {
+      "id": "R32",
+      "as_of": "2025-05-31",
+      "horizon": 14,
+      "half": "validation",
+      "source": "manual",
+      "observations": [
+        "ru.usdrub"
+      ],
+      "interventions": [
+        "ru.key_rate"
+      ],
+      "macro_version": "22334e1063099f0562b81dbbfd13e5688cc2fa4fe93d10df89c413482203d0ee",
+      "satellite_version": "9014d93ee2012f646f19f5cf6c067e9d3428c7abb148fdf6770b6bee7ea677f7",
+      "left_out": {},
+      "constraint_probabilities": {
+        "0": null,
+        "1": null,
+        "2": null,
+        "3": null,
+        "4": null,
+        "5": null,
+        "6": null,
+        "7": null,
+        "8": null,
+        "9": null,
+        "10": null,
+        "11": null,
+        "12": null,
+        "13": null
+      }
+    },
+    {
+      "id": "R33",
+      "as_of": "2024-05-31",
+      "horizon": 14,
+      "half": "validation",
+      "source": "llm",
+      "observations": [
+        "ru.usdrub",
+        "ru.cnyrub",
+        "ru.imoex"
+      ],
+      "interventions": [],
+      "macro_version": "3036f46c46d2430bf0d30c5c38091edd387ba370bee3b989507a59ce74af9505",
+      "satellite_version": "eeca292b2483023b56c790f38a51459733fa6ae45aeb5dcb237820905a0a924c",
+      "left_out": {},
+      "constraint_probabilities": {
+        "0": null,
+        "1": null,
+        "2": null,
+        "3": null,
+        "4": null,
+        "5": null,
+        "6": null,
+        "7": null,
+        "8": null,
+        "9": null,
+        "10": null,
+        "11": null,
+        "12": null,
+        "13": null,
+        "14": null,
+        "15": null,
+        "16": null,
+        "17": null,
+        "18": null,
+        "19": null,
+        "20": null,
+        "21": null,
+        "22": null,
+        "23": null,
+        "24": null,
+        "25": null,
+        "26": null,
+        "27": null,
+        "28": null,
+        "29": null,
+        "30": null,
+        "31": null,
+        "32": null,
+        "33": null,
+        "34": null,
+        "35": null,
+        "36": null,
+        "37": null,
+        "38": null,
+        "39": null,
+        "40": null,
+        "41": null
+      }
+    },
+    {
+      "id": "R34",
+      "as_of": "2024-10-31",
+      "horizon": 14,
+      "half": "validation",
+      "source": "llm",
+      "observations": [
+        "ru.usdrub",
+        "ru.cnyrub"
+      ],
+      "interventions": [],
+      "macro_version": "9ccbcf32258fea924963d1a08b25e86c21dd9dcd4d205584b69ace7af51d61b4",
+      "satellite_version": "79ca3b493835fd9c89805bedc621986594784a6826816487c8030e430a2cfc3c",
+      "left_out": {},
+      "constraint_probabilities": {
+        "0": null,
+        "1": null,
+        "2": null,
+        "3": null,
+        "4": null,
+        "5": null,
+        "6": null,
+        "7": null,
+        "8": null,
+        "9": null,
+        "10": null,
+        "11": null,
+        "12": null,
+        "13": null,
+        "14": null,
+        "15": null,
+        "16": null,
+        "17": null,
+        "18": null,
+        "19": null,
+        "20": null,
+        "21": null,
+        "22": null,
+        "23": null,
+        "24": null,
+        "25": null,
+        "26": null,
+        "27": null
+      }
+    },
+    {
+      "id": "R35",
+      "as_of": "2025-03-31",
+      "horizon": 14,
+      "half": "validation",
+      "source": "llm",
+      "observations": [
+        "ru.imoex"
+      ],
+      "interventions": [],
+      "macro_version": "57e1c7afa89eac13a92ce6621c41590958965d7c4f018aec60687083ab8f66bc",
+      "satellite_version": "f8c9d9fc73d6f2fe06cced66d3b87c117be62cb561f3943d16c6f6d814dd96ca",
+      "left_out": {},
+      "constraint_probabilities": {
+        "0": null,
+        "1": null,
+        "2": null,
+        "3": null,
+        "4": null,
+        "5": null,
+        "6": null,
+        "7": null,
+        "8": null,
+        "9": null,
+        "10": null,
+        "11": null,
+        "12": null,
+        "13": null
+      }
+    },
+    {
+      "id": "G41",
+      "as_of": "2023-02-28",
+      "horizon": 14,
+      "half": "validation",
+      "source": "llm",
+      "observations": [
+        "gl.ust_10y",
+        "gl.vix"
+      ],
+      "interventions": [],
+      "macro_version": "58e5c02b2d56bffececa48b5c6842a344295a0fc38ee9b0c9efb85c712ad337d",
+      "satellite_version": "2c0789dfde1dd636accdd5ceed3dc95d896f8ee565812ae04656320850b4be14",
+      "left_out": {},
+      "constraint_probabilities": {
+        "0": null,
+        "1": null,
+        "2": null,
+        "3": null,
+        "4": null,
+        "5": null,
+        "6": null,
+        "7": null,
+        "8": null,
+        "9": null,
+        "10": null,
+        "11": null,
+        "12": null,
+        "13": null,
+        "14": null,
+        "15": null,
+        "16": null,
+        "17": null,
+        "18": null,
+        "19": null,
+        "20": null,
+        "21": null,
+        "22": null,
+        "23": null,
+        "24": null,
+        "25": null,
+        "26": null,
+        "27": null
+      }
+    },
+    {
+      "id": "G42",
+      "as_of": "2024-07-31",
+      "horizon": 14,
+      "half": "validation",
+      "source": "llm",
+      "observations": [
+        "gl.vix"
+      ],
+      "interventions": [],
+      "macro_version": "99d7c2117d65335e90b76675764288914a4940021a1513e3e322dc05c076ca1a",
+      "satellite_version": "a9ffb107c9f8f11167d32bca7033e016dfd4b261cfa24092701141dfe6a52151",
+      "left_out": {},
+      "constraint_probabilities": {
+        "0": null,
+        "1": null,
+        "2": null,
+        "3": null,
+        "4": null,
+        "5": null,
+        "6": null,
+        "7": null,
+        "8": null,
+        "9": null,
+        "10": null,
+        "11": null,
+        "12": null,
+        "13": null
+      }
+    },
+    {
+      "id": "G43",
+      "as_of": "2025-03-31",
+      "horizon": 14,
+      "half": "validation",
+      "source": "llm",
+      "observations": [
+        "gl.vix",
+        "gl.ust_10y"
+      ],
+      "interventions": [],
+      "macro_version": "57e1c7afa89eac13a92ce6621c41590958965d7c4f018aec60687083ab8f66bc",
+      "satellite_version": "f8c9d9fc73d6f2fe06cced66d3b87c117be62cb561f3943d16c6f6d814dd96ca",
+      "left_out": {},
+      "constraint_probabilities": {
+        "0": null,
+        "1": null,
+        "2": null,
+        "3": null,
+        "4": null,
+        "5": null,
+        "6": null,
+        "7": null,
+        "8": null,
+        "9": null,
+        "10": null,
+        "11": null,
+        "12": null,
+        "13": null,
+        "14": null,
+        "15": null,
+        "16": null,
+        "17": null,
+        "18": null,
+        "19": null,
+        "20": null,
+        "21": null,
+        "22": null,
+        "23": null,
+        "24": null,
+        "25": null,
+        "26": null,
+        "27": null
+      }
+    }
+  ],
+  "utility": {
+    "target": "macro",
+    "by_episode": {
+      "R25": 1.0485193932865657,
+      "R26": 1.1556369794725585,
+      "R27": 1.0345875924054009,
+      "R28": 1.0186783617230402,
+      "R29": 1.032272773038399,
+      "R30": 0.9520576454990088,
+      "R31": 1.0864612259276543,
+      "R32": 0.7772382872302093,
+      "R33": 0.9898349475627158,
+      "R34": 0.9400650004532831,
+      "R35": 1.1701238989651115,
+      "G41": 1.0517510097230212,
+      "G42": 1.0120788121915487,
+      "G43": 1.0798953192258764
+    },
+    "by_source": {
+      "llm": {
+        "episodes": 6,
+        "judged": 6,
+        "share_helped": 0.3333333333333333,
+        "score": 1.0369235430903667
+      },
+      "manual": {
+        "episodes": 8,
+        "judged": 8,
+        "share_helped": 0.25,
+        "score": 0.9819322658095879
+      }
+    }
+  },
+  "meta": {
+    "generated": "2026-11-17",
+    "known_on": "2026-10-29",
+    "draws": 1000,
+    "seed": 20261029,
+    "after_months": 12,
+    "episodes_toml": "9f8d94c714a648cff1636b104d4c9ec72ca1be45c8b16ea731382749b8f36184",
+    "macro_registry": "010d2b5c0c43787ebda7eb4e46917c450fd55292b30f65103396fb6e006b2356",
+    "store": "C:\\Users\\LeoLeon\\Documents\\MacroStress\\macrostress-dsh\\workspace\\series",
+    "models": "experiments\\mt\\sl",
+    "backtest_root": "experiments\\mt\\sl\\backtest",
+    "git_commit": "7e3fdef8f7351df9a7eea12b3d8d8f088ac393cb",
+    "plugin_sdk": "1.1.0",
+    "model_sdk": "4.1.0",
+    "macro_model": {
+      "model_id": "rw.joint",
+      "version": "0.5.0+spec.b66f682d0f2b8c60"
+    },
+    "satellite_models": [
+      {
+        "model_id": "hier.gibbs",
+        "version": "0.2.0"
+      }
+    ],
+    "macro_versions": [
+      "22334e1063099f0562b81dbbfd13e5688cc2fa4fe93d10df89c413482203d0ee",
+      "3036f46c46d2430bf0d30c5c38091edd387ba370bee3b989507a59ce74af9505",
+      "42e521e5a6b9e9f0467a6fcf0c1d1f0d2b933cfa8a1380feedf44ea618a3c4ad",
+      "4862c4798c0ded5c2a1b691c70d8ad84a6ee3580c5472137bbc534eb9eaf4e50",
+      "57e1c7afa89eac13a92ce6621c41590958965d7c4f018aec60687083ab8f66bc",
+      "58e5c02b2d56bffececa48b5c6842a344295a0fc38ee9b0c9efb85c712ad337d",
+      "750896c21481da14d73d45f7886044fef580e84cbbd4fbbddd09f7e6e44cb6e2",
+      "967917d7739b3bfa2499e43df2e6ae38ddbf9a5183db80859cf7de8aec4247de",
+      "99d7c2117d65335e90b76675764288914a4940021a1513e3e322dc05c076ca1a",
+      "9ccbcf32258fea924963d1a08b25e86c21dd9dcd4d205584b69ace7af51d61b4",
+      "a80497c1c9bb084b3d65be6bf77466d50a10d5a2313494b8b77f00543a9a4906",
+      "adeaab4a3161a9138d6143384f04fa823740a2fad137cec69c1dc95591411ad9",
+      "ca8f8ca3e0a1f7bc87bd4b27a7b16e5cac1a791185a344a26d144553656fcbfa"
+    ],
+    "satellite_versions": [
+      "02a864a09cdcc5d4c633a82d411437778af84bca04cf6c0ac61747a780f1d675",
+      "2c0789dfde1dd636accdd5ceed3dc95d896f8ee565812ae04656320850b4be14",
+      "33769894a88b08179d34a36228135299f79d789a6e0a1bdebee02b6ae2e4c1ca",
+      "459897bbac5239f8383e8272cd98ba722aaeccc3ac7db73bff7d4c4aa3fd6450",
+      "6e2d2258780afcdb9d3ead646212b9b944b2cf53c8864289c84cd15e990b8254",
+      "79ca3b493835fd9c89805bedc621986594784a6826816487c8030e430a2cfc3c",
+      "7ce021d1377ba33e4c1586a08f9f835d0f10cd96e1829da36a9a17a07a94bb58",
+      "8921836c544539d4840256f1c2ab9cb7c1cac8404a56bf1442fece5c479fafa5",
+      "9014d93ee2012f646f19f5cf6c067e9d3428c7abb148fdf6770b6bee7ea677f7",
+      "a9ffb107c9f8f11167d32bca7033e016dfd4b261cfa24092701141dfe6a52151",
+      "eeca292b2483023b56c790f38a51459733fa6ae45aeb5dcb237820905a0a924c",
+      "f8c9d9fc73d6f2fe06cced66d3b87c117be62cb561f3943d16c6f6d814dd96ca",
+      "fd87e3789c88ca315e41d347726de5adcc5656ec2cd571cfc77dbb7e8797f97c"
+    ],
+    "missing": []
+  },
+  "trust": {
+    "decision": {
+      "target": "macro",
+      "accuracy": null,
+      "harm": {
+        "statistic": 1.015040355021398,
+        "batches": 14,
+        "p": 0.29296059476082736,
+        "passed": true
+      },
+      "usefulness": {
+        "statistic": 0.9810651291185583,
+        "batches": 14,
+        "p": 0.19154243837098256,
+        "proven": false
+      }
+    },
+    "trusted": false,
+    "reasons": [
+      "portfolio_tail: not checked",
+      "accuracy: not checked"
+    ]
+  }
+}

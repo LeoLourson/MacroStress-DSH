@@ -1,0 +1,1344 @@
+{
+  "step_months": 3,
+  "validation_from": "2021-01-01",
+  "block_dates": 4,
+  "dates": 28,
+  "dropped": {
+    "refused": {},
+    "skipped": {},
+    "left_out": {
+      "2014-01-01": {
+        "ru.housing_price": "0 changes or intervals, the model needs 3",
+        "ru.output": "no change into calendar month 1 to estimate seasonality"
+      },
+      "2014-04-01": {
+        "ru.housing_price": "1 changes or intervals, the model needs 3"
+      },
+      "2014-07-01": {
+        "ru.housing_price": "1 changes or intervals, the model needs 3"
+      },
+      "2014-10-01": {
+        "ru.housing_price": "1 changes or intervals, the model needs 3"
+      },
+      "2015-01-01": {
+        "ru.housing_price": "1 changes or intervals, the model needs 3"
+      },
+      "2015-04-01": {
+        "ru.housing_price": "2 changes or intervals, the model needs 3"
+      },
+      "2015-07-01": {
+        "ru.housing_price": "2 changes or intervals, the model needs 3"
+      },
+      "2015-10-01": {
+        "ru.housing_price": "2 changes or intervals, the model needs 3"
+      },
+      "2016-01-01": {
+        "ru.housing_price": "2 changes or intervals, the model needs 3"
+      }
+    },
+    "excluded": {},
+    "non_finite": {}
+  },
+  "sanity": {
+    "quantities": [
+      {
+        "level": "macro",
+        "quantity": "gl.brent",
+        "cells": 392,
+        "shares": {
+          "band_outside_domain": 0.0,
+          "band_wider_than_moves": null
+        },
+        "width_to_moves": null,
+        "direction": null,
+        "benchmark": "walk",
+        "score": 0.9483826072941636,
+        "without": 0.9380343659917681
+      },
+      {
+        "level": "macro",
+        "quantity": "gl.fed_rate",
+        "cells": 392,
+        "shares": {
+          "band_outside_domain": 0.0,
+          "band_wider_than_moves": null
+        },
+        "width_to_moves": null,
+        "direction": null,
+        "benchmark": "walk",
+        "score": 0.9497591699220829,
+        "without": 0.937971274939456
+      },
+      {
+        "level": "macro",
+        "quantity": "gl.ust_10y",
+        "cells": 392,
+        "shares": {
+          "band_outside_domain": 0.0,
+          "band_wider_than_moves": null
+        },
+        "width_to_moves": null,
+        "direction": null,
+        "benchmark": "walk",
+        "score": 0.9067965410217199,
+        "without": 0.940008099441483
+      },
+      {
+        "level": "macro",
+        "quantity": "gl.vix",
+        "cells": 392,
+        "shares": {
+          "band_outside_domain": 0.0,
+          "band_wider_than_moves": null
+        },
+        "width_to_moves": null,
+        "direction": null,
+        "benchmark": "walk",
+        "score": 0.9455053416015293,
+        "without": 0.9381870217184177
+      },
+      {
+        "level": "macro",
+        "quantity": "ru.cnyrub",
+        "cells": 392,
+        "shares": {
+          "band_outside_domain": 0.0,
+          "band_wider_than_moves": null
+        },
+        "width_to_moves": null,
+        "direction": null,
+        "benchmark": "walk",
+        "score": 0.9985626041787284,
+        "without": 0.9357645849853706
+      },
+      {
+        "level": "macro",
+        "quantity": "ru.cpi",
+        "cells": 392,
+        "shares": {
+          "band_outside_domain": 0.0,
+          "band_wider_than_moves": null
+        },
+        "width_to_moves": null,
+        "direction": null,
+        "benchmark": "walk",
+        "score": 0.8865709751599328,
+        "without": 0.9409923761681033
+      },
+      {
+        "level": "macro",
+        "quantity": "ru.credit",
+        "cells": 392,
+        "shares": {
+          "band_outside_domain": 0.0,
+          "band_wider_than_moves": null
+        },
+        "width_to_moves": null,
+        "direction": null,
+        "benchmark": "walk",
+        "score": 1.0150772980061582,
+        "without": 0.9350479470500532
+      },
+      {
+        "level": "macro",
+        "quantity": "ru.housing_price",
+        "cells": 29,
+        "shares": {
+          "band_outside_domain": 0.0,
+          "band_wider_than_moves": null
+        },
+        "width_to_moves": null,
+        "direction": null,
+        "benchmark": "walk",
+        "score": 1.0080743995833854,
+        "without": 0.937527337408347
+      },
+      {
+        "level": "macro",
+        "quantity": "ru.imoex",
+        "cells": 392,
+        "shares": {
+          "band_outside_domain": 0.0,
+          "band_wider_than_moves": null
+        },
+        "width_to_moves": null,
+        "direction": null,
+        "benchmark": "walk",
+        "score": 1.026583012067754,
+        "without": 0.9345597395900278
+      },
+      {
+        "level": "macro",
+        "quantity": "ru.key_rate",
+        "cells": 392,
+        "shares": {
+          "band_outside_domain": 0.0,
+          "band_wider_than_moves": null
+        },
+        "width_to_moves": null,
+        "direction": null,
+        "benchmark": "walk",
+        "score": 0.9103932299905863,
+        "without": 0.9398307129044138
+      },
+      {
+        "level": "macro",
+        "quantity": "ru.mortgage_rate",
+        "cells": 392,
+        "shares": {
+          "band_outside_domain": 0.0,
+          "band_wider_than_moves": null
+        },
+        "width_to_moves": null,
+        "direction": null,
+        "benchmark": "walk",
+        "score": 0.9725450523402805,
+        "without": 0.9369293264398302
+      },
+      {
+        "level": "macro",
+        "quantity": "ru.ofz_10y",
+        "cells": 392,
+        "shares": {
+          "band_outside_domain": 0.0,
+          "band_wider_than_moves": null
+        },
+        "width_to_moves": null,
+        "direction": null,
+        "benchmark": "walk",
+        "score": 0.936159155238361,
+        "without": 0.9386069977114707
+      },
+      {
+        "level": "macro",
+        "quantity": "ru.ofz_1y",
+        "cells": 392,
+        "shares": {
+          "band_outside_domain": 0.0,
+          "band_wider_than_moves": null
+        },
+        "width_to_moves": null,
+        "direction": null,
+        "benchmark": "walk",
+        "score": 0.9163641082731456,
+        "without": 0.9395492449971802
+      },
+      {
+        "level": "macro",
+        "quantity": "ru.ofz_5y",
+        "cells": 392,
+        "shares": {
+          "band_outside_domain": 0.0,
+          "band_wider_than_moves": null
+        },
+        "width_to_moves": null,
+        "direction": null,
+        "benchmark": "walk",
+        "score": 0.9243617660733785,
+        "without": 0.9391656151989949
+      },
+      {
+        "level": "macro",
+        "quantity": "ru.output",
+        "cells": 378,
+        "shares": {
+          "band_outside_domain": 0.0,
+          "band_wider_than_moves": null
+        },
+        "width_to_moves": null,
+        "direction": null,
+        "benchmark": "walk",
+        "score": 0.99184453435538,
+        "without": 0.9360537803508243
+      },
+      {
+        "level": "macro",
+        "quantity": "ru.real_wage",
+        "cells": 392,
+        "shares": {
+          "band_outside_domain": 0.0,
+          "band_wider_than_moves": null
+        },
+        "width_to_moves": null,
+        "direction": null,
+        "benchmark": "walk",
+        "score": 1.0008967095880374,
+        "without": 0.9356670136820776
+      },
+      {
+        "level": "macro",
+        "quantity": "ru.retail",
+        "cells": 392,
+        "shares": {
+          "band_outside_domain": 0.0,
+          "band_wider_than_moves": null
+        },
+        "width_to_moves": null,
+        "direction": null,
+        "benchmark": "walk",
+        "score": 1.01049693709971,
+        "without": 0.9352468234726001
+      },
+      {
+        "level": "macro",
+        "quantity": "ru.ruonia",
+        "cells": 392,
+        "shares": {
+          "band_outside_domain": 0.0,
+          "band_wider_than_moves": null
+        },
+        "width_to_moves": null,
+        "direction": null,
+        "benchmark": "walk",
+        "score": 0.9028384395649944,
+        "without": 0.940203668220744
+      },
+      {
+        "level": "macro",
+        "quantity": "ru.spread_a",
+        "cells": 370,
+        "shares": {
+          "band_outside_domain": 0.0,
+          "band_wider_than_moves": null
+        },
+        "width_to_moves": null,
+        "direction": null,
+        "benchmark": "walk",
+        "score": 0.7896807862364297,
+        "without": 0.9461302536743385
+      },
+      {
+        "level": "macro",
+        "quantity": "ru.spread_aa",
+        "cells": 370,
+        "shares": {
+          "band_outside_domain": 0.0,
+          "band_wider_than_moves": null
+        },
+        "width_to_moves": null,
+        "direction": null,
+        "benchmark": "walk",
+        "score": 0.864917902127532,
+        "without": 0.9421091910217612
+      },
+      {
+        "level": "macro",
+        "quantity": "ru.spread_bbb",
+        "cells": 370,
+        "shares": {
+          "band_outside_domain": 0.0,
+          "band_wider_than_moves": null
+        },
+        "width_to_moves": null,
+        "direction": null,
+        "benchmark": "walk",
+        "score": 0.8271667128438791,
+        "without": 0.9440678714300829
+      },
+      {
+        "level": "macro",
+        "quantity": "ru.unemployment",
+        "cells": 392,
+        "shares": {
+          "band_outside_domain": 0.0,
+          "band_wider_than_moves": null
+        },
+        "width_to_moves": null,
+        "direction": null,
+        "benchmark": "walk",
+        "score": 0.945990845152242,
+        "without": 0.9381449600058012
+      },
+      {
+        "level": "macro",
+        "quantity": "ru.usdrub",
+        "cells": 392,
+        "shares": {
+          "band_outside_domain": 0.0,
+          "band_wider_than_moves": null
+        },
+        "width_to_moves": null,
+        "direction": null,
+        "benchmark": "walk",
+        "score": 0.9991045598303708,
+        "without": 0.9357413747022921
+      }
+    ]
+  },
+  "admission": {
+    "criteria": {
+      "domain": {
+        "rule": "no band outside the domain",
+        "failed": []
+      },
+      "moves": {
+        "alpha": 0.0125,
+        "tests": [],
+        "untested": 0,
+        "failed": []
+      },
+      "tails": {
+        "alpha": 0.0125,
+        "tests": [
+          {
+            "level": "macro",
+            "side": "below",
+            "statistic": 0.06868577609518658,
+            "null": 0.05,
+            "batches": 28,
+            "p": 0.10234896461863266
+          },
+          {
+            "level": "macro",
+            "side": "above",
+            "statistic": 0.10275824770146025,
+            "null": 0.05,
+            "batches": 28,
+            "p": 0.008407522527700838
+          }
+        ],
+        "untested": 0,
+        "failed": []
+      },
+      "failing": {
+        "alpha": 0.0125,
+        "tests": [
+          {
+            "level": "macro",
+            "quantity": "gl.brent",
+            "statistic": 0.9483826072941636,
+            "batches": 7,
+            "p": 0.9222966690168389
+          },
+          {
+            "level": "macro",
+            "quantity": "gl.fed_rate",
+            "statistic": 0.9497591699220829,
+            "batches": 7,
+            "p": 0.9497414270542976
+          },
+          {
+            "level": "macro",
+            "quantity": "gl.ust_10y",
+            "statistic": 0.9067965410217199,
+            "batches": 7,
+            "p": 0.9957920467748885
+          },
+          {
+            "level": "macro",
+            "quantity": "gl.vix",
+            "statistic": 0.9455053416015293,
+            "batches": 7,
+            "p": 0.9943566246085297
+          },
+          {
+            "level": "macro",
+            "quantity": "ru.cnyrub",
+            "statistic": 0.9985626041787284,
+            "batches": 7,
+            "p": 0.9999022796625623
+          },
+          {
+            "level": "macro",
+            "quantity": "ru.cpi",
+            "statistic": 0.8865709751599328,
+            "batches": 7,
+            "p": 0.9985150084269668
+          },
+          {
+            "level": "macro",
+            "quantity": "ru.credit",
+            "statistic": 1.0150772980061582,
+            "batches": 7,
+            "p": 0.963932026501382
+          },
+          {
+            "level": "macro",
+            "quantity": "ru.housing_price",
+            "statistic": 1.0080743995833854,
+            "batches": 5,
+            "p": 0.9994810903608916
+          },
+          {
+            "level": "macro",
+            "quantity": "ru.imoex",
+            "statistic": 1.026583012067754,
+            "batches": 7,
+            "p": 0.9328873088016068
+          },
+          {
+            "level": "macro",
+            "quantity": "ru.key_rate",
+            "statistic": 0.9103932299905863,
+            "batches": 7,
+            "p": 0.98712120032318
+          },
+          {
+            "level": "macro",
+            "quantity": "ru.mortgage_rate",
+            "statistic": 0.9725450523402805,
+            "batches": 7,
+            "p": 0.9789221745420879
+          },
+          {
+            "level": "macro",
+            "quantity": "ru.ofz_10y",
+            "statistic": 0.936159155238361,
+            "batches": 7,
+            "p": 0.9992016092061097
+          },
+          {
+            "level": "macro",
+            "quantity": "ru.ofz_1y",
+            "statistic": 0.9163641082731456,
+            "batches": 7,
+            "p": 0.9872426421547741
+          },
+          {
+            "level": "macro",
+            "quantity": "ru.ofz_5y",
+            "statistic": 0.9243617660733785,
+            "batches": 7,
+            "p": 0.9974537273725684
+          },
+          {
+            "level": "macro",
+            "quantity": "ru.output",
+            "statistic": 0.99184453435538,
+            "batches": 7,
+            "p": 0.9545144856461516
+          },
+          {
+            "level": "macro",
+            "quantity": "ru.real_wage",
+            "statistic": 1.0008967095880374,
+            "batches": 7,
+            "p": 0.999974751814187
+          },
+          {
+            "level": "macro",
+            "quantity": "ru.retail",
+            "statistic": 1.01049693709971,
+            "batches": 7,
+            "p": 0.9999964526663968
+          },
+          {
+            "level": "macro",
+            "quantity": "ru.ruonia",
+            "statistic": 0.9028384395649944,
+            "batches": 7,
+            "p": 0.9777440309824719
+          },
+          {
+            "level": "macro",
+            "quantity": "ru.spread_a",
+            "statistic": 0.7896807862364297,
+            "batches": 7,
+            "p": 0.9994262122737326
+          },
+          {
+            "level": "macro",
+            "quantity": "ru.spread_aa",
+            "statistic": 0.864917902127532,
+            "batches": 7,
+            "p": 0.9972781610921094
+          },
+          {
+            "level": "macro",
+            "quantity": "ru.spread_bbb",
+            "statistic": 0.8271667128438791,
+            "batches": 7,
+            "p": 0.9999395032784657
+          },
+          {
+            "level": "macro",
+            "quantity": "ru.unemployment",
+            "statistic": 0.945990845152242,
+            "batches": 7,
+            "p": 0.9846369720941127
+          },
+          {
+            "level": "macro",
+            "quantity": "ru.usdrub",
+            "statistic": 0.9991045598303708,
+            "batches": 7,
+            "p": 0.9998852023743227
+          }
+        ],
+        "untested": 0,
+        "failed": []
+      },
+      "portfolio_tail": {
+        "checked": false,
+        "failed": []
+      }
+    },
+    "failed": false
+  },
+  "levels": {
+    "macro": {
+      "units": 28,
+      "cells": 8573,
+      "pairs": {
+        "model/walk": {
+          "score": 0.9384973686246219,
+          "by_horizon": {
+            "1": 0.9804310517416795,
+            "2": 0.9672963195501959,
+            "3": 0.9557628934901565,
+            "4": 0.9559520918976329,
+            "5": 0.9462067701074705,
+            "6": 0.9352450232835322,
+            "7": 0.9450979444005911,
+            "8": 0.936374154339658,
+            "9": 0.9270870394484724,
+            "10": 0.9316802447988604,
+            "11": 0.9222258008084054,
+            "12": 0.9122647774971762,
+            "13": 0.9173548523559023,
+            "14": 0.9090323017609037
+          },
+          "by_quantity": {
+            "gl.brent": 0.9483826072941636,
+            "gl.fed_rate": 0.9497591699220829,
+            "gl.ust_10y": 0.9067965410217199,
+            "gl.vix": 0.9455053416015293,
+            "ru.cnyrub": 0.9985626041787284,
+            "ru.cpi": 0.8865709751599328,
+            "ru.credit": 1.0150772980061582,
+            "ru.housing_price": 1.0080743995833854,
+            "ru.imoex": 1.026583012067754,
+            "ru.key_rate": 0.9103932299905863,
+            "ru.mortgage_rate": 0.9725450523402805,
+            "ru.ofz_10y": 0.936159155238361,
+            "ru.ofz_1y": 0.9163641082731456,
+            "ru.ofz_5y": 0.9243617660733785,
+            "ru.output": 0.99184453435538,
+            "ru.real_wage": 1.0008967095880374,
+            "ru.retail": 1.01049693709971,
+            "ru.ruonia": 0.9028384395649944,
+            "ru.spread_a": 0.7896807862364297,
+            "ru.spread_aa": 0.864917902127532,
+            "ru.spread_bbb": 0.8271667128438791,
+            "ru.unemployment": 0.945990845152242,
+            "ru.usdrub": 0.9991045598303708
+          },
+          "cells": 8573,
+          "left_out": 9,
+          "interval": {
+            "point": 0.9384973686246219,
+            "log_se": 0.015566720413056928,
+            "low": 0.9031441878043313,
+            "high": 0.9580167884064168
+          }
+        }
+      },
+      "calibration": [
+        0.08806718768225825,
+        0.46028228158171003,
+        0.341420739531086,
+        0.11022979120494576
+      ],
+      "calibration_by_horizon": {
+        "1": [
+          0.06462035541195477,
+          0.4507269789983845,
+          0.37318255250403876,
+          0.11147011308562198
+        ],
+        "3": [
+          0.06991869918699187,
+          0.4926829268292683,
+          0.33658536585365856,
+          0.1008130081300813
+        ],
+        "6": [
+          0.08333333333333333,
+          0.46568627450980393,
+          0.34967320261437906,
+          0.10130718954248366
+        ],
+        "12": [
+          0.09900990099009901,
+          0.4537953795379538,
+          0.3333333333333333,
+          0.11386138613861387
+        ]
+      },
+      "coverage": 0.8008865041409075
+    }
+  },
+  "halves": {
+    "all": {
+      "units": [
+        "2014-01-01",
+        "2014-04-01",
+        "2014-07-01",
+        "2014-10-01",
+        "2015-01-01",
+        "2015-04-01",
+        "2015-07-01",
+        "2015-10-01",
+        "2016-01-01",
+        "2016-04-01",
+        "2016-07-01",
+        "2016-10-01",
+        "2017-01-01",
+        "2017-04-01",
+        "2017-07-01",
+        "2017-10-01",
+        "2018-01-01",
+        "2018-04-01",
+        "2018-07-01",
+        "2018-10-01",
+        "2019-01-01",
+        "2019-04-01",
+        "2019-07-01",
+        "2019-10-01",
+        "2020-01-01",
+        "2020-04-01",
+        "2020-07-01",
+        "2020-10-01"
+      ],
+      "cells": 8573,
+      "admitted": true,
+      "levels": {
+        "macro": {
+          "units": 28,
+          "cells": 8573,
+          "pairs": {
+            "model/walk": {
+              "score": 0.9384973686246219,
+              "by_horizon": {
+                "1": 0.9804310517416795,
+                "2": 0.9672963195501959,
+                "3": 0.9557628934901565,
+                "4": 0.9559520918976329,
+                "5": 0.9462067701074705,
+                "6": 0.9352450232835322,
+                "7": 0.9450979444005911,
+                "8": 0.936374154339658,
+                "9": 0.9270870394484724,
+                "10": 0.9316802447988604,
+                "11": 0.9222258008084054,
+                "12": 0.9122647774971762,
+                "13": 0.9173548523559023,
+                "14": 0.9090323017609037
+              },
+              "by_quantity": {
+                "gl.brent": 0.9483826072941636,
+                "gl.fed_rate": 0.9497591699220829,
+                "gl.ust_10y": 0.9067965410217199,
+                "gl.vix": 0.9455053416015293,
+                "ru.cnyrub": 0.9985626041787284,
+                "ru.cpi": 0.8865709751599328,
+                "ru.credit": 1.0150772980061582,
+                "ru.housing_price": 1.0080743995833854,
+                "ru.imoex": 1.026583012067754,
+                "ru.key_rate": 0.9103932299905863,
+                "ru.mortgage_rate": 0.9725450523402805,
+                "ru.ofz_10y": 0.936159155238361,
+                "ru.ofz_1y": 0.9163641082731456,
+                "ru.ofz_5y": 0.9243617660733785,
+                "ru.output": 0.99184453435538,
+                "ru.real_wage": 1.0008967095880374,
+                "ru.retail": 1.01049693709971,
+                "ru.ruonia": 0.9028384395649944,
+                "ru.spread_a": 0.7896807862364297,
+                "ru.spread_aa": 0.864917902127532,
+                "ru.spread_bbb": 0.8271667128438791,
+                "ru.unemployment": 0.945990845152242,
+                "ru.usdrub": 0.9991045598303708
+              },
+              "cells": 8573,
+              "left_out": 9,
+              "interval": {
+                "point": 0.9384973686246219,
+                "log_se": 0.015566720413056928,
+                "low": 0.9031441878043313,
+                "high": 0.9580167884064168
+              }
+            }
+          },
+          "calibration": [
+            0.08806718768225825,
+            0.46028228158171003,
+            0.341420739531086,
+            0.11022979120494576
+          ],
+          "calibration_by_horizon": {
+            "1": [
+              0.06462035541195477,
+              0.4507269789983845,
+              0.37318255250403876,
+              0.11147011308562198
+            ],
+            "3": [
+              0.06991869918699187,
+              0.4926829268292683,
+              0.33658536585365856,
+              0.1008130081300813
+            ],
+            "6": [
+              0.08333333333333333,
+              0.46568627450980393,
+              0.34967320261437906,
+              0.10130718954248366
+            ],
+            "12": [
+              0.09900990099009901,
+              0.4537953795379538,
+              0.3333333333333333,
+              0.11386138613861387
+            ]
+          },
+          "coverage": 0.8008865041409075
+        }
+      }
+    },
+    "tuning": {
+      "units": [
+        "2014-01-01",
+        "2014-04-01",
+        "2014-07-01",
+        "2014-10-01",
+        "2015-01-01",
+        "2015-04-01",
+        "2015-07-01",
+        "2015-10-01",
+        "2016-01-01",
+        "2016-04-01",
+        "2016-07-01",
+        "2016-10-01",
+        "2017-01-01",
+        "2017-04-01",
+        "2017-07-01",
+        "2017-10-01",
+        "2018-01-01",
+        "2018-04-01",
+        "2018-07-01",
+        "2018-10-01",
+        "2019-01-01",
+        "2019-04-01",
+        "2019-07-01",
+        "2019-10-01",
+        "2020-01-01",
+        "2020-04-01",
+        "2020-07-01",
+        "2020-10-01"
+      ],
+      "cells": 8573,
+      "admitted": true,
+      "levels": {
+        "macro": {
+          "units": 28,
+          "cells": 8573,
+          "pairs": {
+            "model/walk": {
+              "score": 0.9384973686246219,
+              "by_horizon": {
+                "1": 0.9804310517416795,
+                "2": 0.9672963195501959,
+                "3": 0.9557628934901565,
+                "4": 0.9559520918976329,
+                "5": 0.9462067701074705,
+                "6": 0.9352450232835322,
+                "7": 0.9450979444005911,
+                "8": 0.936374154339658,
+                "9": 0.9270870394484724,
+                "10": 0.9316802447988604,
+                "11": 0.9222258008084054,
+                "12": 0.9122647774971762,
+                "13": 0.9173548523559023,
+                "14": 0.9090323017609037
+              },
+              "by_quantity": {
+                "gl.brent": 0.9483826072941636,
+                "gl.fed_rate": 0.9497591699220829,
+                "gl.ust_10y": 0.9067965410217199,
+                "gl.vix": 0.9455053416015293,
+                "ru.cnyrub": 0.9985626041787284,
+                "ru.cpi": 0.8865709751599328,
+                "ru.credit": 1.0150772980061582,
+                "ru.housing_price": 1.0080743995833854,
+                "ru.imoex": 1.026583012067754,
+                "ru.key_rate": 0.9103932299905863,
+                "ru.mortgage_rate": 0.9725450523402805,
+                "ru.ofz_10y": 0.936159155238361,
+                "ru.ofz_1y": 0.9163641082731456,
+                "ru.ofz_5y": 0.9243617660733785,
+                "ru.output": 0.99184453435538,
+                "ru.real_wage": 1.0008967095880374,
+                "ru.retail": 1.01049693709971,
+                "ru.ruonia": 0.9028384395649944,
+                "ru.spread_a": 0.7896807862364297,
+                "ru.spread_aa": 0.864917902127532,
+                "ru.spread_bbb": 0.8271667128438791,
+                "ru.unemployment": 0.945990845152242,
+                "ru.usdrub": 0.9991045598303708
+              },
+              "cells": 8573,
+              "left_out": 9,
+              "interval": {
+                "point": 0.9384973686246219,
+                "log_se": 0.015566720413056928,
+                "low": 0.9031441878043313,
+                "high": 0.9580167884064168
+              }
+            }
+          },
+          "calibration": [
+            0.08806718768225825,
+            0.46028228158171003,
+            0.341420739531086,
+            0.11022979120494576
+          ],
+          "calibration_by_horizon": {
+            "1": [
+              0.06462035541195477,
+              0.4507269789983845,
+              0.37318255250403876,
+              0.11147011308562198
+            ],
+            "3": [
+              0.06991869918699187,
+              0.4926829268292683,
+              0.33658536585365856,
+              0.1008130081300813
+            ],
+            "6": [
+              0.08333333333333333,
+              0.46568627450980393,
+              0.34967320261437906,
+              0.10130718954248366
+            ],
+            "12": [
+              0.09900990099009901,
+              0.4537953795379538,
+              0.3333333333333333,
+              0.11386138613861387
+            ]
+          },
+          "coverage": 0.8008865041409075
+        }
+      }
+    }
+  },
+  "quantities": {
+    "gl.brent": {
+      "level": "macro",
+      "cells": 392,
+      "constrained": 0,
+      "scored": 392,
+      "unverified_tail": false,
+      "ratios": {
+        "model/walk": 0.9483826072941636
+      },
+      "calibration": [
+        0.18622448979591838,
+        0.3392857142857143,
+        0.40561224489795916,
+        0.06887755102040816
+      ],
+      "coverage": 0.7423469387755102,
+      "sharpness": 67.71916505891804
+    },
+    "gl.fed_rate": {
+      "level": "macro",
+      "cells": 392,
+      "constrained": 0,
+      "scored": 392,
+      "unverified_tail": false,
+      "ratios": {
+        "model/walk": 0.9497591699220829
+      },
+      "calibration": [
+        0.14795918367346939,
+        0.11989795918367346,
+        0.29336734693877553,
+        0.4387755102040816
+      ],
+      "coverage": 0.413265306122449,
+      "sharpness": 0.28320247851887725
+    },
+    "gl.ust_10y": {
+      "level": "macro",
+      "cells": 392,
+      "constrained": 0,
+      "scored": 392,
+      "unverified_tail": false,
+      "ratios": {
+        "model/walk": 0.9067965410217199
+      },
+      "calibration": [
+        0.1326530612244898,
+        0.45918367346938777,
+        0.3826530612244898,
+        0.025510204081632654
+      ],
+      "coverage": 0.8392857142857143,
+      "sharpness": 1.5610702965917949
+    },
+    "gl.vix": {
+      "level": "macro",
+      "cells": 392,
+      "constrained": 0,
+      "scored": 392,
+      "unverified_tail": false,
+      "ratios": {
+        "model/walk": 0.9455053416015293
+      },
+      "calibration": [
+        0.03316326530612245,
+        0.45153061224489793,
+        0.36989795918367346,
+        0.14540816326530612
+      ],
+      "coverage": 0.8214285714285714,
+      "sharpness": 89.64800551986187
+    },
+    "ru.cnyrub": {
+      "level": "macro",
+      "cells": 392,
+      "constrained": 0,
+      "scored": 392,
+      "unverified_tail": false,
+      "ratios": {
+        "model/walk": 0.9985626041787284
+      },
+      "calibration": [
+        0.07908163265306123,
+        0.48214285714285715,
+        0.32142857142857145,
+        0.11734693877551021
+      ],
+      "coverage": 0.8010204081632653,
+      "sharpness": 44.80023044662023
+    },
+    "ru.cpi": {
+      "level": "macro",
+      "cells": 392,
+      "constrained": 0,
+      "scored": 392,
+      "unverified_tail": false,
+      "ratios": {
+        "model/walk": 0.8865709751599328
+      },
+      "calibration": [
+        0.12755102040816327,
+        0.6556122448979592,
+        0.06377551020408163,
+        0.15306122448979592
+      ],
+      "coverage": 0.7193877551020408,
+      "sharpness": 5.627338463947325
+    },
+    "ru.credit": {
+      "level": "macro",
+      "cells": 392,
+      "constrained": 0,
+      "scored": 392,
+      "unverified_tail": false,
+      "ratios": {
+        "model/walk": 1.0150772980061582
+      },
+      "calibration": [
+        0.29846938775510207,
+        0.4005102040816326,
+        0.288265306122449,
+        0.012755102040816327
+      ],
+      "coverage": 0.6836734693877551,
+      "sharpness": 12.670208285959234
+    },
+    "ru.housing_price": {
+      "level": "macro",
+      "cells": 29,
+      "constrained": 0,
+      "scored": 29,
+      "unverified_tail": false,
+      "ratios": {
+        "model/walk": 1.0080743995833854
+      },
+      "calibration": [
+        0.0,
+        0.13793103448275862,
+        0.1724137931034483,
+        0.6896551724137931
+      ],
+      "coverage": 0.3103448275862069,
+      "sharpness": 8.37644441601401
+    },
+    "ru.imoex": {
+      "level": "macro",
+      "cells": 392,
+      "constrained": 0,
+      "scored": 392,
+      "unverified_tail": false,
+      "ratios": {
+        "model/walk": 1.026583012067754
+      },
+      "calibration": [
+        0.05612244897959184,
+        0.2857142857142857,
+        0.5586734693877551,
+        0.09948979591836735
+      ],
+      "coverage": 0.8443877551020408,
+      "sharpness": 25.687005522682227
+    },
+    "ru.key_rate": {
+      "level": "macro",
+      "cells": 392,
+      "constrained": 0,
+      "scored": 392,
+      "unverified_tail": false,
+      "ratios": {
+        "model/walk": 0.9103932299905863
+      },
+      "calibration": [
+        0.007653061224489796,
+        0.673469387755102,
+        0.17857142857142858,
+        0.14030612244897958
+      ],
+      "coverage": 0.8520408163265306,
+      "sharpness": 6.951115992930893
+    },
+    "ru.mortgage_rate": {
+      "level": "macro",
+      "cells": 392,
+      "constrained": 0,
+      "scored": 392,
+      "unverified_tail": false,
+      "ratios": {
+        "model/walk": 0.9725450523402805
+      },
+      "calibration": [
+        0.18622448979591838,
+        0.4387755102040816,
+        0.2729591836734694,
+        0.10204081632653061
+      ],
+      "coverage": 0.7117346938775511,
+      "sharpness": 2.454234543607039
+    },
+    "ru.ofz_10y": {
+      "level": "macro",
+      "cells": 392,
+      "constrained": 0,
+      "scored": 392,
+      "unverified_tail": false,
+      "ratios": {
+        "model/walk": 0.936159155238361
+      },
+      "calibration": [
+        0.0,
+        0.5714285714285714,
+        0.3469387755102041,
+        0.08163265306122448
+      ],
+      "coverage": 0.9183673469387755,
+      "sharpness": 4.412525533146351
+    },
+    "ru.ofz_1y": {
+      "level": "macro",
+      "cells": 392,
+      "constrained": 0,
+      "scored": 392,
+      "unverified_tail": false,
+      "ratios": {
+        "model/walk": 0.9163641082731456
+      },
+      "calibration": [
+        0.0,
+        0.6403061224489796,
+        0.23214285714285715,
+        0.12755102040816327
+      ],
+      "coverage": 0.8724489795918368,
+      "sharpness": 5.841577505659254
+    },
+    "ru.ofz_5y": {
+      "level": "macro",
+      "cells": 392,
+      "constrained": 0,
+      "scored": 392,
+      "unverified_tail": false,
+      "ratios": {
+        "model/walk": 0.9243617660733785
+      },
+      "calibration": [
+        0.0,
+        0.6147959183673469,
+        0.28061224489795916,
+        0.10459183673469388
+      ],
+      "coverage": 0.8954081632653061,
+      "sharpness": 5.618638782285787
+    },
+    "ru.output": {
+      "level": "macro",
+      "cells": 378,
+      "constrained": 0,
+      "scored": 378,
+      "unverified_tail": false,
+      "ratios": {
+        "model/walk": 0.99184453435538
+      },
+      "calibration": [
+        0.08994708994708994,
+        0.30952380952380953,
+        0.42857142857142855,
+        0.17195767195767195
+      ],
+      "coverage": 0.7380952380952381,
+      "sharpness": 7.709725666077418
+    },
+    "ru.real_wage": {
+      "level": "macro",
+      "cells": 392,
+      "constrained": 0,
+      "scored": 392,
+      "unverified_tail": false,
+      "ratios": {
+        "model/walk": 1.0008967095880374
+      },
+      "calibration": [
+        0.15816326530612246,
+        0.35459183673469385,
+        0.44387755102040816,
+        0.04336734693877551
+      ],
+      "coverage": 0.798469387755102,
+      "sharpness": 13.529103543082783
+    },
+    "ru.retail": {
+      "level": "macro",
+      "cells": 392,
+      "constrained": 0,
+      "scored": 392,
+      "unverified_tail": false,
+      "ratios": {
+        "model/walk": 1.01049693709971
+      },
+      "calibration": [
+        0.15816326530612246,
+        0.336734693877551,
+        0.45408163265306123,
+        0.05102040816326531
+      ],
+      "coverage": 0.7908163265306123,
+      "sharpness": 13.210936308988778
+    },
+    "ru.ruonia": {
+      "level": "macro",
+      "cells": 392,
+      "constrained": 0,
+      "scored": 392,
+      "unverified_tail": false,
+      "ratios": {
+        "model/walk": 0.9028384395649944
+      },
+      "calibration": [
+        0.007653061224489796,
+        0.6275510204081632,
+        0.23214285714285715,
+        0.1326530612244898
+      ],
+      "coverage": 0.8596938775510204,
+      "sharpness": 7.0250065607281975
+    },
+    "ru.spread_a": {
+      "level": "macro",
+      "cells": 370,
+      "constrained": 0,
+      "scored": 370,
+      "unverified_tail": false,
+      "ratios": {
+        "model/walk": 0.7896807862364297
+      },
+      "calibration": [
+        0.05405405405405406,
+        0.42162162162162165,
+        0.4945945945945946,
+        0.02972972972972973
+      ],
+      "coverage": 0.9135135135135135,
+      "sharpness": 3.6011824576535254
+    },
+    "ru.spread_aa": {
+      "level": "macro",
+      "cells": 370,
+      "constrained": 0,
+      "scored": 370,
+      "unverified_tail": false,
+      "ratios": {
+        "model/walk": 0.864917902127532
+      },
+      "calibration": [
+        0.043243243243243246,
+        0.45135135135135135,
+        0.4756756756756757,
+        0.02972972972972973
+      ],
+      "coverage": 0.927027027027027,
+      "sharpness": 2.117157479601863
+    },
+    "ru.spread_bbb": {
+      "level": "macro",
+      "cells": 370,
+      "constrained": 0,
+      "scored": 370,
+      "unverified_tail": false,
+      "ratios": {
+        "model/walk": 0.8271667128438791
+      },
+      "calibration": [
+        0.051351351351351354,
+        0.44054054054054054,
+        0.46756756756756757,
+        0.04054054054054054
+      ],
+      "coverage": 0.9081081081081082,
+      "sharpness": 5.993877026657828
+    },
+    "ru.unemployment": {
+      "level": "macro",
+      "cells": 392,
+      "constrained": 0,
+      "scored": 392,
+      "unverified_tail": false,
+      "ratios": {
+        "model/walk": 0.945990845152242
+      },
+      "calibration": [
+        0.0663265306122449,
+        0.5204081632653061,
+        0.288265306122449,
+        0.125
+      ],
+      "coverage": 0.8061224489795918,
+      "sharpness": 1.0917440196038575
+    },
+    "ru.usdrub": {
+      "level": "macro",
+      "cells": 392,
+      "constrained": 0,
+      "scored": 392,
+      "unverified_tail": false,
+      "ratios": {
+        "model/walk": 0.9991045598303708
+      },
+      "calibration": [
+        0.05357142857142857,
+        0.5459183673469388,
+        0.27040816326530615,
+        0.13010204081632654
+      ],
+      "coverage": 0.8163265306122449,
+      "sharpness": 44.99853395482424
+    }
+  },
+  "tail": null
+}
