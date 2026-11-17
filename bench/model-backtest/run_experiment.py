@@ -23,6 +23,7 @@ VARIANTS = {
     "band": {"band_fit": True},
     "state": {"stochastic_scale": True},
     "band-state": {"band_fit": True, "stochastic_scale": True},
+    "state-no-momentum": {"stochastic_scale": True, "momentum": False},
 }
 
 
@@ -54,7 +55,7 @@ def execute(args):
     plan = load_episodes(plan_file)
     common = {
         "store": ROOT / "workspace/series",
-        "models": folder / "models",
+        "models": args.models if args.models is not None else folder / "models",
         "episodes": plan_file,
         "as_of": date(2026, 10, 29),
         "macro_id": "rw.joint",
@@ -65,7 +66,8 @@ def execute(args):
     # Selection happens in the parent; the explicit model is pickled into every worker.
     with patch("mst.models.selected", return_value=model):
         for check in args.checks:
-            label = f"{args.half}-{check}{'-portfolio' if args.portfolio else ''}"
+            suffix = f"-{args.portfolio}" if args.portfolio else ""
+            label = f"{args.half}-{check}{suffix}"
             log = folder / f"{label}.md"
             details = folder / f"{label}.json"
             print(f"START {args.variant} {label}", flush=True)
@@ -96,6 +98,7 @@ def main():
         "--checks", nargs="+", choices=("rolling", "episodes"), default=["rolling", "episodes"]
     )
     parser.add_argument("--workers", type=int, default=4)
+    parser.add_argument("--models", type=Path, help="Short isolated cache path on Windows")
     parser.add_argument("--drivers", type=Path)
     parser.add_argument("--portfolio")
     return execute(parser.parse_args())
