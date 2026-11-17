@@ -150,25 +150,28 @@ def history_range(history: np.ndarray) -> float:
 
 def move_ranges(history: np.ndarray, horizon: int) -> np.ndarray:
     """(horizon,) per month ``t`` of the horizon, the range of the history's changes over the
-    months between the last known value and ``t``; NaN where no pair of known values is that
-    far apart, and everywhere when the known values span fewer than ``MIN_MOVES_MONTHS`` months.
+    months between the last known value and ``t``; NaN where the changes of that length cover
+    fewer than ``MIN_MOVES_MONTHS`` months, from the start of the first to the end of the last.
 
     The band of month ``t`` is a forecast of the change from the last known value, so its
     yardstick is how far the quantity moved over as many months, not the range of its levels:
     a mean-reverting series moves less over a year than a walk would, and a short history has
     seen many moves of a year but few of its levels. A series last known two months before the
-    end of the history is three months from month 1.
+    end of the history is three months from month 1. The span is counted per length because a
+    series can change its frequency: one annual until 2020 and quarterly since has years of
+    twelve-month changes but only the few three-month ones after the switch.
     """
     y = np.asarray(history, dtype=float)
     found = np.full(horizon, np.nan)
     seen = np.flatnonzero(np.isfinite(y))
-    if not len(seen) or seen[-1] - seen[0] + 1 < MIN_MOVES_MONTHS:
+    if not len(seen):
         return found
     gap = len(y) - 1 - seen[-1]
     for t in range(horizon):
         steps = t + 1 + gap
         moves = y[steps:] - y[:-steps]
-        moves = moves[np.isfinite(moves)]
-        if len(moves):
-            found[t] = moves.max() - moves.min()
+        starts = np.flatnonzero(np.isfinite(moves))
+        if len(starts) and starts[-1] + steps - starts[0] + 1 >= MIN_MOVES_MONTHS:
+            known = moves[starts]
+            found[t] = known.max() - known.min()
     return found

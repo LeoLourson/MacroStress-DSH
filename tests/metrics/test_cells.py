@@ -119,6 +119,18 @@ def test_move_ranges_need_five_years_and_a_pair_of_known_values():
     assert MIN_MOVES_MONTHS == 60
 
 
+def test_move_ranges_of_one_length_need_five_years_of_such_moves():
+    """An annual series that turns quarterly: the three-month moves are the few after the
+    switch, and the range of a few moves is no yardstick, while the annual moves cover five
+    years."""
+    y = np.full(MIN_MOVES_MONTHS + 10, np.nan)
+    y[0 : MIN_MOVES_MONTHS + 1 : 12] = [0.0, 5.0, 7.0, 15.0, 16.0, 30.0]
+    y[MIN_MOVES_MONTHS + 3 :: 3] = [31.0, 33.0, 34.0]
+    found = move_ranges(y, 12)
+    assert np.isnan(found[2])  # three months: three moves over ten months
+    assert found[11] == pytest.approx(14.0 - 1.0)  # twelve months: 5, 2, 8, 1, 14
+
+
 def test_finite_draws_drops_the_non_finite_values():
     assert finite_draws(np.array([1.0, np.nan, np.inf, 2.0])).tolist() == [1.0, 2.0]
 
