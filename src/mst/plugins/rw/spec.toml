@@ -1,7 +1,7 @@
 start = 2012-01-01
 drifts = ["ru.cpi", "ru.usdrub", "ru.cnyrub", "ru.output", "ru.real_wage", "ru.retail", "ru.credit", "ru.housing_price", "ru.imoex"]
 reversion = []
-stochastic_scale = false
+stochastic_scale = true
 sample_scale = true
 scale_blocks = []
 regimes = [2014-11-01, 2020-03-01, 2022-03-01]

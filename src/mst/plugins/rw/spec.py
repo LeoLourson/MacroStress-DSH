@@ -68,7 +68,7 @@ class Spec(BaseModel):
     price block keeps ``A = 1``, because an AR(1) on a trending log level fits the trend
     rather than a return to a fixed level.
     """
-    stochastic_scale: bool = False
+    stochastic_scale: bool = True
     """Whether the monthly multiplier follows the estimated log AR(1) path from its state in
     the last month of the panel, so that the band widens after a turbulent month.
     """

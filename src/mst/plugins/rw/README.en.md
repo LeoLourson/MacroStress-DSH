@@ -34,7 +34,7 @@ $$
 s_t=\phi s_{t-1}+\sigma\eta_t,\qquad \lambda_t=\exp\!\left(\log\frac{\nu}{\nu-2}-\frac{\sigma^2}{2(1-\phi^2)}+s_t\right),
 $$
 
-so $E[\lambda_t]=\frac{\nu}{\nu-2}$: persistence changes the shape of the path, not the unconditional monthly covariance. `stochastic_scale = false` by default: at 12 months the validation CRPS improves by 0.0014 against a threshold of 0.005, so the persistent scale is off.
+so $E[\lambda_t]=\frac{\nu}{\nu-2}$: persistence changes the shape of the path, not the unconditional monthly covariance. The path starts from the estimated log scale of the last panel month, so a turbulent month widens the next bands and a calm one narrows them (section "Persistence of the multiplier").
 
 The shocks $z_{t,j}$ carry the names of variables: the shock `ru.key_rate` is the key rate's own innovation. The matrix $B$ is the Cholesky factorisation of $\Sigma$ in panel order; the base law of the paths does not depend on the order.
 
@@ -145,7 +145,9 @@ A backtest of 17 November 2026 checked the split above on the same windows as th
 
 ### Persistence of the multiplier
 
-With `stochastic_scale = true` the path of the multiplier is a log AR(1) with estimated $\phi$ and $\sigma$. The series for the estimate is the inverse ECME weight: $w_t$ is proportional to $E[1/\lambda_t\mid\text{data}]$, so $\log(1/w_t)$ estimates the log scale. A regression of that series on its previous month gives $\phi$ and $\sigma$; on the panel of 2026-10-29 they are $\phi=0.63$, $\sigma=0.69$. The estimate is two-step and approximate: $1/w_t$ is a posterior mean shrunk toward one, so $\sigma$ is likely understated. The level of the path is normalised so that $E[\lambda_t]=\frac{\nu}{\nu-2}$: persistence changes the shape of the path, not the unconditional monthly covariance. The switch is off by default: the validation CRPS improves by 0.0014 against a threshold of 0.005.
+With `stochastic_scale = true` the path of the multiplier is a log AR(1) with estimated $\phi$ and $\sigma$. The series for the estimate is the inverse ECME weight: $w_t$ is proportional to $E[1/\lambda_t\mid\text{data}]$, so $\log(1/w_t)$ estimates the log scale. A regression of that series on its previous month gives $\phi$ and $\sigma$; on the panel of 2026-10-29 they are $\phi=0.63$, $\sigma=0.69$. The estimate is two-step and approximate: $1/w_t$ is a posterior mean shrunk toward one, so $\sigma$ is likely understated. The level of the path is normalised so that $E[\lambda_t]=\frac{\nu}{\nu-2}$: persistence changes the shape of the path, not the unconditional monthly covariance. The path starts from $s_0$, the estimate of the log scale in the last panel month; a version saved without that estimate starts from the stationary law.
+
+`stochastic_scale = true` by default since 2026-11-17. On all grid dates of the backtest under the [criteria of trust](<../../../../docs/concept/success-criteria.md>) the version with independent months fails admission: on the near months the fact lies above the band of the macro variables in 11.5% of cells against the allowed 5% (p = 2.3e-5 against a threshold of 0.0016). The persistent scale passes every implemented criterion at the macro, share price, position and portfolio levels, although its upper tail is close to the threshold too: 8.9%, p = 0.0036. A gain in accuracy is not proven: the validation grid CRPS ratio is 0.989 with a 95% interval [0.981, 1.007]. The portfolio tail stays understated although the criterion does not refuse it: 8 VaR95 breaches in 40 windows instead of the expected two. The [journal of changes](<../../../../bench/model-backtest/journal.md>) records the calculations and caveats.
 
 ### Housing price
 
@@ -273,7 +275,7 @@ By default there is no mean reversion: the spread grows as $\sqrt t$, rates and 
 | `start` | 2012-01-01 | the first month of the panel, as for `bvar.sv` |
 | `drifts` | the nine variables above | the variables with a non-zero drift |
 | `reversion` | `[]` | the variables with mean reversion; empty by default |
-| `stochastic_scale` | `false` | the path of every block's multiplier is a log AR(1) instead of independent months |
+| `stochastic_scale` | `true` | the path of every block's multiplier is a log AR(1) from the last month's state instead of independent months |
 | `sample_scale` | `true` | the level and correlations of the scale are the sample covariance of the changes |
 | `regimes`, `regime_months` | 2014-11, 2020-03, 2022-03; 36 | the first months of the regimes and the shortest window of the correlations |
 | `scale_blocks` | empty, one block | the blocks with their own scale multipliers |
@@ -403,7 +405,7 @@ Each variant re-estimates every date of the grid. "Rate", "IMOEX", "BBB" are the
 | S+B | 0.882 / 0.9412 | 0.824 / 0.9902 | 4.11 | 18.38 | 4.96 |
 | S+A+B+C | 0.774 / 1.0170 | 0.733 / 1.1160 | 3.52 | 18.38 | 3.30 |
 
-A and C are off: the AR(1) coefficients are 0.97–0.99, the return barely moves the centre and narrows the band. B is off: the validation CRPS beats S by 0.0014 against a threshold of 0.005. S is adopted.
+A and C are off: the AR(1) coefficients are 0.97–0.99, the return barely moves the centre and narrows the band. B is off: the validation CRPS beats S by 0.0014 against a threshold of 0.005. S is adopted. That decision used the former threshold; on 2026-11-17 B was turned on under the criteria of trust (section "Persistence of the multiplier").
 
 ### Width and rate transfer
 

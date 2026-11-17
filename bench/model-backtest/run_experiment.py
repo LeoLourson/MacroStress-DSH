@@ -18,9 +18,11 @@ for variable in ("OPENBLAS_NUM_THREADS", "OMP_NUM_THREADS", "MKL_NUM_THREADS"):
 
 ROOT = Path(__file__).resolve().parents[2]
 OUTPUT = ROOT / "experiments" / "model-trust-2026-11-17"
+# Every variant names its scale switch: the shipped default moved to the persistent scale on
+# 17.11.2026, and the frozen variants must keep their configuration and cache identity.
 VARIANTS = {
-    "baseline": {},
-    "band": {"band_fit": True},
+    "baseline": {"stochastic_scale": False},
+    "band": {"band_fit": True, "stochastic_scale": False},
     "state": {"stochastic_scale": True},
     "band-state": {"band_fit": True, "stochastic_scale": True},
     "state-no-momentum": {"stochastic_scale": True, "momentum": False},

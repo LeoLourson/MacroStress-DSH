@@ -53,7 +53,7 @@ def test_runner_selects_only_requested_half_and_passes_explicit_model(runner, mo
     def grid(**kwargs):
         selected = models.selected("rw.joint")
         assert selected._spec.band_fit
-        assert not selected._spec.stochastic_scale
+        assert not selected._spec.stochastic_scale  # the variants stay fixed when defaults move
         calls.append(("grid", kwargs))
         return 1
 

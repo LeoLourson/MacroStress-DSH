@@ -429,7 +429,10 @@ def test_blocks_have_their_own_tails_and_keep_the_sample_covariance():
     light = 0.5 * heavy * np.sqrt(1 / 3) + rng.normal(size=count)
     d = np.column_stack([heavy, light])
     p = panel(np.vstack([np.zeros(2), np.cumsum(d, axis=0)]), ["x", "y"])
-    spec = Spec(drifts=[], breaks=[], regimes=[], momentum=False, scale_blocks=[["y"]])
+    spec = Spec(
+        drifts=[], breaks=[], regimes=[], momentum=False, scale_blocks=[["y"]],
+        stochastic_scale=False,
+    )
     meta, arrays, nu = estimate(p, spec)
     assert_array_equal(arrays["blocks"], [0, 1])
     assert nu[0] < 5 < 10 < nu[1]

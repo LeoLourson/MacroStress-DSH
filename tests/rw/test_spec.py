@@ -18,6 +18,9 @@ def test_defaults_match_bundled_spec():
     assert spec.regimes == [date(2014, 11, 1), date(2020, 3, 1), date(2022, 3, 1)]
     assert spec.regime_months == 36
     assert spec.scale_blocks == []
+    # The persistent scale passed the criteria of trust on 17.11.2026; independent months failed
+    # the upper macro tail (bench/model-backtest/journal.md).
+    assert spec.stochastic_scale
     assert spec.breaks == [
         Break(month=date(2021, 1, 1), variables=["ru.spread_aa", "ru.spread_a", "ru.spread_bbb"])
     ]
