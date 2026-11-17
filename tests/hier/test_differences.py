@@ -6,13 +6,15 @@ from datetime import date
 import numpy as np
 import pytest
 
+from mst.data.store import Observation, SeriesStore
 from mst.drivers import bundle as satellite_bundle
 from mst.drivers.history import history
+from mst.drivers.registry import Registry
 from mst.model_sdk import Intervention
 from mst.model_sdk.contracts import MacroSimulation as Simulation
 from mst.model_sdk.contracts import SatelliteEstimateContext
 from mst.plugins.hier.check import check
-from mst.plugins.hier.estimate import difference, fit
+from mst.plugins.hier.estimate import difference, fit, path_of
 from mst.plugins.hier.model import HierModel
 from mst.plugins.hier.simulate import IMPACT, PARAMETERS_FROM_ABOVE
 from mst.plugins.hier.simulate import simulate as simulate_hier
@@ -314,6 +316,49 @@ def test_without_the_option_the_fit_is_bit_for_bit_as_before(tmp_path):
     other = fit(hist, spec.model_copy(update={"differences": ["price"]}))
     assert other.differenced is True
     assert not np.array_equal(result.gamma, other.gamma)
+
+
+def test_a_quarterly_average_is_fitted_in_differences(tmp_path):
+    """A price published as the average of a quarter has no change of one month; the change
+    between two quarters is a sum of the monthly changes with weights 1/3, 2/3, 1, 2/3, 1/3.
+    The observations hold the true changes exactly, the fit finds the long-run response to the
+    macro variable, and the bounds stay in levels."""
+    panel = simulated.panel(240, seed=5)
+    rng = np.random.default_rng(6)
+    x = panel.y[:, 0]
+    raw = simulated.registry(without_history=()).model_dump(by_alias=True)
+    raw["quantities"][0]["span"] = 3
+    registry = Registry.model_validate(raw)
+    store = SeriesStore(tmp_path)
+    truth = {}
+    for name, gamma in {"sector": simulated.CHANGE_SECTOR, **simulated.CHANGE_COMPANIES}.items():
+        truth[name] = simulated.change_path(gamma, x, rng)
+        rows = [
+            Observation(
+                panel.months[t], float(truth[name][t - 2 : t + 1].mean()), panel.months[t], False
+            )
+            for t in range(2, len(x), 3)
+        ]
+        store.write(f"drv.price.{name}", rows)
+    hist = history(registry, "price", panel, store, AS_OF)
+    sector = hist.nodes.index("sector")
+
+    item = path_of(replace(hist, x=difference(hist.x)), sector, differenced=True)
+    changes = np.diff(truth["sector"])[item.first - 1 : item.first - 1 + len(item.path)]
+    assert item.weights @ changes == pytest.approx(item.values, abs=1e-9)
+    assert not item.complete
+
+    spec = differenced_spec().model_copy(update={"sampler": Sampler(draws=200, burn=100, seed=7)})
+    result = fit(hist, spec)
+    assert result.differenced
+    gamma = result.gamma[:, sector].mean(axis=0)
+    true = simulated.CHANGE_SECTOR
+    long_run = (gamma[2] + gamma[3]) / (1 - gamma[1])
+    assert long_run == pytest.approx((true[2] + true[3]) / (1 - true[1]), abs=0.3)
+    assert result.rows[sector] == len(item.observed)
+    levels = hist.d[np.isfinite(hist.d[:, sector]), sector]
+    assert result.train_low[sector] == levels[1:].min()
+    assert result.train_high[sector] == levels[1:].max()
 
 
 def test_a_missing_level_gives_two_missing_changes():

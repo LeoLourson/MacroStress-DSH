@@ -75,31 +75,28 @@ class Path:
     """The months a node is estimated on, its observations and its path over those months.
 
     The path runs from the first month the first observation covers to the last observation,
-    after the last month whose ``x`` is unknown. An observation fixes the mean of the path over
-    the ``span`` months it covers; months no observation fixes are drawn by the sampler.
+    after the last month whose ``x`` is unknown. An observation fixes a weighted sum of the
+    path (``weights``); months no observation fixes are drawn by the sampler.
     """
 
     first: int
     observed: np.ndarray
-    """(o,) month indices of the observations."""
+    """(o,) month indices of the observations; of the later level for a change."""
     values: np.ndarray
-    span: int
+    weights: np.ndarray
+    """(o, n) the weights of the observations on the path."""
     xpart: np.ndarray
     """(n, m (L + 1)) the ``x`` part of ``z_t`` for months ``first .. last``."""
     path: np.ndarray
     """(n,) the driver over months ``first .. last``; observed or drawn."""
-    weights: np.ndarray = field(init=False)
-    """(o, n) the weights of the observations on the path: every observation is the mean of
-    the ``span`` months it covers."""
+    earlier: np.ndarray | None = None
+    """(o,) for a path of changes, the month of the earlier level of every observation."""
+    complete: bool = field(init=False)
+    """Every month is an observation of its own: the sampler has nothing to draw."""
 
     def __post_init__(self) -> None:
-        self.weights = np.zeros((len(self.observed), len(self.path)))
-        for k, month in enumerate(self.observed - self.first):
-            self.weights[k, month - self.span + 1 : month + 1] = 1 / self.span
-
-    @property
-    def complete(self) -> bool:
-        return self.span == 1 and len(self.observed) == len(self.path)
+        n = len(self.path)
+        self.complete = self.weights.shape == (n, n) and np.array_equal(self.weights, np.eye(n))
 
     def rows(self) -> tuple[np.ndarray, np.ndarray]:
         """``(Z, y)`` of months ``first + 1 .. last`` on the current path."""
@@ -108,17 +105,40 @@ class Path:
         return z, self.path[1:]
 
 
-def path_of(hist: History, node: int, until: int | None = None) -> Path | None:
+def _weights(first: int, n: int, span: int, observed, earlier) -> np.ndarray:
+    """The weights of the observations on the path of months ``first .. first + n - 1``.
+
+    A level stored at month ``t`` is the mean of the ``span`` months up to ``t``. On a path of
+    levels it weighs those months by ``1 / span``. On a path of monthly changes the observation
+    is the difference of two stored levels at ``t'`` < ``t``: it is the sum, over the ``span``
+    months ``j`` of the mean, of the changes from ``t' - j + 1`` to ``t - j`` — the weights
+    1/3, 2/3, 1, 2/3, 1/3 for two neighbouring quarters, one month of weight one for two
+    neighbouring months.
+    """
+    out = np.zeros((len(observed), n))
+    for k, t in enumerate(observed - first):
+        if earlier is None:
+            out[k, t - span + 1 : t + 1] = 1 / span
+            continue
+        for j in range(span):
+            out[k, earlier[k] - first - j + 1 : t - j + 1] += 1 / span
+    return out
+
+
+def path_of(
+    hist: History, node: int, until: int | None = None, *, differenced: bool = False
+) -> Path | None:
     """The estimation months of a node up to ``until``; None without two usable observations.
 
     The window is the months whose ``x`` the panel knows: it starts after the last month with an
     unknown ``x`` and ends at the last one, so an observation that falls outside it is dropped.
+    With ``differenced`` the path is of monthly changes and ``hist.x`` holds the changes of
+    ``x``; every stored level after the first is observed as its change from the stored level
+    before it, so a quarterly average or a gap of a month keeps its information.
     """
     span, lags, d = hist.quantity.span, hist.quantity.lags, hist.d[:, node]
     last = len(d) - 1 if until is None else until
     observed = np.flatnonzero(np.isfinite(d[: last + 1]))
-    if len(observed) < 2:
-        return None
     known = np.array(
         [t >= lags and bool(np.all(np.isfinite(hist.x[t - lags : t + 1]))) for t in range(last + 1)]
     )
@@ -127,25 +147,38 @@ def path_of(hist: History, node: int, until: int | None = None) -> Path | None:
         return None
     end = int(usable[-1])
     observed = observed[observed <= end]
-    if len(observed) < 2:
+    # The first month an observation covers: for a level the first of its span, for a change
+    # the month after the first of the span of the earlier level.
+    reach = span - 1 - int(differenced)
+    if len(observed) < 2 + int(differenced):
         return None
-    first = max(int(observed[0]) - span + 1, lags)
+    first = max(int(observed[0]) - reach, lags)
     unknown = np.flatnonzero(~known[first : end + 1]) + first
     if len(unknown):
         first = int(unknown[-1]) + 1
     if first > end:
         return None
-    observed = observed[observed - span + 1 >= first]
+    observed = observed[observed - reach >= first]
+    earlier = None
+    if differenced:
+        observed, earlier = observed[1:], observed[:-1]
     if len(observed) < 2:
         return None
     months = np.arange(first, end + 1)
+    if differenced:
+        ends = np.r_[earlier[:1], observed]
+        start = np.diff(np.interp(np.arange(first - 1, end + 1), ends, d[ends]))
+        values = d[observed] - d[earlier]
+    else:
+        values, start = d[observed], np.interp(months, observed, d[observed])
     return Path(
         first=first,
         observed=observed,
-        values=d[observed],
-        span=span,
+        values=values,
+        weights=_weights(first, len(months), span, observed, earlier),
         xpart=np.array([lagged(hist.x, lags, t) for t in months]),
-        path=np.interp(months, observed, d[observed]),
+        path=start,
+        earlier=earlier,
     )
 
 
@@ -277,17 +310,16 @@ def level_bounds(
 ) -> tuple[np.ndarray, np.ndarray]:
     """The training bounds of a quantity fitted in differences: the levels it was trained on.
 
-    A change is an observation exactly when both its months are observed, so the levels the
-    estimation saw are the two months of every observed change — a level no change touches is
-    not data the model was trained on. The bounds stay in levels, so the outside-range flag
+    Every observation of a change joins two stored levels, so the levels the estimation saw
+    are the two ends of every observed change — a level no change touches is not data the model
+    was trained on. The bounds stay in levels, so the outside-range flag
     keeps the meaning it has for a quantity in levels; a node without a series of its own
     inherits them from the nearest object above it with data, as ``training_bounds`` gives it.
     """
     low = np.full(len(rows), np.nan)
     high = np.full(len(rows), np.nan)
     for i, item in paths.items():
-        months = np.concatenate([item.observed, item.observed - 1])
-        values = hist.d[months[months >= 0], i]
+        values = hist.d[np.concatenate([item.observed, item.earlier]), i]
         if len(values):
             low[i], high[i] = float(values.min()), float(values.max())
     for i in range(len(rows)):
@@ -320,10 +352,10 @@ def fit(
     columns_ = columns(hist.quantity)
     k, n = len(columns_), len(hist.nodes)
     differenced = hist.quantity.id in spec.differences
-    data = replace(hist, d=difference(hist.d), x=difference(hist.x)) if differenced else hist
+    data = replace(hist, x=difference(hist.x)) if differenced else hist
     paths = {}
     for i in range(n):
-        item = path_of(data, i, until)
+        item = path_of(data, i, until, differenced=differenced)
         if item is not None and len(item.path) - 1 > k:
             paths[i] = item
     if not paths:
