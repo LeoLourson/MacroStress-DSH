@@ -26,7 +26,7 @@ $$
 w>\max_s\Delta_s-\min_s\Delta_s,\qquad \Delta_s=y_{s+k}-y_s,\qquad k=t+g,
 $$
 
-where $g$ is the number of months from the last known value of the quantity to the end of the history. The band of month $t$ forecasts a change over $k$ months, so it is compared with past changes of the same length. The moves rule applies when such changes cover at least 60 months.
+where $g$ is the number of months from the last known value of the quantity to the end of the history. The band of month $t$ forecasts a change over $k$ months, so it is compared with past changes of the same length. The moves rule applies when the history holds at least 200 known changes of that length: the range of a few changes is narrower than a correct 90 % band, and on a monthly Student walk with four degrees of freedom the rule rejects 7 % of the cells of a correct band with 120 months of history and 27–66 % with annual values, but under 0.5 % with 200 changes.
 
 Let $\pi_{q,r}$ be the share of the cells of quantity $q$ breaking rule $r$ among the cells the rule applies to. The model passes when $\pi_{q,r}<0.05$ for every quantity and every rule, and one quantity over the threshold keeps the whole model out. Episodes add a condition on the scenario: every interval condition $c$ of the scenario must have probability $P_0(c)>0.01$ in the forecast without the scenario, otherwise the scenario rests on an event the model considers almost impossible. Point conditions are not held to this threshold, since their probability is set by the precision the condition is given with.
 

@@ -33,8 +33,13 @@ BUCKET_EDGES = (0.05, 0.50, 0.95)
 """The same edges as shares, where the probability integral transform falls."""
 MIN_HISTORY_MONTHS = 120
 """The shortest history, in months, whose range the width rule reads (``history_range``)."""
-MIN_MOVES_MONTHS = 60
-"""The shortest history, in months, whose changes the moves rule reads (``move_ranges``)."""
+MIN_MOVES = 200
+"""The fewest known changes of one length the moves rule reads (``move_ranges``).
+
+The range of a few changes is narrower than a calibrated 90 % band: for a Student walk with
+four degrees of freedom, a band right by construction breaks the rule in 7 % of its cells
+with 120 monthly values and in 27-66 % with annual ones. With two hundred changes of each
+length the share is under 0.5 %."""
 
 
 @dataclass(frozen=True)
@@ -150,15 +155,15 @@ def history_range(history: np.ndarray) -> float:
 
 def move_ranges(history: np.ndarray, horizon: int) -> np.ndarray:
     """(horizon,) per month ``t`` of the horizon, the range of the history's changes over the
-    months between the last known value and ``t``; NaN where the changes of that length cover
-    fewer than ``MIN_MOVES_MONTHS`` months, from the start of the first to the end of the last.
+    months between the last known value and ``t``; NaN where fewer than ``MIN_MOVES`` changes of
+    that length are known.
 
     The band of month ``t`` is a forecast of the change from the last known value, so its
     yardstick is how far the quantity moved over as many months, not the range of its levels:
     a mean-reverting series moves less over a year than a walk would, and a short history has
     seen many moves of a year but few of its levels. A series last known two months before the
-    end of the history is three months from month 1. The span is counted per length because a
-    series can change its frequency: one annual until 2020 and quarterly since has years of
+    end of the history is three months from month 1. The changes are counted per length because
+    a series can change its frequency: one annual until 2020 and quarterly since has many
     twelve-month changes but only the few three-month ones after the switch.
     """
     y = np.asarray(history, dtype=float)
@@ -170,8 +175,7 @@ def move_ranges(history: np.ndarray, horizon: int) -> np.ndarray:
     for t in range(horizon):
         steps = t + 1 + gap
         moves = y[steps:] - y[:-steps]
-        starts = np.flatnonzero(np.isfinite(moves))
-        if len(starts) and starts[-1] + steps - starts[0] + 1 >= MIN_MOVES_MONTHS:
-            known = moves[starts]
+        known = moves[np.isfinite(moves)]
+        if len(known) >= MIN_MOVES:
             found[t] = known.max() - known.min()
     return found

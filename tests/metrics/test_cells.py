@@ -11,7 +11,7 @@ from mst.metrics.baselines import (
 )
 from mst.metrics.cells import (
     MIN_HISTORY_MONTHS,
-    MIN_MOVES_MONTHS,
+    MIN_MOVES,
     crps,
     finite_draws,
     history_range,
@@ -91,7 +91,7 @@ def test_move_ranges_read_the_changes_over_the_months_to_each_horizon_month():
     """Month t of the horizon is t months from the last known value, so its yardstick is the
     range of the history's t-month changes: 2, 4 and 6 apart in a line of slope 2 with one
     jump."""
-    y = 2.0 * np.arange(MIN_MOVES_MONTHS, dtype=float)
+    y = 2.0 * np.arange(MIN_MOVES + 3, dtype=float)
     y[30:] += 10.0
     found = move_ranges(y, 3)
     # One-month changes are 2 and once 12; two-month ones 4 and 14; three-month 6 and 16.
@@ -101,34 +101,28 @@ def test_move_ranges_read_the_changes_over_the_months_to_each_horizon_month():
 def test_move_ranges_count_the_months_since_the_last_known_value():
     """A series known two months before the end of the history is three months from month 1
     of the horizon."""
-    y = np.arange(MIN_MOVES_MONTHS + 2, dtype=float) ** 2
+    y = np.arange(MIN_MOVES + 5, dtype=float) ** 2
     y[-2:] = np.nan
     known = y[:-2]
     three = known[3:] - known[:-3]
     assert move_ranges(y, 1)[0] == pytest.approx(three.max() - three.min())
 
 
-def test_move_ranges_need_five_years_and_a_pair_of_known_values():
-    y = np.arange(MIN_MOVES_MONTHS, dtype=float)
-    assert np.isnan(move_ranges(y[: MIN_MOVES_MONTHS - 1], 2)).all()
-    # Quarterly values: no pair of known values is one month apart.
-    quarterly = np.full(MIN_MOVES_MONTHS + 1, np.nan)
-    quarterly[::3] = np.arange(0, MIN_MOVES_MONTHS + 1, 3, dtype=float) ** 2
+def test_move_ranges_need_as_many_moves_of_the_length():
+    """The range of a few moves is narrower than a calibrated 90 % band: with 120 monthly
+    values a band right by construction breaks the rule in 7 % of its cells, with annual ones
+    in 27-66 %. Two hundred moves of the length keep that share under 0.5 %."""
+    y = np.arange(MIN_MOVES + 2, dtype=float) ** 2
+    found = move_ranges(y, 3)
+    assert np.isfinite(found[:2]).all() and np.isnan(found[2])  # 200, 199 and 198 moves
+    quarterly = np.full(3 * MIN_MOVES + 1, np.nan)
+    quarterly[::3] = np.arange(MIN_MOVES + 1, dtype=float) ** 2
     quarterly_found = move_ranges(quarterly, 3)
     assert np.isnan(quarterly_found[:2]).all() and np.isfinite(quarterly_found[2])
-    assert MIN_MOVES_MONTHS == 60
-
-
-def test_move_ranges_of_one_length_need_five_years_of_such_moves():
-    """An annual series that turns quarterly: the three-month moves are the few after the
-    switch, and the range of a few moves is no yardstick, while the annual moves cover five
-    years."""
-    y = np.full(MIN_MOVES_MONTHS + 10, np.nan)
-    y[0 : MIN_MOVES_MONTHS + 1 : 12] = [0.0, 5.0, 7.0, 15.0, 16.0, 30.0]
-    y[MIN_MOVES_MONTHS + 3 :: 3] = [31.0, 33.0, 34.0]
-    found = move_ranges(y, 12)
-    assert np.isnan(found[2])  # three months: three moves over ten months
-    assert found[11] == pytest.approx(14.0 - 1.0)  # twelve months: 5, 2, 8, 1, 14
+    annual = np.full(12 * 40 + 1, np.nan)
+    annual[::12] = np.arange(41, dtype=float)
+    assert np.isnan(move_ranges(annual, 12)).all()
+    assert MIN_MOVES == 200
 
 
 def test_finite_draws_drops_the_non_finite_values():
