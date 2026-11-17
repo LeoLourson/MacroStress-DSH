@@ -86,9 +86,9 @@ def test_the_gates_match_the_numbers_of_the_saved_run(module, workspace, base_ru
         assert report["s2"][driver]["value"] == pytest.approx(value, abs=1e-9)
         assert report["s2"][driver]["limit"] == 35.0
 
-    # S3: the share of driver cells whose band is wider than history.
+    # S3: the share of driver cells whose band is wider than every move of their length.
     cells = [row for name, row in meta["checks"]["paths"].items() if name.startswith("driver/")]
-    share = float(np.mean([row.get("band_wider_than_history", 0.0) for row in cells]))
+    share = float(np.mean([row.get("band_wider_than_moves", 0.0) for row in cells]))
     assert report["s3"]["share"] == pytest.approx(share, abs=1e-12)
     assert report["s3"]["limit"] == 0.05
 
@@ -113,9 +113,11 @@ def test_the_gates_match_the_numbers_of_the_saved_run(module, workspace, base_ru
 
 
 def test_s3_counts_the_horizon_months_as_the_run_does(module, workspace, base_run, monkeypatch):
-    # Every band is wider than a history of no width, except month 0, where all paths coincide:
+    # Every band is wider than moves of no width, except month 0, where all paths coincide:
     # the admission rule counts the months after it, so the share is one and not 2/3 of it.
-    monkeypatch.setattr("mst.metrics.cells.history_range", lambda history: 1e-9)
+    monkeypatch.setattr(
+        "mst.metrics.cells.move_ranges", lambda history, months: np.full(months, 1e-9)
+    )
     report = module.gates(workspace, run=base_run, month=2, imoex="ru.usdrub", usdrub="gl.brent")
     assert report["s3"]["share"] == 1.0
 
@@ -148,9 +150,7 @@ def test_the_training_range_shares_cover_the_widened_range_too(module, workspace
     meta = runs.meta(workspace, base_run)
     with np.load(runs.folder(workspace, base_run) / "paths.npz") as saved:
         drivers = saved["drivers"]
-    with np.load(
-        workspace.models / "satellites" / meta["satellites"] / "arrays.npz"
-    ) as stored:
+    with np.load(workspace.models / "satellites" / meta["satellites"] / "arrays.npz") as stored:
         for quantity, row in report["training_range"].items():
             part = _share_part_of(workspace, meta, quantity)
             d = stored[f"{quantity}.d"]
@@ -170,9 +170,7 @@ def test_the_training_range_shares_cover_the_widened_range_too(module, workspace
 
 def _share_part_of(workspace, meta, quantity):
     folder = workspace.models / "satellites" / meta["satellites"]
-    return json.loads((folder / "meta.json").read_text(encoding="utf-8"))["quantities"][
-        quantity
-    ]
+    return json.loads((folder / "meta.json").read_text(encoding="utf-8"))["quantities"][quantity]
 
 
 def _transform_of(workspace, meta, quantity):
@@ -188,9 +186,7 @@ def test_the_gates_name_the_largest_elasticity_to_the_dollar(module, workspace, 
         usdrub="gl.brent",
     )
     meta = runs.meta(workspace, base_run)
-    with np.load(
-        workspace.models / "satellites" / meta["satellites"] / "arrays.npz"
-    ) as stored:
+    with np.load(workspace.models / "satellites" / meta["satellites"] / "arrays.npz") as stored:
         gamma = stored["share_price.gamma"]
     part = _share_part(workspace, meta)
     largest = 0.0

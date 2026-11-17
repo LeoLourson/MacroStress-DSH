@@ -69,8 +69,10 @@ def interval(
     point = _score_of_logs(_log_ratios(first, second, np.ones(cube["units"])))
     if point is None:
         return {"point": None, "log_se": None, "low": None, "high": None}
-    return {"point": point, **_spread(lambda w: _log_ratios(first, second, w), cube, block,
-                                      repetitions, seed)}
+    return {
+        "point": point,
+        **_spread(lambda w: _log_ratios(first, second, w), cube, block, repetitions, seed),
+    }
 
 
 def paired(
@@ -96,13 +98,11 @@ def paired(
     )
 
 
-def _spread(logs_of, cube: dict, block: int, repetitions: int, seed: int) -> dict:
-    """The SE of the log score and the 95 % bounds of the score, by moving blocks of units.
-
-    One unit has no spread to resample: its error is unknown, not zero.
-    """
+def _samples(logs_of, cube: dict, block: int, repetitions: int, seed: int) -> np.ndarray:
+    """The log scores over units resampled in moving blocks; empty with fewer than two units,
+    since one unit has no spread to resample: its error is unknown, not zero."""
     if cube["units"] < 2:
-        return {"log_se": None, "low": None, "high": None}
+        return np.array([])
     rng = np.random.default_rng(seed)
     samples = np.full(repetitions, np.nan)
     for repetition in range(repetitions):
@@ -110,7 +110,12 @@ def _spread(logs_of, cube: dict, block: int, repetitions: int, seed: int) -> dic
         logs = logs_of(weights)
         if np.isfinite(logs).any():
             samples[repetition] = _mean_of_logs(logs)
-    known = samples[np.isfinite(samples)]
+    return samples[np.isfinite(samples)]
+
+
+def _spread(logs_of, cube: dict, block: int, repetitions: int, seed: int) -> dict:
+    """The SE of the log score and the 95 % bounds of the score, by moving blocks of units."""
+    known = _samples(logs_of, cube, block, repetitions, seed)
     if len(known) < 2:
         return {"log_se": None, "low": None, "high": None}
     low, high = np.percentile(known, [2.5, 97.5])

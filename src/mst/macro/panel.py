@@ -75,7 +75,8 @@ def build_panel(
     rows = {v.id: [o for o in store.as_of(v.id, as_of) if o.month >= start] for v in variables}
     last = max((r[-1].month for r in rows.values() if r), default=None)
     if last is None:
-        raise ValueError(f"no variable has a value known on {as_of}")
+        # No history since the start of the panel: every variable is too short on this date.
+        raise ShortHistory({v.id: f"no value known between {start} and {as_of}" for v in variables})
     months = months_between(start, last)
     index = {month: t for t, month in enumerate(months)}
     y = np.full((len(months), len(variables)), np.nan)

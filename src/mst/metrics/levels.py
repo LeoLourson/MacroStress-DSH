@@ -35,7 +35,6 @@ from mst.model_sdk.bounds import lower_bounds, observed
 from .baselines import (
     DOMAIN,
     MOVES,
-    WIDTH,
     band_problems,
     conditional_walk,
     macro_domain,
@@ -43,7 +42,7 @@ from .baselines import (
     quantity_domain,
     random_walk,
 )
-from .cells import Cell, crps, finite_draws, history_range, move_ranges, pit, quantiles
+from .cells import Cell, crps, finite_draws, move_ranges, pit, quantiles, return_range
 from .episodes import Episodes
 from .valuation import conditional_paths, realized_paths, value
 from .windows import Window
@@ -97,7 +96,6 @@ def macro_cells(window: Window, registry: Registry, plan: Episodes) -> list[Cell
             else None
         )
         domain = macro_domain(registry.variable(id_))
-        spread = history_range(stored[:, j])
         moves = move_ranges(stored[:, j], window.horizon)
         for k in range(window.horizon):
             fact = window.realized[k, j]
@@ -115,7 +113,6 @@ def macro_cells(window: Window, registry: Registry, plan: Episodes) -> list[Cell
                     base=None if base is None else base.paths[:, k + 1, i],
                     conditional=None if knowing is None else knowing[:, k],
                     constrained=(id_, k + 1) in pinned,
-                    history_range=spread,
                     move_range=float(moves[k]),
                     domain=domain,
                 )
@@ -173,7 +170,6 @@ def driver_cells(window: Window, registry: Registry, plan: Episodes) -> list[Cel
         naive = naive_annual(own, window.horizon, draws=plan.draws, seed=plan.seed)
         unverified = "outside_training_range" in paths.flags.get(driver, frozenset())
         domain = quantity_domain(declared)
-        spread = history_range(own)
         moves = move_ranges(own, len(window.months))
         for t, month in enumerate(window.months):
             fact = _driver_fact(window, series_of.get(driver), month, declared)
@@ -190,7 +186,6 @@ def driver_cells(window: Window, registry: Registry, plan: Episodes) -> list[Cel
                     baseline=walk[:, t] if walk.size else None,
                     naive=naive[:, t] if naive is not None else None,
                     base=None if base is None else base.paths[:, t + 1, k],
-                    history_range=spread,
                     move_range=float(moves[t]),
                     domain=domain,
                     unverified=unverified,
@@ -273,7 +268,7 @@ def _return_cell(window, t, quantity, level, chosen, drawn, facts, based, past) 
         draws=drawn.returns(chosen),
         base=based.returns(chosen) if has_base else None,
         historical=past if len(past) else None,
-        history_range=history_range(past),
+        move_range=return_range(past),
     )
 
 
@@ -290,7 +285,7 @@ def rows(found: list[Cell], unit: str, half_of: Mapping[str, str]) -> list[dict]
 
     A constrained cell says nothing about the forecast and is left out; so is a cell whose
     draws are all non-finite, which ``non_finite`` counts. The band columns feed the sanity of
-    the quantities: the width against the history range, the admission rules and, beside a
+    the quantities: the width against the range of the moves, the admission rules and, beside a
     base run, the move of the median the scenario made and the miss of the base run's median.
     """
     result = []
@@ -305,7 +300,6 @@ def rows(found: list[Cell], unit: str, half_of: Mapping[str, str]) -> list[dict]
             draws,
             cell.fact,
             domain=cell.domain,
-            history_range=cell.history_range,
             move_range=cell.move_range,
         )
         row = {
@@ -323,10 +317,8 @@ def rows(found: list[Cell], unit: str, half_of: Mapping[str, str]) -> list[dict]
             "pit": pit(draws, cell.fact),
             "inside": bool(band[0] <= cell.fact <= band[2]),
             "width": float(band[2] - band[0]),
-            "history_range": cell.history_range,
             "move_range": cell.move_range,
             DOMAIN: DOMAIN in broken,
-            WIDTH: WIDTH in broken if np.isfinite(cell.history_range) else None,
             MOVES: MOVES in broken if np.isfinite(cell.move_range) else None,
             "shift": None,
             "miss": None,

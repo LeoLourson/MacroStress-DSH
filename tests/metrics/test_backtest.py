@@ -104,7 +104,7 @@ def test_the_runner_judges_the_cells_of_every_episode(workspace, tmp_path, capsy
         store=workspace["store"].root, models=workspace["models"], episodes=plan, as_of=KNOWN_ON
     )
 
-    assert code == 0
+    assert code == 1  # without the grid and a portfolio, trust is not checked
     out = capsys.readouterr().out
     assert "| R1 |" in out and "| R2 |" in out
     assert "## Episodes: quantities" in out and "ru.key_rate" in out
@@ -158,7 +158,9 @@ def test_the_band_rules_read_the_stored_history_not_the_model_window(
 ):
     from mst.metrics import cells as rules
 
-    monkeypatch.setattr(rules, "MIN_HISTORY_MONTHS", 12)
+    # The model sees twelve months; the moves rule needs more changes than that and still
+    # finds them, in the stored history.
+    monkeypatch.setattr(rules, "MIN_MOVES", 20)
     workspace["macro"].window = 12
     plan = plan_file(tmp_path, [("R1", "gl.brent"), ("R2", "gl.brent")])
 
@@ -167,16 +169,13 @@ def test_the_band_rules_read_the_stored_history_not_the_model_window(
     as_of = calculation_date(date.fromisoformat(STARTS["R1"] + "-01"))
     variable = load_registry().variable("ru.key_rate")
     known = [variable.to_model(row.value) for row in workspace["store"].as_of("ru.key_rate", as_of)]
-    assert len(known) > 12
     cells = [
         cell
         for cell in report["rows"]
         if cell["quantity"] == "ru.key_rate" and cell["episode"] == "R1"
     ]
-    assert cells
-    assert [cell["history_range"] for cell in cells] == pytest.approx(
-        [max(known) - min(known)] * len(cells)
-    )
+    assert cells and len(known) > 20 + len(cells)
+    assert all(np.isfinite(cell["move_range"]) for cell in cells)
 
 
 def test_the_details_file_holds_the_full_report(workspace, tmp_path):
@@ -184,7 +183,7 @@ def test_the_details_file_holds_the_full_report(workspace, tmp_path):
 
     code, report = run_episodes(workspace, plan, tmp_path)
 
-    assert code == 0
+    assert code == 1  # without the grid and a portfolio, trust is not checked
     assert report["dropped"] == {
         "refused": {},
         "skipped": {},
@@ -209,7 +208,7 @@ def test_save_keeps_the_report_without_its_cells_beside_the_plan(workspace, tmp_
 
     code, report = run_episodes(workspace, plan, tmp_path, save=True)
 
-    assert code == 0
+    assert code == 1  # without the grid and a portfolio, trust is not checked
     saved = tmp_path / "results"
     kept = json.loads((saved / "fake.macro.json").read_text(encoding="utf-8"))
     assert "rows" not in kept
@@ -245,7 +244,7 @@ def test_the_report_reads_what_fell_out_and_the_sanity_before_the_scores(
     assert report["halves"]["all"]["units"] == ["R1", "R2"]
     assert report["halves"]["tuning"]["units"] == ["R1"]
     assert report["halves"]["validation"]["units"] == ["R2"]
-    assert report["halves"]["tuning"]["sanity"]["failed"] is False
+    assert report["halves"]["tuning"]["admitted"] is True
     assert report["utility"]["by_source"]["manual"]["episodes"] == 2
     titles = (
         "## Episodes: what fell out",
@@ -318,7 +317,7 @@ def test_a_fact_episode_reports_the_constraint_probability_as_not_applicable(
     code, report = run_episodes(workspace, plan, tmp_path)
     out = capsys.readouterr().out
 
-    assert code == 0
+    assert code == 1  # without the grid and a portfolio, trust is not checked
     row = report["episodes"][0]
     assert row["constraint_probabilities"]
     assert all(share is None for share in row["constraint_probabilities"].values())
@@ -429,7 +428,7 @@ def test_the_satellites_judge_the_drivers_with_their_own_base_run(workspace, tmp
 
     code, report = run_episodes(workspace, plan, tmp_path, drivers=catalog)
 
-    assert code == 0
+    assert code == 1  # without the grid and a portfolio, trust is not checked
     row = report["quantities"]["share_price:sber"]
     assert row["level"] == "driver/share_price"
     assert row["scored"] > 0
@@ -549,14 +548,12 @@ def test_the_decision_compares_two_reports_on_the_same_cells(workspace, tmp_path
         return runner._decision_block(report, path, load_episodes(plan), "macro")
 
     # The candidate against itself: no difference from the incumbent, and the verdict repeats.
+    # Neither version is trusted without the grid and a portfolio, so none replaces the other.
     verdict = decide_on(against)
-    assert verdict["vs_incumbent"]["point"] == pytest.approx(1.0)
-    assert verdict["benchmark"] == "conditional_walk"
-    # The verdict is spoken on the validation half; one episode leaves its error unknown, so
-    # nothing is detected.
-    assert verdict["half"] == "validation"
-    assert verdict["cells"] > 0
-    assert verdict["verdict"] == "inconclusive"
+    episodes = verdict["checks"]["episodes"]
+    assert episodes["ratio"] == pytest.approx(1.0)
+    assert not episodes["better"] and not episodes["worse"]
+    assert not verdict["replaces"]
     assert decide_on(against) == verdict
 
     # A cell the two reports do not share is an error naming it, not a silent comparison on
@@ -577,26 +574,30 @@ def test_the_decision_compares_two_reports_on_the_same_cells(workspace, tmp_path
         decide_on(saved)
 
 
-def test_the_decision_section_prints_the_steps(capsys):
+def test_the_decision_section_prints_the_checks_and_the_verdict(capsys):
     print_decision(
         {
             "level": "macro",
-            "half": "validation",
-            "cells": 12,
-            "benchmark": "conditional_walk",
-            "vs_benchmark": {"point": 0.9, "low": 0.8, "high": 1.0},
-            "vs_incumbent": {"point": 0.95, "low": 0.9, "high": 1.01},
-            "admission_shares": {"band_outside_domain": 0.0},
-            "admission_grown": [],
-            "verdict": "inconclusive",
-            "step": 4,
-            "note": "the difference is undetected; the incumbent stays",
+            "checks": {
+                "episodes": {
+                    "ratio": 0.9,
+                    "low": 0.8,
+                    "high": 0.97,
+                    "better": True,
+                    "worse": False,
+                },
+                "grid": {"ratio": 1.0, "low": 0.95, "high": 1.05, "better": False, "worse": False},
+            },
+            "trusted": True,
+            "incumbent_trusted": True,
+            "replaces": True,
+            "reason": "better on a check beyond its error and worse on none",
         }
     )
     out = capsys.readouterr().out
-    assert "**inconclusive** (step 4)" in out
-    assert "half validation: 12 paired cells" in out
-    assert "model/conditional_walk 0.900 [0.800, 1.000]" in out
+    assert "episodes: candidate/incumbent 0.900 [0.800, 0.970] — better" in out
+    assert "grid: candidate/incumbent 1.000 [0.950, 1.050] — no difference" in out
+    assert "**replaces the incumbent**" in out
 
 
 class _ShortRate(simulated.FakeMacro):
@@ -621,7 +622,7 @@ def test_a_short_variable_leaves_out_its_cells_not_the_episode(workspace, tmp_pa
     assert report["dropped"]["left_out"] == {"R1": reason, "R2": reason}
     assert "ru.key_rate" not in report["quantities"]
     assert report["dropped"]["refused"] == {}
-    assert code == 0
+    assert code == 1  # without the grid and a portfolio, trust is not checked
 
 
 def test_an_episode_fixing_a_short_variable_is_dropped_with_the_reason(

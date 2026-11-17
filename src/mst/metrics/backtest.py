@@ -35,13 +35,13 @@ from mst.macro.registry import Registry, load_registry
 from mst.model_sdk.contracts import Intervention, LinearTerm, ScenarioPlan
 from mst.scenario.build import point_constraint
 
-from . import levels, scores
+from . import levels, scores, trust
 from .baselines import CONSTRAINT, CONSTRAINT_THRESHOLD, constraint_probabilities
-from .decision import verdict
+from .decision import compare
 from .episodes import Episodes, calculation_date, load_episodes
 from .prepare import prepare, simulated
 from .quality import relative
-from .tables import number, print_decision, print_dropped, print_judgement
+from .tables import number, print_decision, print_dropped, print_judgement, print_trust
 from .windows import Scope, Window, extend, file_digest, open_window, provenance
 
 UNIT = "episode"
@@ -125,8 +125,6 @@ def run(
     report["meta"] = _meta(
         windows, plan, plugin=plugin, known_on=as_of, store=store, models=models, root=root
     )
-    if against is not None:
-        report["decision"] = _decision_block(report, against, plan, target_level)
     if plan.rolling is not None and rolling:
         from .rolling import rolling_report
 
@@ -141,6 +139,9 @@ def run(
             scope=scope,
             workers=workers,
         )
+    report["trust"] = _trust(report, target_level, plan.seed)
+    if against is not None:
+        report["decision"] = _decision_block(report, against, plan, target_level)
     tables = io.StringIO()
     with contextlib.redirect_stdout(tables):
         print_report(report)
@@ -154,7 +155,20 @@ def run(
         bench.save_result(
             bench.results(plan.path.parent), plugin.model_id, plain, tables.getvalue()
         )
-    return 1 if refused or report["admission_failed"] else 0
+    return 1 if refused or not report["trust"]["trusted"] else 0
+
+
+def _trust(report: dict, target_level: str, seed: int) -> dict:
+    """The verdict of the criteria of trust over the episodes and, when it ran, the grid."""
+    grid = report.get("rolling") or {}
+    decided = trust.decision(
+        report["rows"],
+        grid.get("rows", []),
+        target=target_level,
+        grid_block=grid.get("block_dates", 1),
+    )
+    checks = {"episodes": report, **({"grid": grid} if grid else {})}
+    return {"decision": decided, **trust.verdict(checks, decided)}
 
 
 def _episode_window(plugin, data, registry, plan, check, root, known_on, inputs, scope) -> Window:
@@ -279,14 +293,20 @@ def _report(
         for window in windows
     }
     judgement = scores.judge(
-        found, rows, unit=UNIT, block=1, seed=plan.seed, repetitions=scores.REPETITIONS
+        found,
+        rows,
+        unit=UNIT,
+        block=1,
+        seed=plan.seed,
+        repetitions=scores.REPETITIONS,
+        calibration=None,
     )
     gate = _constraint_gate(shares)
     report = {
         "dropped": levels.fell_out(windows, found, refused=refused),
         **judgement,
         "constraint_gate": gate,
-        "admission_failed": judgement["sanity"]["admission"]["failed"] or gate["failed"],
+        "admission_failed": judgement["admission"]["failed"] or gate["failed"],
         "target_level": target_level,
         "episodes": [
             {
@@ -377,7 +397,7 @@ def _constraint_gate(shares: dict[str, dict[int, float | None]]) -> dict:
 
 
 def _decision_block(report: dict, against: Path, plan: Episodes, target_level: str) -> dict:
-    """The two-standard-error verdict against the incumbent's details, on the same plan."""
+    """The replacement rule against the incumbent's details, on the same plan."""
     if not against.exists():
         raise ValueError(f"--against {against}: the file does not exist")
     incumbent = json.loads(against.read_text(encoding="utf-8"))
@@ -386,13 +406,17 @@ def _decision_block(report: dict, against: Path, plan: Episodes, target_level: s
             "--against was produced from a different episode plan; "
             "the two versions must be compared on the same cells"
         )
-    return verdict(
-        report["rows"],
-        report["sanity"]["admission"],
-        incumbent,
-        unit=UNIT,
+    if "rows" not in incumbent or "trust" not in incumbent:
+        raise ValueError("--against carries no cells or no trust: pass the --details file")
+    checks = {"episodes": (report["rows"], incumbent["rows"], UNIT, 1)}
+    grid, theirs = report.get("rolling"), incumbent.get("rolling")
+    if grid and theirs:
+        checks["grid"] = (grid["rows"], theirs["rows"], "date", grid["block_dates"])
+    return compare(
+        checks,
+        trusted=report["trust"]["trusted"],
+        incumbent_trusted=incumbent["trust"]["trusted"],
         level=target_level,
-        block=1,
         seed=plan.seed,
     )
 
@@ -458,6 +482,8 @@ def print_report(report: dict) -> None:
             f"\nMonte-Carlo interval of model/walk at `{report['target_level']}` (the draws "
             f"resampled, not the episodes): {number(low)} .. {number(high)}."
         )
+    if report.get("trust"):
+        print_trust(report["trust"])
     if report.get("decision"):
         print_decision(report["decision"])
     if report.get("rolling"):

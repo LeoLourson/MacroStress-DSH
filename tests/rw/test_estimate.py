@@ -204,10 +204,10 @@ def test_housing_break_excludes_whole_crossing_interval():
 @pytest.mark.parametrize(
     "ids,y,expected,count",
     [
-        (["x", "y"], [[1, 2], [2, np.nan], [3, np.nan], [4, 3]], "y", 0),
+        (["x", "y"], [[1, 2], [2, np.nan], [4, np.nan], [3, 3]], "y", 0),
         (
             ["x", "ru.housing_price"],
-            [[1, 2], [2, np.nan], [3, np.nan], [4, 3]],
+            [[1, 2], [2, np.nan], [4, np.nan], [3, 3]],
             "ru.housing_price",
             1,
         ),
@@ -220,6 +220,17 @@ def test_insufficient_data_names_variable(ids, y, expected, count):
         estimate(panel(y, ids), Spec(drifts=[], breaks=[]))
     assert list(raised.value.variables) == [expected]
     assert raised.value.variables[expected] == f"{count} changes or intervals, the model needs 3"
+
+
+def test_changes_that_never_vary_are_a_short_history():
+    """A rate that has not moved since the panel began gives the scale no variance: the
+    variable is short on that date, not the whole date refused."""
+    from mst.model_sdk import ShortHistory
+
+    y = [[1.0, 5.0], [2.0, 5.0], [4.0, 5.0], [3.0, 5.0], [5.0, 5.0]]
+    with pytest.raises(ShortHistory) as raised:
+        estimate(panel(y, ["x", "ru.key_rate"]), Spec(drifts=[], breaks=[]))
+    assert raised.value.variables == {"ru.key_rate": "4 changes, all equal: no variance to scale"}
 
 
 def test_a_variable_the_platform_left_out_may_stay_in_the_spec():

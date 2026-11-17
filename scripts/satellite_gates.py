@@ -62,8 +62,7 @@ def gates(
     served = [
         driver
         for driver in meta["drivers"]
-        if driver in set(satellites.served())
-        and satellites.quantity_of(driver) == "share_price"
+        if driver in set(satellites.served()) and satellites.quantity_of(driver) == "share_price"
     ]
     # S1 judges the served shares of the run; ``shares`` narrows S2, S6 and the bands only.
     named = shares or served
@@ -118,8 +117,7 @@ def _index_return(meta: dict, macro_paths: np.ndarray, imoex: str, month: int) -
 
     if imoex not in meta["variables"]:
         raise ValueError(
-            f"the run carries no paths of {imoex}: the variables are "
-            f"{', '.join(meta['variables'])}"
+            f"the run carries no paths of {imoex}: the variables are {', '.join(meta['variables'])}"
         )
     variable = load_registry().variable(imoex)
     column = path_to_model(variable.transform, macro_paths[:, :, meta["variables"].index(imoex)])
@@ -127,12 +125,12 @@ def _index_return(meta: dict, macro_paths: np.ndarray, imoex: str, month: int) -
 
 
 def _s3(meta: dict, satellites, driver_paths: np.ndarray) -> dict:
-    """The share of driver cells whose band is wider than history, recomputed from the paths.
+    """The share of driver cells whose band is wider than their moves, recomputed from the paths.
 
     The recorded share of the run is printed beside it: a run made before the scale error of
     ``_checks`` was fixed records wrong shares, and the plan judges the recomputed one.
     """
-    from mst.metrics.baselines import WIDTH, quantity_domain
+    from mst.metrics.baselines import MOVES, quantity_domain
     from mst.runs import _fan_problems
 
     shares = []
@@ -148,9 +146,9 @@ def _s3(meta: dict, satellites, driver_paths: np.ndarray) -> dict:
             own[:, node],
             quantity_domain(declared),
         )
-        shares.append(problems.get(WIDTH, 0.0))
+        shares.append(problems.get(MOVES, 0.0))
     recorded = [
-        row.get(WIDTH, 0.0)
+        row.get(MOVES, 0.0)
         for name, row in meta["checks"]["paths"].items()
         if name.startswith("driver/")
     ]
@@ -216,8 +214,9 @@ def _training_range(meta: dict, satellites, driver_paths: np.ndarray) -> dict:
         move = float(np.nanmax(moves)) if np.isfinite(moves).any() else 0.0
         outside = ((column[:, 1:] < low) | (column[:, 1:] > high)).any(axis=1).mean()
         widened = ((column[:, 1:] < low - move) | (column[:, 1:] > high + move)).any(axis=1)
-        row = out.setdefault(quantity, {"median": None, "widened_median": None,
-                                        "drivers": {}, "widened": {}})
+        row = out.setdefault(
+            quantity, {"median": None, "widened_median": None, "drivers": {}, "widened": {}}
+        )
         row["drivers"][driver] = float(outside)
         row["widened"][driver] = float(widened.mean())
     for row in out.values():
@@ -243,9 +242,7 @@ def _bands(ws, meta, macro, satellites, driver_paths, named, month) -> dict:
     # satellites draw is the noise of the run, so only x and the posterior differ. The base
     # scenario imposes nothing, so its plan carries the horizon of the run alone.
     empty = ScenarioPlan(horizon=meta["horizon"], constraints=(), interventions=())
-    simulation = macro.plugin.simulate(
-        macro.model, empty, draws=meta["draws"], seed=meta["seed"]
-    )
+    simulation = macro.plugin.simulate(macro.model, empty, draws=meta["draws"], seed=meta["seed"])
     fixed = MacroSimulation(
         ids=simulation.ids,
         months=simulation.months,
@@ -261,9 +258,7 @@ def _bands(ws, meta, macro, satellites, driver_paths, named, month) -> dict:
     for driver in named:
         column = drawn.paths[:, month, drawn.ids.index(driver)]
         residuals[driver] = float(np.percentile(column, 95) - np.percentile(column, 5))
-    return {
-        driver: {"full": full[driver], "residuals_only": residuals[driver]} for driver in named
-    }
+    return {driver: {"full": full[driver], "residuals_only": residuals[driver]} for driver in named}
 
 
 def _printed(report: dict) -> str:
@@ -278,7 +273,7 @@ def _printed(report: dict) -> str:
         "|---|---|---|---|",
         f"| S1 shares minus the index | {report['s1']['value']:+.1f} | "
         f"{report['s1']['limit']:.0f} | {_yes(report['s1']['holds'])} |",
-        f"| S3 driver cells wider than history | {100 * s3['share']:.1f}% "
+        f"| S3 driver cells wider than their moves | {100 * s3['share']:.1f}% "
         f"(recorded {100 * s3['recorded']:.1f}%) | {100 * s3['limit']:.0f}% | "
         f"{_yes(s3['holds'])} |",
         f"| S6 largest elasticity to the dollar | {_number(s6['largest'])} "
@@ -301,8 +296,7 @@ def _printed(report: dict) -> str:
     ]
     for quantity, row in report["training_range"].items():
         lines.append(
-            f"- {quantity}: {100 * row['median']:.1f}% "
-            f"(widened {100 * row['widened_median']:.1f}%)"
+            f"- {quantity}: {100 * row['median']:.1f}% (widened {100 * row['widened_median']:.1f}%)"
         )
     return "\n".join(lines)
 
@@ -317,9 +311,7 @@ def _yes(holds: bool | None) -> str:
 
 def main(argv: list[str] | None = None) -> int:
     """Read the artefacts of a base run and print its gates."""
-    parser = argparse.ArgumentParser(
-        prog="satellite_gates", description=__doc__.split("\n\n")[0]
-    )
+    parser = argparse.ArgumentParser(prog="satellite_gates", description=__doc__.split("\n\n")[0])
     parser.add_argument("--workspace", type=Path, required=True, help="the workspace directory")
     parser.add_argument("--run", required=True, help="the base run to read")
     parser.add_argument("--month", type=int, default=12, help="the month of the returns")

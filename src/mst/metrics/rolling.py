@@ -32,9 +32,9 @@ import numpy as np
 from mst.model_sdk import ShortHistory
 
 from . import levels, scores
-from .decision import verdict
+from .decision import compare
 from .episodes import Episodes, calculation_date, load_episodes
-from .prepare import prepare, simulated
+from .prepare import Short, prepare, simulated
 from .tables import print_decision, print_dropped, print_judgement
 from .windows import MACRO_ONLY, Scope, Window, extend, facts, open_window
 
@@ -107,7 +107,9 @@ def rolling_report(
     windows, skipped, refused = [], {}, {}
     for when, window in zip(dates, found, strict=True):
         if isinstance(window, str):
-            short = _short_of_history(store, registry, calculation_date(when))
+            short = isinstance(window, Short) or _short_of_history(
+                store, registry, calculation_date(when)
+            )
             (skipped if short else refused)[when.isoformat()] = window
         else:
             windows.append(window)
@@ -121,7 +123,13 @@ def rolling_report(
         "dates": len(windows),
         "dropped": levels.fell_out(windows, found, refused=refused, skipped=skipped),
         **scores.judge(
-            found, rows, unit=UNIT, block=block, seed=plan.seed, repetitions=scores.REPETITIONS
+            found,
+            rows,
+            unit=UNIT,
+            block=block,
+            seed=plan.seed,
+            repetitions=scores.REPETITIONS,
+            calibration=plan.rolling.step_months,
         ),
         "rows": rows,
     }
@@ -181,35 +189,31 @@ def _short_of_history(store, registry, as_of: date) -> bool:
 def passed(report: dict) -> bool:
     """Whether the grid judged some cells, the model refused no date and admission passed."""
     return bool(
-        report["rows"]
-        and not report["dropped"]["refused"]
-        and not report["sanity"]["admission"]["failed"]
+        report["rows"] and not report["dropped"]["refused"] and not report["admission"]["failed"]
     )
 
 
 def rolling_decision(report: dict, against: Path, *, level: str = "macro", seed: int) -> dict:
-    """The four steps of the decision rule against the incumbent's rolling details.
+    """The replacement rule on the grid alone, against the incumbent's rolling details.
 
-    The two grids must have the same step. A candidate that refused a date has failed whatever
-    its score: scoring only the dates a model survives would hide its failures.
+    The two grids must have the same step. Without the episodes and the portfolio a version is
+    not trusted (``mst.metrics.trust``); on the grid alone it stands in for trust that the grid
+    passed: no refused date and the admission met. Scoring only the dates a model survives would
+    hide its failures.
     """
     other = json.loads(Path(against).read_text(encoding="utf-8"))
     other = other.get("rolling", other)
     if other.get("step_months") != report["step_months"]:
         raise ValueError(f"--against {against}: the grid has another step")
-    found = verdict(
-        report["rows"],
-        report["sanity"]["admission"],
-        other,
-        unit=UNIT,
+    if "rows" not in other:
+        raise ValueError("the incumbent carries no cells: pass the --details file of its check")
+    return compare(
+        {"grid": (report["rows"], other["rows"], UNIT, report["block_dates"])},
+        trusted=passed(report),
+        incumbent_trusted=passed(other),
         level=level,
-        block=report["block_dates"],
         seed=seed,
     )
-    if report["dropped"]["refused"]:
-        found["verdict"] = "rejected"
-        found["reason"] = f"the model refused {len(report['dropped']['refused'])} date(s)"
-    return found
 
 
 def run(

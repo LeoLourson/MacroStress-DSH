@@ -123,7 +123,15 @@ def main(argv: list[str] | None = None) -> int:
         default="macro",
         help="the level the decision reads (macro by default)",
     )
-    for command in (check, grid):
+    tried = commands.add_parser(
+        "trial", help="the false rejections and the power of the criteria on synthetic worlds"
+    )
+    tried.add_argument("--worlds", type=int, default=200, help="worlds per model (200)")
+    tried.add_argument("--seed", type=int, default=0)
+    tried.add_argument(
+        "--defects", nargs="*", default=None, help="the models to try; every defect by default"
+    )
+    for command in (check, grid, tried):
         command.add_argument(
             "--workers",
             type=int,
@@ -137,6 +145,17 @@ def main(argv: list[str] | None = None) -> int:
     if workers < 1:
         parser.error("--workers must be at least 1")
 
+    if args.command == "trial":
+        from .trial import CRITERIA, DEFECTS, World, trial
+
+        defects = args.defects or list(DEFECTS)
+        table = trial(World(), defects, worlds=args.worlds, seed=args.seed, workers=workers)
+        print(f"| model | {' | '.join(CRITERIA)} | any |")
+        print(f"|---|{'---:|' * (len(CRITERIA) + 1)}")
+        for defect, shares in table.items():
+            cells = " | ".join(f"{shares[name]:.3f}" for name in (*CRITERIA, "any"))
+            print(f"| {defect} | {cells} |")
+        return 0
     if args.command == "rolling":
         return run_rolling(
             store=args.store,

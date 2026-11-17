@@ -1,13 +1,11 @@
 """The admission rules and the baselines the scores are compared with.
 
-A version is admitted when fewer than five percent of its cells break each of three rules
-separately: the ``[p5, p95]`` band lies inside the admissible domain of the quantity, the width
-of the band does not exceed the range of the quantity over its history, and it does not exceed
-the range of the quantity's changes over as many months as the cell is ahead of the last known
-value. The second rule reads a history of ten years, the third one of five: a year-ahead band
-of a mean-reverting series wider than every move of a year it made is too wide, whatever the
-range of its levels. A scenario also
-has to be reachable: the share of the *base* run's paths that satisfy each constraint must be
+A cell breaks the domain rule when its ``[p5, p95]`` band leaves the admissible domain of
+the quantity, and the moves rule when the width of the band exceeds the range of the quantity's
+changes over as many months as the cell is ahead of the last known value; how many broken cells
+fail a version is the business of ``mst.metrics.trust``. The range of the levels themselves is
+no rule: a correct walk's band is wider than the range of a short history of levels. A scenario
+also has to be reachable: the share of the *base* run's paths that satisfy each constraint must be
 above one percent, or the scenario rests on a rare tail of the distribution. A constraint
 reconstructed as an exact point (``low == high``) cannot be met by a continuous draw, so its
 probability is not applicable rather than zero; the report says so and leaves it out of the
@@ -30,9 +28,8 @@ reported paths do.
 import numpy as np
 
 DOMAIN = "band_outside_domain"
-WIDTH = "band_wider_than_history"
 MOVES = "band_wider_than_moves"
-RULES = (DOMAIN, WIDTH, MOVES)
+RULES = (DOMAIN, MOVES)
 """The admission rules of a band, in the order the reports print them."""
 
 
@@ -80,6 +77,8 @@ def _endpoint(transform: str, value: float) -> float:
             return -float("inf")
         return 100.0 * float(np.log(value))
     return value
+
+
 CONSTRAINT = "constraint_probability_below_one_percent"
 CONSTRAINT_THRESHOLD = 0.01
 """The share of the base run's paths that must satisfy each informative constraint."""
@@ -90,17 +89,14 @@ def band_problems(
     fact: float,
     *,
     domain: tuple[float, float] | None,
-    history_range: float,
     move_range: float,
 ) -> list[str]:
-    """The admission rules a cell breaks: its band against the domain, the history range and
-    the range of the history's changes; a NaN range leaves its rule out."""
+    """The admission rules a cell breaks: its band against the domain and the range of the
+    history's changes; a NaN range leaves the moves rule out."""
     p05, _, p95 = np.percentile(np.asarray(draws, dtype=float), [5, 50, 95])
     problems = []
     if domain is not None and (p05 < domain[0] or p95 > domain[1]):
         problems.append(DOMAIN)
-    if np.isfinite(history_range) and (p95 - p05) > history_range:
-        problems.append(WIDTH)
     if np.isfinite(move_range) and (p95 - p05) > move_range:
         problems.append(MOVES)
     return problems
@@ -219,9 +215,7 @@ def _floored(paths: np.ndarray, lower: float | None) -> np.ndarray:
     return paths if lower is None else np.maximum(paths, lower)
 
 
-def naive_annual(
-    history: np.ndarray, horizon: int, *, draws: int, seed: int
-) -> np.ndarray | None:
+def naive_annual(history: np.ndarray, horizon: int, *, draws: int, seed: int) -> np.ndarray | None:
     """The naive forecast: the year-ago value of every target month plus ``t`` drifts.
 
     For target month ``T + t`` the year-ago month is ``T + t - 12``; the history ends at ``T``,

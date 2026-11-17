@@ -79,6 +79,16 @@ def test_panel_starts_at_start_even_without_data_there(tmp_path):
     assert np.isnan(panel.y[:2]).all()
 
 
+def test_a_date_before_any_value_since_the_start_is_short_for_every_variable(tmp_path):
+    from mst.model_sdk import ShortHistory
+
+    store = SeriesStore(tmp_path)
+    store.write("gl.vix", [Observation(date(2020, 3, 1), 30.0, date(2020, 4, 1), False)])
+    with pytest.raises(ShortHistory) as raised:
+        build_panel(store, registry(), start=date(2020, 1, 1), as_of=date(2019, 6, 1))
+    assert set(raised.value.variables) == {v.id for v in registry().variables}
+
+
 def test_a_seasonal_variable_without_every_calendar_month_is_named_as_short(tmp_path):
     from mst.model_sdk import ShortHistory
 

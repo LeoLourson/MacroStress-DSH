@@ -1,17 +1,15 @@
 """The sanity of a check, read before any score: is each quantity's forecast a sane number?
 
-A score averaged over quantities hides the quantity that broke: a band twice as wide as the
-whole history of the series, a forecast pushed away from the fact by the scenario, or an
-aggregate that rests on one quantity. This module reads the scored rows of either check — the
-episodes or the rolling grid, of any level — and answers per quantity:
+A score averaged over quantities hides the quantity that broke: a band twice as wide as every
+move of the series, a forecast pushed away from the fact by the scenario, or an aggregate that
+rests on one quantity. This module reads the scored rows of either check — the episodes or the
+rolling grid, of any level — and describes every quantity; whether the shares fail the version
+is the business of ``mst.metrics.trust``:
 
-- **admission**: the share of cells whose ``[p5, p95]`` band leaves the admissible domain, the
-  share whose band is wider than the whole range of the history known on the date, and the
-  share whose band is wider than the range of the history's changes over as many months.
-  Each quantity must stay under ``ADMISSION_SHARE`` on each rule; one quantity over it fails
-  the check, whatever the pooled share is;
-- **width**: the median ratios of the band width to those two ranges — numbers a reader can
-  judge without knowing the unit of the series;
+- **rules**: the share of cells whose ``[p5, p95]`` band leaves the admissible domain and the
+  share whose band is wider than the range of the history's changes over as many months;
+- **width**: the median ratio of the band width to that range — a number a reader can judge
+  without knowing the unit of the series;
 - **direction**: where the scenario moved the median from the base run, the share of cells it
   moved towards the fact. Only a move larger than ``MOVED`` of the base band counts; below it
   the move is Monte-Carlo noise. Under one half the scenario pushes the forecast the wrong way;
@@ -22,8 +20,7 @@ The plain benchmark of a level is the first of ``BENCHMARKS`` its rows carry: th
 of a series, the historical simulation of a return (``benchmark_of``).
 
 A row carries ``quantity``, ``level``, ``month``, the CRPS columns (``model`` and the
-benchmarks') and the band columns: ``width`` (``p95 - p5``), ``history_range``,
-``move_range``, a boolean per
+benchmarks') and the band columns: ``width`` (``p95 - p5``), ``move_range``, a boolean per
 admission rule and, in the episodes, ``shift`` (median less the base run's median), ``miss``
 (fact less the base run's median) and ``base_width`` (the base run's band).
 """
@@ -35,8 +32,6 @@ import numpy as np
 from .baselines import RULES
 from .quality import relative
 
-ADMISSION_SHARE = 0.05
-"""A quantity is admitted when fewer than this share of its cells break each admission rule."""
 MOVED = 0.1
 """The smallest move of the median, as a share of the base band, the direction reads."""
 BENCHMARKS = ("walk", "historical")
@@ -55,9 +50,8 @@ def benchmark_of(rows: Rows) -> str | None:
 
 
 def check(rows: Rows) -> dict:
-    """The table of the quantities and the admission it gives."""
-    table = quantities(rows)
-    return {"quantities": table, "admission": admission(rows, table)}
+    """The table of the quantities."""
+    return {"quantities": quantities(rows)}
 
 
 def quantities(rows: Rows) -> list[dict]:
@@ -69,20 +63,13 @@ def quantities(rows: Rows) -> list[dict]:
     for (level, quantity), own in sorted(groups.items()):
         others = [row for row in rows if row["level"] == level and row["quantity"] != quantity]
         benchmark = benchmark_of([row for row in rows if row["level"] == level])
-        shares = {rule: _share(own, rule) for rule in RULES}
         scored = benchmark is not None
         table.append(
             {
                 "level": level,
                 "quantity": quantity,
                 "cells": len(own),
-                "shares": shares,
-                "failed": [
-                    rule
-                    for rule in RULES
-                    if shares[rule] is not None and shares[rule] >= ADMISSION_SHARE
-                ],
-                "width_to_range": _width_to(own, "history_range"),
+                "shares": {rule: _share(own, rule) for rule in RULES},
                 "width_to_moves": _width_to(own, "move_range"),
                 "direction": _direction(own),
                 "benchmark": benchmark,
@@ -95,37 +82,9 @@ def quantities(rows: Rows) -> list[dict]:
     return table
 
 
-def admission(rows: Rows, table: Sequence[Mapping[str, object]]) -> dict:
-    """Per rule: the worst quantity's share, the quantities that fail and the pooled share.
-
-    The check fails when any quantity fails any rule. The worst share is what the decision rule
-    compares between two versions; the pooled share is reported for reference only.
-    """
-    rules = {}
-    for rule in RULES:
-        failing = [entry for entry in table if rule in entry["failed"]]
-        known = [entry["shares"][rule] for entry in table if entry["shares"][rule] is not None]
-        rules[rule] = {
-            "worst": max(known, default=0.0),
-            "pooled": _share(rows, rule),
-            "quantities": [entry["quantity"] for entry in failing],
-        }
-    return {
-        "threshold": ADMISSION_SHARE,
-        "cells": len(rows),
-        "rules": rules,
-        "failed": any(rule["quantities"] for rule in rules.values()),
-    }
-
-
-def worst_shares(found: Mapping[str, object]) -> dict[str, float]:
-    """The share per rule the decision rule reads: the worst quantity's."""
-    return {rule: float(entry["worst"]) for rule, entry in found["rules"].items()}
-
-
 def _share(rows: Rows, rule: str) -> float | None:
     """The share of the cells breaking ``rule`` among the cells it applies to; a row whose
-    verdict is None — the width rule without a long enough history — is outside it."""
+    verdict is None — the moves rule without enough known changes — is outside it."""
     applied = [bool(row[rule]) for row in rows if row[rule] is not None]
     return float(np.mean(applied)) if applied else None
 

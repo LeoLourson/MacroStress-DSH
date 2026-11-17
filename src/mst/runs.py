@@ -767,17 +767,16 @@ def _macro_model_scale(registry, paths) -> np.ndarray:
 def _fan_problems(draws, history, domain) -> dict[str, float]:
     """The shares of the horizon months whose band breaks each admission rule."""
     from .metrics.baselines import band_problems
-    from .metrics.cells import history_range, move_ranges
+    from .metrics.cells import move_ranges
 
     if draws.size == 0:
         return {}
     months = draws.shape[1]
-    spread = history_range(history) if history is not None else float("nan")
     moves = move_ranges(history, months) if history is not None else np.full(months, np.nan)
     broken = {rule: 0 for rule in RULES}
     for t in range(months):
         for rule in band_problems(
-            draws[:, t], float("nan"), domain=domain, history_range=spread, move_range=moves[t]
+            draws[:, t], float("nan"), domain=domain, move_range=moves[t]
         ):
             broken[rule] += 1
     return {rule: count / months for rule, count in broken.items()}

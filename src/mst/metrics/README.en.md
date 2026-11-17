@@ -46,13 +46,13 @@ The first section of the report lists everything that did not enter the scores, 
 
 The second section is a table per quantity, read before the scores.
 
-- The share of cells whose band from the 5th to the 95th percentile leaves the admissible domain, and the share whose band is wider than the whole range of the history known on the date. Both width rules read that history from the whole series store, not from the months the model is estimated on: a model that starts later must not meet a narrower yardstick. The second rule reads only the cells whose history spans at least ten years: the range of a short history is no yardstick for a band, and such a cell stays out of the share.
-- The share of cells whose band is wider than the range of the quantity's changes over as many months as separate the cell's month from the last known value. The band forecasts such a change, so a year-ahead band is compared with the moves of a year, not with the range of the levels. A mean-reverting series moves less over a year than a walk, and this rule catches its band. The rule reads the moves of one length when at least 200 of them are known (`cells.MIN_MOVES`): the range of a few moves is narrower than a correct band, and on a Student walk with four degrees of freedom the rule rejects 7 % of the cells of a correct band with 120 monthly values, 27–66 % with annual ones and under 0.5 % with 200 moves. The count is kept per length because a series can change its frequency: the housing price, annual until 2020 and quarterly since 2021, has only a few three-month moves.
-- The median ratios of the band width to both ranges: 2 means a band twice as wide as the whole history or as any move of the same length, numbers one reads without the unit of the series.
+- The share of cells whose band from the 5th to the 95th percentile leaves the admissible domain.
+- The share of cells whose band is wider than the range of the quantity's changes over as many months as separate the cell's month from the last known value. The rule reads the history from the whole series store, not from the months the model is estimated on: a model that starts later must not meet a narrower yardstick. The band forecasts such a change, so a year-ahead band is compared with the moves of a year, not with the range of the levels. A mean-reverting series moves less over a year than a walk, and this rule catches its band. The rule reads the moves of one length when at least 200 of them are known (`cells.MIN_MOVES`): the range of a few moves is narrower than a correct band, and on a Student walk with four degrees of freedom the rule rejects 7 % of the cells of a correct band with 120 monthly values, 27–66 % with annual ones and under 0.5 % with 200 moves. The count is kept per length because a series can change its frequency: the housing price, annual until 2020 and quarterly since 2021, has only a few three-month moves.
+- The median ratio of the band width to the range of the moves: 2 means a band twice as wide as any move of the same length, a number one reads without the unit of the series.
 - The share of cells where the scenario moved the median from the base run towards the fact. A move below a tenth of the base band is noise. Below one half the scenario pushes the forecast away from the fact.
 - The plain benchmark of the level, the quantity's score against it, and the score of the level without the quantity. When the latter differs much, the aggregate rests on that quantity.
 
-*Admission* is passed by every quantity on its own: fewer than 5 % of its cells may break each of the three band rules. One quantity over the threshold keeps the version out whatever the share over all cells, which the report prints for reference. On the episodes the probability of every interval observation under the base run must also be above 1 %. For an exact value that probability would measure the tolerance $\tau$, so point observations stay out of this threshold.
+*Admission* follows the [criteria of trust](<../../../docs/concept/success-criteria.en.md>) and reads every window of the check. The domain allows no break. The moves rule and, on the grid, the shares of the facts below and above the band of every level, every quantity's score against its benchmark and the tail of the portfolio are statistical criteria: one fails when a share or score is significantly worse than the null hypothesis, with Bonferroni's correction for the number of tests. A t-test over batches of neighbouring windows as long as a window gives the significance, since the windows of the grid overlap. A band too wide does not fail the tails: the score catches it. On the episodes the probability of every interval observation under the base run must also be above 1 %. For an exact value that probability would measure the tolerance $\tau$, so point observations stay out of this threshold.
 
 ## The relative score
 
@@ -80,16 +80,13 @@ The plan splits the windows in advance into tuning and validation: the episodes 
 
 The use of the scenario is the ratio `model/base` at the target level: over the level, per episode and as the share of episodes where it is below one. Scenarios of a person and of a language model are reported apart: a language model may remember the outcome of a past event.
 
-## Deciding on a new version
+## Trust and the decision on a new version
 
-With `--against` the check compares the version with the `--details` file of the incumbent built on the same plan. The comparison reads the validation half of the target level by $\log S$, against the conditional walk where the level has one and the plain benchmark of the level otherwise; the standard error is the spread of $\log S$ over resampled windows. The cells of the two versions must match, otherwise the check stops with the list of differences.
+After the episodes and the grid the report gives the verdict of trust. The model is trusted when no check refused a window, the admission passed, the tail of the portfolio was checked in the admission of the grid and is not understated, and two comparisons hold on the validation half of the target level: the score on the grid is not significantly worse than the benchmark's beyond 2 %, and the scenario does not significantly worsen the forecast of the same model without it. The usefulness of the scenario, the forecast beating the conditional walk, is reported apart and trust does not need it. A property nothing can check, such as the tail of the portfolio without `--portfolio`, is marked unchecked, and there is no trust.
 
-1. A version without admission is rejected whatever its score.
-2. A version is accepted if it beats the benchmark and the incumbent by more than two standard errors and the admission shares of its worst quantity did not grow.
-3. A version is rejected if it is worse by more than two standard errors.
-4. Otherwise the incumbent stays: an undetected difference does not prove equality.
+`python -m mst.metrics trial` measures on synthetic worlds, where the correct model is known, the share of false rejections of every criterion and its power against named defects: a narrow and a wide band, a shifted centre, thin tails and one failing quantity.
 
-With one window the error of the score is unknown, and no difference is detected.
+With `--against` the check compares the version with the `--details` file of the incumbent built on the same plan. The candidate replaces the incumbent when it is trusted and either the incumbent is not, or the candidate is significantly better by CRPS on the episodes or on the grid and significantly worse on neither. The comparison is pairwise on the cells of the validation half of the target level. The cells of the two versions must match, otherwise the check stops with the list of differences.
 
 ## The tail of the portfolio
 
@@ -112,7 +109,7 @@ python -m mst.metrics backtest MODEL_ID --as-of DATE --store STORE --models MODE
   [--drivers CATALOG] [--portfolio ID] [--details FILE] [--against FILE] [--save]
 ```
 
-`--drivers` adds the level of the drivers, `--portfolio` the levels of the positions and the portfolio and needs `--drivers` too. `backtest` also runs the grid unless told `--no-rolling`. `--details` writes the full report with its cells, `--save` keeps the report without cells and its tables in `results/` beside the plan. A decision with `--against` needs the cells, so it reads a `--details` file. Exit code 1 means a refused window or a failed admission; the section of what fell out and the table of sanity name the cause.
+`--drivers` adds the level of the drivers, `--portfolio` the levels of the positions and the portfolio and needs `--drivers` too. `backtest` also runs the grid unless told `--no-rolling`. `--details` writes the full report with its cells, `--save` keeps the report without cells and its tables in `results/` beside the plan. A decision with `--against` needs the cells, so it reads a `--details` file. Exit code 1 means the model is not trusted; the section on trust lists the reasons. Without the grid and a portfolio trust is not checked, and the code is 1 too.
 
 ## Where things are in the code
 
@@ -122,10 +119,11 @@ python -m mst.metrics backtest MODEL_ID --as-of DATE --store STORE --models MODE
 | [prepare.py](<prepare.py>) | the versions of every date estimated in parallel before the windows open |
 | [levels.py](<levels.py>) | the cells of every level, the rows, what fell out |
 | [valuation.py](<valuation.py>) | the paths in own units and the valuation of positions |
-| [sanity.py](<sanity.py>) | sanity and admission per quantity |
+| [sanity.py](<sanity.py>) | sanity per quantity |
+| [trust.py](<trust.py>), [trial.py](<trial.py>) | the criteria of admission and trust, their trial on synthetic worlds |
 | [quality.py](<quality.py>), [block.py](<block.py>) | the relative score and its interval |
 | [scores.py](<scores.py>) | the shared judgement: levels, halves, quantities, tail |
-| [decision.py](<decision.py>) | the two-standard-error rule |
+| [decision.py](<decision.py>) | the rule replacing the incumbent |
 | [es.py](<es.py>) | the ES of a run and the statistic $Z$ |
 | [rolling.py](<rolling.py>), [backtest.py](<backtest.py>) | the grid with the price of events; the episodes with the gate of their conditions and the use of the scenario |
 | [tables.py](<tables.py>), [cli.py](<cli.py>) | printing and the command line |

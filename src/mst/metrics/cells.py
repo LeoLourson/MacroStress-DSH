@@ -5,9 +5,9 @@ rolling grid — a month ``t`` of its horizon and a quantity ``q`` of any level.
 the fact ``y``, the ``R`` draws of the forecast and the draws of every comparison on the same
 cell: the random walk with drift (``baseline``), the walk that knows the scenario's path
 (``conditional``), the naive forecast of a target (``naive``) and the unconstrained run of the
-model (``base``). It also holds the range of the quantity's history known at the window's
-calculation date, the range of its changes over as many months as the cell is ahead of the last
-known value, and the admissible domain, which the admission rules read.
+model (``base``). It also holds the range of the quantity's changes over as many months as
+the cell is ahead of the last known value, and the admissible domain, which the admission rules
+read.
 
 CRPS is the integral of the squared distance between the forecast distribution and the fact;
 the sample estimator over the draws is ``E|X - y| - E|X - X'| / 2``, which penalises both bias
@@ -31,8 +31,6 @@ BUCKETS = (5.0, 50.0, 95.0)
 """The quantile edges of the calibration band, in percent."""
 BUCKET_EDGES = (0.05, 0.50, 0.95)
 """The same edges as shares, where the probability integral transform falls."""
-MIN_HISTORY_MONTHS = 120
-"""The shortest history, in months, whose range the width rule reads (``history_range``)."""
 MIN_MOVES = 200
 """The fewest known changes of one length the moves rule reads (``move_ranges``).
 
@@ -69,12 +67,10 @@ class Cell:
     historical: np.ndarray | None = None
     """The historical simulation of a return: its values over the past windows of the same
     length the calculation date knows. The benchmark of a position and of the portfolio."""
-    history_range: float = float("nan")
-    """The range of the quantity's history known at the same date; the width rule reads it."""
     move_range: float = float("nan")
     """The range of the history's changes over the months from the last known value to the
-    cell's month (``move_ranges``); the moves rule reads it. NaN for a return, whose
-    ``history_range`` already is the range of the past returns of the same length."""
+    cell's month (``move_ranges``); for a return, the range of the past returns of the same
+    length (``return_range``). The moves rule reads it."""
     domain: tuple[float, float] | None = None
     """The admissible range in the model scale; None when unbounded."""
     unverified: bool = False
@@ -138,18 +134,15 @@ def typical_movement(history: np.ndarray, months: int) -> float:
     return sigma if sigma > 0 else float("nan")
 
 
-def history_range(history: np.ndarray) -> float:
-    """The range of the finite values of a monthly history; NaN without a finite value or when
-    the known values span fewer than ``MIN_HISTORY_MONTHS`` months.
+def return_range(past: np.ndarray) -> float:
+    """The range of the finite past returns of one length; NaN with fewer than ``MIN_MOVES``.
 
-    The range is the yardstick of the width rule, and the range of a short history is none: a
-    calibrated twelve-month band of a rate is wider than the range of the few years it has
-    seen. The span runs from the first known month to the last, gaps included."""
-    y = np.asarray(history, dtype=float)
-    seen = np.flatnonzero(np.isfinite(y))
-    if not len(seen) or seen[-1] - seen[0] + 1 < MIN_HISTORY_MONTHS:
+    A return already is a change over the cell's months, so its past values are the moves the
+    moves rule compares the band with, under the same least count."""
+    known = np.asarray(past, dtype=float)
+    known = known[np.isfinite(known)]
+    if len(known) < MIN_MOVES:
         return float("nan")
-    known = y[seen]
     return float(known.max() - known.min())
 
 

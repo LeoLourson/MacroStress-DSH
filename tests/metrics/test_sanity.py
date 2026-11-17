@@ -2,8 +2,8 @@
 
 import pytest
 
-from mst.metrics.baselines import DOMAIN, MOVES, WIDTH
-from mst.metrics.sanity import check, worst_shares
+from mst.metrics.baselines import DOMAIN, MOVES
+from mst.metrics.sanity import check
 
 
 def row(
@@ -14,10 +14,8 @@ def row(
     level="macro",
     model=1.0,
     walk=1.0,
-    wide=False,
     outside=False,
     width=1.0,
-    history=10.0,
     moves=10.0,
     shift=None,
     miss=None,
@@ -31,10 +29,8 @@ def row(
         "model": model,
         "walk": walk,
         "width": width,
-        "history_range": history,
         "move_range": moves,
         DOMAIN: outside,
-        WIDTH: wide,
         MOVES: False,
         "shift": shift,
         "miss": miss,
@@ -42,28 +38,9 @@ def row(
     }
 
 
-def test_one_quantity_over_the_share_fails_whatever_the_pool():
-    rows = [row("a", m) for m in range(1, 41)] + [row("b", m) for m in range(1, 41)]
-    rows += [row("c", m, wide=m <= 3) for m in range(1, 41)]
-
-    found = check(rows)
-
-    width = found["admission"]["rules"][WIDTH]
-    assert width["pooled"] == pytest.approx(3 / 120)
-    assert width["worst"] == pytest.approx(3 / 40)
-    assert width["quantities"] == ["c"]
-    assert found["admission"]["failed"]
-    assert worst_shares(found["admission"]) == {
-        DOMAIN: 0.0,
-        WIDTH: pytest.approx(3 / 40),
-        MOVES: 0.0,
-    }
-    assert [entry["failed"] for entry in found["quantities"]] == [[], [], [WIDTH]]
-
-
-def test_the_width_is_read_against_the_range_of_the_history():
-    rows = [row("a", m, width=w, history=10.0) for m, w in enumerate([5.0, 20.0, 8.0], 1)]
-    assert check(rows)["quantities"][0]["width_to_range"] == pytest.approx(0.8)
+def test_the_width_is_read_against_the_range_of_the_moves():
+    rows = [row("a", m, width=w, moves=10.0) for m, w in enumerate([5.0, 20.0, 8.0], 1)]
+    assert check(rows)["quantities"][0]["width_to_moves"] == pytest.approx(0.8)
 
 
 def test_the_direction_counts_only_the_moves_above_the_noise():

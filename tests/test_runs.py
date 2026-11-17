@@ -373,26 +373,26 @@ def test_a_scenario_without_conditions_and_interventions_has_no_comparison(
 
 
 def test_the_admission_limit_is_strict_and_weighs_every_quantity_equally():
-    from mst.metrics.baselines import DOMAIN, MOVES, WIDTH
+    from mst.metrics.baselines import DOMAIN, MOVES
     from mst.runs import ADMISSION_LIMIT, _admission
 
     assert ADMISSION_LIMIT == 0.05
-    below = {"paths": {"macro/ru.key_rate": {DOMAIN: 0.0499, WIDTH: 0.0}}}
-    at = {"paths": {"macro/ru.key_rate": {DOMAIN: 0.05, WIDTH: 0.0}}}
+    below = {"paths": {"macro/ru.key_rate": {DOMAIN: 0.0499, MOVES: 0.0}}}
+    at = {"paths": {"macro/ru.key_rate": {DOMAIN: 0.05, MOVES: 0.0}}}
     assert _admission(below)["admitted"] is True
     assert _admission(at)["admitted"] is False
 
     mixed = {
         "paths": {
-            "macro/a": {DOMAIN: 0.0, WIDTH: 0.2},
-            "driver/d:x": {DOMAIN: 0.1, WIDTH: 0.0},
+            "macro/a": {DOMAIN: 0.0, MOVES: 0.2},
+            "driver/d:x": {DOMAIN: 0.1, MOVES: 0.0},
         }
     }
     found = _admission(mixed)
-    assert found["shares"] == {DOMAIN: 0.05, WIDTH: 0.1, MOVES: 0.0}
+    assert found["shares"] == {DOMAIN: 0.05, MOVES: 0.1}
     assert found["admitted"] is False
     assert found["broken"] == [
-        {"condition": WIDTH, "quantity": "macro/a", "share": 0.2},
+        {"condition": MOVES, "quantity": "macro/a", "share": 0.2},
         {"condition": DOMAIN, "quantity": "driver/d:x", "share": 0.1},
     ]
     # Without paths to check there is nothing broken, and no refusal either.
@@ -542,12 +542,18 @@ def _macro_version(versions):
     return macro_version.load(versions.models, versions.macro, {"bvar.sv": MODEL})
 
 
-def _history_of(versions, driver) -> tuple[float, float]:
-    """``(middle, span)`` of a driver's own history in the model scale."""
+def _moves_of(versions, driver, monkeypatch) -> tuple[float, float, float]:
+    """``(middle, narrowest, widest)``: the middle of a driver's own history in the model scale
+    and the narrowest and the widest range of its moves over the twelve months of a run. The
+    fixture's history is short, so the least count of the moves rule is lowered."""
+    from mst.metrics import cells
+
+    monkeypatch.setattr(cells, "MIN_MOVES", 5)
     quantity, node = versions.satellite.node(driver)
     history = versions.satellite.arrays[f"{quantity}.d"][:, node]
     finite = history[np.isfinite(history)]
-    return float((finite.max() + finite.min()) / 2), float(finite.max() - finite.min())
+    moves = cells.move_ranges(history, 12)
+    return float((finite.max() + finite.min()) / 2), float(moves.min()), float(moves.max())
 
 
 def _banded_paths(versions, bands: dict[str, tuple[float, float]]) -> SimpleNamespace:
@@ -597,48 +603,47 @@ def _driver_checks(versions, bands) -> dict:
     return runs._checks(_bare_spec(), macro, paths, None, versions.satellite)["paths"]
 
 
-def test_a_log100_band_narrower_than_the_history_reports_zero_at_a_high_and_low_price(
-    versions,
+def test_a_log100_band_narrower_than_the_moves_reports_zero_at_a_high_and_low_price(
+    versions, monkeypatch
 ):
     # The width of the band is set in the model scale, where the history lives; the level
-    # of the price — a share at 5239 or at 5 — must not enter the verdict. A band of half
-    # the history range is admitted whatever the price.
-    _, span = _history_of(versions, "share_price:sber")
+    # of the price — a share at 5239 or at 5 — must not enter the verdict. A band narrower
+    # than every range of the moves is admitted whatever the price.
+    _, narrowest, _ = _moves_of(versions, "share_price:sber", monkeypatch)
     rows = _driver_checks(
         versions,
         {
-            "share_price:sber": (100.0 * np.log(5239.0), 0.6 * span),
-            "share_price:gazp": (100.0 * np.log(5.0), 0.6 * span),
+            "share_price:sber": (100.0 * np.log(5239.0), 0.6 * narrowest),
+            "share_price:gazp": (100.0 * np.log(5.0), 0.6 * narrowest),
         },
     )
-    assert rows["driver/share_price:sber"]["band_wider_than_history"] == 0.0
-    assert rows["driver/share_price:gazp"]["band_wider_than_history"] == 0.0
+    assert rows["driver/share_price:sber"]["band_wider_than_moves"] == 0.0
+    assert rows["driver/share_price:gazp"]["band_wider_than_moves"] == 0.0
     assert rows["driver/share_price:sber"]["band_outside_domain"] == 0.0
 
 
-def test_a_log100_band_wider_than_the_history_reports_the_full_share(versions):
-    middle, span = _history_of(versions, "share_price:sber")
-    rows = _driver_checks(
-        versions, {"share_price:sber": (middle + 2.0 * span, 2.5 * span)}
-    )
-    assert rows["driver/share_price:sber"]["band_wider_than_history"] == 1.0
+def test_a_log100_band_wider_than_the_moves_reports_the_full_share(versions, monkeypatch):
+    middle, _, widest = _moves_of(versions, "share_price:sber", monkeypatch)
+    rows = _driver_checks(versions, {"share_price:sber": (middle, 2.5 * widest)})
+    assert rows["driver/share_price:sber"]["band_wider_than_moves"] == 1.0
 
 
 def test_a_logit_driver_and_an_identity_driver_are_measured_in_their_own_model_scale(
-    versions,
+    versions, monkeypatch
 ):
     # overdue_share is logit and bond_spread is identity: each band is measured in its own
-    # quantity's model scale, half the history range admitted and two and a half times it
-    # refused, wherever the quantity itself sits.
-    for driver, share_of_history, expected in (
-        ("overdue_share:mining", 0.6, 0.0),
-        ("overdue_share:mining", 2.5, 1.0),
-        ("bond_spread:corp", 0.6, 0.0),
-        ("bond_spread:corp", 2.5, 1.0),
+    # quantity's model scale, narrower than every range of the moves admitted and wider than
+    # every one refused, wherever the quantity itself sits.
+    for driver, narrow, expected in (
+        ("overdue_share:mining", True, 0.0),
+        ("overdue_share:mining", False, 1.0),
+        ("bond_spread:corp", True, 0.0),
+        ("bond_spread:corp", False, 1.0),
     ):
-        middle, span = _history_of(versions, driver)
-        rows = _driver_checks(versions, {driver: (middle, share_of_history * span)})
-        assert rows[f"driver/{driver}"]["band_wider_than_history"] == expected, driver
+        middle, narrowest, widest = _moves_of(versions, driver, monkeypatch)
+        width = 0.6 * narrowest if narrow else 2.5 * widest
+        rows = _driver_checks(versions, {driver: (middle, width)})
+        assert rows[f"driver/{driver}"]["band_wider_than_moves"] == expected, driver
 
 
 def call(ws, name, arguments):

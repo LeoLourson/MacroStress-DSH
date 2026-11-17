@@ -299,6 +299,28 @@ def test_a_short_variable_is_left_out_of_its_dates_not_the_dates(tmp_path, monke
     assert {row["quantity"] for row in found["rows"]} == {"gl.brent"}
 
 
+class Young(WalkMacro):
+    """The walk whose own window has no history before 2025: every variable is short."""
+
+    def estimate(self, context):
+        from mst.model_sdk import ShortHistory
+
+        if context.as_of.year < 2025:
+            raise ShortHistory(
+                {v.id: "no value since the start" for v in context.registry.variables}
+            )
+        return super().estimate(context)
+
+
+def test_a_date_where_the_model_finds_every_variable_short_is_skipped(tmp_path, monkeypatch):
+    """The grid's own reading of the data finds the date long enough, but the model's window
+    starts later: the model says every variable is short, and the date is skipped, not refused."""
+    found = report_of(tmp_path, monkeypatch, macro=Young())
+    assert not found["dropped"]["refused"]
+    assert found["dropped"]["skipped"]
+    assert all(row["date"] >= "2025-01-01" for row in found["rows"])
+
+
 def test_the_drivers_are_judged_on_the_grid_as_on_the_episodes(tmp_path, monkeypatch):
     found = report_of(tmp_path, monkeypatch, drivers=True, months=72)
 
@@ -337,9 +359,8 @@ def test_the_decision_reads_the_two_versions_on_the_same_cells(tmp_path, monkeyp
     against = tmp_path / "incumbent.json"
     against.write_text(json.dumps(right, default=jsonable), encoding="utf-8")
     verdict = rolling_decision(biased, against, seed=1)
-    assert verdict["half"] == "validation"
-    assert verdict["vs_incumbent"]["point"] > 1.5
-    assert verdict["verdict"] in {"rejected_worse", "rejected_admission"}
+    assert verdict["checks"]["grid"]["ratio"] > 1.5
+    assert not verdict["replaces"]
     short = {**right, "rows": right["rows"][:-1]}
     against.write_text(json.dumps(short, default=jsonable), encoding="utf-8")
     with pytest.raises(ValueError, match="do not share 1 cells"):

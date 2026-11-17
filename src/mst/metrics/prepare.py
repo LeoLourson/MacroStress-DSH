@@ -22,6 +22,7 @@ from pathlib import Path
 
 from mst.data.store import SeriesStore
 from mst.macro.registry import Registry
+from mst.model_sdk import ShortHistory
 from mst.model_sdk.checkpoint import report
 
 from .windows import Window, _data_key, cached, macro_name, satellite_name, simulate
@@ -97,10 +98,18 @@ def simulated(
     return found
 
 
+class Short(str):
+    """The reason a window was not opened because its date is short of history for the model:
+    every variable the model was given is too short (``ShortHistory``)."""
+
+
 def _simulated(build: Callable[..., Window], item: tuple, registry, plan) -> Window | str:
-    """One window opened and simulated; the reason when its build refuses it."""
+    """One window opened and simulated; the reason when its build refuses it, a ``Short``
+    reason when the date is short of history for the model."""
     try:
         window = build(*item)
+    except ShortHistory as short:
+        return Short(short)
     except ValueError as error:
         return str(error)
     simulate(window, registry, plan)

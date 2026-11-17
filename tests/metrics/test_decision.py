@@ -1,174 +1,74 @@
-"""The four-step decision rule."""
+"""mst.metrics.decision: the replacement rule of a candidate against the incumbent."""
 
-from mst.metrics.decision import decide
+import numpy as np
+import pytest
+
+from mst.metrics.decision import compare
 
 
-def test_step_one_rejects_a_candidate_that_failed_admission():
-    verdict = decide(
-        candidate_crps=0.10,
-        benchmark_crps=0.50,
-        incumbent_crps=0.50,
-        se_vs_benchmark=0.05,
-        se_vs_incumbent=0.05,
-        candidate_admission_shares={"band_outside_domain": 0.06, "band_wider_than_history": 0.01},
-        incumbent_admission_shares={"band_outside_domain": 0.01, "band_wider_than_history": 0.01},
+def rows(scale, *, units=12, months=3, seed=0):
+    """Episode rows whose model CRPS is ``scale`` times a noisy common level."""
+    rng = np.random.default_rng(seed)
+    found = []
+    for u in range(units):
+        for m in range(1, months + 1):
+            level = rng.uniform(0.5, 1.5)
+            found.append(
+                {
+                    "episode": f"E{u:02d}",
+                    "month": m,
+                    "quantity": "q",
+                    "level": "macro",
+                    "half": "validation",
+                    "model": scale * level * rng.uniform(0.95, 1.05),
+                }
+            )
+    return found
+
+
+def decide(mine, theirs, *, trusted=True, incumbent_trusted=True):
+    return compare(
+        {"episodes": (mine, theirs, "episode", 1)},
+        trusted=trusted,
+        incumbent_trusted=incumbent_trusted,
+        level="macro",
+        seed=1,
     )
-    assert verdict["verdict"] == "rejected_admission" and verdict["step"] == 1
 
 
-def test_step_two_accepts_a_two_se_improvement_with_unchanged_admission():
-    verdict = decide(
-        candidate_crps=0.10,
-        benchmark_crps=0.50,
-        incumbent_crps=0.50,
-        se_vs_benchmark=0.05,
-        se_vs_incumbent=0.05,
-        candidate_admission_shares={"band_outside_domain": 0.01, "band_wider_than_history": 0.01},
-        incumbent_admission_shares={"band_outside_domain": 0.01, "band_wider_than_history": 0.02},
-    )
-    assert verdict["verdict"] == "accepted" and verdict["step"] == 2
+def test_an_untrusted_candidate_never_replaces():
+    found = decide(rows(0.5), rows(1.0), trusted=False)
+    assert found["checks"]["episodes"]["better"]
+    assert not found["replaces"]
 
 
-def test_step_two_needs_both_benchmarks_for_the_first_version_only_the_benchmark():
-    without = decide(
-        candidate_crps=0.10,
-        benchmark_crps=0.50,
-        incumbent_crps=None,
-        se_vs_benchmark=0.05,
-        se_vs_incumbent=None,
-        candidate_admission_shares={"band_outside_domain": 0.01},
-        incumbent_admission_shares=None,
-    )
-    assert without["verdict"] == "accepted"
-    # With an incumbent, an improvement only over the benchmark is not enough.
-    guarded = decide(
-        candidate_crps=0.10,
-        benchmark_crps=0.50,
-        incumbent_crps=0.12,
-        se_vs_benchmark=0.05,
-        se_vs_incumbent=0.05,
-        candidate_admission_shares={"band_outside_domain": 0.01},
-        incumbent_admission_shares={"band_outside_domain": 0.01},
-    )
-    assert guarded["verdict"] == "inconclusive"
+def test_a_trusted_candidate_replaces_an_untrusted_incumbent_whatever_the_scores():
+    assert decide(rows(1.0, seed=2), rows(1.0), incumbent_trusted=False)["replaces"]
 
 
-def test_step_two_rejects_when_an_admission_share_grew():
-    verdict = decide(
-        candidate_crps=0.10,
-        benchmark_crps=0.50,
-        incumbent_crps=0.50,
-        se_vs_benchmark=0.05,
-        se_vs_incumbent=0.05,
-        candidate_admission_shares={"band_outside_domain": 0.02, "band_wider_than_history": 0.01},
-        incumbent_admission_shares={"band_outside_domain": 0.01, "band_wider_than_history": 0.01},
-    )
-    assert verdict["verdict"] == "inconclusive" and verdict["step"] == 4
-    assert verdict["admission_grown"] == ["band_outside_domain"]
+def test_between_trusted_versions_only_a_proven_gain_replaces():
+    assert decide(rows(0.5), rows(1.0))["replaces"]
+    same = decide(rows(1.0), rows(1.0))
+    assert not same["checks"]["episodes"]["better"] and not same["replaces"]
+    worse = decide(rows(2.0), rows(1.0))
+    assert worse["checks"]["episodes"]["worse"] and not worse["replaces"]
 
 
-def test_step_three_rejects_a_two_se_regression():
-    worse = decide(
-        candidate_crps=0.70,
-        benchmark_crps=0.50,
-        incumbent_crps=0.50,
-        se_vs_benchmark=0.05,
-        se_vs_incumbent=0.05,
-        candidate_admission_shares={"band_outside_domain": 0.01},
-        incumbent_admission_shares={"band_outside_domain": 0.01},
-    )
-    assert worse["verdict"] == "rejected_worse" and worse["step"] == 3
-
-
-def test_step_four_stays_inconclusive_within_two_se():
-    verdict = decide(
-        candidate_crps=0.51,
-        benchmark_crps=0.50,
-        incumbent_crps=0.50,
-        se_vs_benchmark=0.05,
-        se_vs_incumbent=0.05,
-        candidate_admission_shares={"band_outside_domain": 0.01},
-        incumbent_admission_shares={"band_outside_domain": 0.01},
-    )
-    assert verdict["verdict"] == "inconclusive" and verdict["step"] == 4
-
-
-def test_the_same_inputs_give_the_same_verdict():
-    kwargs = dict(
-        candidate_crps=0.10,
-        benchmark_crps=0.50,
-        incumbent_crps=0.50,
-        se_vs_benchmark=0.05,
-        se_vs_incumbent=0.05,
-        candidate_admission_shares={"band_outside_domain": 0.01},
-        incumbent_admission_shares={"band_outside_domain": 0.01},
-    )
-    assert decide(**kwargs) == decide(**kwargs)
-
-
-def _rows(unit_count, scale):
-    return [
+def test_a_gain_on_one_check_with_a_loss_on_another_keeps_the_incumbent():
+    found = compare(
         {
-            "episode": f"E{u}",
-            "month": t,
-            "quantity": q,
-            "model": scale * (1 + u + t),
-            "walk": 1 + u + t,
-        }
-        for u in range(unit_count)
-        for t in (1, 2)
-        for q in ("a", "b")
-    ]
-
-
-def test_on_rows_reads_the_ratio_against_the_benchmark_and_the_incumbent():
-    from mst.metrics.decision import on_rows
-
-    shares = {"band_outside_domain": 0.0, "band_wider_than_history": 0.0}
-    verdict = on_rows(
-        _rows(6, 0.5),
-        _rows(6, 1.0),
-        unit="episode",
-        benchmark="walk",
-        block=1,
+            "episodes": (rows(0.5), rows(1.0), "episode", 1),
+            "grid": (rows(2.0, seed=3), rows(1.0, seed=3), "episode", 1),
+        },
+        trusted=True,
+        incumbent_trusted=True,
+        level="macro",
         seed=1,
-        admission=shares,
-        incumbent_admission=shares,
     )
-    assert verdict["vs_benchmark"]["point"] == 0.5
-    assert verdict["vs_incumbent"]["point"] == 0.5
-    assert verdict["verdict"] == "accepted"
+    assert found["checks"]["episodes"]["better"] and found["checks"]["grid"]["worse"]
+    assert not found["replaces"]
 
 
-def test_on_rows_refuses_two_reports_on_different_cells():
-    import pytest
-
-    from mst.metrics.decision import on_rows
-
-    with pytest.raises(ValueError, match="do not share 4 cells"):
-        on_rows(
-            _rows(2, 0.5),
-            _rows(1, 1.0),
-            unit="episode",
-            benchmark="walk",
-            block=1,
-            seed=1,
-            admission={},
-            incumbent_admission={},
-        )
-
-
-def test_on_rows_with_one_unit_detects_nothing():
-    from mst.metrics.decision import on_rows
-
-    verdict = on_rows(
-        _rows(1, 0.5),
-        _rows(1, 1.0),
-        unit="episode",
-        benchmark="walk",
-        block=1,
-        seed=1,
-        admission={},
-        incumbent_admission={},
-    )
-    assert verdict["verdict"] == "inconclusive"
+def test_two_versions_on_different_cells_are_an_error():
+    with pytest.raises(ValueError, match="do not share"):
+        decide(rows(1.0, units=12), rows(1.0, units=11))

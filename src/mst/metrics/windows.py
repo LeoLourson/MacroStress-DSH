@@ -299,6 +299,9 @@ def macro_name(
         return found
     try:
         estimate, left_out = _estimate_known(plugin, data, registry, as_of, inputs)
+    except ShortHistory:
+        # A date short of history is found at once, without an estimate: nothing to cache.
+        raise
     except ValueError as error:
         refuse(pointer, error)
         raise
@@ -360,7 +363,8 @@ def _estimate_known(
     A model that finds the history of some variables too short says so with ``ShortHistory``;
     it is estimated again on the registry without them, and they come back with the reason.
     Every round removes at least one variable it was given, so the rounds end. A short variable
-    leaves out its own cells; only an episode that fixes it is lost with it.
+    leaves out its own cells; only an episode that fixes it is lost with it. When every variable
+    is short, the date itself is: ``ShortHistory`` names them all.
     """
     left_out: dict[str, str] = {}
     while True:
@@ -385,6 +389,8 @@ def _estimate_known(
                     f"{plugin.model_id} calls short variables it was not given: {', '.join(stray)}"
                 ) from short
             left_out.update(short.variables)
+            if len(left_out) == len(registry.variables):
+                raise ShortHistory(left_out) from short
             continue
         return estimate, left_out
 

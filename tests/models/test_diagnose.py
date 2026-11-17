@@ -212,9 +212,7 @@ def test_a_changed_version_is_refused(versions, tmp_path):
         diagnose_version.diagnose(tmp_path, bvar)
 
 
-def write_run(
-    tmp_path, run_id, *, variables, checks, changes, values, paths
-) -> None:
+def write_run(tmp_path, run_id, *, variables, checks, changes, values, paths) -> None:
     """A finished run folder with the files the gates read."""
     folder = tmp_path / "runs" / run_id
     folder.mkdir(parents=True)
@@ -228,8 +226,7 @@ def write_run(
         json.dumps(
             {
                 "positions": [
-                    {"position_id": f"p{k}", "value_current": v}
-                    for k, v in enumerate(values)
+                    {"position_id": f"p{k}", "value_current": v} for k, v in enumerate(values)
                 ]
             }
         ),
@@ -242,17 +239,14 @@ def test_macro_gates_read_a_finished_run(tmp_path):
     checks = {
         "macro/ru.usdrub": {
             "band_outside_domain": 0.0,
-            "band_wider_than_history": 0.1,
             "band_wider_than_moves": 0.0,
         },
         "macro/ru.key_rate": {
             "band_outside_domain": 0.09,
-            "band_wider_than_history": 0.2,
             "band_wider_than_moves": 0.08,
         },
         "driver/share_price:sibn": {
             "band_outside_domain": 0.9,
-            "band_wider_than_history": 0.9,
             "band_wider_than_moves": 0.9,
         },
     }
@@ -274,7 +268,6 @@ def test_macro_gates_read_a_finished_run(tmp_path):
     assert row["scenario"] == "test"
     # The driver cells do not count: the shares pool the macro cells only.
     assert row["macro_band_outside_domain"] == pytest.approx(0.045)
-    assert row["macro_band_wider_than_history"] == pytest.approx(0.15)
     assert row["macro_band_wider_than_moves"] == pytest.approx(0.04)
     assert row["largest_gain_of_notional"] == pytest.approx(6.0 / 10000.0)
     assert row["absurd"] == {
@@ -289,7 +282,6 @@ def test_macro_gates_read_a_finished_run(tmp_path):
     assert row["bound_touch"] == {"ru.key_rate": 1.0, "gl.fed_rate": 1.0, "ru.spread_bbb": 1.0}
     assert row["gates"] == {
         "band_outside_domain_below_five_percent": True,
-        "band_wider_than_history_below_five_percent": False,
         "band_wider_than_moves_below_five_percent": True,
         "largest_gain_below_ten_notional": True,
     }

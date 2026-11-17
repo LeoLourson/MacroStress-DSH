@@ -519,6 +519,14 @@ def _counts(panel: Panel, data: np.ndarray, spec: Spec) -> dict[str, int]:
         for variable, count in counts.items()
         if count < spec.min_changes
     }
+    # Changes that never vary give the scale no variance: the history has not moved yet.
+    short.update(
+        {
+            variable: f"{counts[variable]} changes, all equal: no variance to scale"
+            for i, variable in enumerate(panel.ids)
+            if variable != HOUSING and variable not in short and np.nanvar(data[:, i]) == 0
+        }
+    )
     if short:
         raise ShortHistory(short)
     return counts
@@ -569,9 +577,7 @@ def _tail(panel: Panel) -> np.ndarray:
             return panel.y[first:].copy()
 
 
-def estimate(
-    panel: Panel, spec: Spec, *, left_out: Sequence[str] = ()
-) -> tuple[dict, dict, float]:
+def estimate(panel: Panel, spec: Spec, *, left_out: Sequence[str] = ()) -> tuple[dict, dict, float]:
     """The version of the panel; ``left_out`` are variables the spec may name but the panel
     lacks, because the platform left them out as too short."""
     spec.validate_ids([*panel.ids, *left_out])
@@ -609,9 +615,7 @@ def estimate(
     if spec.sample_scale:
         sample, ordinary, shrunk["sample"] = sample_covariance(panel, data, spec)
         covariance[np.ix_(ordinary, ordinary)] = sample
-        sample_variance = {
-            panel.ids[i]: float(np.diag(sample)[k]) for k, i in enumerate(ordinary)
-        }
+        sample_variance = {panel.ids[i]: float(np.diag(sample)[k]) for k, i in enumerate(ordinary)}
     scale = np.zeros_like(covariance)
     block = np.ix_(ordinary, ordinary)
     scale[block] = _positive_scale(covariance[block] / mix[block], spec.eig_floor)

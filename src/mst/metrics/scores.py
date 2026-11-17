@@ -3,7 +3,8 @@
 A check gives cells (``mst.metrics.levels``) and turns them into rows; ``judge`` reads the rows
 the same way whatever the check:
 
-- the sanity of every quantity (``mst.metrics.sanity``), first;
+- the sanity of every quantity (``mst.metrics.sanity``) and the admission criteria of trust
+  (``mst.metrics.trust``) over every window, first;
 - per level, the relative CRPS of every pair of forecasts the rows carry (``PAIRS``), with the
   interval over resampled windows — single windows for the episodes, moving blocks as long as
   a window for the overlapping dates of the grid — the calibration of the facts and the
@@ -28,6 +29,7 @@ from .cells import BUCKET_EDGES, Cell, crps, finite_draws
 from .levels import PORTFOLIO
 from .quality import interval, relative
 from .sanity import benchmark_of, check
+from .trust import admission
 
 PAIRS = (
     ("model", "conditional_walk"),
@@ -54,12 +56,26 @@ Rows = Sequence[Mapping[str, object]]
 
 
 def judge(
-    found: list[Cell], rows: list[dict], *, unit: str, block: int, seed: int, repetitions: int
+    found: list[Cell],
+    rows: list[dict],
+    *,
+    unit: str,
+    block: int,
+    seed: int,
+    repetitions: int,
+    calibration: int | None,
 ) -> dict:
-    """The sanity, the scores per level, the halves and the quantities of one check.
+    """The sanity, the admission, the scores per level, the halves and the quantities of one
+    check.
 
-    ``unit`` names the window key of the rows; a row names its half.
+    ``unit`` names the window key of the rows; a row names its half. ``calibration``, the step
+    of the grid in months, adds the criteria only the grid reads (``mst.metrics.trust``); the
+    tail of the portfolio they read is the one at that month, where the windows do not overlap.
     """
+
+    def admitted(chosen, tail=None):
+        return admission(chosen, unit=unit, block=block, calibration=calibration, tail=tail)
+
     halves = {"all": rows}
     for half in ("tuning", "validation"):
         chosen = [row for row in rows if row["half"] == half]
@@ -80,14 +96,29 @@ def judge(
         if ends
         else None
     )
+    short = (
+        es.tail(
+            [
+                (cell.unit, -cell.fact, -cell.draws)
+                for cell in sorted(found, key=lambda cell: cell.unit)
+                if cell.level == PORTFOLIO and cell.month == calibration
+            ],
+            block=1,
+            seed=seed,
+            repetitions=repetitions,
+        )
+        if calibration is not None and any(cell.level == PORTFOLIO for cell in found)
+        else None
+    )
     return {
         "sanity": check(rows),
+        "admission": admitted(rows, short),
         "levels": levels,
         "halves": {
             name: {
                 "units": sorted({str(row[unit]) for row in chosen}),
                 "cells": len(chosen),
-                "sanity": check(chosen)["admission"],
+                "admitted": not admitted(chosen)["failed"],
                 "levels": summary(
                     chosen, unit=unit, block=block, seed=seed, repetitions=repetitions
                 ),
