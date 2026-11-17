@@ -87,8 +87,13 @@ class CbrRuonia(Release):
         return {_day(row.findtext("D0")): float(row.findtext("ruo")) for row in rows}
 
 
+REDENOMINATION = date(1998, 1, 1)
+"""The day a new rouble replaced a thousand old ones; the service quotes earlier days in old
+roubles."""
+
+
 class CbrCurrency(Release):
-    """Monthly means of the official rate, in roubles per one unit of the currency."""
+    """Monthly means of the official rate, in new roubles per one unit of the currency."""
 
     loader: Literal["cbr_currency"]
     code: str
@@ -109,7 +114,8 @@ class CbrCurrency(Release):
         for record in ET.fromstring(response.content).iter("Record"):
             day = date(*map(int, reversed(record.get("Date").split("."))))
             value = float(record.findtext("Value").replace(",", "."))
-            daily[day] = value / int(record.findtext("Nominal"))
+            per_unit = value / int(record.findtext("Nominal"))
+            daily[day] = per_unit / 1000 if day < REDENOMINATION else per_unit
         return daily
 
 

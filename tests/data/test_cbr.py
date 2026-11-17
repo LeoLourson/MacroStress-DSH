@@ -76,6 +76,20 @@ def test_currency_rate_is_per_one_unit():
     assert seen[0].url.params["date_req1"] == "01/01/2012"
 
 
+def test_currency_rate_before_the_redenomination_is_in_new_roubles():
+    body = (
+        '<?xml version="1.0" encoding="windows-1251"?><ValCurs ID="R01235">'
+        '<Record Date="31.12.1997" Id="R01235"><Nominal>1</Nominal><Value>5960,00</Value></Record>'
+        '<Record Date="01.01.1998" Id="R01235"><Nominal>1</Nominal><Value>5,9600</Value></Record>'
+        "</ValCurs>"
+    )
+    source = CbrCurrency(loader="cbr_currency", code="R01235", lag_days=1, revised=False)
+    assert source.daily(client(body, [], "cp1251"), date(1997, 12, 1)) == {
+        date(1997, 12, 31): approx(5.96),
+        date(1998, 1, 1): approx(5.96),
+    }
+
+
 def test_zero_coupon_yield_is_read_for_its_term():
     header = "".join(f"<th>{term}</th>" for term in ("0,25", "0,5", "1", "10"))
     rows = "".join(

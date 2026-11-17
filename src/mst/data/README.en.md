@@ -18,7 +18,7 @@ The command downloads from January 2012, or from `--start`, all series of `sourc
 | `release.py` | Common source fields: `lag_days`, `revised` |
 | `daily.py` | Daily values to monthly: mean, median, a mean over calendar days for step rates |
 | `fred.py` | FRED: Brent, the Fed rate, UST 10Y, VIX; the key from `FRED_API_KEY` |
-| `cbr.py` | Bank of Russia: the key rate and RUONIA (SOAP), official exchange rates, the zero-coupon OFZ curve |
+| `cbr.py` | Bank of Russia: the key rate and RUONIA (SOAP), official exchange rates (in new roubles before the redenomination of 1998 too), the zero-coupon OFZ curve |
 | `cbr_stats.py` | Bank of Russia banking statistics: credit, the mortgage rate, the overdue share by industry; new months from the open data service, old ones from archive Excel tables |
 | `moex.py` | Moscow Exchange ISS: closes of indices and shares (with splits), spreads of bond indices and single issues over the OFZ curve |
 | `rosstat.py` | Rosstat: monthly tables, "Short-term economic indicators", housing prices by territory; increments on the previous month are built up into a level |
