@@ -26,7 +26,7 @@ from mst.model_sdk.conditional import (
     box_gibbs,
     dependent_rows,
     draw_driving,
-    log_condition_weight,
+    log_condition_weights,
     pick_latent,
     truncated_normal,
 )
@@ -363,6 +363,25 @@ CANDIDATE_SAMPLES = 64
 the weight only has to rank the candidates, not price them."""
 
 
+def _candidate_weights(plan, loadings, means, driving, rng) -> np.ndarray:
+    """The log weights of the volatility candidates under the conditions, in one GHK pass.
+
+    An exact row (low == high) holds under every candidate through the truncation, but weighs
+    by its density: a far value is likelier under a volatile path. The interval rows weigh by
+    their box given the exact ones. Raises ``ContradictsModels`` when no candidate gives the
+    conditions any probability.
+    """
+    rows = len(plan.terms)
+    driven = [z[:, :, driving].reshape(rows, -1) for z in loadings]
+    covs = np.array([z @ z.T for z in driven])
+    weights = log_condition_weights(
+        np.array(means), covs, plan.low, plan.high, rng, CANDIDATE_SAMPLES
+    )
+    if np.all(np.isneginf(weights)):
+        raise ContradictsModels()
+    return weights
+
+
 def _constraints_of(
     scenario: ScenarioPlan, ids: list[str], group: int
 ) -> tuple:
@@ -443,36 +462,24 @@ def _simulate_recursive(
         )
         draw = int(np.random.default_rng([seed, r, 0]).integers(model.draws))
         rng_volatility = np.random.default_rng([seed, r, 1])
-        reps, dets, log_probabilities = [], [], []
-        for _ in range(candidates):
-            rep = _repetition(model, horizon, rng_volatility, draw)
-            deterministic = _recursive_path(
-                rep.history, rep.lags, rep.intercept, zeros, overrides
+        reps = [_repetition(model, horizon, rng_volatility, draw) for _ in range(candidates)]
+        dets = [
+            _recursive_path(rep.history, rep.lags, rep.intercept, zeros, overrides)
+            for rep in reps
+        ]
+        log_probabilities = np.zeros(candidates)
+        if plan.terms:
+            loadings = [_recursive_loadings(plan, rep, overrides) for rep in reps]
+            log_probabilities = _candidate_weights(
+                plan, loadings, [_level(plan, d) for d in dets], driving, rng_volatility
             )
-            reps.append(rep)
-            dets.append(deterministic)
-            if not plan.terms:
-                log_probabilities.append(0.0)
-                continue
-            z = _recursive_loadings(plan, rep, overrides)
-            mean = _level(plan, deterministic)
-            rows = len(plan.terms)
-            z_driving = z[:, :, driving].reshape(rows, -1)
-            cov = z_driving @ z_driving.T
-            log_probabilities.append(
-                log_condition_weight(
-                    mean, cov, plan.low, plan.high, rng_volatility, CANDIDATE_SAMPLES
-                )
-            )
-        if np.all(np.isneginf(log_probabilities)):
-            raise ContradictsModels()
         picked, size = pick_latent(log_probabilities, rng_volatility)
         ess.append(size)
         rep, deterministic = reps[picked], dets[picked]
         impacts = _substituted_impacts(rep.impacts, overrides)
         z = None
         if plan.terms:
-            z = _recursive_loadings(plan, rep, overrides)
+            z = loadings[picked]
             z_all = z.reshape(len(z), -1)
             z_d = z[:, :, driving].reshape(len(z), -1)
             bad = dependent_rows(z_d, z_all)
@@ -563,34 +570,19 @@ def simulate(
         plan = _plan(model, replace(scenario, constraints=constraints))
         draw = int(np.random.default_rng([seed, r, 0]).integers(model.draws))
         rng_volatility = np.random.default_rng([seed, r, 1])
-        reps, log_probabilities = [], []
-        for _ in range(candidates):
-            rep = _repetition(model, horizon, rng_volatility, draw)
-            reps.append(rep)
-            if not plan.terms:
-                log_probabilities.append(0.0)
-                continue
-            z = _loadings(plan, rep)
-            mean = _level(plan, rep.mean)
-            # An exact row (low == high) holds under every candidate through the
-            # truncation, but weighs by its density: a far value is likelier under a
-            # volatile path. The interval rows weigh by their box given the exact ones.
-            rows = len(plan.terms)
-            z_driving = z[:, :, driving].reshape(rows, -1)
-            cov = z_driving @ z_driving.T
-            log_probabilities.append(
-                log_condition_weight(
-                    mean, cov, plan.low, plan.high, rng_volatility, CANDIDATE_SAMPLES
-                )
+        reps = [_repetition(model, horizon, rng_volatility, draw) for _ in range(candidates)]
+        log_probabilities = np.zeros(candidates)
+        if plan.terms:
+            loadings = [_loadings(plan, rep) for rep in reps]
+            log_probabilities = _candidate_weights(
+                plan, loadings, [_level(plan, rep.mean) for rep in reps], driving, rng_volatility
             )
-        if np.all(np.isneginf(log_probabilities)):
-            raise ContradictsModels()
         picked, size = pick_latent(log_probabilities, rng_volatility)
         ess.append(size)
         rep = reps[picked]
         z = None
         if plan.terms:
-            z = _loadings(plan, rep)
+            z = loadings[picked]
             z_all = z.reshape(len(z), -1)
             z_d = z[:, :, driving].reshape(len(z), -1)
             bad = dependent_rows(z_d, z_all)

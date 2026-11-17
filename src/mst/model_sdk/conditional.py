@@ -223,51 +223,63 @@ def log_box_probability(mean, cov, low, high, rng, samples: int) -> float:
     return float(logsumexp(log_weights) - np.log(samples))
 
 
-def log_condition_weight(mean, cov, low, high, rng, samples: int) -> float:
-    """The log likelihood of the conditions under ``X ~ N(mean, cov)``: what ranks the
-    candidates of a hidden volatility path.
+def log_condition_weights(means, covs, low, high, rng, samples: int) -> np.ndarray:
+    """``(N,)`` the log likelihood of the conditions under every ``X ~ N(means[k], covs[k])``:
+    what ranks the candidates of a hidden coordinate, all of them in one GHK pass.
 
     An exact row (``low == high``) weighs by the density of ``X`` at its value, and the interval
-    rows by the probability of their box given the exact rows (``log_box_probability``). The
+    rows by the probability of their box given the exact rows (``log_box_probabilities``). The
     truncation meets an exact row under every candidate, but a candidate that makes its value
-    likelier explains the event better. Exact rows the covariance does not move, or moves only
-    as a combination of each other, carry no density, and the weight is the box alone.
+    likelier explains the event better. A candidate whose covariance does not move the exact
+    rows, or moves them only as a combination of each other, carries no density there, and its
+    weight is the box of the interval rows alone.
     """
-    mean = np.asarray(mean, dtype=float)
-    cov = np.asarray(cov, dtype=float)
+    means = np.asarray(means, dtype=float)
+    covs = np.asarray(covs, dtype=float)
     low = np.asarray(low, dtype=float)
     high = np.asarray(high, dtype=float)
     exact = low == high
     interval = ~exact
+    box_means = means[:, interval]
+    box_covs = covs[:, interval][:, :, interval]
+    density = np.zeros(len(means))
     if exact.any():
-        try:
-            factor = np.linalg.cholesky(cov[np.ix_(exact, exact)])
-        except np.linalg.LinAlgError:
-            factor = None
-        if factor is not None:
-            gap = low[exact] - mean[exact]
-            whitened = np.linalg.solve(factor, gap)
-            density = float(
-                -0.5 * whitened @ whitened
-                - np.log(np.diag(factor)).sum()
-                - 0.5 * len(gap) * np.log(2 * np.pi)
+        factors, carried = _factors(covs[:, exact][:, :, exact])
+        if carried.any():
+            factor = factors[carried]
+            gap = low[exact][None, :] - means[carried][:, exact]
+            whitened = np.linalg.solve(factor, gap[..., None])[..., 0]
+            density[carried] = (
+                -0.5 * (whitened**2).sum(axis=1)
+                - np.log(np.diagonal(factor, axis1=1, axis2=2)).sum(axis=1)
+                - 0.5 * gap.shape[1] * np.log(2 * np.pi)
             )
             # The gaussian law of the interval rows given the exact ones.
-            gain = np.linalg.solve(factor.T, np.linalg.solve(factor, cov[np.ix_(exact, interval)]))
-            given_mean = mean[interval] + gain.T @ gap
-            given_cov = cov[np.ix_(interval, interval)] - cov[np.ix_(interval, exact)] @ gain
-            box = log_box_probability(
-                given_mean, given_cov, low[interval], high[interval], rng, samples
-            )
-            return density + box
-    return log_box_probability(
-        mean[interval],
-        cov[np.ix_(interval, interval)],
-        low[interval],
-        high[interval],
-        rng,
-        samples,
-    )
+            cross = covs[carried][:, exact][:, :, interval]
+            gain = np.linalg.solve(np.swapaxes(factor, 1, 2), np.linalg.solve(factor, cross))
+            box_means = box_means.copy()
+            box_covs = box_covs.copy()
+            box_means[carried] += np.einsum("cei,ce->ci", gain, gap)
+            box_covs[carried] -= np.einsum("cei,cej->cij", cross, gain)
+    box = log_box_probabilities(box_means, box_covs, low[interval], high[interval], rng, samples)
+    return density + box
+
+
+def _factors(covs) -> tuple[np.ndarray, np.ndarray]:
+    """``(factors, carried)``: the lower Cholesky factors of a batch of covariances and the mask
+    of those that have one; a singular covariance keeps a zero factor and ``False``."""
+    try:
+        return np.linalg.cholesky(covs), np.ones(len(covs), dtype=bool)
+    except np.linalg.LinAlgError:
+        factors = np.zeros_like(covs)
+        carried = np.zeros(len(covs), dtype=bool)
+        for k, cov in enumerate(covs):
+            try:
+                factors[k] = np.linalg.cholesky(cov)
+                carried[k] = True
+            except np.linalg.LinAlgError:
+                pass
+        return factors, carried
 
 
 def log_box_probabilities(

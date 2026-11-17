@@ -187,7 +187,8 @@ row linearly dependent on the rows already fixed (threshold $10^{-9}$) is refuse
 
 The path of multipliers is drawn as the volatility path of `bvar.sv` is. Under observations the
 model draws `LATENT_CANDIDATES` candidates of $\boldsymbol\lambda$ from the base law, weighs each
-by the probability of the box under it (`log_condition_weight`) and picks one by the weights
+by the likelihood of the conditions under it, all candidates in one GHK pass
+(`log_condition_weights`), and picks one by the weights
 (`pick_latent`). Without observations the path of multipliers is drawn from the base law without
 weights.
 

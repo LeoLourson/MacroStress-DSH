@@ -10,7 +10,7 @@ from mst.model_sdk.conditional import (
     InfeasibleScenario,
     dependent_rows,
     draw_driving,
-    log_condition_weight,
+    log_condition_weights,
     pick_latent,
 )
 from mst.model_sdk.contracts import (
@@ -210,32 +210,35 @@ def _hidden(
     candidates: int,
     cache: dict,
 ):
-    """Draw and score regime-path candidates."""
-    # An exact row (low == high) holds under every candidate through the truncation, but
-    # weighs by its density: a far value is likelier under some regime paths than others.
-    # The interval rows weigh by their box given the exact ones.
-    log_probabilities = []
-    paths = []
-    for _ in range(candidates):
-        path = _regime_path(model, draw, horizon, rng_path)
-        key = (draw, path.tobytes())
+    """Draw and score regime-path candidates.
+
+    An exact row (low == high) holds under every candidate through the truncation, but weighs
+    by its density: a far value is likelier under some regime paths than others. The interval
+    rows weigh by their box given the exact ones. A persistent chain repeats its paths, so every
+    distinct path is scored once, in one GHK pass, and its copies share the weight.
+    """
+    paths = [_regime_path(model, draw, horizon, rng_path) for _ in range(candidates)]
+    if not chosen.terms:
+        picked, ess = pick_latent(np.zeros(candidates), rng_path)
+        return _repetition_of(model, draw, paths[picked]), ess
+    keys = [(draw, path.tobytes()) for path in paths]
+    for key, path in zip(keys, paths, strict=True):
         if key not in cache:
             rep_of_path = _repetition_of(model, draw, path)
             cache[key] = (_loadings(chosen, rep_of_path), _level(chosen, rep_of_path.mean))
-        z, level = cache[key]
-        paths.append(path)
-        if not chosen.terms:
-            log_probabilities.append(0.0)
-            continue
-        rows = len(chosen.terms)
-        z_driving = z[:, :, driving].reshape(rows, -1)
-        cov = z_driving @ z_driving.T
-        mean = level
-        log_probabilities.append(
-            log_condition_weight(
-                mean, cov, chosen.low, chosen.high, rng_path, CANDIDATE_SAMPLES
-            )
-        )
+    distinct = list(dict.fromkeys(keys))
+    rows = len(chosen.terms)
+    driven = [cache[key][0][:, :, driving].reshape(rows, -1) for key in distinct]
+    weights = log_condition_weights(
+        np.array([cache[key][1] for key in distinct]),
+        np.array([z @ z.T for z in driven]),
+        chosen.low,
+        chosen.high,
+        rng_path,
+        CANDIDATE_SAMPLES,
+    )
+    weight_of = dict(zip(distinct, weights, strict=True))
+    log_probabilities = np.array([weight_of[key] for key in keys])
     if np.all(np.isneginf(log_probabilities)):
         raise ContradictsModels()
     picked, ess = pick_latent(log_probabilities, rng_path)

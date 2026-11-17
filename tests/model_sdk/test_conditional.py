@@ -150,33 +150,61 @@ def test_the_box_probability_in_the_upper_tail_of_two_coordinates():
 
 
 def test_an_exact_condition_weighs_by_its_density():
-    from mst.model_sdk.conditional import log_condition_weight
+    from mst.model_sdk.conditional import log_condition_weights
 
     rng = np.random.default_rng(1)
     value = np.array([5.0])
-    calm = log_condition_weight(np.zeros(1), np.eye(1) * 0.25, value, value, rng, 8)
-    volatile = log_condition_weight(np.zeros(1), np.eye(1) * 4.0, value, value, rng, 8)
+    covs = np.array([np.eye(1) * 0.25, np.eye(1) * 4.0])
+    calm, volatile = log_condition_weights(np.zeros((2, 1)), covs, value, value, rng, 8)
     assert calm == pytest.approx(stats.norm.logpdf(5.0, scale=0.5), rel=1e-12)
     assert volatile == pytest.approx(stats.norm.logpdf(5.0, scale=2.0), rel=1e-12)
 
 
-def test_an_interval_weighs_given_the_exact_conditions():
-    from mst.model_sdk.conditional import log_condition_weight
+@pytest.mark.parametrize("rho", [0.8, -0.3])
+def test_an_interval_weighs_given_the_exact_conditions(rho):
+    """One exact and one interval row: the weight is the density of the exact value times the
+    probability of the interval given it, which a one-dimensional box gives exactly."""
+    from mst.model_sdk.conditional import log_condition_weights
 
     rng = np.random.default_rng(1)
-    cov = np.array([[1.0, 0.8], [0.8, 1.0]])
+    means = np.array([[0.0, 0.0], [0.5, -0.2]])
+    cov = np.array([[1.0, rho], [rho, 1.0]])
     low, high = np.array([2.0, 0.0]), np.array([2.0, 1.0])
-    given = stats.norm(loc=0.8 * 2.0, scale=np.sqrt(1 - 0.8**2))
-    expected = stats.norm.logpdf(2.0) + np.log(given.cdf(1.0) - given.cdf(0.0))
-    got = log_condition_weight(np.zeros(2), cov, low, high, rng, 8)
-    assert got == pytest.approx(expected, rel=1e-9)
+    got = log_condition_weights(means, np.array([cov, 2.0 * cov]), low, high, rng, 8)
+    for k, (mean, scale) in enumerate([(means[0], 1.0), (means[1], 2.0)]):
+        sd = np.sqrt(scale)
+        given = stats.norm(
+            loc=mean[1] + rho * (2.0 - mean[0]), scale=sd * np.sqrt(1 - rho**2)
+        )
+        expected = stats.norm.logpdf(2.0, loc=mean[0], scale=sd) + np.log(
+            given.cdf(1.0) - given.cdf(0.0)
+        )
+        assert got[k] == pytest.approx(expected, rel=1e-9)
 
 
 def test_intervals_alone_weigh_by_the_box_probability():
-    from mst.model_sdk.conditional import log_box_probability, log_condition_weight
+    from mst.model_sdk.conditional import log_box_probabilities, log_condition_weights
 
-    cov = np.array([[1.0, 0.3], [0.3, 2.0]])
+    covs = np.array([[[1.0, 0.3], [0.3, 2.0]], [[2.0, -0.5], [-0.5, 1.0]]])
+    means = np.array([[0.0, 0.0], [0.2, -0.4]])
     low, high = np.array([0.5, -1.0]), np.array([1.5, 0.0])
-    box = log_box_probability(np.zeros(2), cov, low, high, np.random.default_rng(3), 64)
-    got = log_condition_weight(np.zeros(2), cov, low, high, np.random.default_rng(3), 64)
-    assert got == box
+    box = log_box_probabilities(means, covs, low, high, np.random.default_rng(3), 64)
+    got = log_condition_weights(means, covs, low, high, np.random.default_rng(3), 64)
+    assert np.array_equal(got, box)
+
+
+def test_exact_conditions_the_covariance_does_not_move_weigh_by_the_box_alone():
+    """A candidate whose exact rows have a singular covariance carries no density there: its
+    weight is the box of the interval rows, while the other candidates keep their density."""
+    from mst.model_sdk.conditional import log_condition_weights
+
+    low, high = np.array([1.0, 1.0, 0.0]), np.array([1.0, 1.0, 2.0])
+    moving = np.eye(3)
+    stuck = np.eye(3)
+    stuck[0, 1] = stuck[1, 0] = 1.0  # the two exact rows are one combination
+    got = log_condition_weights(
+        np.zeros((2, 3)), np.array([moving, stuck]), low, high, np.random.default_rng(2), 8
+    )
+    box = np.log(stats.norm.cdf(2.0) - stats.norm.cdf(0.0))
+    assert got[0] == pytest.approx(2 * stats.norm.logpdf(1.0) + box, rel=1e-9)
+    assert got[1] == pytest.approx(box, rel=1e-9)

@@ -16,7 +16,7 @@ from mst.model_sdk import (
     ScenarioPlan,
     draw_driving,
 )
-from mst.model_sdk.conditional import log_condition_weight, pick_latent
+from mst.model_sdk.conditional import log_condition_weights, pick_latent
 
 CANDIDATE_SAMPLES = 64
 BRIDGE_STREAM = 7
@@ -266,15 +266,10 @@ def _candidate_rows(model, plan, affine, kept, low, high, seed, group, candidate
     scales = scale_candidates(
         model.nu, plan.horizon, candidates, rng, *_scale_law(model)
     )
-    rows, weights = [], []
-    for scale in scales:
-        z = affine.rows[kept] * _multipliers(scale, len(model.ids))
-        rows.append(z)
-        weights.append(
-            log_condition_weight(
-                affine.centre[kept], z @ z.T, low[kept], high[kept], rng, CANDIDATE_SAMPLES
-            )
-        )
+    rows = [affine.rows[kept] * _multipliers(scale, len(model.ids)) for scale in scales]
+    covs = np.array([z @ z.T for z in rows])
+    means = np.broadcast_to(affine.centre[kept], (len(rows), len(kept)))
+    weights = log_condition_weights(means, covs, low[kept], high[kept], rng, CANDIDATE_SAMPLES)
     return scales, rows, weights
 
 
