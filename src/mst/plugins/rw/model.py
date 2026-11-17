@@ -41,6 +41,8 @@ class JointWalk:
     previous: np.ndarray
     scale_persistence: np.ndarray
     scale_volatility: np.ndarray
+    scale_state: np.ndarray
+    """The deviation of every block's log scale from its mean in the last month of the panel."""
     diagnostics: dict
     tail: np.ndarray
     """The last months of the panel, from the latest one at which every variable was known."""
@@ -104,6 +106,7 @@ class RwModel(MacroModel):
             previous=np.asarray(arrays.get("previous", np.full(n, np.nan)), dtype=float),
             scale_persistence=np.array([item.get("persistence", 0.0) for item in scale_path]),
             scale_volatility=np.array([item.get("volatility", 0.0) for item in scale_path]),
+            scale_state=np.array([item.get("state", 0.0) for item in scale_path]),
             drift=arrays["drift"],
             scale=arrays["scale"],
             weights=arrays["weights"],

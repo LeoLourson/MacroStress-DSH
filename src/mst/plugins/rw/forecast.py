@@ -47,14 +47,23 @@ def transfer(scale: np.ndarray, interventions: tuple[int, ...]) -> tuple[np.ndar
 
 
 def scale_candidates(
-    nu: float, horizon: int, count: int, rng, phi: float = 0.0, sigma: float = 0.0
+    nu: float,
+    horizon: int,
+    count: int,
+    rng,
+    phi: float = 0.0,
+    sigma: float = 0.0,
+    state: float = np.nan,
 ) -> np.ndarray:
     """Common monthly scales: iid ``nu / chi_square(nu)`` or a log AR(1) path.
 
     With ``sigma = 0`` this is the Student scale of the law. With a positive volatility the
-    log scale follows ``s_t = phi s_{t-1} + sigma e_t`` from its stationary distribution, and
-    the level is set so that ``E[lambda] = nu / (nu - 2)``: the persistence reshapes the path,
-    it does not change the unconditional monthly covariance.
+    log scale follows ``s_t = phi s_{t-1} + sigma e_t``, and the level is set so that
+    ``E[lambda] = nu / (nu - 2)`` over the stationary distribution: the persistence reshapes
+    the path, it does not change the unconditional monthly covariance. The path starts from
+    ``state``, the deviation of the log scale in the last month of the panel, so a turbulent
+    month widens the next ones and a calm one narrows them; with an unknown (NaN) state it
+    starts from the stationary distribution.
     """
     if sigma <= 0:
         return nu / rng.chisquare(nu, size=(count, horizon))
@@ -62,12 +71,12 @@ def scale_candidates(
         raise ValueError("scale persistence must lie in [0, 1)")
     stationary = sigma**2 / (1 - phi**2)
     level = np.log(nu / (nu - 2)) - stationary / 2
-    state = np.empty((count, horizon + 1))
-    state[:, 0] = rng.normal(0, np.sqrt(stationary), count)
+    path = np.empty((count, horizon + 1))
+    path[:, 0] = rng.normal(0, np.sqrt(stationary), count) if np.isnan(state) else state
     noise = rng.normal(0, sigma, (count, horizon))
     for t in range(1, horizon + 1):
-        state[:, t] = phi * state[:, t - 1] + noise[:, t - 1]
-    return np.exp(level + state[:, 1:])
+        path[:, t] = phi * path[:, t - 1] + noise[:, t - 1]
+    return np.exp(level + path[:, 1:])
 
 
 def root_mean(nu, persistence, volatility) -> np.ndarray:
@@ -256,14 +265,15 @@ def _blocks(model) -> np.ndarray:
 
 def block_scales(model, horizon: int, count: int, rng) -> np.ndarray:
     """``count`` candidate paths of the multipliers, ``(count, horizon, blocks)``: every
-    block draws its own from its ``nu`` and, for the persistent law, its persistence and
-    volatility; the blocks are independent."""
+    block draws its own from its ``nu`` and, for the persistent law, its persistence,
+    volatility and state in the last month of the panel; the blocks are independent."""
     nu = np.atleast_1d(np.asarray(model.nu, dtype=float))
-    phi = np.broadcast_to(np.asarray(getattr(model, "scale_persistence", 0.0), float), nu.shape)
-    sigma = np.broadcast_to(np.asarray(getattr(model, "scale_volatility", 0.0), float), nu.shape)
+    phi = np.broadcast_to(np.asarray(model.scale_persistence, float), nu.shape)
+    sigma = np.broadcast_to(np.asarray(model.scale_volatility, float), nu.shape)
+    state = np.broadcast_to(np.asarray(model.scale_state, float), nu.shape)
     return np.stack(
         [
-            scale_candidates(nu[b], horizon, count, rng, phi[b], sigma[b])
+            scale_candidates(nu[b], horizon, count, rng, phi[b], sigma[b], state[b])
             for b in range(len(nu))
         ],
         axis=-1,
@@ -339,9 +349,7 @@ def _group_paths(model, plan, affine, *, group, seed, candidates, sweeps):
             pick = j
             eps = rng.standard_normal(affine.paths.shape[-1])
         scale = scales[pick]
-        path = affine.mean + np.einsum(
-            "tij,j->ti", affine.paths, eps * _multipliers(scale, blocks)
-        )
+        path = affine.mean + np.einsum("tij,j->ti", affine.paths, eps * _multipliers(scale, blocks))
         result.append(path)
         sizes.append(np.abs(eps.reshape(-1, n)[1:]).max(axis=1))
         chosen.append(scale)

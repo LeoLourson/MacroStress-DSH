@@ -69,10 +69,8 @@ class Spec(BaseModel):
     rather than a return to a fixed level.
     """
     stochastic_scale: bool = False
-    """Whether the common monthly scale follows the estimated log AR(1) path.
-
-    Off by default: the argument of the calibration is that the persistence does not change
-    the unconditional 12-month covariance, and the validation CRPS did not improve.
+    """Whether the monthly multiplier follows the estimated log AR(1) path from its state in
+    the last month of the panel, so that the band widens after a turbulent month.
     """
     sample_scale: bool = True
     """Whether the level of the innovation covariance is the sample covariance of changes.

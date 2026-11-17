@@ -4,9 +4,10 @@ from collections.abc import Sequence
 from datetime import date
 
 import numpy as np
-from scipy.optimize import minimize_scalar
+from scipy.optimize import brentq, minimize_scalar
 from scipy.special import gammaln
 from scipy.stats import norm, rankdata
+from scipy.stats import t as student
 
 from mst.macro.panel import Panel
 from mst.model_sdk import ShortHistory
@@ -417,25 +418,29 @@ def scale_path_parameters(weights: np.ndarray) -> dict:
     month of the same series gives the persistence and the vol-of-vol of the scale path. The
     implied scale is a posterior mean, so its variance is shrunk and the vol-of-vol is
     approximate. Missing months are skipped; a pair that is not two adjacent months is not
-    used, because the panel has no change for the missing month.
+    used, because the panel has no change for the missing month. ``state`` is the deviation of
+    the implied log scale from its mean in the last month of the panel, decayed by the
+    persistence over the months after the last one with a weight: the start of the forecast.
     """
     known = np.flatnonzero(np.isfinite(weights))
     if len(known) < 4:
-        return {"persistence": 0.0, "volatility": 0.0, "months": int(len(known))}
+        return {"persistence": 0.0, "volatility": 0.0, "state": 0.0, "months": int(len(known))}
     implied = np.log(1.0 / weights[known])
     previous, current = implied[:-1], implied[1:]
     adjacent = np.diff(known) == 1
     previous, current = previous[adjacent], current[adjacent]
     if len(previous) < 3:
-        return {"persistence": 0.0, "volatility": 0.0, "months": int(len(known))}
+        return {"persistence": 0.0, "volatility": 0.0, "state": 0.0, "months": int(len(known))}
     design = np.column_stack([np.ones(len(previous)), previous])
     coefficient = np.linalg.lstsq(design, current, rcond=None)[0]
     residual = current - design @ coefficient
     persistence = float(np.clip(coefficient[1], 0.0, 0.98))
     volatility = float(np.std(residual, ddof=2))
+    after = len(weights) - 1 - int(known[-1])
     return {
         "persistence": persistence,
         "volatility": volatility,
+        "state": float((implied[-1] - implied.mean()) * persistence**after),
         "months": int(len(known)),
         "intercept": float(coefficient[0]),
     }
@@ -465,6 +470,30 @@ def block_laws(
         found.append(nu)
         weights.append(weight)
     return np.array(found), np.column_stack(weights)
+
+
+def band_nu(data: np.ndarray, spec: Spec) -> float:
+    """``nu`` of the multiplier when the scale is the sample covariance: the one whose
+    unit-variance Student band p5..p95 holds 90 % of the changes.
+
+    Every change is standardized by the sample mean and standard deviation of its variable, the
+    second moment the sample covariance gives the law, and the 90 % quantile of their absolute
+    values over all variables is the half-width of the band. The likelihood ``nu`` of the joint
+    law answers the largest months: on the panel of 2016 it is 2.5, the band is 1.14 standard
+    deviations wide on each side and 18 % of the changes lie outside it.
+    """
+    z = (data - np.nanmean(data, axis=0)) / np.nanstd(data, axis=0, ddof=1)
+    width = float(np.nanquantile(np.abs(z), 0.90))
+    low, high = spec.nu_bounds
+
+    def half(nu: float) -> float:
+        return float(student.ppf(0.95, nu) * np.sqrt((nu - 2) / nu))
+
+    if width <= half(low):
+        return low
+    if width >= half(high):
+        return high
+    return float(brentq(lambda nu: half(nu) - width, low, high))
 
 
 def sample_covariance(
@@ -594,10 +623,22 @@ def estimate(panel: Panel, spec: Spec, *, left_out: Sequence[str] = ()) -> tuple
         block_nu, block_weights = np.array([nu]), weights[:, None]
     else:
         block_nu, block_weights = block_laws(data, mu, blocks, ordinary, spec)
+    if spec.sample_scale:
+        block_nu = np.array(
+            [
+                band_nu(data[:, [i for i in ordinary if blocks[i] == block]], spec)
+                for block in range(len(block_nu))
+            ]
+        )
     dynamics = [
         scale_path_parameters(column)
         if spec.stochastic_scale
-        else {"persistence": 0.0, "volatility": 0.0, "months": int(np.isfinite(column).sum())}
+        else {
+            "persistence": 0.0,
+            "volatility": 0.0,
+            "state": 0.0,
+            "months": int(np.isfinite(column).sum()),
+        }
         for column in block_weights.T
     ]
     mix = mixing(

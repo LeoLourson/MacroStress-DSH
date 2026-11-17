@@ -37,6 +37,9 @@ def model(scale=None, start_sd=None):
         start_mean=np.array([10.0, 20.0]),
         start_sd=np.zeros(2) if start_sd is None else start_sd,
         tail=np.array([[10.0, 20.0]]),
+        scale_persistence=0.0,
+        scale_volatility=0.0,
+        scale_state=0.0,
     )
 
 
@@ -181,13 +184,21 @@ def test_inverse_chi_square_scale_mean():
 
 
 def test_persistent_scale_keeps_the_unconditional_mean_and_correlates_months():
-    scales = scale_candidates(
-        8, 12, 40000, np.random.default_rng(6), phi=0.9, sigma=0.3
-    )
+    scales = scale_candidates(8, 12, 40000, np.random.default_rng(6), phi=0.9, sigma=0.3)
     assert_allclose(scales.mean(axis=0), 8 / 6, rtol=0.03)
     assert np.corrcoef(scales[:, 0], scales[:, 1])[0, 1] > 0.5
     with pytest.raises(ValueError, match="persistence"):
         scale_candidates(8, 2, 10, np.random.default_rng(1), phi=1.0, sigma=0.3)
+
+
+def test_persistent_scale_starts_from_the_state_of_the_last_month():
+    def first(state):
+        draws = scale_candidates(8, 12, 40000, np.random.default_rng(6), 0.9, 0.3, state)
+        return draws[:, 0].mean(), draws[:, -1].mean()
+
+    calm, turbulent = first(-0.5), first(0.5)
+    assert turbulent[0] > 2 * calm[0]
+    assert turbulent[1] / calm[1] < turbulent[0] / calm[0]
 
 
 def test_persistence_centres_the_base_law_and_narrows_it():
@@ -363,6 +374,7 @@ def test_mixing_is_the_mean_product_of_the_drawn_multipliers(persistence, volati
         nu=np.array([6.0, 9.0]),
         scale_persistence=np.full(2, persistence),
         scale_volatility=np.full(2, volatility),
+        scale_state=np.full(2, np.nan),
     )
     draws = block_scales(m, 1, 400000, np.random.default_rng(3))[:, 0]
     blocks = np.array([0, 0, 1])

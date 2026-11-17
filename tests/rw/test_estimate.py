@@ -2,12 +2,14 @@ from datetime import date
 
 import numpy as np
 import pytest
+from scipy.stats import t as student
 from numpy.testing import assert_allclose, assert_array_equal
 
 from mst.macro.panel import Panel, months_between
 from mst.plugins.rw.estimate import (
     _groups,
     _scale_step,
+    band_nu,
     changes,
     drift,
     ecme,
@@ -129,6 +131,21 @@ def test_ecme_gaussian_nu_reaches_upper_bound():
     _, nu, _, trace = ecme(d, np.zeros(2), Spec(drifts=[], breaks=[]))
     assert nu > 59.99
     assert np.diff(trace).min() >= -1e-8
+
+
+def test_band_nu_puts_ninety_percent_of_the_changes_inside_p5_p95():
+    rng = np.random.default_rng(93)
+    spec = Spec(drifts=[], breaks=[])
+    d = rng.standard_t(5, size=(20000, 2)) * [1.0, 30.0]
+    nu = band_nu(d, spec)
+    z = (d - d.mean(axis=0)) / d.std(axis=0, ddof=1)
+    half = student.ppf(0.95, nu) * np.sqrt((nu - 2) / nu)
+    assert nu == pytest.approx(5, rel=0.25)
+    assert np.mean(np.abs(z) > half) == pytest.approx(0.10, abs=0.002)
+    assert band_nu(rng.normal(size=(4000, 2)), spec) == 60.0
+    rare = rng.normal(size=(600, 3))
+    rare[::25] *= 10
+    assert band_nu(rare, spec) == 2.5
 
 
 def test_ecme_stops_on_nonconvergence_and_reports_likelihood_delta():
@@ -335,6 +352,12 @@ def test_scale_path_parameters_recovers_a_log_ar1():
     found = scale_path_parameters(weights)
     assert abs(found["persistence"] - truth) < 0.06
     assert abs(found["volatility"] - volatility) < 0.05
+    assert found["state"] == pytest.approx(state[-1] - state.mean(), abs=1e-9)
+    weights[-2:] = np.nan
+    decayed = scale_path_parameters(weights)["state"]
+    assert decayed == pytest.approx(
+        (state[-3] - state[:-2].mean()) * found["persistence"] ** 2, rel=0.2
+    )
 
 
 def ar_changes(rng, phi, count, sd=1.0):
