@@ -40,8 +40,19 @@ switching = "mean_covariance"
 # explosive. On the panel of 2026-09-30 with mu = 1 no draw kept the companion radius under
 # rho_max (median 1.066 with delta, 1.27 without it); without mu the median is 1.011 and a
 # quarter of the draws are identified. The BVAR escapes it by fitting trending series in
-# differences.
-delta = 1.0
+# differences, and so does this model now (below); with differences both rows are off, since
+# they would read the level of a differenced variable as its monthly change.
+# The variables whose equation runs on monthly changes; the version keeps the equivalent VAR
+# in levels with one lag more. Every variable but the VIX and the spreads, which the prior
+# returns to their mean, as in the BVAR. In levels the backtest of 2026-11-17 refused 16 of 32
+# episodes and 24 of 27 dates of the rolling grid: on the histories before 2020 no draw kept
+# the companion radius under rho_max.
+differences = [
+    "gl.brent", "gl.fed_rate", "gl.ust_10y",
+    "ru.key_rate", "ru.ruonia", "ru.ofz_1y", "ru.ofz_5y", "ru.ofz_10y",
+    "ru.usdrub", "ru.cnyrub", "ru.cpi", "ru.output", "ru.unemployment", "ru.real_wage",
+    "ru.retail", "ru.credit", "ru.mortgage_rate", "ru.housing_price", "ru.imoex",
+]
 # Dirichlet prior on every row of the transition matrix: `transition_stay` on staying in
 # the regime, `transition_switch` on leaving it for each other regime. The stress episodes
 # of the Russian panel are short, so the prior leans on persistence: a row of raw counts

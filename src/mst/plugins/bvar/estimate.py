@@ -47,6 +47,7 @@ from scipy.stats import invwishart
 
 from mst.macro.panel import Panel, shift
 from mst.model_sdk import ShortHistory
+from mst.model_sdk.differences import changes, levels_lags
 from mst.model_sdk.missing import draw_missing
 
 from . import sv
@@ -179,32 +180,14 @@ def differenced(panel: Panel, spec: Spec) -> np.ndarray:
     return np.array([float(id_ in spec.differences) for id_ in panel.ids])
 
 
-def changes(y: np.ndarray, s: np.ndarray) -> np.ndarray:
-    """``w_t = y_t - s y_{t-1}`` from the second month on: changes where ``s`` is one, levels
-    elsewhere. Without differences ``y`` itself, every month kept."""
-    if not s.any():
-        return y
-    return y[1:] - s * y[:-1]
-
-
 def levels_form(coefficients: np.ndarray, s: np.ndarray, p: int) -> np.ndarray:
-    """The VAR in levels with ``p + 1`` lags equivalent to ``p`` lags on ``w = changes(y, s)``.
-
-    ``y_t = S y_{t-1} + c + sum_k G_k (y_{t-k} - S y_{t-k-1})``, so ``A_1 = S + G_1``,
-    ``A_k = G_k - G_{k-1} S`` and ``A_{p+1} = -G_p S``; the constant and the dummy terms are
-    those of ``w``. Without differences the coefficients are returned as they are.
-    """
+    """The VAR in levels with ``p + 1`` lags equivalent to ``p`` lags on ``w = changes(y, s)``
+    (``mst.model_sdk.differences``); the constant and the dummy terms are those of ``w``.
+    Without differences the coefficients are returned as they are."""
     if not s.any():
         return coefficients
     const, lags, dummy = split(coefficients, p)
-    n = len(const)
-    scale = np.diag(s)
-    levels = np.zeros((p + 1, n, n))
-    levels[0] = scale + lags[0]
-    for k in range(1, p):
-        levels[k] = lags[k] - lags[k - 1] @ scale
-    levels[p] = -lags[p - 1] @ scale
-    return np.hstack([const[:, None], *levels, dummy])
+    return np.hstack([const[:, None], *levels_lags(lags, s), dummy])
 
 
 def dummy_columns(spec: Spec, last: date) -> list[Dummy]:

@@ -102,7 +102,9 @@ $$
 \operatorname{sd}\big(A_j[i,i']\big)=\frac{\lambda}{j}\cdot\frac{\sigma_i}{\sigma_{i'}}.
 $$
 
-Here $\lambda$ is the overall tightness (`tightness`), $\sigma_i$ the residual scale of variable $i$, $\delta_i=1$ for a nonstationary variable and $\delta_i=0$ for a stationary one. The $1/j$ form, the factor for other variables' lags, how $\sigma_i$ is obtained and the list of stationary variables are not set by the design for `msvar.markov` (in `bvar.sv` `gl.vix` and the three spreads are stationary). The intercept gets a diffuse assumption (not set by the design).
+Here $\lambda$ is the overall tightness (`tightness`), $\sigma_i$ the residual scale of variable $i$, $\delta_i=1$ for a variable in levels that does not revert to its mean and $\delta_i=0$ for a stationary one or one on changes. The $1/j$ form, the factor for other variables' lags, how $\sigma_i$ is obtained and the list of stationary variables are not set by the design for `msvar.markov` (in `bvar.sv` `gl.vix` and the three spreads are stationary). The intercept gets a diffuse assumption (not set by the design).
+
+The equations of the variables listed in `differences` run on monthly changes, the others on levels. Let $S$ be the diagonal matrix with ones for the variables on changes. Then $p$ lags $G_k$ on $w_t=y_t-Sy_{t-1}$ equal a VAR in levels with $p+1$ lags $A_1=S+G_1$, $A_k=G_k-G_{k-1}S$, $A_{p+1}=-G_pS$, and the intercept becomes a monthly drift. A version keeps the levels form, so the forecast, the missing months and the identification read it as before. The unit root of a variable on changes is exact in every parameter draw. In levels, on the histories before 2020 no draw kept the spectral radius under `rho_max`, and the backtest of 2026-11-17 refused 16 of 32 episodes.
 
 Dummy observations (Sims, Zha, 1998; Giannone, Lenza, Primiceri, 2015) are added to the regression because the 2026-10-30 audit found that, with regressors in levels, the Minnesota weight is $10^{-5}$ to $10^{-2}$ times its nominal value, while these dummies act on levels and pull the system toward unit roots and away from explosive ones. Let $\bar y_0$ be the mean of the first $p$ observations of the sample, $\phi_{\mathrm{sc}}$ the sum-of-coefficients weight (`mu`) and $\phi_{\mathrm{io}}$ the initial-observation weight (`delta`). For each variable $i$ the sum-of-coefficients dummy adds the row
 
@@ -117,6 +119,8 @@ y^{\ast}=\frac{\bar y_0^\top}{\phi_{\mathrm{io}}},\qquad x^{\ast}=\frac{1}{\phi_
 $$
 
 In the Giannone, Lenza, Primiceri notation a smaller weight means a stronger pull; the design does not say which convention `spec.toml` follows (open questions). Candidates: $\lambda\in\lbrace0.05;\ 0.1;\ 0.2\rbrace$, $\phi_{\mathrm{sc}}=\phi_{\mathrm{io}}\in\lbrace1;\ 5\rbrace$, and the previous assumption as reference; the winner is chosen by the relative CRPS of the unconditional forecast against the random walk on the tuning half of the date grid.
+
+The dummy rows are written for levels: in an equation on changes they would read the level of a variable as its monthly change. With a non-empty `differences` the estimation refuses them, and the current configuration has them off.
 
 `msvar.markov` has no crisis-month dummies (2014-11, 2022-02, 2022-03, the 2021-01 step): the stress regime absorbs crisis months. The 2021-01 splice of the spreads is therefore not modelled separately either (open questions).
 

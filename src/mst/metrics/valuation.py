@@ -90,9 +90,9 @@ def realized_paths(
     values are not out yet, an earlier one, and holds what the calculation date knows: the
     panel's last row for a macro variable and the latest value of the driver's series known on
     ``as_of`` for a month up to ``t = 0``. Months ``t = 1 .. H`` are ``months`` exactly, the
-    months after ``t = 0`` as the window builds them, and hold the facts known on ``known_on``; the macro values come from
-    ``realized`` ``(H, n)`` in the model scale, in the order of ``panel.ids``, and are mapped back
-    through their registry transforms. Drivers in their own units are read from ``store``.
+    months after ``t = 0`` as the window builds them, and hold the facts known on ``known_on``;
+    the macro values come from ``realized`` ``(H, n)`` in the model scale, in the order of
+    ``panel.ids``, and are mapped back through their registry transforms. Drivers in their own units are read from ``store``.
 
     ``missing`` names every ``<series or id>/<month>`` gap of the window, including gaps in the
     middle of it and at its ends, and every served driver without a series of its own. A gap

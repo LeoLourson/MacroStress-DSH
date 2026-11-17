@@ -80,6 +80,11 @@ class MSVarModel(MacroModel):
             as_of=context.as_of,
             seasonal=seasonal,
         )
+        # A variable the platform left out as too short has no equation to difference; any
+        # other name the panel lacks stays and is refused as unknown.
+        spec = spec.model_copy(
+            update={"differences": [i for i in spec.differences if i not in context.left_out]}
+        )
         posterior = estimate(panel, spec, len(signs.regimes))
         model = identify(
             posterior,
@@ -92,7 +97,6 @@ class MSVarModel(MacroModel):
         return parts(model, spec, panel, context.as_of)
 
     def load(self, meta: dict, arrays: dict) -> Posterior:
-        spec = Spec.model_validate(meta["spec"])
         regimes = list(meta["regimes"])
         # The J set holds the economic shocks and the regime elements; only the regime
         # elements are regimes, the rest are the columns of B.
@@ -101,7 +105,8 @@ class MSVarModel(MacroModel):
             ids=meta["ids"],
             n_global=meta["n_global"],
             months=[date.fromisoformat(m) for m in meta["months"]],
-            lags_count=spec.lags,
+            # A version with differences keeps its levels form, one lag longer than the spec.
+            lags_count=arrays["lags"].shape[2],
             n_regimes=len(regimes),
             shocks=shocks,
             regime_ids=regimes,

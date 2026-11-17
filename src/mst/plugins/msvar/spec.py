@@ -40,6 +40,9 @@ class Spec(Contract):
     lags: Count
     tightness: Positive
     stationary: list[str] = []
+    differences: list[str] = []
+    """The variables whose equation runs on monthly changes; the version keeps the equivalent
+    VAR in levels with one lag more (``mst.model_sdk.differences``)."""
     sign_lag: Annotated[int, Field(strict=True, ge=0)]
     rotation_tries: Count
     rho_max: Annotated[float | None, Field(strict=True, ge=1.0)] = None

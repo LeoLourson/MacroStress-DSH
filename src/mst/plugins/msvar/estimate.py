@@ -68,6 +68,7 @@ from scipy.stats import invwishart
 
 from mst.macro.panel import Panel
 from mst.model_sdk import ShortHistory
+from mst.model_sdk.differences import changes, levels_lags
 from mst.model_sdk.missing import draw_missing
 
 from .spec import Spec
@@ -188,7 +189,9 @@ def minnesota(panel: Panel, spec: Spec) -> Prior:
     mean = np.zeros((n, 1 + n * p))
     var = np.full(mean.shape, LOOSE)
     for i, id_ in enumerate(panel.ids):
-        mean[i, 1 + i] = 0.0 if id_ in spec.stationary else 1.0
+        # A change has no own persistence to carry by default; a level keeps its last value.
+        level_walk = id_ not in spec.stationary and id_ not in spec.differences
+        mean[i, 1 + i] = 1.0 if level_walk else 0.0
     for lag in range(1, p + 1):
         block = slice(1 + (lag - 1) * n, 1 + lag * n)
         var[:, block] = (spec.tightness / (lag * sigma[None, :])) ** 2
@@ -200,6 +203,24 @@ def minnesota(panel: Panel, spec: Spec) -> Prior:
         allowed(n, panel.n_global, p),
         *(rows if rows else (None, None)),
     )
+
+
+def differenced(panel: Panel, spec: Spec) -> np.ndarray:
+    """``s`` (n,): one for a variable whose equation runs on monthly changes, else nought."""
+    unknown = set(spec.differences) - set(panel.ids)
+    if unknown:
+        raise ValueError(f"differences names unknown variables: {', '.join(sorted(unknown))}")
+    return np.array([float(id_ in spec.differences) for id_ in panel.ids])
+
+
+def levels_form(coefficients: np.ndarray, s: np.ndarray, p: int) -> np.ndarray:
+    """One regime's VAR in levels with ``p + 1`` lags, equivalent to its ``p`` lags on
+    ``w = changes(y, s)``; the constant is that of ``w``. Without differences the
+    coefficients are returned as they are."""
+    if not s.any():
+        return coefficients
+    const, lags = split(coefficients, p)
+    return np.hstack([const[:, None], *levels_lags(lags, s)])
 
 
 def fill(y: np.ndarray) -> np.ndarray:
@@ -502,15 +523,15 @@ def impute(
     return draw_missing(y, missing, equation, precisions, intercept, rng)
 
 
-def _initial(panel: Panel, prior: Prior, spec: Spec, n_regimes: int):
+def _initial(panel: Panel, prior: Prior, spec: Spec, n_regimes: int, s: np.ndarray):
     """The starting split: one VAR over the whole panel, its months ordered by residual size.
 
     The quietest months go to the first regime, so the starting labels already agree with the
     volatility order the sampler enforces.
     """
     p, n = spec.lags, len(panel.ids)
-    filled = fill(panel.y)
-    x, target = regressors(filled, p), filled[p:]
+    w = changes(fill(panel.y), s)
+    x, target = regressors(w, p), w[p:]
     coefficients = np.zeros((n, x.shape[1]))
     for i in range(n):
         columns = prior.mask[i]
@@ -536,19 +557,30 @@ def estimate(panel: Panel, spec: Spec, n_regimes: int) -> Posterior:
         raise ValueError("the model needs both a global and a Russian block")
     if n_regimes < 2:
         raise ValueError("a switching model needs at least two regimes")
+    s = differenced(panel, spec)
+    if s.any() and (spec.mu is not None or spec.delta is not None):
+        raise ValueError(
+            "the dummy rows mu and delta are written for levels: with differences they would "
+            "read the levels of a differenced variable as its monthly change, so turn them off"
+        )
     prior = minnesota(panel, spec)
     rng = np.random.default_rng(spec.sampler.seed)
     p, n, m = spec.lags, len(panel.ids), n_regimes
+    # The sampler fits p lags of w = changes(y, s); the levels form has q lags and is what the
+    # unknown months are drawn on and what the version keeps.
+    q = p + 1 if s.any() else p
     missing = np.isnan(panel.y)
-    coefficients, sigmas, transition, states = _initial(panel, prior, spec, n_regimes)
+    coefficients, sigmas, transition, states = _initial(panel, prior, spec, n_regimes, s)
     identity = np.eye(n)
     saved = []
     for keep in _keep(spec):
         factors = [unit_lower(sigma) for sigma in sigmas]
         a = [solve_triangular(c, identity, lower=True, unit_diagonal=True) for c, _ in factors]
         logvar = [h for _, h in factors]
-        y = impute(panel.y, missing, states, coefficients, a, logvar, p, rng)
-        x, target = regressors(y, p), y[p:]
+        levels = [levels_form(c, s, p) for c in coefficients]
+        y = impute(panel.y, missing, states, levels, a, logvar, q, rng)
+        w = changes(y, s)
+        x, target = regressors(w, p), w[p:]
         if spec.switching == "mean_covariance":
             coefficients = _mean_covariance(target, x, states, coefficients, a, logvar, prior, rng)
         else:
@@ -594,25 +626,26 @@ def estimate(panel: Panel, spec: Spec, n_regimes: int) -> Posterior:
         if keep:
             saved.append(
                 {
-                    "coefficients": np.stack(coefficients),
+                    "coefficients": np.stack([levels_form(c, s, p) for c in coefficients]),
                     "chol": np.stack([c for c, _ in factors]),
                     "logvar": np.stack([h for _, h in factors]),
                     "transition": transition,
                     "states": states,
-                    "history": y[-p:],
+                    "history": y[-q:],
                 }
             )
     share = np.mean(
         [[(draw["states"] == j).mean() for j in range(m)] for draw in saved], axis=0
     )
     diagnostics = {"missing": int(missing.sum()), "regime_share": list(share)}
-    return _posterior(panel, spec, saved, diagnostics)
+    return _posterior(panel, saved, diagnostics)
 
 
-def _posterior(panel: Panel, spec: Spec, saved: list[dict], diagnostics: dict) -> Posterior:
+def _posterior(panel: Panel, saved: list[dict], diagnostics: dict) -> Posterior:
     stacked = {name: np.array([draw[name] for draw in saved]) for name in saved[0]}
-    p, n = spec.lags, len(panel.ids)
-    coefficients = stacked["coefficients"]  # (S, m, n, 1 + n p)
+    coefficients = stacked["coefficients"]  # (S, m, n, 1 + n q), the levels form
+    n = len(panel.ids)
+    p = (coefficients.shape[-1] - 1) // n
     count, regimes = coefficients.shape[0], coefficients.shape[1]
     lags = (
         coefficients[:, :, :, 1 : 1 + n * p]
