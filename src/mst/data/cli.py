@@ -2,10 +2,12 @@
 
 ::
 
-  python -m mst.data update [SERIES ...] --workspace DIR
+  python -m mst.data update [SERIES ...] --workspace DIR [--start YYYY-MM-DD]
 
 ``update`` fetches every series of ``src/mst/data/sources.toml`` (or only the named ones) from
-January 2012 on and adds the new versions to ``<workspace>/series/<id>.csv``. It sends requests
+``--start`` on, January 2012 by default, and adds the new versions to
+``<workspace>/series/<id>.csv``. An earlier start fills the months before the stored history
+as the first fetch of a series does: each is dated by its publication lag. It sends requests
 only to the sources named there and exits with 1 if any series failed.
 """
 
@@ -23,8 +25,9 @@ from .store import SeriesStore
 from .update import update
 
 START = date(2012, 1, 1)
-"""T0, the first month of history of the macro model
-(docs/concept/bvar-method-legacy.md, 4.1)."""
+"""The first month a routine update fetches: T0 of the macro models
+(docs/concept/bvar-method-legacy.md, 4.1). The yardsticks of a backtest read the longer
+history an update with an earlier ``--start`` stores."""
 
 ROOTS_PATH = SOURCES_PATH.with_name("mintsifry-roots.pem")
 """Roots and sub CAs of the Russian Trusted Root CA (Mintsifry), which signs rosstat.gov.ru."""
@@ -52,6 +55,9 @@ def main(argv: list[str] | None = None) -> int:
     run = commands.add_parser("update", help="fetch series into the workspace")
     run.add_argument("series", nargs="*", help="series ids; all by default")
     run.add_argument("--workspace", required=True, type=Path)
+    run.add_argument(
+        "--start", type=date.fromisoformat, default=START, help="first month, YYYY-MM-DD"
+    )
     args = parser.parse_args(argv)
 
     workspace = Workspace(args.workspace)
@@ -63,7 +69,7 @@ def main(argv: list[str] | None = None) -> int:
 
     store = SeriesStore(workspace.series)
     with client() as http:
-        outcome = update(store, chosen, http, fetched_on=date.today(), start=START)
+        outcome = update(store, chosen, http, fetched_on=date.today(), start=args.start)
     for series, added in outcome.added.items():
         print(f"{series}: +{added}")
     for series, reason in outcome.failed.items():

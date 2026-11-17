@@ -49,16 +49,18 @@ def new_versions(
     """Rows that ``fetched`` adds to a series whose stored rows are ``known``.
 
     A month that has not ended by ``fetched_on`` is skipped: its value is not final. The first
-    fetch of a series dates each month by its end plus ``lag_days``; if the source revises the
-    series, these rows carry the latest version under an estimated date and are approximate.
-    Later fetches date new months and changed values by ``fetched_on``.
+    fetch of a series, and a fetch that reaches months before its first stored one, date each
+    such month by its end plus ``lag_days``; if the source revises the series, these rows carry
+    the latest version under an estimated date and are approximate. Later fetches date new
+    months and changed values by ``fetched_on``.
     """
     latest = {row.month: row.value for row in sorted(known, key=lambda row: row.published)}
-    backfill = not known
+    first = min(latest, default=None)
     rows = []
     for month, value in sorted(fetched.items()):
         if month_end(month) >= fetched_on or latest.get(month) == value:
             continue
+        backfill = first is None or month < first
         if month in latest or not backfill and revised:
             rows.append(Observation(month, value, fetched_on, False))
         else:

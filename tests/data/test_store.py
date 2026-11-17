@@ -82,6 +82,18 @@ def test_after_backfill_new_months_and_revisions_are_dated_by_the_fetch():
     assert rows == [obs(JAN, 1.1, fetched_on), obs(FEB, 2.0, fetched_on)]
 
 
+def test_months_before_the_stored_history_are_a_backfill_too():
+    known = [obs(FEB, 2.0, date(2024, 3, 20), True)]
+    rows = new_versions(
+        known,
+        {JAN: 1.0, FEB: 2.0, MAR: 3.0},
+        lag_days=20,
+        revised=True,
+        fetched_on=date(2024, 5, 2),
+    )
+    assert rows == [obs(JAN, 1.0, date(2024, 2, 20), True), obs(MAR, 3.0, date(2024, 5, 2))]
+
+
 def test_repeated_fetch_adds_nothing():
     known = [obs(JAN, 1.0, date(2024, 2, 20), True), obs(JAN, 1.1, date(2024, 4, 2))]
     assert (

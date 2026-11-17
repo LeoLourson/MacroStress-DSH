@@ -3,10 +3,10 @@
 Monthly series with the publication date of each value, and the loaders that get them. How value versions are stored is described in [../../../docs/concept/architecture.en.md](../../../docs/concept/architecture.en.md#series-and-publication-dates).
 
 ```powershell
-python -m mst.data update [SERIES ...] --workspace DIR
+python -m mst.data update [SERIES ...] --workspace DIR [--start YYYY-MM-DD]
 ```
 
-The command downloads from January 2012 all series of `sources.toml` (or only the named ones) and adds new versions to `<workspace>/series/<id>.csv`. Exit code 1 means some series failed to download; the others are saved anyway. Requests go only to the sources in `sources.toml`.
+The command downloads from January 2012, or from `--start`, all series of `sources.toml` (or only the named ones) and adds new versions to `<workspace>/series/<id>.csv`. Months before the stored history are dated by the series' publication lag, as on its first download, so a calculation on a past date sees them. The admission rules of the backtest read the longer history; the models estimate from the month of their own specification. Exit code 1 means some series failed to download; the others are saved anyway. Requests go only to the sources in `sources.toml`.
 
 | File | What it does |
 |---|---|

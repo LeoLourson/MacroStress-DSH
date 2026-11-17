@@ -5,7 +5,7 @@ import httpx
 from mst.data.release import Release
 from mst.data.sources import load_sources
 from mst.data.store import SeriesStore
-from mst.data.update import update
+from mst.data.update import Outcome, update
 from mst.macro.registry import load_registry
 
 
@@ -45,3 +45,19 @@ def test_update_stores_new_rows_once_and_reports_failures_per_series(tmp_path):
 def test_every_source_feeds_a_registered_variable():
     variables = {variable.id for variable in load_registry().variables}
     assert set(load_sources()) <= variables
+
+
+def test_the_command_fetches_from_the_month_it_is_given(tmp_path, monkeypatch):
+    from mst.data import cli
+
+    asked = []
+
+    def recording(store, sources, http, *, fetched_on, start):
+        asked.append(start)
+        return Outcome()
+
+    monkeypatch.setattr(cli, "update", recording)
+    workspace = ["--workspace", str(tmp_path)]
+    assert cli.main(["update", "gl.vix", *workspace, "--start", "1990-01-01"]) == 0
+    assert cli.main(["update", "gl.vix", *workspace]) == 0
+    assert asked == [date(1990, 1, 1), cli.START]
