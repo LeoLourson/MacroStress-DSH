@@ -110,6 +110,7 @@ def test_load_of_a_version_without_the_new_arrays_keeps_the_random_walk():
         "drift": np.array([0.1, 0.0]),
         "scale": np.eye(2),
         "weights": np.array([1.0]),
+        "blocks": np.zeros(2, dtype=int),
         "start_mean": np.zeros(2),
         "start_sd": np.zeros(2),
         "tail": np.zeros((1, 2)),

@@ -1,6 +1,7 @@
 """Missing-data Student ECME and the housing interval approximation."""
 
 from collections.abc import Sequence
+from datetime import date
 
 import numpy as np
 from scipy.optimize import minimize_scalar
@@ -10,6 +11,7 @@ from scipy.stats import norm, rankdata
 from mst.macro.panel import Panel
 from mst.model_sdk import ShortHistory
 
+from .forecast import mixing
 from .spec import Spec
 
 HOUSING = "ru.housing_price"
@@ -278,15 +280,15 @@ def _intervals(panel: Panel, index: int, spec: Spec) -> list[tuple[int, int, int
     return intervals
 
 
-def _housing_row(
-    panel: Panel, mu: np.ndarray, scale: np.ndarray, nu: float, spec: Spec
-) -> np.ndarray:
+def _housing_row(panel: Panel, mu: np.ndarray, mix: np.ndarray, spec: Spec) -> np.ndarray:
+    """The housing row of the scale: the covariances of the intervals per month over
+    ``mix``, the housing row of ``mixing``."""
     h = panel.ids.index(HOUSING)
     intervals = _intervals(panel, h, spec)
     residuals = [(a, b, k, panel.y[b, h] - panel.y[a, h] - k * mu[h]) for a, b, k in intervals]
     variance = np.mean([residual**2 / k for _, _, k, residual in residuals])
     row = np.zeros(len(panel.ids))
-    row[h] = (nu - 2) / nu * variance
+    row[h] = variance / mix[h]
     for i in range(len(panel.ids)):
         if i != h:
             breaks = [item.month for item in spec.breaks if panel.ids[i] in item.variables]
@@ -296,15 +298,17 @@ def _housing_row(
                 if np.isfinite(panel.y[[a, b], i]).all()
                 and not any(panel.months[a] < month <= panel.months[b] for month in breaks)
             ]
-            row[i] = (nu - 2) / nu * np.mean(shared) if shared else 0
+            row[i] = np.mean(shared) / mix[i] if shared else 0
     return row
 
 
-def housing(panel: Panel, mu: np.ndarray, scale: np.ndarray, nu: float, spec: Spec) -> np.ndarray:
+def housing(
+    panel: Panel, mu: np.ndarray, scale: np.ndarray, mix: np.ndarray, spec: Spec
+) -> np.ndarray:
     """Insert housing into a full-size scale matrix, preserving its diagonal."""
     result = scale.copy()
     h = panel.ids.index(HOUSING)
-    row = _housing_row(panel, mu, scale, nu, spec)
+    row = _housing_row(panel, mu, mix, spec)
     result[h, :] = row
     result[:, h] = row
     return _positive_scale(result, spec.eig_floor)
@@ -351,6 +355,14 @@ def mean_reversion(panel: Panel, spec: Spec) -> tuple[np.ndarray, np.ndarray, li
     return persistence, neutral, report
 
 
+def scale_window(panel: Panel, spec: Spec) -> date:
+    """The first change month of the covariance and the momentum: the start of the regime the
+    panel ends in, or ``regime_months`` before its end when the regime is younger."""
+    current = max((month for month in spec.regimes if month <= panel.months[-1]), default=None)
+    shortest = panel.months[max(0, len(panel.months) - spec.regime_months)]
+    return max(panel.months[0], min(current or panel.months[0], shortest))
+
+
 def variance_ratio(phi: float, horizon: int) -> float:
     """``Var`` of a sum of ``horizon`` stationary AR(1) changes over ``horizon`` single ones."""
     return 1.0 + 2.0 * sum((1 - k / horizon) * phi**k for k in range(1, horizon))
@@ -366,7 +378,7 @@ def momentum(panel: Panel, data: np.ndarray, spec: Spec) -> tuple[np.ndarray, li
     """The AR(1) coefficient of the monthly changes of every variable, and how it was chosen.
 
     ``phi`` solves ``variance_ratio(phi, h) = Var(h-month change) / (h Var(monthly change))``
-    over the change months from ``scale_start`` on, clipped to ``momentum_bound``. Matching
+    over all the change months, clipped to ``momentum_bound``. Matching
     the ratio rather than the first autocorrelation fits the horizon a stress test reads: the
     monthly means of a walk have a positive first autocorrelation, while the year may revert.
     A variable in ``reversion``, housing and a variable with fewer than two windows keep 0.
@@ -374,11 +386,10 @@ def momentum(panel: Panel, data: np.ndarray, spec: Spec) -> tuple[np.ndarray, li
     from scipy.optimize import brentq
 
     count, horizon, bound = len(panel.ids), spec.momentum_horizon, spec.momentum_bound
-    window = np.array([month >= spec.scale_start for month in panel.months[1:]])
     phi, report = np.zeros(count), []
     for i, variable in enumerate(panel.ids):
         row = {"id": variable, "momentum": 0.0, "variance_ratio": None}
-        column = data[window, i]
+        column = data[:, i]
         sums = _window_sums(column, horizon)
         if not spec.momentum or variable in spec.reversion or variable == HOUSING:
             report.append(row | {"source": "off"})
@@ -430,27 +441,58 @@ def scale_path_parameters(weights: np.ndarray) -> dict:
     }
 
 
+def scale_blocks(ids: list[str], spec: Spec) -> np.ndarray:
+    """The block of every variable's multiplier, numbered from zero: the variables no block
+    of the spec names first, then the blocks the panel has, in the order of the spec."""
+    index = np.zeros(len(ids), dtype=int)
+    for number, block in enumerate(spec.scale_blocks, start=1):
+        index[[ids.index(variable) for variable in block if variable in ids]] = number
+    return np.unique(index, return_inverse=True)[1]
+
+
+def block_laws(
+    data: np.ndarray, mu: np.ndarray, blocks: np.ndarray, ordinary: list[int], spec: Spec
+) -> tuple[np.ndarray, np.ndarray]:
+    """``nu`` and the month weights of every block's multiplier, from the ECME of the
+    block's own changes; housing has no monthly changes and takes no part."""
+    found, weights = [], []
+    for block in range(blocks.max() + 1):
+        columns = [i for i in ordinary if blocks[i] == block]
+        if not columns:
+            raise ValueError(f"scale block {block} has no variable with monthly changes")
+        part = data[:, columns]
+        _, nu, weight, _ = ecme(part, mu[columns], spec, shrink=shrinkage(part))
+        found.append(nu)
+        weights.append(weight)
+    return np.array(found), np.column_stack(weights)
+
+
 def sample_covariance(
     panel: Panel, data: np.ndarray, spec: Spec
 ) -> tuple[np.ndarray, list[int], float]:
-    """The unweighted sample covariance of the changes, as a positive-definite matrix, with
-    its correlations shrunk to zero by the weight ``shrinkage`` gives the window.
+    """The unweighted sample covariance of the changes, as a positive-definite matrix: the
+    variances of the whole panel and the correlations of ``scale_window``, shrunk to zero by
+    the weight ``shrinkage`` gives that window.
 
     The ECME weight of a crisis month is small, so the t-scale it estimates is below the
     sample second moment of a variable whose large changes cluster. This matrix is the
-    second step of the scale estimate: the level and the correlations the innovation
-    covariance is matched to, over the months from ``scale_start`` on. A window with about as
-    many months as variables estimates its correlations badly, and the scenario carries them
-    to every quantity it does not fix, so they are shrunk; the variances stay the sample's.
-    Housing has no monthly changes and is left to the interval estimate.
+    second step of the scale estimate. The scenario carries the correlations to every quantity
+    it does not fix, and a correlation of another regime carries them the wrong way, so they
+    come from the current regime; a window of a few years estimates them badly, so they are
+    shrunk. The variances come from the whole panel: a regime opens with its shock, and three
+    years that start with it overstate the spread of the years that follow. Housing has no
+    monthly changes and is left to the interval estimate.
     """
     ordinary = [i for i, variable in enumerate(panel.ids) if variable != HOUSING]
-    months = np.array([month >= spec.scale_start for month in panel.months[1:]])
+    first = scale_window(panel, spec)
+    months = np.array([month >= first for month in panel.months[1:]])
     rows = data[months][:, ordinary]
-    matrix = _pairwise_covariance(rows)
+    regime = _pairwise_covariance(rows)
     weight = shrinkage(rows)
-    shrunk = (1 - weight) * matrix + weight * np.diag(np.diag(matrix))
-    return _positive_scale(shrunk, spec.eig_floor), ordinary, weight
+    sd = np.sqrt(np.diag(regime))
+    correlation = (1 - weight) * regime / np.outer(sd, sd) + weight * np.eye(len(sd))
+    whole = np.sqrt(np.diag(_pairwise_covariance(data[:, ordinary])))
+    return _positive_scale(correlation * np.outer(whole, whole), spec.eig_floor), ordinary, weight
 
 
 def _pairwise_covariance(data: np.ndarray) -> np.ndarray:
@@ -485,7 +527,7 @@ def _counts(panel: Panel, data: np.ndarray, spec: Spec) -> dict[str, int]:
 def _start(
     panel: Panel,
     scale: np.ndarray,
-    nu: float,
+    factor: np.ndarray,
     persistence: np.ndarray,
     intercept: np.ndarray,
 ) -> tuple[np.ndarray, np.ndarray]:
@@ -502,11 +544,11 @@ def _start(
         if a < 1:
             neutral = intercept[i] / (1 - a)
             mean[i] = neutral + a**duration * (panel.y[last, i] - neutral)
-            factor = (1 - a ** (2 * duration)) / (1 - a**2)
+            steps = (1 - a ** (2 * duration)) / (1 - a**2)
         else:
             mean[i] = panel.y[last, i] + duration * intercept[i]
-            factor = float(duration)
-        sd[i] = np.sqrt(max(factor, 0.0) * nu / (nu - 2) * scale[i, i])
+            steps = float(duration)
+        sd[i] = np.sqrt(max(steps, 0.0) * factor[i] * scale[i, i])
     return mean, sd
 
 
@@ -541,26 +583,42 @@ def estimate(
         raise ValueError("ECME requires at least one non-housing variable")
     shrunk = {"ecme": shrinkage(data[:, ordinary])}
     fitted, nu, weights, trace = ecme(data[:, ordinary], mu[ordinary], spec, shrink=shrunk["ecme"])
-    scale = np.zeros((len(panel.ids), len(panel.ids)))
-    scale[np.ix_(ordinary, ordinary)] = fitted
-    ecme_variance = {
-        panel.ids[i]: float(np.diag(fitted)[k] * nu / (nu - 2))
-        for k, i in enumerate(ordinary)
-    }
+    blocks = scale_blocks(panel.ids, spec)
+    if blocks.max() == 0:
+        block_nu, block_weights = np.array([nu]), weights[:, None]
+    else:
+        block_nu, block_weights = block_laws(data, mu, blocks, ordinary, spec)
+    dynamics = [
+        scale_path_parameters(column)
+        if spec.stochastic_scale
+        else {"persistence": 0.0, "volatility": 0.0, "months": int(np.isfinite(column).sum())}
+        for column in block_weights.T
+    ]
+    mix = mixing(
+        block_nu,
+        blocks,
+        [item["persistence"] for item in dynamics],
+        [item["volatility"] for item in dynamics],
+    )
+    # The monthly covariance of the joint Student law, nu / (nu - 2) * Sigma, or the sample
+    # covariance of the changes; the scale is that covariance over the mixing of the blocks.
+    covariance = np.zeros((len(panel.ids), len(panel.ids)))
+    covariance[np.ix_(ordinary, ordinary)] = fitted * nu / (nu - 2)
+    ecme_variance = {panel.ids[i]: float(covariance[i, i]) for i in ordinary}
     sample_variance: dict[str, float] = {}
     if spec.sample_scale:
-        # The Student law has monthly covariance nu / (nu - 2) * Sigma, so this rescaled
-        # sample covariance makes that covariance the sample covariance of the changes.
         sample, ordinary, shrunk["sample"] = sample_covariance(panel, data, spec)
-        scale[np.ix_(ordinary, ordinary)] = (nu - 2) / nu * sample
+        covariance[np.ix_(ordinary, ordinary)] = sample
         sample_variance = {
             panel.ids[i]: float(np.diag(sample)[k]) for k, i in enumerate(ordinary)
         }
+    scale = np.zeros_like(covariance)
+    block = np.ix_(ordinary, ordinary)
+    scale[block] = _positive_scale(covariance[block] / mix[block], spec.eig_floor)
     phi, persistence_of_changes = momentum(panel, data, spec)
     if phi.any():
         # A diagonal AR(1) of changes has monthly covariance Sigma_e / (1 - phi phi'),
         # elementwise; this innovation scale keeps the monthly covariance estimated above.
-        block = np.ix_(ordinary, ordinary)
         scale[block] = _positive_scale(
             scale[block] * (1 - np.outer(phi[ordinary], phi[ordinary])), spec.eig_floor
         )
@@ -572,7 +630,7 @@ def estimate(
             mu[h] = sum(panel.y[b, h] - panel.y[a, h] for a, b, _ in intervals) / sum(
                 k for _, _, k in intervals
             )
-        row = _housing_row(panel, mu, scale, nu, spec)
+        row = _housing_row(panel, mu, mix[h], spec)
         scale[h, :] = row
         scale[:, h] = row
         original = scale / np.sqrt(np.outer(np.diag(scale), np.diag(scale)))
@@ -580,16 +638,11 @@ def estimate(
         corrected = scale / np.sqrt(np.outer(np.diag(scale), np.diag(scale)))
         distance = float(np.linalg.norm(corrected - original))
     persistence, neutral, reversion = mean_reversion(panel, spec)
-    dynamics = (
-        scale_path_parameters(weights)
-        if spec.stochastic_scale
-        else {"persistence": 0.0, "volatility": 0.0, "months": int(np.isfinite(weights).sum())}
-    )
     intercept = mu.copy()
     for i, variable in enumerate(panel.ids):
         if variable in spec.reversion:
             intercept[i] = (1.0 - persistence[i]) * neutral[i]
-    start_mean, start_sd = _start(panel, scale, nu, persistence, intercept)
+    start_mean, start_sd = _start(panel, scale, np.diag(mix), persistence, intercept)
     chosen = np.flatnonzero(np.isfinite(weights))
     chosen = chosen[np.argsort(weights[chosen], kind="stable")[:10]]
     diagnostics = {
@@ -599,6 +652,7 @@ def estimate(
         "trace": trace,
         "counts": counts,
         "shrinkage": shrunk,
+        "scale_window": scale_window(panel, spec).isoformat(),
         "higham_distance": distance,
         "smallest_weights": [
             {"month": panel.months[i + 1].isoformat(), "weight": float(weights[i])} for i in chosen
@@ -606,6 +660,10 @@ def estimate(
         "mean_reversion": reversion,
         "momentum": persistence_of_changes,
         "scale_path": dynamics,
+        "scale_blocks": [
+            {"ids": [panel.ids[i] for i in np.flatnonzero(blocks == b)], "nu": float(value)}
+            for b, value in enumerate(block_nu)
+        ],
         "scale_correction": {
             "mode": "sample" if spec.sample_scale else "ecme",
             "ecme_sd": {
@@ -622,6 +680,7 @@ def estimate(
         "drift": mu,
         "scale": scale,
         "weights": weights,
+        "blocks": blocks,
         "start_mean": start_mean,
         "start_sd": start_sd,
         "persistence": persistence,
@@ -631,4 +690,4 @@ def estimate(
         "previous": panel.y[-2] if len(panel.y) > 1 else np.full(len(panel.ids), np.nan),
         "tail": _tail(panel),
     }
-    return diagnostics, arrays, nu
+    return diagnostics, arrays, block_nu

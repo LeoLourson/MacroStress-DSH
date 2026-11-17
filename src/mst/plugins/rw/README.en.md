@@ -12,7 +12,7 @@ Two conclusions follow, and the model rests on them.
 
 First, the causal effect of a Bank of Russia decision cannot be estimated from the Russian data of 2012–2026. The monthly changes of the key rate and of the log of USD/RUB correlate at +0.6, and the regression gives 2.97 % of rouble weakening per 1 pp of hike: this is how the data describe a central bank that answers a rouble collapse. Without the 9 months of the largest rouble moves the correlation falls to 0.19. The scenario therefore sets the central bank's decision and the market's reaction to it, and the model carries what was set over to the other variables by their joint law, claiming nothing about causes.
 
-Second, a stress test needs the tails more than the dynamics. The kurtosis of the monthly changes is 47 for the key rate, 56 for the CPI, 18 for unemployment, 12 for USD/RUB and 9 for IMOEX, against 3 for the normal law. In a crisis month the variables move together and far. The model carries this by one common scale multiplier per month.
+Second, a stress test needs the tails more than the dynamics. The kurtosis of the monthly changes is 47 for the key rate, 56 for the CPI, 18 for unemployment, 12 for USD/RUB and 9 for IMOEX, against 3 for the normal law. In a crisis month the variables move together and far. The model carries this by a scale multiplier per month shared within a block of variables whose crises coincide.
 
 The model is simple on purpose: no lags, no rotations and no sign table. It differs from the baseline in heavy tails, a joint law of the variables and zero drift for rates, so a CRPS comparison with the baseline tests exactly these three choices.
 
@@ -28,7 +28,7 @@ where $A=\operatorname{diag}(a_1,\dots,a_n)$ is a diagonal mean reversion, $c$ a
 
 By default $A=I$ and $c=\mu$: the former joint random walk with drift. A variable named in `reversion` gets $a_i<1$ and $c_i=(1-a_i)m_i$, where $m_i$ is the mean level of its panel: the model returns to the mean level. Variables in `drifts` (nominal prices, exchange rates, volumes, IMOEX) keep $A=I$: they trend, and a return to a fixed level would fit the trend rather than a return. The `reversion` list is empty by default: the AR(1) coefficients on the panel are 0.97–0.99, the return moves the centre weakly and narrows the band, and the coverage falls (see "Implementation check").
 
-The multiplier is common to all variables, so in a month with a large $\lambda_t$ every variable moves widely at once. That is the crisis month of the model. The path $\lambda_t$ is either independent over months (`stochastic_scale = false`) or follows a log AR(1):
+This is the law of one block: variables of different blocks have their own multipliers (section "Blocks of multipliers"). Within a block the multiplier is common, so in a month with a large $\lambda_t$ every variable of the block moves widely at once. That is the crisis month of the model. The path $\lambda_t$ is either independent over months (`stochastic_scale = false`) or follows a log AR(1):
 
 $$
 s_t=\phi s_{t-1}+\sigma\eta_t,\qquad \lambda_t=\exp\!\left(\log\frac{\nu}{\nu-2}-\frac{\sigma^2}{2(1-\phi^2)}+s_t\right),
@@ -82,7 +82,7 @@ $$
 \mathrm{VR}_h(\varphi)=1+2\sum_{k=1}^{h-1}\Bigl(1-\frac kh\Bigr)\varphi^k
 $$
 
-at $h$ = `momentum_horizon` equals the ratio of the sample variance of $h$-month changes to $h$ monthly ones over the `scale_start` window, bounded by `momentum_bound`; the first autocorrelation is not used. A stress test reads the year, and the monthly means of the exchange rate and oil follow one another while their yearly changes revert: a fit to the first autocorrelation would widen their yearly width by 19–25 %. The innovation scale is $\Sigma_e=C\circ(1-\varphi\varphi^\top)$, where $C$ is the monthly covariance of the changes from the previous step and $\circ$ the elementwise product, so the monthly covariance of the model stays the sample one.
+at $h$ = `momentum_horizon` equals the ratio of the sample variance of $h$-month changes to $h$ monthly ones over all the months of the panel, bounded by `momentum_bound`; the first autocorrelation is not used. A stress test reads the year, and the monthly means of the exchange rate and oil follow one another while their yearly changes revert: a fit to the first autocorrelation would widen their yearly width by 19–25 %. The innovation scale is $\Sigma_e=C\circ(1-\varphi\varphi^\top)$, where $C$ is the monthly covariance of the changes from the previous step and $\circ$ the elementwise product, so the monthly covariance of the model stays the sample one.
 
 In levels this is a second-order recursion $y_t=(A+\Phi)y_{t-1}-\Phi y_{t-2}+c-\Phi\mu+\sqrt{\lambda_t}Bz_t$ with $\Phi=\operatorname{diag}(\varphi)$. The first forecast change reads the last observed change; when month $-1$ or month $0$ is unknown, the first change starts from the drift. A set value overrides the recursion in its cell, and the set change passes into the next month with the share $\varphi_i$; the projection on the free coordinates uses both transitions.
 
@@ -117,9 +117,31 @@ $$
 C=\frac{1}{T-1}\sum_{t\in T}(d_t-\bar d)(d_t-\bar d)^\top,\qquad \Sigma=\frac{\nu-2}{\nu}\,C,
 $$
 
-so that the monthly covariance of the law, $\frac{\nu}{\nu-2}\Sigma$, equals $C$. The matrix $C$ is computed over pairwise known months with the breaks excluded, and its correlation part is projected onto a positive-definite one when needed (as for the housing price). The window $T$ starts at `scale_start = 2012-01-01`, with the panel, so the scale sees the 2014 crisis. The correlations of $C$ are shrunk toward zero by the same Schäfer–Strimmer weight, computed on the window: $C\mapsto(1-\lambda)C+\lambda\operatorname{diag}C$ keeps the variances and damps chance correlations of a short history. With a window from 2015, after the rouble floated, the out-of-sample forecasts of quarterly dates 2017–2025 held the fact in the 90 % band in 77 % of the macro cells over 12 months; with 2012, in 81 %. The window was chosen on those same dates, with no separate validation half. Housing has no monthly changes and keeps the interval estimate.
+so that the monthly covariance of the law, $\frac{\nu}{\nu-2}\Sigma$, equals $C$; with several blocks $\Sigma=C\oslash M$ (section "Blocks of multipliers"). The matrix $C$ is computed over pairwise known months with the breaks excluded, and its correlation part is projected onto a positive-definite one when needed (as for the housing price). The correlations of $C$ come from the window of the regime the panel ends in. The list `regimes` names the first months of the regimes: the floating rouble from November 2014, the pandemic from March 2020, the sanctions from March 2022. When a regime is younger than `regime_months` = 36 months, the window starts 36 months before the end of the panel. The scenario carries the correlations to the variables it does not set, and a correlation of another regime would carry them toward the old one. The variances of $C$ come from the whole panel, because a regime opens with its shock and the three years that start with it overstate the spread of the years after. The correlations of the window are shrunk toward zero by the Schäfer–Strimmer weight computed on the same window: $C\mapsto(1-\lambda)C+\lambda\operatorname{diag}C$ keeps the variances and damps chance correlations of a short history. Housing has no monthly changes and keeps the interval estimate.
 
 In substance this restores the sample correlations of the joint law. A regression of the monthly IMOEX change on the key-rate change gives −1.34 % per 1 pp instead of −0.46 % for the ECME estimate; BBB +0.61 pp, USD/RUB +2.81 % (see "Implementation checks"). The signs and orders are those of the data; this is a statistical transfer, not a causal effect.
+
+### Blocks of multipliers
+
+One multiplier for all 23 variables means that the large changes of every variable fall in the same months. In the history this holds for part of the variables only. Let $\zeta_i$ be the standardised monthly change of variable $i$. A common multiplier makes the correlation of squares $\operatorname{corr}(\zeta_i^2,\zeta_j^2)$ exceed the squared linear correlation $\rho_{ij}^2$ the normal law would give. On the panel known in April 2022 the correlation of squares of USD/RUB with the key rate, OFZ yields, spreads, the CPI and IMOEX is 0.68–0.91 against $\rho^2$ of 0.01–0.61, and with unemployment, output and retail sales it is between −0.07 and +0.03. A scenario with a large move of the rouble therefore widened the band of unemployment through the common multiplier: in episode R28 (April 2022) its width in month 14 was 3.5 pp against a history range of 2.4 pp, and 2.6 pp without the scenario.
+
+The list `scale_blocks` splits the variables into blocks, and every block $g$ has its own multiplier $\lambda_{t,g}$ with its own $\nu_g$; the variables the list does not name form one more block. The multipliers of different blocks are independent, and the step of a month is $\Lambda_t^{1/2}Bz_t$ with $\Lambda_t=\operatorname{diag}(\lambda_{t,g(1)},\dots,\lambda_{t,g(n)})$, where $g(i)$ is the block of variable $i$. The correlation of squares singles out a global block (Brent, the Fed rate, UST, the VIX), a block of the real economy (output, unemployment, retail) and the mortgage rate, whose large changes fall in the months of no other variable; the other domestic variables and the housing price form the financial block. ECME on the changes of a block's variables estimates $\nu_g$; the $\nu$ of the joint estimate stays in the diagnostics.
+
+The monthly covariance of the step is $M\circ\Sigma$, where
+
+$$
+M_{ij}=\mathbb E\sqrt{\lambda_{g(i)}\lambda_{g(j)}}=
+\begin{cases}
+\dfrac{\nu_g}{\nu_g-2}, & g(i)=g(j)=g,\\[2mm]
+m_{g(i)}\,m_{g(j)}, & g(i)\ne g(j),
+\end{cases}
+\qquad
+m_g=\mathbb E\sqrt{\lambda_g}=\sqrt{\frac{\nu_g}{2}}\,\frac{\Gamma\bigl(\frac{\nu_g-1}{2}\bigr)}{\Gamma\bigl(\frac{\nu_g}{2}\bigr)}.
+$$
+
+The scale is therefore $\Sigma=C\oslash M$, where $\oslash$ is the elementwise division, with the same projection onto positive-definite matrices. With one block every element of $M$ is $\nu/(\nu-2)$ and the formulas of this document with a single $\nu$ hold as written; with several blocks $\lambda_t\Sigma$ in them reads as $\Lambda_t^{1/2}\Sigma\Lambda_t^{1/2}$ and $\frac{\nu}{\nu-2}\Sigma$ as $M\circ\Sigma$. Independent multipliers bound the correlation of variables in different blocks: with $\nu_g=2.5$ in both blocks it is at most $m_g^2(\nu_g-2)/\nu_g\approx0.46$, and the projection weakens a stronger sample correlation.
+
+A backtest of 17 November 2026 checked the split above on the same windows as the version with one multiplier. Without a scenario, on the grid of dates, the score against the random walk barely moved: 0.993 against 0.990 in the validation half. The conditional forecast of the episodes got worse: 1.059 against 0.992 relative to conditional_walk in the validation half and 0.927 against 0.851 in the tuning half. The variables of the real block, the reason for the split, got worse too: unemployment 1.334 against 1.219, output 1.095 against 0.959. The ratio of the conditional forecast to the unconditional one rose from 1.017 to 1.076, so the loss comes from the transfer of the scenario, which the bound on the correlation across blocks weakened. The band of unemployment stayed wider than the range of the history in both versions. The current spec therefore keeps one block (`scale_blocks = []`), and the code keeps the blocks for other splits.
 
 ### Persistence of the multiplier
 
@@ -134,7 +156,7 @@ $$
 \hat\rho_{hi}=\frac{1}{q\,\sigma_h\sigma_i}\sum_{l=1}^{q}\frac{(D^h_l-k_l\mu_h)(D^i_l-k_l\mu_i)}{k_l},
 $$
 
-where in the second formula the intervals are those shared by the housing price and variable $i$, $D^i_l$ is the change of variable $i$ over the same interval, and $\sigma_i^2=\frac{\nu}{\nu-2}\Sigma_{ii}$ is the variance of its monthly change. The row and column of the housing price in $\Sigma$ are $\frac{\nu-2}{\nu}\,\sigma_h\sigma_i\hat\rho_{hi}$, the covariance carried to the scale of the Student law. If the resulting matrix is not positive definite, its correlation part is replaced by the nearest correlation matrix in the Frobenius norm with eigenvalues at least `eig_floor` (Higham, 2002); the diagonal stays. The housing estimates are an approximation: they rest on 31 intervals and on a Gaussian law.
+where in the second formula the intervals are those shared by the housing price and variable $i$, $D^i_l$ is the change of variable $i$ over the same interval, and $\sigma_i^2=M_{ii}\Sigma_{ii}$ is the variance of its monthly change. The row and column of the housing price $h$ in $\Sigma$ are $\sigma_h\sigma_i\hat\rho_{hi}/M_{hi}$, the covariance carried to the scale. If the resulting matrix is not positive definite, its correlation part is replaced by the nearest correlation matrix in the Frobenius norm with eigenvalues at least `eig_floor` (Higham, 2002); the diagonal stays. The housing estimates are an approximation: they rest on 31 intervals and on a Gaussian law.
 
 ### Parameter uncertainty
 
@@ -242,7 +264,7 @@ the same linear projection as the conditional baseline `conditional_walk`, with 
 
 ## Assumptions
 
-By default there is no mean reversion: the spread grows as $\sqrt t$, rates and spreads included. The code supports a diagonal AR(1) (`reversion`), but on this panel it does not help (section "Mean reversion"). The links between variables are only contemporaneous: the model does not carry the delayed pass-through of the exchange rate into prices, which comes from the scenario or a satellite. The crisis scale is common to all variables: a crisis in the rouble alone and a crisis in everything differ only by the innovations. The covariance of the changes is the sample covariance from 2012, so crises also set the correlations: this is a statistical transfer, not a causal effect. The drift of prices and exchange rates comes from the history of 2012–2026. Conditioning uses the full joint law, including statistical links from domestic to global variables. Parameter uncertainty is not counted.
+By default there is no mean reversion: the spread grows as $\sqrt t$, rates and spreads included. The code supports a diagonal AR(1) (`reversion`), but on this panel it does not help (section "Mean reversion"). The links between variables are only contemporaneous: the model does not carry the delayed pass-through of the exchange rate into prices, which comes from the scenario or a satellite. The scale multiplier is common to all variables, so a scenario with a large move of the rouble also widens the bands of variables whose large changes did not coincide with the rouble's; the split into blocks made the conditional forecast worse (section "Blocks of multipliers"). The covariance of the changes is the sample covariance, with the correlations of the current regime, so crises also set the correlations: this is a statistical transfer, not a causal effect. The drift of prices and exchange rates comes from the history of 2012–2026. Conditioning uses the full joint law, including statistical links from domestic to global variables. Parameter uncertainty is not counted.
 
 ## Parameters
 
@@ -251,9 +273,10 @@ By default there is no mean reversion: the spread grows as $\sqrt t$, rates and 
 | `start` | 2012-01-01 | the first month of the panel, as for `bvar.sv` |
 | `drifts` | the nine variables above | the variables with a non-zero drift |
 | `reversion` | `[]` | the variables with mean reversion; empty by default |
-| `stochastic_scale` | `false` | the path of the common multiplier is a log AR(1) instead of independent months |
+| `stochastic_scale` | `false` | the path of every block's multiplier is a log AR(1) instead of independent months |
 | `sample_scale` | `true` | the level and correlations of the scale are the sample covariance of the changes |
-| `scale_start` | 2012-01-01 | the first month of the sample covariance and of the momentum fit |
+| `regimes`, `regime_months` | 2014-11, 2020-03, 2022-03; 36 | the first months of the regimes and the shortest window of the correlations |
+| `scale_blocks` | empty, one block | the blocks with their own scale multipliers |
 | `momentum`, `momentum_horizon`, `momentum_bound` | `true`, 12, 0.5 | the AR(1) of the monthly changes, chosen by the yearly variance |
 | `breaks` | 2021-01: three spreads | changes left out at breaks of the series |
 | `nu_bounds` | $[2.5,\ 60]$ | the search interval of $\nu$ |
@@ -269,7 +292,7 @@ The estimated parameters are written to the version meta. `diagnostics.mean_reve
 
 `plugin = Plugin(plugin_id="rw", ..., model_sdk=">=4.0,<5.0", macro=(MODEL,))`, the variables are the whole registry, `latents = ("scale_path",)`. The model executes the interventions itself, so `structural_form` returns a `StructuralForm` with registry order as its base order (all set variables move first in each intervened month) and `time_recursion = True`; the platform does not apply the interventions again. The plugin imports only `mst.model_sdk`, `mst.macro.panel`, `mst.macro.registry`, `mst.plugin_sdk` and its own package; the plugin rules forbid importing from `mst.plugins.bvar`.
 
-`estimate` writes to the meta `as_of`, `ids`, `n_global`, `months`, `shocks` (the variable ids in panel order), `nu`, `diagnostics`, `spec` and `structural_form`, and to the arrays `panel_y`, `panel_approximate`, `drift` of length $n$, `scale` of size $n\times n$ ($\Sigma$), `weights` (the weights $w_t$ of the months at the last iteration), `start_mean` of length $n$, `start_sd` of length $n$, `persistence` ($a_i$), `intercept` ($c_i$) and `tail` (the last months of the panel). `load` restores the model without re-estimating; a version without `persistence` and `intercept` (estimated before 0.2.0) reads as the former walk: $a_i=1$, $c_i=\mu_i$, $\phi=\sigma=0$. A version without `momentum` and `previous` reads with $\varphi=0$. `simulate` returns a `MacroSimulation`: shadow paths of shape $(R,H+1,n)$ with the interventions executed, where row $t=0$ is the path's $y_0$, `history` holds the months of `tail` with the missed ones drawn and $y_0$ last, and the group numbers. Version 0.4.0 added the shrinkage toward the diagonal and the required tail, so versions 0.3.0 and older do not load and are estimated again.
+`estimate` writes to the meta `as_of`, `ids`, `n_global`, `months`, `shocks` (the variable ids in panel order), `nu` (one per block), `diagnostics`, `spec` and `structural_form`, and to the arrays `panel_y`, `panel_approximate`, `drift` of length $n$, `scale` of size $n\times n$ ($\Sigma$), `weights` (the weights $w_t$ of the months at the last iteration), `start_mean` of length $n$, `start_sd` of length $n$, `persistence` ($a_i$), `intercept` ($c_i$), `blocks` (the block of every variable) and `tail` (the last months of the panel). `load` restores the model without re-estimating; a version without `persistence` and `intercept` (estimated before 0.2.0) reads as the former walk: $a_i=1$, $c_i=\mu_i$, $\phi=\sigma=0$. A version without `momentum` and `previous` reads with $\varphi=0$. `simulate` returns a `MacroSimulation`: shadow paths of shape $(R,H+1,n)$ with the interventions executed, where row $t=0$ is the path's $y_0$, `history` holds the months of `tail` with the missed ones drawn and $y_0$ last, and the group numbers. Version 0.4.0 added the shrinkage toward the diagonal and the required tail, so versions 0.3.0 and older do not load and are estimated again. Version 0.5.0 keeps the $\nu$ of every block and the array `blocks`, so versions 0.4.0 and older are estimated again too.
 
 In `diagnostics` the version writes $\nu$, the number of iterations and the last change of the likelihood, the ten months with the smallest weight $w_t$ (the model's crisis months), the number of changes of every variable, the distance of the Higham correction if one was needed, and the three blocks above (`mean_reversion`, `scale_path`, `scale_correction`).
 
@@ -277,7 +300,7 @@ In `diagnostics` the version writes $\nu$, the number of iterations and the last
 
 Files and functions:
 
-- `src/mst/plugins/rw/spec.toml`, `spec.py` — the parameters of the table and their checks: the variables of `drifts` and `reversion` are in the registry, the interval `nu_bounds` lies above 2, `scale_start` is the first of a month.
+- `src/mst/plugins/rw/spec.toml`, `spec.py` — the parameters of the table and their checks: the variables of `drifts` and `reversion` are in the registry, the interval `nu_bounds` lies above 2, the `regimes` are increasing first days of months, the `scale_blocks` are disjoint and name registry variables.
 - `src/mst/plugins/rw/estimate.py` — `changes(panel, spec)` (changes without the breaks), `drift(changes, ids, spec)`, `ecme(changes, mu, spec) -> (scale, nu, weights, trace)`, `mean_reversion(panel, spec) -> (a, m, report)`, `scale_path_parameters(weights) -> {persistence, volatility}`, `sample_covariance(panel, data, spec)`, `housing(panel, mu, scale, nu, spec)`, `nearest_correlation(matrix, floor)`.
 - `src/mst/plugins/rw/forecast.py` — `transfer(scale, interventions) -> (mean, loadings)` (the conditional projection of a month under the set cells), `scale_candidates(nu, horizon, count, rng, phi, sigma)`, `simulate(model, plan, draws, seed)`, `constraint_law(model, plan, draws, seed)`.
 - `src/mst/plugins/rw/model.py`, `plugin.py`, `__init__.py` — the model class under the `MacroModel` contract, `structural_form` and the plugin declaration; version 0.2.0.
@@ -295,13 +318,13 @@ Checks for the code:
 7. The panel order does not change the law of the paths without a scenario (Kolmogorov–Smirnov by months for two orders); a set changes only the response of the other variables of the same month.
 8. With `ru.key_rate` set in month $t$, the conditional mean change of another variable in the same month equals the projection formula of the section "Difference from the baseline".
 9. A set value stands on every path of its group and only in its month; the other variables of the same month respond by the projection instead of staying untouched.
-10. Under an observation on a large move, candidates of the multipliers with a large $\lambda$ get more weight: the mean multiplier of the picked paths is above the base one.
+10. Under an observation on a large move, candidates of the multipliers with a large $\lambda$ get more weight: the mean multiplier of the picked paths is above the base one. A large observation on a variable of one block does not widen the band of a variable of another block, and $M$ equals the mean product of the drawn multipliers.
 11. `constraint_law` agrees with `simulate`: the share of paths in the box equals the probability of the row within the Monte Carlo error.
 12. Interval conditions hold on every path, exact ones within $\tau$.
 13. One seed gives bit-identical paths; `load` after `estimate` gives the same paths.
 14. No observed path of a variable with `lower` lies below the bound.
 15. `mean_reversion` on a simulated AR(1) recovers the slope and the mean level, and a variable outside `reversion` stays a walk.
-16. `sample_covariance` uses the `scale_start` window and gives the sample covariance of the changes in the Student scale; `estimate` with `sample_scale = true` reproduces it up to the projection.
+16. `sample_covariance` takes the correlations of the regime window and the variances of the whole panel; `estimate` with `sample_scale = true` reproduces it up to the projection.
 17. `scale_path_parameters` recovers $\phi$ and $\sigma$ of the log AR(1); `scale_candidates` with $\sigma>0$ keeps $E[\lambda]=\nu/(\nu-2)$ and correlates neighbouring months; at $a<1$ the base law converges to the mean, and the same-month response to a set is computed from $a y+c$, not from the level.
 18. The shrunk ECME converges on 30 months where the plain one does not; the weight is near zero on a long sample and above 0.3 on a short one, and full shrinkage gives the diagonal.
 19. In the history of a path the known months repeat the panel, the last one is month 0, and a gap between them has the mean and variance of the bridge.

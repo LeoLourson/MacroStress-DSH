@@ -16,7 +16,14 @@ from mst.model_sdk import (
     ScenarioPlan,
 )
 from mst.model_sdk.bounds import observed
-from mst.plugins.rw.forecast import constraint_law, scale_candidates, simulate, transfer
+from mst.plugins.rw.forecast import (
+    block_scales,
+    constraint_law,
+    mixing,
+    scale_candidates,
+    simulate,
+    transfer,
+)
 
 
 def model(scale=None, start_sd=None):
@@ -336,3 +343,29 @@ def test_the_history_draws_the_months_the_panel_missed_between_known_ones():
     middle = history[:, 1, 1] - (19.0 + found.paths[:, 0, 1]) / 2
     assert middle.mean() == pytest.approx(0.0, abs=0.03)
     assert middle.var() == pytest.approx(0.5 * m.nu / (m.nu - 2) * m.scale[1, 1], rel=0.05)
+
+
+def test_a_large_observation_widens_only_the_block_of_its_variable():
+    def spread(blocks, plan):
+        m = model(scale=np.array([[1.0, 0.0], [0.0, 2.0]]))
+        m.nu, m.blocks = np.array([4.0, 4.0]), np.array(blocks)
+        paths = simulate(m, plan, draws=1000, seed=8).paths
+        return np.subtract(*np.percentile(paths[:, 1, 1] - paths[:, 0, 1], [95, 5]))
+
+    stressed = ScenarioPlan(1, (condition("gl.x", 1, 17, 19),))
+    assert spread([0, 0], stressed) > 1.5 * spread([0, 0], ScenarioPlan(1))
+    assert spread([0, 1], stressed) == pytest.approx(spread([0, 1], ScenarioPlan(1)), rel=0.1)
+
+
+@pytest.mark.parametrize("persistence,volatility", [(0.0, 0.0), (0.7, 0.4)])
+def test_mixing_is_the_mean_product_of_the_drawn_multipliers(persistence, volatility):
+    m = SimpleNamespace(
+        nu=np.array([6.0, 9.0]),
+        scale_persistence=np.full(2, persistence),
+        scale_volatility=np.full(2, volatility),
+    )
+    draws = block_scales(m, 1, 400000, np.random.default_rng(3))[:, 0]
+    blocks = np.array([0, 0, 1])
+    roots = np.sqrt(draws[:, blocks])
+    expected = (roots[:, :, None] * roots[:, None, :]).mean(axis=0)
+    assert_allclose(mixing(m.nu, blocks, persistence, volatility), expected, rtol=0.02)

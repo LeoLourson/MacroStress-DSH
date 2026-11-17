@@ -20,12 +20,16 @@ from .estimate import estimate
 from .forecast import constraint_law, simulate
 from .spec import load_spec
 
+
 @dataclass(frozen=True)
 class JointWalk:
     ids: list[str]
     n_global: int
     months: list[date]
-    nu: float
+    nu: np.ndarray
+    """The ``nu`` of every block's multiplier."""
+    blocks: np.ndarray
+    """The block of every variable's multiplier."""
     drift: np.ndarray
     scale: np.ndarray
     weights: np.ndarray
@@ -35,23 +39,23 @@ class JointWalk:
     intercept: np.ndarray
     momentum: np.ndarray
     previous: np.ndarray
-    scale_persistence: float
-    scale_volatility: float
+    scale_persistence: np.ndarray
+    scale_volatility: np.ndarray
     diagnostics: dict
     tail: np.ndarray
     """The last months of the panel, from the latest one at which every variable was known."""
 
 
 class RwModel(MacroModel):
-    """No lags: joint Student monthly changes with a common crisis multiplier."""
+    """No lags: joint Student monthly changes with a crisis multiplier for every block."""
 
     model_id = "rw.joint"
-    version = "0.4.0"
+    version = "0.5.0"
     latents = ("scale_path",)
     label = "Joint random walk with heavy tails"
     description = (
         "Joint Student monthly changes with zero drift for rates and spreads; the scale is the "
-        "sample covariance of the changes, the common multiplier may follow a persistent path, "
+        "sample covariance of the changes, every block of variables has its own multiplier, "
         "and interventions propagate through the full conditional law, without causal claims."
     )
 
@@ -75,7 +79,7 @@ class RwModel(MacroModel):
                 "n_global": panel.n_global,
                 "months": [m.isoformat() for m in panel.months],
                 "shocks": panel.ids,
-                "nu": nu,
+                "nu": nu.tolist(),
                 "diagnostics": diagnostics,
                 "spec": spec.model_dump(mode="json"),
                 "structural_form": {"order_within_month": panel.ids, "time_recursion": True},
@@ -85,19 +89,21 @@ class RwModel(MacroModel):
 
     def load(self, meta: dict, arrays: dict) -> JointWalk:
         n = len(meta["ids"])
-        scale_path = meta.get("diagnostics", {}).get("scale_path", {})
+        nu = np.atleast_1d(np.asarray(meta["nu"], dtype=float))
+        scale_path = meta.get("diagnostics", {}).get("scale_path") or [{}] * len(nu)
         return JointWalk(
             ids=meta["ids"],
             n_global=meta["n_global"],
             months=[date.fromisoformat(m) for m in meta["months"]],
-            nu=meta["nu"],
+            nu=nu,
+            blocks=np.asarray(arrays["blocks"], dtype=int),
             diagnostics=meta["diagnostics"],
             persistence=np.asarray(arrays.get("persistence", np.ones(n)), dtype=float),
             intercept=np.asarray(arrays.get("intercept", arrays["drift"]), dtype=float),
             momentum=np.asarray(arrays.get("momentum", np.zeros(n)), dtype=float),
             previous=np.asarray(arrays.get("previous", np.full(n, np.nan)), dtype=float),
-            scale_persistence=float(scale_path.get("persistence", 0.0)),
-            scale_volatility=float(scale_path.get("volatility", 0.0)),
+            scale_persistence=np.array([item.get("persistence", 0.0) for item in scale_path]),
+            scale_volatility=np.array([item.get("volatility", 0.0) for item in scale_path]),
             drift=arrays["drift"],
             scale=arrays["scale"],
             weights=arrays["weights"],

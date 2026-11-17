@@ -79,18 +79,30 @@ class Spec(BaseModel):
 
     The ECME t-scale downweights the clustered crisis months and understates the
     unconditional covariance; with this switch the scale is the sample covariance of the
-    changes over ``scale_start`` and later, rescaled to the Student scale. The correlation
+    changes over ``regimes``, rescaled to the Student scale. The correlation
     and the variance of the transfer then come from the sample, not from the downweighted
     estimate.
     """
-    scale_start: date = date(2012, 1, 1)
-    """The first change month of the sample covariance and of the momentum fit.
+    scale_blocks: list[list[str]] = Field(default_factory=list)
+    """Groups of variables whose large changes fall in months of their own.
 
-    The window starts with the panel, so the scale sees the 2014 crisis. With 2015, after the
-    rouble floated, the forecasts made out of sample on quarterly dates 2017-2025 held the
-    fact in the 90 % band in 77 % of the macro cells over 12 months; with 2012, in 81 %. The
-    window was chosen on those same dates, not on a separate half.
+    Every group has its own common monthly multiplier with its own ``nu``; the variables no
+    group names share one more. Independent multipliers cap the correlation across groups,
+    so a scenario carries less to the variables of other groups; with an empty list all the
+    variables share one multiplier.
     """
+    regimes: list[date] = Field(
+        default_factory=lambda: [date(2014, 11, 1), date(2020, 3, 1), date(2022, 3, 1)]
+    )
+    """The first months of the regimes: the rouble float, the pandemic, the sanctions of 2022.
+
+    The sample covariance and the momentum read the changes of the regime the panel ends in:
+    a correlation estimated across a change of regime pulls the quantities a scenario does
+    not fix in the direction of the old one.
+    """
+    regime_months: int = Field(default=36, ge=2, strict=True)
+    """The shortest window: a regime younger than this many months is read together with the
+    end of the one before it, since three years is the least the momentum can be fitted on."""
 
     momentum: bool = True
     """Whether the monthly changes keep a share of the previous change.
@@ -113,11 +125,13 @@ class Spec(BaseModel):
             raise ValueError("start must be the first day of a month")
         return value
 
-    @field_validator("scale_start")
+    @field_validator("regimes")
     @classmethod
-    def scale_first_of_month(cls, value: date) -> date:
-        if value.day != 1:
-            raise ValueError("scale_start must be the first day of a month")
+    def increasing_regimes(cls, value: list[date]) -> list[date]:
+        if any(month.day != 1 for month in value):
+            raise ValueError("a regime must start on the first day of a month")
+        if any(later <= earlier for earlier, later in zip(value, value[1:], strict=False)):
+            raise ValueError("regimes must be in increasing order")
         return value
 
     @field_validator("nu_bounds")
@@ -142,8 +156,17 @@ class Spec(BaseModel):
             raise ValueError("reversion variables must be distinct")
         return value
 
+    @field_validator("scale_blocks")
+    @classmethod
+    def disjoint_blocks(cls, value: list[list[str]]) -> list[list[str]]:
+        named = [variable for block in value for variable in block]
+        if any(not block for block in value) or len(named) != len(set(named)):
+            raise ValueError("scale blocks must be non-empty and disjoint")
+        return value
+
     def validate_ids(self, ids: list[str]) -> None:
         requested = set(self.drifts) | set(self.reversion)
+        requested.update(variable for block in self.scale_blocks for variable in block)
         for item in self.breaks:
             requested.update(item.variables)
         unknown = requested - set(ids)

@@ -2,7 +2,7 @@ from datetime import date
 
 import numpy as np
 import pytest
-from numpy.testing import assert_allclose
+from numpy.testing import assert_allclose, assert_array_equal
 
 from mst.macro.panel import Panel, months_between
 from mst.plugins.rw.estimate import (
@@ -17,8 +17,10 @@ from mst.plugins.rw.estimate import (
     nearest_correlation,
     sample_covariance,
     scale_path_parameters,
+    scale_window,
     shrinkage,
 )
+from mst.plugins.rw.forecast import mixing
 from mst.plugins.rw.spec import Break, Spec
 
 
@@ -179,7 +181,8 @@ def test_housing_always_uses_intervals_even_with_monthly_observations():
     base_scale[1, :] = 0
     base_scale[:, 1] = 0
     assert_allclose(
-        housing(p, arrays["drift"], base_scale, nu, Spec(drifts=[], breaks=[])), arrays["scale"]
+        housing(p, arrays["drift"], base_scale, np.full(2, nu[0] / (nu[0] - 2)), Spec()),
+        arrays["scale"],
     )
 
 
@@ -260,7 +263,7 @@ def test_sample_scale_is_the_sample_covariance_in_the_student_scale():
     scale = np.array([[1.0, 0.4], [0.4, 2.0]])
     d = rng.multivariate_normal([0, 0], scale, 800)
     p = panel(np.vstack([np.zeros(2), np.cumsum(d, axis=0)]), ["x", "y"])
-    spec = Spec(drifts=[], breaks=[], sample_scale=True, momentum=False)
+    spec = Spec(drifts=[], breaks=[], regimes=[], sample_scale=True, momentum=False)
     meta, arrays, nu = estimate(p, spec)
     # The correlation of the sample is shrunk to zero by the weight its history earns; the
     # variances stay the sample's.
@@ -282,17 +285,32 @@ def test_a_short_sample_shrinks_its_correlations_and_keeps_its_variances():
     assert np.abs(matrix[off]).sum() < (1 - weight + 0.01) * np.abs(raw[off]).sum()
 
 
-def test_sample_covariance_uses_the_window():
+def test_sample_covariance_takes_the_correlation_of_the_regime_and_the_variance_of_the_panel():
     p = panel(np.zeros((14, 2)), ["x", "y"])
-    months = p.months
     data = np.zeros((13, 2))
-    data[:2] = 100.0
-    data[2:, 0] = np.arange(11) + 1.0
-    data[2:, 1] = 2.0 * (np.arange(11) + 1.0)
-    early = sample_covariance(p, data, Spec(drifts=[], breaks=[], scale_start=months[0]))[0]
-    late = sample_covariance(p, data, Spec(drifts=[], breaks=[], scale_start=months[4]))[0]
-    assert late[0, 0] < early[0, 0] / 100
-    assert late[1, 1] > late[0, 0]
+    data[:3, 0] = [30.0, -30.0, 30.0]
+    data[:3, 1] = -data[:3, 0]
+    data[3:, 0] = [1.0, -1.0, 2.0, -2.0, 1.0, -1.0, 2.0, -2.0, 1.0, -1.0]
+    data[3:, 1] = data[3:, 0] + np.tile([0.1, -0.1], 5)
+
+    def matrix(regimes):
+        spec = Spec(drifts=[], breaks=[], regimes=regimes, regime_months=2)
+        return sample_covariance(p, data, spec)[0]
+
+    whole, regime = matrix([]), matrix([p.months[4]])
+    assert whole[0, 1] <= 0 < regime[0, 1]
+    assert_allclose(np.diag(regime), np.diag(np.cov(data.T, ddof=1)), rtol=1e-6)
+    assert_allclose(np.diag(whole), np.diag(regime), rtol=1e-6)
+
+
+def test_the_window_starts_with_the_regime_unless_the_regime_is_young():
+    p = panel(np.zeros((66, 1)), ["x"])  # 2018-01 .. 2023-06
+    regimes = [date(2014, 11, 1), date(2020, 3, 1), date(2022, 3, 1)]
+    assert scale_window(p, Spec(regimes=regimes, regime_months=12)) == date(2022, 3, 1)
+    assert scale_window(p, Spec(regimes=regimes, regime_months=24)) == date(2021, 7, 1)
+    assert scale_window(p, Spec(regimes=[], regime_months=24)) == date(2018, 1, 1)
+    assert scale_window(p, Spec(regimes=[date(2030, 1, 1)], regime_months=12)) == date(2018, 1, 1)
+    assert scale_window(p, Spec(regimes=regimes, regime_months=120)) == date(2018, 1, 1)
 
 
 def test_scale_path_parameters_recovers_a_log_ar1():
@@ -321,7 +339,7 @@ def test_momentum_matches_the_variance_of_twelve_month_changes():
     rng = np.random.default_rng(41)
     d = np.column_stack([ar_changes(rng, 0.4, 3000), ar_changes(rng, -0.3, 3000)])
     p = panel(np.vstack([np.zeros(2), np.cumsum(d, axis=0)]), ["x", "y"])
-    spec = Spec(drifts=[], breaks=[], scale_start=p.months[0])
+    spec = Spec(drifts=[], breaks=[], regimes=[])
     phi, report = momentum(p, changes(p, spec), spec)
     assert_allclose(phi, [0.4, -0.3], atol=0.08)
     assert_allclose(variance_ratio(phi[0], 12), report[0]["variance_ratio"], rtol=1e-6)
@@ -333,7 +351,7 @@ def test_momentum_keeps_the_sample_monthly_covariance():
     d = np.column_stack([ar_changes(rng, 0.4, 2500), ar_changes(rng, 0.2, 2500)])
     d[:, 1] += 0.5 * d[:, 0]
     p = panel(np.vstack([np.zeros(2), np.cumsum(d, axis=0)]), ["x", "y"])
-    spec = Spec(drifts=[], breaks=[], scale_start=p.months[0])
+    spec = Spec(drifts=[], breaks=[], regimes=[])
     meta, arrays, nu = estimate(p, spec)
     phi = arrays["momentum"]
     monthly = nu / (nu - 2) * arrays["scale"] / (1 - np.outer(phi, phi))
@@ -350,9 +368,28 @@ def test_momentum_is_bounded_and_off_for_mean_reverting_variables():
     rng = np.random.default_rng(47)
     d = np.column_stack([ar_changes(rng, 0.9, 2000), ar_changes(rng, 0.4, 2000)])
     p = panel(np.vstack([np.zeros(2), np.cumsum(d, axis=0)]), ["x", "y"])
-    spec = Spec(drifts=[], breaks=[], scale_start=p.months[0], reversion=["y"])
+    spec = Spec(drifts=[], breaks=[], regimes=[], reversion=["y"])
     phi, _ = momentum(p, changes(p, spec), spec)
     assert phi[0] == spec.momentum_bound
     assert phi[1] == 0.0
-    off = Spec(drifts=[], breaks=[], scale_start=p.months[0], momentum=False)
+    off = Spec(drifts=[], breaks=[], regimes=[], momentum=False)
     assert_allclose(momentum(p, changes(p, off), off)[0], [0.0, 0.0])
+
+
+def test_blocks_have_their_own_tails_and_keep_the_sample_covariance():
+    rng = np.random.default_rng(23)
+    count = 600
+    heavy = rng.standard_t(3, size=count)
+    light = 0.5 * heavy * np.sqrt(1 / 3) + rng.normal(size=count)
+    d = np.column_stack([heavy, light])
+    p = panel(np.vstack([np.zeros(2), np.cumsum(d, axis=0)]), ["x", "y"])
+    spec = Spec(drifts=[], breaks=[], regimes=[], momentum=False, scale_blocks=[["y"]])
+    meta, arrays, nu = estimate(p, spec)
+    assert_array_equal(arrays["blocks"], [0, 1])
+    assert nu[0] < 5 < 10 < nu[1]
+    assert [block["ids"] for block in meta["scale_blocks"]] == [["x"], ["y"]]
+    weight = meta["shrinkage"]["sample"]
+    sample = np.cov(d.T, ddof=1)
+    expected = (1 - weight) * sample + weight * np.diag(np.diag(sample))
+    implied = arrays["scale"] * mixing(nu, arrays["blocks"], 0.0, 0.0)
+    assert_allclose(implied, expected, rtol=1e-6)

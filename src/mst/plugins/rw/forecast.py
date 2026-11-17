@@ -3,6 +3,7 @@
 from dataclasses import dataclass
 
 import numpy as np
+from scipy.special import gammaln
 
 from mst.macro.panel import shift
 from mst.model_sdk import (
@@ -67,6 +68,28 @@ def scale_candidates(
     for t in range(1, horizon + 1):
         state[:, t] = phi * state[:, t - 1] + noise[:, t - 1]
     return np.exp(level + state[:, 1:])
+
+
+def root_mean(nu, persistence, volatility) -> np.ndarray:
+    """``E sqrt(lambda)`` of the multiplier ``scale_candidates`` draws, for every block."""
+    nu, volatility = np.asarray(nu, dtype=float), np.asarray(volatility, dtype=float)
+    stationary = volatility**2 / (1 - np.asarray(persistence, dtype=float) ** 2)
+    lognormal = np.exp(np.log(nu / (nu - 2)) / 2 - stationary / 8)
+    student = np.sqrt(nu / 2) * np.exp(gammaln((nu - 1) / 2) - gammaln(nu / 2))
+    return np.where(volatility > 0, lognormal, student)
+
+
+def mixing(nu, blocks, persistence, volatility) -> np.ndarray:
+    """``E sqrt(lambda_a lambda_b)`` for every pair of variables, by their blocks.
+
+    Within a block it is ``E lambda = nu / (nu - 2)``. The multipliers of two blocks are
+    independent, so across them it is the product of ``E sqrt(lambda)``, which is smaller: a
+    monthly covariance ``C`` needs the scale ``C / mixing`` to come out of the draws.
+    """
+    nu, blocks = np.asarray(nu, dtype=float), np.asarray(blocks, dtype=int)
+    root = root_mean(nu, persistence, volatility)[blocks]
+    same = blocks[:, None] == blocks[None, :]
+    return np.where(same, (nu / (nu - 2))[blocks][:, None], np.outer(root, root))
 
 
 def _validate(model, plan: ScenarioPlan, draws: int) -> None:
@@ -200,8 +223,10 @@ def _affine(model, plan: ScenarioPlan, group: int) -> _Affine:
     return _Affine(mean, paths, centre, rows)
 
 
-def _multipliers(scales: np.ndarray, n: int) -> np.ndarray:
-    return np.repeat(np.concatenate(([1.0], np.sqrt(scales))), n)
+def _multipliers(scales: np.ndarray, blocks: np.ndarray) -> np.ndarray:
+    """The multiplier of every innovation: one at month zero, then the root of the scale of
+    the variable's block in that month; ``scales`` is ``(H, blocks)``."""
+    return np.concatenate((np.ones(len(blocks)), np.sqrt(scales[:, blocks]).ravel()))
 
 
 def _independent(affine: _Affine, low, high) -> np.ndarray:
@@ -223,11 +248,25 @@ def _independent(affine: _Affine, low, high) -> np.ndarray:
     return np.array(kept, dtype=int)
 
 
-def _scale_law(model) -> tuple[float, float]:
-    """The persistence and volatility of the common scale; zero for the base law."""
-    return (
-        float(getattr(model, "scale_persistence", 0.0)),
-        float(getattr(model, "scale_volatility", 0.0)),
+def _blocks(model) -> np.ndarray:
+    """The block of every variable's multiplier; one block for a model without them."""
+    found = getattr(model, "blocks", None)
+    return np.zeros(len(model.ids), dtype=int) if found is None else np.asarray(found, dtype=int)
+
+
+def block_scales(model, horizon: int, count: int, rng) -> np.ndarray:
+    """``count`` candidate paths of the multipliers, ``(count, horizon, blocks)``: every
+    block draws its own from its ``nu`` and, for the persistent law, its persistence and
+    volatility; the blocks are independent."""
+    nu = np.atleast_1d(np.asarray(model.nu, dtype=float))
+    phi = np.broadcast_to(np.asarray(getattr(model, "scale_persistence", 0.0), float), nu.shape)
+    sigma = np.broadcast_to(np.asarray(getattr(model, "scale_volatility", 0.0), float), nu.shape)
+    return np.stack(
+        [
+            scale_candidates(nu[b], horizon, count, rng, phi[b], sigma[b])
+            for b in range(len(nu))
+        ],
+        axis=-1,
     )
 
 
@@ -239,18 +278,14 @@ def constraint_law(
     if not plan.constraints:
         return None
     means, covs = [], []
-    n = len(model.ids)
+    blocks = _blocks(model)
     for group in range(draws):
         affine = _affine(model, plan, group)
-        scales = scale_candidates(
-            model.nu,
-            plan.horizon,
-            candidates,
-            np.random.default_rng([seed, group, 1]),
-            *_scale_law(model),
+        scales = block_scales(
+            model, plan.horizon, candidates, np.random.default_rng([seed, group, 1])
         )
         for scale in scales:
-            rows = affine.rows * _multipliers(scale, n)
+            rows = affine.rows * _multipliers(scale, blocks)
             means.append(affine.centre)
             covs.append(rows @ rows.T)
     return ConstraintLaw(
@@ -263,10 +298,9 @@ def constraint_law(
 
 def _candidate_rows(model, plan, affine, kept, low, high, seed, group, candidates):
     rng = np.random.default_rng([seed, group, 1])
-    scales = scale_candidates(
-        model.nu, plan.horizon, candidates, rng, *_scale_law(model)
-    )
-    rows = [affine.rows[kept] * _multipliers(scale, len(model.ids)) for scale in scales]
+    scales = block_scales(model, plan.horizon, candidates, rng)
+    blocks = _blocks(model)
+    rows = [affine.rows[kept] * _multipliers(scale, blocks) for scale in scales]
     covs = np.array([z @ z.T for z in rows])
     means = np.broadcast_to(affine.centre[kept], (len(rows), len(kept)))
     weights = log_condition_weights(means, covs, low[kept], high[kept], rng, CANDIDATE_SAMPLES)
@@ -275,6 +309,7 @@ def _candidate_rows(model, plan, affine, kept, low, high, seed, group, candidate
 
 def _group_paths(model, plan, affine, *, group, seed, candidates, sweeps):
     n = len(model.ids)
+    blocks = _blocks(model)
     low = np.array([row.low for row in plan.constraints])
     high = np.array([row.high for row in plan.constraints])
     kept = _independent(affine, low, high)
@@ -285,12 +320,8 @@ def _group_paths(model, plan, affine, *, group, seed, candidates, sweeps):
             model, plan, affine, kept, low, high, seed, group, candidates
         )
     else:
-        scales = scale_candidates(
-            model.nu,
-            plan.horizon,
-            plan.inner,
-            np.random.default_rng([seed, group, 1]),
-            *_scale_law(model),
+        scales = block_scales(
+            model, plan.horizon, plan.inner, np.random.default_rng([seed, group, 1])
         )
     result, sizes, chosen, ess = [], [], [], []
     for j in range(plan.inner):
@@ -308,7 +339,9 @@ def _group_paths(model, plan, affine, *, group, seed, candidates, sweeps):
             pick = j
             eps = rng.standard_normal(affine.paths.shape[-1])
         scale = scales[pick]
-        path = affine.mean + np.einsum("tij,j->ti", affine.paths, eps * _multipliers(scale, n))
+        path = affine.mean + np.einsum(
+            "tij,j->ti", affine.paths, eps * _multipliers(scale, blocks)
+        )
         result.append(path)
         sizes.append(np.abs(eps.reshape(-1, n)[1:]).max(axis=1))
         chosen.append(scale)
@@ -345,7 +378,8 @@ def recent(model, zero: np.ndarray, seed: int) -> np.ndarray:
     history = np.repeat(tail[None], len(zero), axis=0)
     history[:, -1] = zero
     rng = np.random.default_rng([seed, BRIDGE_STREAM])
-    variance = model.nu / (model.nu - 2) * np.diag(model.scale)
+    nu = np.atleast_1d(np.asarray(model.nu, dtype=float))
+    variance = (nu / (nu - 2))[_blocks(model)] * np.diag(model.scale)
     for i in range(tail.shape[1]):
         known = np.flatnonzero(np.isfinite(history[0, :, i]))
         for m in np.flatnonzero(~np.isfinite(history[0, :, i])):
