@@ -85,3 +85,7 @@ not replaced with an easier case after capture.
 - No production edits or commits were made. Coverage/CRAP, scored duplication and mutation
   tools (`coverage`, `radon`, `jscpd`, `mutmut`) were unavailable in the project environment;
   no metric or mutation score is claimed.
+
+## Recapture of 2026-11-17
+
+The two `constraints-no-causes.npz` arrays were captured again. The commit that weighs the candidates of a hidden path in one GHK pass draws the sampler's uniforms after all candidates rather than between them, so another candidate is picked under the same seed while the law of the paths stays the same. The cause was checked: on the previous commit both cases matched bitwise, on the new one only they differ, and the cases without conditions still match. The price of the conditions stayed bitwise the same (BVAR `7.872804342723472`, MS-VAR `6.7025265785330745`), so the JSON files are unchanged. The medians of the paths moved by 2.6–3.3 % of the interquartile range on average, against a standard error of the median of about 6 % over 256 paths.
