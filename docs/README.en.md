@@ -13,6 +13,7 @@ each has its own folder.
 | File | The question it answers |
 |---|---|
 | [concept/formalization.en.md](concept/formalization.en.md) | The general scheme: levels, the structural form of a model, a scenario of interventions and observations, the overlay, the conditional forecast, quality metrics |
+| [concept/success-criteria.en.md](concept/success-criteria.en.md) | When a forecasting model is trusted: completeness, plausibility of the band, accuracy against a benchmark, the decision on a version and what the decision does not read yet |
 | [concept/formalization-legacy.en.md](concept/formalization-legacy.en.md) | The previous edition of the general scheme, not the canon: a scenario with model versions and causes, coordinates of a model's outcome |
 | [concept/bvar-method-legacy.en.md](concept/bvar-method-legacy.en.md) | Outdated description of the first BVAR version of the method, not the canon: details of estimating the BVAR and the satellites |
 | [concept/architecture.en.md](concept/architecture.en.md) | How the scheme is implemented in code: packages and data flow, the workspace, model versions, jobs, the system prompt section |

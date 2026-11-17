@@ -1,5 +1,7 @@
 # Checking a model on history
 
+The criteria of trust in a model, with the formulas, are collected in [success-criteria.en.md](<../../../docs/concept/success-criteria.en.md>).
+
 The package `mst.metrics` checks a model of any level on history: the macro model, the satellites and the position models. One procedure serves every plugin. The model is set back to a past date, estimated only on the data published by then, and its forecast is compared with what happened. The report first names what could not be checked, then shows where the forecast looks unreasonable, and only after that gives the scores. The scores describe a version of a plugin on a given set of dates and events; they are no proof of the quality of the product.
 
 The normative rules are in the [general formalization](<../../../docs/concept/formalization.en.md>), section "Quality metrics". This page describes how they work in code and how to read the report.
