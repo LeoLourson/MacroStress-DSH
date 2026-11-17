@@ -26,8 +26,8 @@ def summarize(path):
         "cells": len(own),
         "refused": report["dropped"]["refused"],
         "scores": comparisons,
-        "short_below": sum(row["pit"] < 0.05 for row in short) / len(short),
-        "short_above": sum(row["pit"] > 0.95 for row in short) / len(short),
+        "short_below": sum(row["pit"] < 0.05 for row in short) / len(short) if short else None,
+        "short_above": sum(row["pit"] > 0.95 for row in short) / len(short) if short else None,
         "failed": {key: entry["failed"] for key, entry in criteria.items() if entry["failed"]},
         "tail_tests": criteria.get("tails"),
         "portfolio_tail": criteria.get("portfolio_tail"),
@@ -44,7 +44,8 @@ def main():
     summaries = []
     for name in args.variants:
         for path in sorted((ROOT / name).glob(f"{args.half}-*.json")):
-            summaries.append(summarize(path))
+            if not path.name.endswith(".scope.json"):
+                summaries.append(summarize(path))
     print(json.dumps(summaries, indent=2, ensure_ascii=False))
 
 

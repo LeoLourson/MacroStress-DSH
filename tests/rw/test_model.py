@@ -143,3 +143,17 @@ def test_load_of_a_version_without_the_new_arrays_keeps_the_random_walk():
     assert_array_equal(model.intercept, arrays["drift"])
     assert model.scale_persistence == 0.0
     assert model.scale_volatility == 0.0
+
+
+def test_loading_old_stochastic_scale_keeps_stationary_initial_distribution():
+    meta = {
+        "ids": ["gl.x"], "n_global": 1, "months": ["2026-01-01"], "nu": [8.0],
+        "diagnostics": {"scale_path": [{"persistence": 0.9, "volatility": 0.3}]},
+    }
+    arrays = {
+        "drift": np.zeros(1), "scale": np.eye(1), "weights": np.ones(1),
+        "blocks": np.zeros(1, dtype=int), "start_mean": np.zeros(1),
+        "start_sd": np.zeros(1), "tail": np.zeros((1, 1)),
+    }
+    model = MODEL.load(meta, arrays)
+    assert np.isnan(model.scale_state[0])

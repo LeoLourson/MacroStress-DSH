@@ -1,6 +1,7 @@
 """The experiment runner keeps the tuning and validation datasets apart."""
 
 import importlib.util
+import json
 from argparse import Namespace
 from pathlib import Path
 
@@ -51,6 +52,51 @@ def test_runner_selects_only_requested_half_and_passes_explicit_model(runner, mo
     )
     assert calls[0][1]["models"] == calls[1][1]["models"]
     assert calls[0][1]["details"] != calls[1][1]["details"]
+
+
+def test_summarizer_handles_all_refused_windows(tmp_path, monkeypatch):
+    path = Path("bench/model-backtest/summarize_experiments.py")
+    spec = importlib.util.spec_from_file_location("experiment_summary", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    monkeypatch.setattr(module, "ROOT", tmp_path)
+    report = tmp_path / "refused.json"
+    report.write_text(json.dumps({
+        "rows": [], "levels": {}, "admission": {"criteria": {}},
+        "dropped": {"refused": {"2014-01-01": "no convergence"}},
+    }), encoding="utf-8")
+    result = module.summarize(report)
+    assert result["short_below"] is None
+    assert result["short_above"] is None
+    assert result["refused"] == {"2014-01-01": "no convergence"}
+
+
+def test_runner_rejects_portfolio_without_drivers(runner, monkeypatch):
+    from mst.metrics import rolling
+
+    monkeypatch.setattr(rolling, "run", lambda **kwargs: 0)
+    args = Namespace(
+        variant="band", half="tuning", checks=["rolling"], workers=1,
+        drivers=None, portfolio="missing", models=None,
+    )
+    with pytest.raises(ValueError, match="portfolio.*drivers"):
+        runner.execute(args)
+
+
+def test_runner_refuses_overwriting_report_with_another_catalog(runner, monkeypatch, tmp_path):
+    from mst.metrics import rolling
+
+    monkeypatch.setattr(rolling, "run", lambda **kwargs: 0)
+    catalog = tmp_path / "catalog.json"
+    catalog.write_text("{}", encoding="utf-8")
+    args = Namespace(
+        variant="band", half="tuning", checks=["rolling"], workers=1,
+        drivers=catalog, portfolio="test", models=None,
+    )
+    runner.execute(args)
+    catalog.write_text('{"different": true}', encoding="utf-8")
+    with pytest.raises(ValueError, match="scope changed"):
+        runner.execute(args)
 
 
 def test_runner_refuses_reusing_directory_with_changed_configuration(runner, monkeypatch):

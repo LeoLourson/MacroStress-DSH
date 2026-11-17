@@ -33,6 +33,8 @@ def execute(args):
     from mst.plugins.rw.model import RwModel
     from mst.plugins.rw.spec import load_spec
 
+    if args.portfolio is not None and args.drivers is None:
+        raise ValueError("--portfolio needs --drivers")
     spec = load_spec().model_copy(update=VARIANTS[args.variant])
     model = RwModel(spec=spec)
     folder = OUTPUT / args.variant
@@ -70,6 +72,19 @@ def execute(args):
             label = f"{args.half}-{check}{suffix}"
             log = folder / f"{label}.md"
             details = folder / f"{label}.json"
+            scope_file = folder / f"{label}.scope.json"
+            scope = {
+                "portfolio": args.portfolio,
+                "drivers_sha256": (
+                    hashlib.sha256(args.drivers.read_bytes()).hexdigest()
+                    if args.drivers is not None else None
+                ),
+            }
+            if scope_file.exists():
+                if json.loads(scope_file.read_text(encoding="utf-8")) != scope:
+                    raise ValueError("Report scope changed: use another experiment directory")
+            else:
+                scope_file.write_text(json.dumps(scope, indent=2), encoding="utf-8")
             print(f"START {args.variant} {label}", flush=True)
             with log.open("w", encoding="utf-8") as stream, contextlib.redirect_stdout(stream):
                 if check == "rolling":

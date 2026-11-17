@@ -113,7 +113,7 @@ class RwModel(MacroModel):
             previous=np.asarray(arrays.get("previous", np.full(n, np.nan)), dtype=float),
             scale_persistence=np.array([item.get("persistence", 0.0) for item in scale_path]),
             scale_volatility=np.array([item.get("volatility", 0.0) for item in scale_path]),
-            scale_state=np.array([item.get("state", 0.0) for item in scale_path]),
+            scale_state=np.array([item.get("state", np.nan) for item in scale_path]),
             drift=arrays["drift"],
             scale=arrays["scale"],
             weights=arrays["weights"],
