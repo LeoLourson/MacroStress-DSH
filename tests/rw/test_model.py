@@ -98,6 +98,29 @@ def test_estimate_load_round_trip_and_intervention_contract(monkeypatch, tmp_pat
     assert loaded.scale_volatility == 0
 
 
+def test_explicit_spec_isolated_from_default_and_identifies_cache(monkeypatch):
+    from mst.metrics.windows import _configuration_digest
+    from mst.plugins.rw import model as adapter
+
+    data = panel()
+    monkeypatch.setattr(adapter, "build_panel", lambda *args, **kwargs: data)
+    registry = Registry(variables=[
+        Variable(id=id_, label=id_, unit="unit", transform="identity", source="test")
+        for id_ in data.ids
+    ])
+    context = MacroEstimateContext(store=None, registry=registry, as_of=date(2026, 11, 1))
+    supplied = Spec(drifts=[], breaks=[], stochastic_scale=True)
+    candidate = adapter.RwModel(spec=supplied)
+    other = adapter.RwModel(spec=supplied.model_copy(update={"stochastic_scale": False}))
+    supplied.drifts.append("gl.x")
+    assert candidate.estimate(context).meta["spec"]["drifts"] == []
+    assert _configuration_digest(candidate) != _configuration_digest(other)
+    assert _configuration_digest(candidate) == _configuration_digest(
+        adapter.RwModel(spec=Spec(drifts=[], breaks=[], stochastic_scale=True))
+    )
+    assert MODEL.version == "0.5.0"
+
+
 def test_load_of_a_version_without_the_new_arrays_keeps_the_random_walk():
     meta = {
         "ids": ["gl.x", "ru.y"],

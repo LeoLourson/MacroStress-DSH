@@ -623,7 +623,7 @@ def estimate(panel: Panel, spec: Spec, *, left_out: Sequence[str] = ()) -> tuple
         block_nu, block_weights = np.array([nu]), weights[:, None]
     else:
         block_nu, block_weights = block_laws(data, mu, blocks, ordinary, spec)
-    if spec.sample_scale:
+    if spec.sample_scale and spec.band_fit:
         block_nu = np.array(
             [
                 band_nu(data[:, [i for i in ordinary if blocks[i] == block]], spec)

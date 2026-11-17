@@ -72,6 +72,8 @@ class Spec(BaseModel):
     """Whether the monthly multiplier follows the estimated log AR(1) path from its state in
     the last month of the panel, so that the band widens after a turbulent month.
     """
+    band_fit: bool = False
+    """Fit the Student degrees of freedom to the central 90 percent band when sample_scale is on."""
     sample_scale: bool = True
     """Whether the level of the innovation covariance is the sample covariance of changes.
 

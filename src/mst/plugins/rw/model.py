@@ -1,5 +1,6 @@
 """Adapter of the joint Student walk to the macro model SDK."""
 
+import hashlib
 from dataclasses import dataclass
 from datetime import date
 
@@ -18,7 +19,7 @@ from mst.model_sdk import (
 
 from .estimate import estimate
 from .forecast import constraint_law, simulate
-from .spec import load_spec
+from .spec import Spec, load_spec
 
 
 @dataclass(frozen=True)
@@ -61,8 +62,14 @@ class RwModel(MacroModel):
         "and interventions propagate through the full conditional law, without causal claims."
     )
 
+    def __init__(self, *, spec: Spec | None = None):
+        self._spec = spec.model_copy(deep=True) if spec is not None else None
+        if self._spec is not None:
+            digest = hashlib.sha256(self._spec.model_dump_json().encode()).hexdigest()[:16]
+            self.version = f"{type(self).version}+spec.{digest}"
+
     def estimate(self, context: MacroEstimateContext) -> MacroEstimate:
-        spec = load_spec()
+        spec = self._spec if self._spec is not None else load_spec()
         spec.validate_ids(
             [*(variable.id for variable in context.registry.variables), *context.left_out]
         )

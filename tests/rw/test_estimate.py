@@ -2,8 +2,8 @@ from datetime import date
 
 import numpy as np
 import pytest
-from scipy.stats import t as student
 from numpy.testing import assert_allclose, assert_array_equal
+from scipy.stats import t as student
 
 from mst.macro.panel import Panel, months_between
 from mst.plugins.rw.estimate import (
@@ -131,6 +131,18 @@ def test_ecme_gaussian_nu_reaches_upper_bound():
     _, nu, _, trace = ecme(d, np.zeros(2), Spec(drifts=[], breaks=[]))
     assert nu > 59.99
     assert np.diff(trace).min() >= -1e-8
+
+
+def test_band_fit_is_an_opt_in_separate_from_the_sample_covariance():
+    rng = np.random.default_rng(94)
+    steps = rng.standard_t(5, (600, 2))
+    p = panel(np.vstack([np.zeros(2), steps.cumsum(axis=0)]), ["x", "y"])
+    spec = Spec(drifts=[], breaks=[], sample_scale=True)
+    _, _, baseline = estimate(p, spec)
+    expected = ecme(steps, np.zeros(2), spec, shrink=shrinkage(steps))[1]
+    assert baseline[0] == pytest.approx(expected)
+    _, _, fitted = estimate(p, spec.model_copy(update={"band_fit": True}))
+    assert fitted[0] == pytest.approx(band_nu(steps, spec))
 
 
 def test_band_nu_puts_ninety_percent_of_the_changes_inside_p5_p95():
